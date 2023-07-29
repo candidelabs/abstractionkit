@@ -1,0 +1,55 @@
+{
+	"name": "abstractionkit",
+	"author": {
+		"name": "Candidelabs",
+		"url": "https://candide.dev"
+	},
+	"version": "0.0.1",
+	"description": "Account Abstraction 4337 SDK by Candidelabs",
+	"main": "dist/index.js",
+	"module": "dist/index.m.js",
+	"unpkg": "dist/index.umd.js",
+	"types": "dist/index.d.ts",
+	"scripts": {
+		"build": "rm -rf dist && microbundle --tsconfig tsconfig.json --no-sourcemap",
+		"clean": "rm -rf dist",
+		"format": "prettier --write .",
+		"lint": "eslint src/**/*.ts",
+		"prepare": "husky install"
+	},
+	"files": [
+		"dist"
+	],
+	"keywords": [
+		"Account Abstraction",
+		"4337",
+		"Useroperation",
+		"Bundler",
+		"Paymaster",
+		"Entrypoint",
+		"SDK"
+	],
+	"license": "MIT",
+	"publishConfig": {
+		"access": "public",
+		"tag": "latest"
+	},
+	"dependencies": {
+		"ethers": "^6.6.4",
+		"isomorphic-unfetch": "^4.0.2"
+	},
+	"devDependencies": {
+		"@typescript-eslint/eslint-plugin": "^6.2.0",
+		"@typescript-eslint/parser": "^6.2.0",
+		"eslint": "^8.46.0",
+		"husky": ">=6",
+		"lint-staged": ">=10",
+		"microbundle": "^0.15.1",
+		"prettier": "3.0.0",
+		"typescript": "^5.1.6"
+	},
+	"lint-staged": {
+		"*.js": "eslint --cache --fix",
+		"*.--write": "prettier --ignore-unknown --write"
+	}
+}
