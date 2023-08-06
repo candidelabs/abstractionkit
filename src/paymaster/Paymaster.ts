@@ -1,6 +1,6 @@
 import "ethers";
 import type { BytesLike } from "ethers";
-import type { UserOperation, AbiInputValue } from "src/types";
+import type { UserOperation } from "src/types";
 
 export abstract class Paymaster {
 	readonly address: string;
@@ -11,10 +11,10 @@ export abstract class Paymaster {
 
 	abstract getPaymasterCallData(
 		userOperation: UserOperation,
-		config: AbiInputValue,
+		config: string[],
 	): BytesLike;
 	abstract getPaymasterCallDataAndEstimateGas(
 		userOperation: UserOperation,
-		config: AbiInputValue,
+		config: string[],
 	): UserOperation;
 }
