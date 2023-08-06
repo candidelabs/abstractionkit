@@ -4,7 +4,7 @@
 		"name": "Candidelabs",
 		"url": "https://candide.dev"
 	},
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"description": "Account Abstraction 4337 SDK by Candidelabs",
 	"main": "dist/index.js",
 	"module": "dist/index.m.js",
@@ -16,6 +16,10 @@
 		"format": "prettier --write .",
 		"lint": "eslint src/**/*.ts",
 		"prepare": "husky install"
+	},
+	"repository": {
+	  "type": "git",
+	  "url": "git+https://github.com/candidelabs/abstractionkit.git"
 	},
 	"files": [
 		"dist"
