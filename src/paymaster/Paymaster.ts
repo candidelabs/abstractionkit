@@ -1,6 +1,6 @@
 import "ethers";
 import type { BytesLike } from "ethers";
-import type { UserOperation } from "src/types";
+import type { UserOperation, JsonRpcError } from "src/types";
 
 export abstract class Paymaster {
 	readonly address: string;
@@ -12,9 +12,9 @@ export abstract class Paymaster {
 	abstract getPaymasterCallData(
 		userOperation: UserOperation,
 		config: string[],
-	): BytesLike;
+	): Promise<BytesLike | JsonRpcError>;
 	abstract getPaymasterCallDataAndEstimateGas(
 		userOperation: UserOperation,
 		config: string[],
-	): UserOperation;
+	): Promise<BytesLike | JsonRpcError>;
 }

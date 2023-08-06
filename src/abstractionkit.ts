@@ -6,6 +6,8 @@ export { CandideAccountFactory } from "./factory/CandideAccountFactory";
 
 export { Bundler } from "./Bundler";
 
+export {CandideValidationPaymaster} from "./paymaster/CandideValidationPaymaster"
+
 export { getUserOperationHash } from "./utils";
 
 export { UserOperationEmptyValues } from "./constants";
