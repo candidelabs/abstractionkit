@@ -7,11 +7,11 @@ export class CandideValidationPaymaster extends Paymaster {
 	readonly rpcUrl: string;
 	readonly entrypointAddress: string;
 
-	constructor(pymasterAddress: string,
+	constructor(
 		entrypointAddress:string,
 		rpcUrl: string
 	) {
-		super(pymasterAddress);
+		super();
 		this.rpcUrl = rpcUrl;
 		this.entrypointAddress = entrypointAddress;
 	}
@@ -44,12 +44,5 @@ export class CandideValidationPaymaster extends Paymaster {
 		} else {
 			return jsonRpcResult.error as JsonRpcError;
 		}
-	}
-
-	getPaymasterCallDataAndEstimateGas(
-		userOperation: UserOperation,
-		config: string[],
-	): Promise<BytesLike | JsonRpcError>{
-		return this.getPaymasterCallData(userOperation, config)
 	}
 }
