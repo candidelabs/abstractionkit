@@ -1,0 +1,19 @@
+{
+  "name": "CreateAndSendTransaction",
+  "version": "1.0.0",
+  "description": "create a new account and send a useroperation and pay gas with erc20 token using a paymaster.",
+  "main": "dist/index.js",
+  "scripts": {
+		"build": "rm -rf dist && tsc",
+		"clean": "rm -rf dist",
+		"format": "prettier --write .",
+		"lint": "eslint src/**/*.ts",
+	},
+  "license": "MIT",
+  "dependencies": {
+    "abstractionkit": "^0.0.3",
+    "dotenv": "^16.3.1",
+    "ethers": "^6.6.7",
+    "typescript": "^5.1.6"
+  }
+}

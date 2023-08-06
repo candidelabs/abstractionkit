@@ -1,0 +1,17 @@
+{
+  "name": "UsingBundlerRPC",
+  "version": "1.0.0",
+  "description": "an example for using the toolkit with the a bundler RPC",
+  "main": "dist/index.js",
+  "scripts": {
+		"build": "rm -rf dist && tsc",
+		"clean": "rm -rf dist",
+		"format": "prettier --write .",
+		"lint": "eslint src/**/*.ts"
+	},
+  "license": "MIT",
+  "dependencies": {
+    "abstractionkit": "^0.0.3",
+    "typescript": "^5.1.6"
+  }
+}
