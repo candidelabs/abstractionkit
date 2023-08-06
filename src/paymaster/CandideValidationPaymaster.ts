@@ -19,7 +19,7 @@ export class CandideValidationPaymaster extends Paymaster {
 	async getPaymasterCallDataForPayingGasWithErc20(
 		userOperation: UserOperation,
 		erc20TokenAddress:string,
-	): Promise<BytesLike | JsonRpcError>{
+	): Promise<{paymasterAndData: BytesLike} | JsonRpcError>{
 		const config = [this.rpcUrl, this.entrypointAddress, erc20TokenAddress]
 
 		return this.getPaymasterCallData(userOperation, config)
@@ -28,7 +28,7 @@ export class CandideValidationPaymaster extends Paymaster {
 	async getPaymasterCallData(
 		userOperation: UserOperation,
 		config: string[],
-	): Promise<BytesLike | JsonRpcError>{
+	): Promise<{paymasterAndData: BytesLike} | JsonRpcError>{
 		const rpcUrl = config[0]
 		const entrypointAddress = config[1]
 		const tokenAddress = config[2]
@@ -40,7 +40,7 @@ export class CandideValidationPaymaster extends Paymaster {
 		);
 
 		if ("result" in jsonRpcResult) {
-			return jsonRpcResult.result as BytesLike
+			return {paymasterAndData: jsonRpcResult.result as BytesLike}
 		} else {
 			return jsonRpcResult.error as JsonRpcError;
 		}
