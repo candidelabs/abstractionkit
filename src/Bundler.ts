@@ -1,4 +1,3 @@
-import * as fetchImport from "isomorphic-unfetch";
 import type {
 	UserOperation,
 	JsonRpcError,
@@ -6,10 +5,9 @@ import type {
 	UserOperationByHashResult,
 	UserOperationReceipt,
 	UserOperationReceiptResult,
-	AbiInputValue,
-	JsonRpcResponse,
 } from "./types";
 import { BytesLike } from "ethers";
+import {sendJsonRpcRequest} from "./utils";
 
 export class Bundler {
 	readonly rpcUrl: string;
@@ -21,7 +19,7 @@ export class Bundler {
 	}
 
 	async chainId(): Promise<{ chainId: string } | JsonRpcError> {
-		const jsonRpcResult = await this.sendJsonRpcRequest(
+		const jsonRpcResult = await sendJsonRpcRequest(
 			this.rpcUrl,
 			"eth_chainId",
 			[],
@@ -36,7 +34,7 @@ export class Bundler {
 	async supportedEntryPoints(): Promise<
 		{ supportedEntryPoints: string[] } | JsonRpcError
 	> {
-		const jsonRpcResult = await this.sendJsonRpcRequest(
+		const jsonRpcResult = await sendJsonRpcRequest(
 			this.rpcUrl,
 			"eth_supportedEntryPoints",
 			[],
@@ -52,7 +50,7 @@ export class Bundler {
 	async estimateUserOperationGas(
 		useroperation: UserOperation,
 	): Promise<GasEstimationResult | JsonRpcError> {
-		const jsonRpcResult = await this.sendJsonRpcRequest(
+		const jsonRpcResult = await sendJsonRpcRequest(
 			this.rpcUrl,
 			"eth_estimateUserOperationGas",
 			[useroperation, this.entrypointAddress],
@@ -68,7 +66,7 @@ export class Bundler {
 	async sendUserOperation(
 		useroperation: UserOperation,
 	): Promise<{ userOperationHash: string } | JsonRpcError> {
-		const jsonRpcResult = await this.sendJsonRpcRequest(
+		const jsonRpcResult = await sendJsonRpcRequest(
 			this.rpcUrl,
 			"eth_sendUserOperation",
 			[useroperation, this.entrypointAddress],
@@ -84,7 +82,7 @@ export class Bundler {
 	async getUserOperationReceipt(
 		useroperationhash: BytesLike,
 	): Promise<UserOperationReceiptResult | JsonRpcError> {
-		const jsonRpcResult = await this.sendJsonRpcRequest(
+		const jsonRpcResult = await sendJsonRpcRequest(
 			this.rpcUrl,
 			"eth_getUserOperationReceipt",
 			[useroperationhash],
@@ -111,7 +109,7 @@ export class Bundler {
 	async getUserOperationByHash(
 		useroperationhash: BytesLike,
 	): Promise<UserOperationByHashResult | JsonRpcError> {
-		const jsonRpcResult = await this.sendJsonRpcRequest(
+		const jsonRpcResult = await sendJsonRpcRequest(
 			this.rpcUrl,
 			"eth_getUserOperationByHash",
 			[useroperationhash],
@@ -122,33 +120,5 @@ export class Bundler {
 			const error = jsonRpcResult.error as JsonRpcError;
 			return error;
 		}
-	}
-
-	async sendJsonRpcRequest(
-		rpcUrl: string,
-		method: string,
-		params: AbiInputValue,
-	): Promise<JsonRpcResponse> {
-		const fetch = fetchImport.default || fetchImport;
-
-		const raw = JSON.stringify({
-			method: method,
-			params: params,
-			id: 1,
-			jsonrpc: "2.0",
-		});
-
-		const requestOptions: RequestInit = {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: raw,
-			redirect: "follow",
-		};
-
-		const response = await fetch(rpcUrl, requestOptions);
-
-		return JSON.parse(await response.text()) as JsonRpcResponse;
 	}
 }

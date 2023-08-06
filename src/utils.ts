@@ -1,8 +1,10 @@
+import * as fetchImport from "isomorphic-unfetch";
+
 import { AbiCoder, keccak256 } from "ethers";
 
 import type { AddressLike, BytesLike, BigNumberish } from "ethers";
 
-import type { AbiInputValue, UserOperation } from "./types";
+import type { AbiInputValue, UserOperation, JsonRpcResponse } from "./types";
 
 export function getUserOperationHash(
 	useroperation: UserOperation,
@@ -72,4 +74,32 @@ export function getCallData(
 	const callData = functionSelector + params.slice(2);
 
 	return callData;
+}
+
+export async function sendJsonRpcRequest(
+	rpcUrl: string,
+	method: string,
+	params: AbiInputValue,
+): Promise<JsonRpcResponse> {
+	const fetch = fetchImport.default || fetchImport;
+
+	const raw = JSON.stringify({
+		method: method,
+		params: params,
+		id: 1,
+		jsonrpc: "2.0",
+	});
+
+	const requestOptions: RequestInit = {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+		},
+		body: raw,
+		redirect: "follow",
+	};
+
+	const response = await fetch(rpcUrl, requestOptions);
+
+	return JSON.parse(await response.text()) as JsonRpcResponse;
 }
