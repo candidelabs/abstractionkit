@@ -15,6 +15,7 @@ export { UserOperationEmptyValues } from "./constants";
 export type {
 	UserOperation,
 	AbiInputValue,
+	JsonRpcParam,
 	JsonRpcResponse,
 	JsonRpcResult,
 	JsonRpcError,

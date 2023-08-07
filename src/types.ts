@@ -19,8 +19,15 @@ export type AbiInputValue =
 	| BigNumberish
 	| BytesLike
 	| boolean
-	| UserOperation
 	| AbiInputValue[];
+
+export type JsonRpcParam =
+	| string
+	| BigNumberish
+	| BytesLike
+	| boolean
+	| object
+	| JsonRpcParam[];
 
 export type JsonRpcResponse = {
 	id: number;

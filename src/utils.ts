@@ -4,7 +4,7 @@ import { AbiCoder, keccak256 } from "ethers";
 
 import type { AddressLike, BytesLike, BigNumberish } from "ethers";
 
-import type { AbiInputValue, UserOperation, JsonRpcResponse } from "./types";
+import type { AbiInputValue, UserOperation, JsonRpcResponse, JsonRpcParam } from "./types";
 
 export function getUserOperationHash(
 	useroperation: UserOperation,
@@ -79,7 +79,7 @@ export function getCallData(
 export async function sendJsonRpcRequest(
 	rpcUrl: string,
 	method: string,
-	params: AbiInputValue,
+	params: JsonRpcParam,
 ): Promise<JsonRpcResponse> {
 	const fetch = fetchImport.default || fetchImport;
 
