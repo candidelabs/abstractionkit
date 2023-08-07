@@ -13,7 +13,7 @@
 	"scripts": {
 		"build": "rm -rf dist && microbundle --tsconfig tsconfig.json --no-sourcemap",
 		"clean": "rm -rf dist",
-		"format": "prettier --write .",
+		"format": "prettier --write src/**/*.ts",
 		"lint": "eslint src/**/*.ts",
 		"prepare": "husky install"
 	},
