@@ -7,10 +7,7 @@ export class CandideValidationPaymaster extends Paymaster {
 	readonly rpcUrl: string;
 	readonly entrypointAddress: string;
 
-	constructor(
-		entrypointAddress:string,
-		rpcUrl: string
-	) {
+	constructor(entrypointAddress: string, rpcUrl: string) {
 		super();
 		this.rpcUrl = rpcUrl;
 		this.entrypointAddress = entrypointAddress;
@@ -18,29 +15,29 @@ export class CandideValidationPaymaster extends Paymaster {
 
 	async getPaymasterCallDataForPayingGasWithErc20(
 		userOperation: UserOperation,
-		erc20TokenAddress:string,
-	): Promise<{paymasterAndData: BytesLike} | JsonRpcError>{
-		const config = [this.rpcUrl, this.entrypointAddress, erc20TokenAddress]
+		erc20TokenAddress: string,
+	): Promise<{ paymasterAndData: BytesLike } | JsonRpcError> {
+		const config = [this.rpcUrl, this.entrypointAddress, erc20TokenAddress];
 
-		return this.getPaymasterCallData(userOperation, config)
+		return this.getPaymasterCallData(userOperation, config);
 	}
 
 	async getPaymasterCallData(
 		userOperation: UserOperation,
 		config: string[],
-	): Promise<{paymasterAndData: BytesLike} | JsonRpcError>{
-		const rpcUrl = config[0]
-		const entrypointAddress = config[1]
-		const tokenAddress = config[2]
+	): Promise<{ paymasterAndData: BytesLike } | JsonRpcError> {
+		const rpcUrl = config[0];
+		const entrypointAddress = config[1];
+		const tokenAddress = config[2];
 
 		const jsonRpcResult = await sendJsonRpcRequest(
 			rpcUrl,
 			"pm_sponsorUserOperation",
-			[userOperation, entrypointAddress, {token: tokenAddress}],
+			[userOperation, entrypointAddress, { token: tokenAddress }],
 		);
 
 		if ("result" in jsonRpcResult) {
-			return {paymasterAndData: jsonRpcResult.result as BytesLike}
+			return { paymasterAndData: jsonRpcResult.result as BytesLike };
 		} else {
 			return jsonRpcResult.error as JsonRpcError;
 		}

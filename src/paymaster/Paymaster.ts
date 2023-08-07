@@ -6,5 +6,5 @@ export abstract class Paymaster {
 	abstract getPaymasterCallData(
 		userOperation: UserOperation,
 		config: string[],
-	): Promise<{paymasterAndData: BytesLike} | JsonRpcError>;
+	): Promise<{ paymasterAndData: BytesLike } | JsonRpcError>;
 }
