@@ -1,5 +1,5 @@
 import { Paymaster } from "./Paymaster";
-import { sendJsonRpcRequest } from "src/utils";
+import { sendJsonRpcRequest } from "../utils";
 import { UserOperation, JsonRpcError } from "../types";
 import { BytesLike } from "ethers";
 
@@ -36,7 +36,7 @@ export class CandideValidationPaymaster extends Paymaster {
 		const jsonRpcResult = await sendJsonRpcRequest(
 			rpcUrl,
 			"pm_sponsorUserOperation",
-			[userOperation, entrypointAddress, [tokenAddress]],
+			[userOperation, entrypointAddress, {token: tokenAddress}],
 		);
 
 		if ("result" in jsonRpcResult) {
