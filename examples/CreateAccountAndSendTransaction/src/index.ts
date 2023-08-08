@@ -6,7 +6,6 @@ import {
     CandideAccount, 
     GasEstimationResult, 
     UserOperation, 
-    CandideValidationPaymaster, 
     getUserOperationHash, 
     UserOperationEmptyValues 
 } from "abstractionkit";
@@ -19,8 +18,6 @@ async function main(): Promise<void> {
     const jsonRpcNodeProvider = process.env.JSON_RPC_NODE_PROVIDER as string
     const entrypointAddress = process.env.ENTRYPOINT_ADDRESS as string
     const privateKey = process.env.PRIVATE_KEY as string
-    const paymasterRPC = process.env.PAYMASTER_RPC as string
-    const erc20TokenAddress = process.env.TOKEN_ADDRESS as string
     
     let bundler: Bundler = new Bundler(
         bundlerUrl,
@@ -69,12 +66,6 @@ async function main(): Promise<void> {
     user_operation.preVerificationGas = "0x" + estimation.preVerificationGas.toString(16) //convert to hex format
     user_operation.verificationGasLimit = "0x" + Math.round(Number(estimation.verificationGas) * 3).toString(16) //convert to hex format - multiply by three to avoid outofgas error during validation(can be removed when the bundler returns an accurate estimation)
     user_operation.callGasLimit = estimation.callGasLimit
-
-    //get early access to Candide's paymaster by visiting our discord https://discord.gg/KJSzy2Rqtg 
-    let paymaster: CandideValidationPaymaster = new CandideValidationPaymaster(
-        entrypointAddress,
-        paymasterRPC
-    )
 
     let user_operation_hash = getUserOperationHash(
         user_operation, entrypointAddress, chainId
