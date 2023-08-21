@@ -7,7 +7,7 @@ import {
     GasEstimationResult, 
     UserOperation, 
     getUserOperationHash, 
-    UserOperationEmptyValues 
+    UserOperationDummyValues 
 } from "abstractionkit";
 
 async function main(): Promise<void> {
@@ -42,7 +42,7 @@ async function main(): Promise<void> {
     const provider = new JsonRpcProvider(jsonRpcNodeProvider);
 
     let user_operation :UserOperation={
-        ...UserOperationEmptyValues,
+        ...UserOperationDummyValues,
         sender:newAccountAddress,
         nonce: "0x00",
         initCode:initCode,//only needed for the first useroperation for a new account
