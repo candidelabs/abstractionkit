@@ -12,9 +12,9 @@
 
 CreateAccountAndSendTransactionUsing Example - AbstractionKit - Account Abstraction SDK by Candide
 
-This example is in the Sepolia chain.
+This example is in the Goerli chain.
 
-In this example you will need to fund the new account address(sender) with sepolia eth first.
+In this example you will need to fund the new account address(sender) with Goerli eth first.
 
 # How to use this example
 

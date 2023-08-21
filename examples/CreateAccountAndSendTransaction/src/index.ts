@@ -1,5 +1,5 @@
 import * as dotenv from 'dotenv'
-import {Wallet, JsonRpcProvider, getBytes } from "ethers"
+import {Wallet, JsonRpcProvider, getBytes, BigNumberish } from "ethers"
 
 import { 
     Bundler, 
@@ -13,7 +13,7 @@ import {
 async function main(): Promise<void> {
     //get vlues from .env
     dotenv.config()
-    const chainId = process.env.CHAIN_ID as string //sepolia
+    const chainId = process.env.CHAIN_ID as string
     const bundlerUrl = process.env.BUNDLER_URL as string
     const jsonRpcNodeProvider = process.env.JSON_RPC_NODE_PROVIDER as string
     const entrypointAddress = process.env.ENTRYPOINT_ADDRESS as string
@@ -49,34 +49,35 @@ async function main(): Promise<void> {
         callData:callData
     }
 
-    let estimation = await bundler.estimateUserOperationGas(user_operation)
-    
-    console.log(estimation)
+    //fetch gas price - use your prefered source
+    const feeData = await provider.getFeeData()
+    user_operation.maxFeePerGas = "0x" + Math.round(Number(feeData.maxFeePerGas)*1.5).toString(16) as BigNumberish//convert to hex format
+    user_operation.maxPriorityFeePerGas = "0x" + Math.round(Number(feeData.maxPriorityFeePerGas)*1.5) as BigNumberish//convert to hex format
 
+   
+    let estimation = await bundler.estimateUserOperationGas(user_operation)
+    console.log(estimation)
     if("code" in estimation){
         return
     }
-
+    //either multiply gas limit with a factor to compensate for the missing paymasterAndData and signature during gas estimation
+    //or supply dummy values that will not cause the useroperation to revert
+    //for the most accurate values, estimate gas again after acquiring the initial gas limits
+    //and a valide paymasterAndData and signature
     estimation = estimation as GasEstimationResult
+    user_operation.preVerificationGas = "0x" + Math.ceil(Number(estimation.preVerificationGas)*1.2).toString(16)
+    user_operation.verificationGasLimit = "0x" + Math.ceil(Number(estimation.verificationGas)*1.5).toString(16)
+    user_operation.callGasLimit = "0x" + Math.ceil(Number(estimation.callGasLimit)*1.2).toString(16)
 
-    const feeData = await provider.getFeeData()
-    user_operation.maxFeePerGas = "0x" + feeData.maxFeePerGas?.toString(16) //convert to hex format
-    user_operation.maxPriorityFeePerGas = "0x" + feeData.maxPriorityFeePerGas?.toString(16) //convert to hex format
-
-    user_operation.preVerificationGas = "0x" + estimation.preVerificationGas.toString(16) //convert to hex format
-    user_operation.verificationGasLimit = "0x" + Math.round(Number(estimation.verificationGas) * 3).toString(16) //convert to hex format - multiply by three to avoid outofgas error during validation(can be removed when the bundler returns an accurate estimation)
-    user_operation.callGasLimit = estimation.callGasLimit
-
+    //sign the user operation hash
     let user_operation_hash = getUserOperationHash(
         user_operation, entrypointAddress, chainId
     )
-
     user_operation.signature = await eoaSigner.signMessage(getBytes(user_operation_hash))
 
+    //send the user operation to the bundler
     let bundlerResponse = await bundler.sendUserOperation(user_operation)
-
     console.log(bundlerResponse)
-
     if("message" in bundlerResponse && bundlerResponse.message as string == "AA21 didn't pay prefund"){
         console.log("Please fund the new account address with some sepolia eth to pay for gas : " + newAccountAddress)
     }
