@@ -10,7 +10,7 @@ export {CandideValidationPaymaster} from "./paymaster/CandideValidationPaymaster
 
 export { getUserOperationHash } from "./utils";
 
-export { UserOperationEmptyValues } from "./constants";
+export { UserOperationEmptyValues, UserOperationDummyValues } from "./constants";
 
 export type {
 	UserOperation,
