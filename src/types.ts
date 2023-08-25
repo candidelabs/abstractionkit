@@ -41,7 +41,8 @@ export type JsonRpcResult =
 	| GasEstimationResult
 	| UserOperationByHashResult
 	| UserOperationReceipt
-	| UserOperationReceiptResult;
+	| UserOperationReceiptResult
+	| SupportedERC20Tokens;
 
 export type JsonRpcError = {
 	code: number;
@@ -92,3 +93,24 @@ export enum Operation {
 	Call = 0,
 	Delegate = 1,
 }
+
+export interface ERC20Token {
+	symbol: string;
+	address: string;
+	decimal: number;
+	fee: number;
+	exchangeRate: string;
+};
+export interface PaymasterMetadata {
+	name: string;
+	description: string;
+	icons: string[];
+	address: string;
+	sponsoredEventTopic: string;
+	dummyPaymasterAndData: string;
+};
+
+export interface SupportedERC20Tokens {
+	paymasterMetadata: PaymasterMetadata;
+	tokens: ERC20Token[];
+};

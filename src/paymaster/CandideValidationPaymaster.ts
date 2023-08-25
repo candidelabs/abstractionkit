@@ -1,6 +1,6 @@
 import { Paymaster } from "./Paymaster";
 import { sendJsonRpcRequest } from "../utils";
-import { UserOperation, JsonRpcError } from "../types";
+import { UserOperation, JsonRpcError, SupportedERC20Tokens } from "../types";
 import { BytesLike } from "ethers";
 
 export class CandideValidationPaymaster extends Paymaster {
@@ -11,6 +11,35 @@ export class CandideValidationPaymaster extends Paymaster {
 		super();
 		this.rpcUrl = rpcUrl;
 		this.entrypointAddress = entrypointAddress;
+	}
+
+	async getSupportedERC20Tokens(): Promise<SupportedERC20Tokens | JsonRpcError> {
+		const jsonRpcResult = await sendJsonRpcRequest(
+			this.rpcUrl,
+			"pm_supportedERC20Tokens",
+			[],
+		);
+
+		if ("result" in jsonRpcResult) {
+			const res = jsonRpcResult.result as SupportedERC20Tokens;
+			return { tokens: res.tokens, paymasterMetadata: res.paymasterMetadata };
+		} else {
+			return jsonRpcResult.error as JsonRpcError;
+		}
+	}
+
+	async getSupportedEntrypoint(): Promise<string | JsonRpcError> {
+		const jsonRpcResult = await sendJsonRpcRequest(
+			this.rpcUrl,
+			"pm_supportedEntryPoint",
+			[],
+		);
+
+		if ("result" in jsonRpcResult) {
+			return jsonRpcResult.result as string;
+		} else {
+			return jsonRpcResult.error as JsonRpcError;
+		}
 	}
 
 	async getPaymasterCallDataForPayingGasWithErc20(
