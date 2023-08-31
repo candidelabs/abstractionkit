@@ -1,7 +1,11 @@
 import { Paymaster } from "./Paymaster";
 import { sendJsonRpcRequest } from "../utils";
-import { UserOperation, JsonRpcError, SupportedERC20Tokens } from "../types";
-import { BytesLike } from "ethers";
+import {
+	UserOperation,
+	JsonRpcError,
+	SupportedERC20Tokens,
+	PmSponsorUserOperationResult,
+} from "../types";
 
 export class CandideValidationPaymaster extends Paymaster {
 	readonly rpcUrl: string;
@@ -13,7 +17,9 @@ export class CandideValidationPaymaster extends Paymaster {
 		this.entrypointAddress = entrypointAddress;
 	}
 
-	async getSupportedERC20Tokens(): Promise<SupportedERC20Tokens | JsonRpcError> {
+	async getSupportedERC20Tokens(): Promise<
+		SupportedERC20Tokens | JsonRpcError
+	> {
 		const jsonRpcResult = await sendJsonRpcRequest(
 			this.rpcUrl,
 			"pm_supportedERC20Tokens",
@@ -45,7 +51,7 @@ export class CandideValidationPaymaster extends Paymaster {
 	async getPaymasterCallDataForPayingGasWithErc20(
 		userOperation: UserOperation,
 		erc20TokenAddress: string,
-	): Promise<{ paymasterAndData: BytesLike } | JsonRpcError> {
+	): Promise<PmSponsorUserOperationResult | JsonRpcError> {
 		const config = [this.rpcUrl, this.entrypointAddress, erc20TokenAddress];
 
 		return this.getPaymasterCallData(userOperation, config);
@@ -54,7 +60,7 @@ export class CandideValidationPaymaster extends Paymaster {
 	async getPaymasterCallData(
 		userOperation: UserOperation,
 		config: string[],
-	): Promise<{ paymasterAndData: BytesLike } | JsonRpcError> {
+	): Promise<PmSponsorUserOperationResult | JsonRpcError> {
 		const rpcUrl = config[0];
 		const entrypointAddress = config[1];
 		const tokenAddress = config[2];
@@ -66,7 +72,7 @@ export class CandideValidationPaymaster extends Paymaster {
 		);
 
 		if ("result" in jsonRpcResult) {
-			return { paymasterAndData: jsonRpcResult.result as BytesLike };
+			return jsonRpcResult.result as PmSponsorUserOperationResult;
 		} else {
 			return jsonRpcResult.error as JsonRpcError;
 		}

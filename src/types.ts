@@ -42,7 +42,8 @@ export type JsonRpcResult =
 	| UserOperationByHashResult
 	| UserOperationReceipt
 	| UserOperationReceiptResult
-	| SupportedERC20Tokens;
+	| SupportedERC20Tokens
+	| PmSponsorUserOperationResult;
 
 export type JsonRpcError = {
 	code: number;
@@ -87,6 +88,10 @@ export type UserOperationReceiptResult = {
 	logs: string;
 	receipt: UserOperationReceipt;
 };
+
+export type PmSponsorUserOperationResult = {
+		paymasterAndData: BytesLike
+}
 
 export enum Operation {
 	Call = 0,
