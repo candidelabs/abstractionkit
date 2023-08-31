@@ -2,13 +2,13 @@ import * as fetchImport from "isomorphic-unfetch";
 
 import { AbiCoder, keccak256 } from "ethers";
 
-import type { AddressLike, BytesLike, BigNumberish } from "ethers";
+import type { BytesLike, BigNumberish } from "ethers";
 
 import type { AbiInputValue, UserOperation, JsonRpcResponse, JsonRpcParam } from "./types";
 
 export function getUserOperationHash(
 	useroperation: UserOperation,
-	entrypointAddress: AddressLike,
+	entrypointAddress: string,
 	chainId: BigNumberish,
 ): BytesLike {
 	const packedUserOperationHash = keccak256(
