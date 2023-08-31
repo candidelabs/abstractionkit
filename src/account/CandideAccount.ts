@@ -70,7 +70,7 @@ export class CandideAccount extends SmartAccount {
 		owners: string[],
 		threshold: BigNumberish = 1,
 		c2nonce: BigNumberish = 0,
-		fallbackHandler: string = ZeroAddress,
+		fallbackHandler: string = "0x2a15DE4410d4c8af0A7b6c12803120f43C42B820", //CompatibilityFallbackHandler
 	): [string, BytesLike] {
 		const initializerFunctionInputParameters = [
 			owners, //_owners
