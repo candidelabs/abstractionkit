@@ -66,7 +66,7 @@ async function main(): Promise<void> {
     //and a valide paymasterAndData and signature
     estimation = estimation as GasEstimationResult
     user_operation.preVerificationGas = "0x" + Math.ceil(Number(estimation.preVerificationGas)*1.2).toString(16)
-    user_operation.verificationGasLimit = "0x" + Math.ceil(Number(estimation.verificationGas)*1.5).toString(16)
+    user_operation.verificationGasLimit = "0x" + Math.ceil(Number(estimation.verificationGasLimit)*1.5).toString(16)
     user_operation.callGasLimit = "0x" + Math.ceil(Number(estimation.callGasLimit)*1.2).toString(16)
 
     //sign the user operation hash

@@ -52,8 +52,7 @@ export type JsonRpcError = {
 export type GasEstimationResult = {
 	callGasLimit: BigNumberish;
 	preVerificationGas: BigNumberish;
-	verificationGas: BigNumberish;
-	deadline: BigNumberish;
+	verificationGasLimit: BigNumberish;
 };
 
 export type UserOperationByHashResult = {
