@@ -1,8 +1,10 @@
 export { SmartAccount } from "./account/SmartAccount";
 export { CandideAccount } from "./account/CandideAccount";
+export { SimpleAccount } from "./account/SimpleAccount";
 
 export { SmartAccountFactory } from "./factory/SmartAccountFactory";
 export { CandideAccountFactory } from "./factory/CandideAccountFactory";
+export { SimpleAccountFactory } from "./factory/SimpleAccountFactory";
 
 export { Bundler } from "./Bundler";
 

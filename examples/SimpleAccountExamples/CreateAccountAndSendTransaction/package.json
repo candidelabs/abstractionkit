@@ -1,0 +1,19 @@
+{
+  "name": "CreateAndSendTransaction",
+  "version": "1.0.0",
+  "description": "create a new account and send a useroperation.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "clean": "rm -rf dist",
+    "format": "prettier --write src/**/*.ts",
+    "lint": "eslint src/**/*.ts"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "abstractionkit": "^0.0.7",
+    "dotenv": "^16.3.1",
+    "ethers": "^6.6.7",
+    "typescript": "^5.1.6"
+  }
+}

@@ -1,7 +1,12 @@
 import { SmartAccount } from "./SmartAccount";
 import type { BigNumberish, BytesLike } from "ethers";
 import type { Operation } from "../types";
-import { ZeroAddress } from "ethers";
+import {
+	ZeroAddress,
+	keccak256,
+	solidityPacked,
+	solidityPackedKeccak256,
+} from "ethers";
 import { CandideAccountFactory } from "../factory/CandideAccountFactory";
 import { SmartAccountFactory } from "../factory/SmartAccountFactory";
 
@@ -130,5 +135,31 @@ export class CandideAccount extends SmartAccount {
 			approveAmount,
 		]);
 		return executorFunctionCallData;
+	}
+
+	getProxyAddress(
+		initializerCallData: BytesLike,
+		factoryAddress: string,
+		c2Nonce: BigNumberish,
+	): string {
+		const salt = keccak256(
+			solidityPacked(
+				["bytes32", "uint256"],
+				[keccak256(initializerCallData), c2Nonce],
+			),
+		);
+
+		const initHash = keccak256(
+			solidityPacked(
+				["bytes", "uint256"],
+				[this.proxyByteCode, this.singletonAddress],
+			),
+		);
+
+		const proxyAdd = solidityPackedKeccak256(
+			["bytes1", "address", "bytes32", "bytes32"],
+			["0xff", factoryAddress, salt, initHash],
+		).slice(-40);
+		return "0x" + proxyAdd;
 	}
 }
