@@ -80,7 +80,7 @@ async function main(): Promise<void> {
     let bundlerResponse = await bundler.sendUserOperation(user_operation)
     console.log(bundlerResponse)
     if("message" in bundlerResponse && bundlerResponse.message as string == "AA21 didn't pay prefund"){
-        console.log("Please fund the new account address with some sepolia eth to pay for gas : " + newAccountAddress)
+        console.log("Please fund the new account address with some eth to pay for gas : " + newAccountAddress)
     }
 }
 
