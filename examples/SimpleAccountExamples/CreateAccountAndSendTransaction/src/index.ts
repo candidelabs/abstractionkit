@@ -52,8 +52,8 @@ async function main(): Promise<void> {
 
     //fetch gas price - use your prefered source
     const feeData = await provider.getFeeData()
-    user_operation.maxFeePerGas = "0x" + Number(feeData.maxFeePerGas).toString(16) as BigNumberish//convert to hex format
-    user_operation.maxPriorityFeePerGas = "0x" + Number(feeData.maxPriorityFeePerGas).toString(16) as BigNumberish //convert to hex format
+    user_operation.maxFeePerGas = "0x" + feeData.maxFeePerGas?.toString(16)//convert to hex format
+    user_operation.maxPriorityFeePerGas = "0x" + feeData.maxPriorityFeePerGas?.toString(16)//convert to hex format
 
    
     let estimation = await bundler.estimateUserOperationGas(user_operation)
