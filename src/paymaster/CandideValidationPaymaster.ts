@@ -57,6 +57,14 @@ export class CandideValidationPaymaster extends Paymaster {
 		return this.getPaymasterCallData(userOperation, config);
 	}
 
+	async getPaymasterCallDataForGaslessTx(
+		userOperation: UserOperation,
+	): Promise<PmSponsorUserOperationResult | JsonRpcError> {
+		const config = [this.rpcUrl, this.entrypointAddress];
+
+		return this.getPaymasterCallData(userOperation, config);
+	}
+
 	async getPaymasterCallData(
 		userOperation: UserOperation,
 		config: string[],
