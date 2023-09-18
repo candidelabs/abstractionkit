@@ -84,7 +84,22 @@ async function main(): Promise<void> {
         entrypointAddress,
         paymasterRPC
     )
-    let paymasterAndDataResult = await paymaster.getPaymasterCallDataForPayingGasWithErc20(user_operation, erc20TokenAddress)
+    const supportedGasTokens = await paymaster.getSupportedERC20Tokens();
+    
+    if ("code" in supportedGasTokens) {
+        const errorresult = supportedGasTokens as JsonRpcError
+        const errorMessage = errorresult.message
+        console.log(errorMessage);
+        return
+    }
+    
+    const gasToken = supportedGasTokens.tokens.find(token => token.address === erc20TokenAddress.toLowerCase());
+    if (!gasToken) {
+        console.log("Gas token selected is not supported");
+        return
+    }
+
+    let paymasterAndDataResult = await paymaster.getPaymasterCallDataForPayingGasWithErc20(user_operation, gasToken.address)
     console.log(paymasterAndDataResult)
     if("code" in paymasterAndDataResult){
         const errorresult = paymasterAndDataResult as JsonRpcError
