@@ -92,11 +92,11 @@ export type UserOperationReceiptResult = {
 export type PmSponsorUserOperationResult = {
 	paymasterAndData: BytesLike;
 	callGasLimit: BigNumberish;
-    preVerificationGas: BigNumberish;
+	preVerificationGas: BigNumberish;
 	verificationGasLimit: BigNumberish;
-    maxFeePerGas: BigNumberish;
-    maxPriorityFeePerGas: BigNumberish;
-}
+	maxFeePerGas: BigNumberish;
+	maxPriorityFeePerGas: BigNumberish;
+};
 
 export enum Operation {
 	Call = 0,
@@ -109,7 +109,7 @@ export interface ERC20Token {
 	decimal: number;
 	fee: number;
 	exchangeRate: string;
-};
+}
 export interface PaymasterMetadata {
 	name: string;
 	description: string;
@@ -117,9 +117,9 @@ export interface PaymasterMetadata {
 	address: string;
 	sponsoredEventTopic: string;
 	dummyPaymasterAndData: string;
-};
+}
 
 export interface SupportedERC20Tokens {
 	paymasterMetadata: PaymasterMetadata;
 	tokens: ERC20Token[];
-};
+}
