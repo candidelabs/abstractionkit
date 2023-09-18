@@ -90,7 +90,12 @@ export type UserOperationReceiptResult = {
 };
 
 export type PmSponsorUserOperationResult = {
-		paymasterAndData: BytesLike
+	paymasterAndData: BytesLike;
+	callGasLimit: BigNumberish;
+    preVerificationGas: BigNumberish;
+	verificationGasLimit: BigNumberish;
+    maxFeePerGas: BigNumberish;
+    maxPriorityFeePerGas: BigNumberish;
 }
 
 export enum Operation {
