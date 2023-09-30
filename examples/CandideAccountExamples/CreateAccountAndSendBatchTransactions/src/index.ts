@@ -38,19 +38,59 @@ async function main(): Promise<void> {
     
     console.log("Account address(sender) : " + newAccountAddress)
 
-    // create callData to deposit eth and get wEth in return
+    // 1st transction - create callData to deposit eth and get wEth in return
     const wEthTokenAddress = "0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6";
     const depositFunctionSignature =  'deposit()';
     const depositFunctionSelector =  getFunctionSelector(depositFunctionSignature);
     const depositTransactionCallData = getCallData(depositFunctionSelector, [], []);
 
-    const tx :MetaTransaction ={
+    const tx1 :MetaTransaction ={
         to: wEthTokenAddress,
         value: 10, //amount to deposit
         data: depositTransactionCallData,
         operation: Operation.Call
     }
-    let callData = smartAccount.createCallDataSingleTransaction(tx);
+
+    // 2nd transaction - approve allowance to uniswap router
+    const uniswapV2RouterAddress = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
+    const approveFunctionSignature =  'approve(address,uint256)';
+    const approveFunctionSelector =  getFunctionSelector(approveFunctionSignature);
+    const approveTransactionCallData = getCallData(
+        approveFunctionSelector, 
+        ["address", "uint256"], 
+        [uniswapV2RouterAddress, 10]
+    );
+
+    const tx2 :MetaTransaction ={
+        to: wEthTokenAddress,
+        value: 0,
+        data: approveTransactionCallData,
+        operation: Operation.Call
+    }
+
+    // 3rd transaction - swap weth for usdc
+    const token0 = "0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6"; //weth
+    const token1 = "0x9B2660A7BEcd0Bf3d90401D1C214d2CD36317da5"; //usdc
+    const swapFunctionSignature =  'swapExactTokensForTokens(uint256,uint256,address[],address,uint256)';
+    const swapFunctionSelector =  getFunctionSelector(swapFunctionSignature);
+    const swapTransactionCallData = getCallData(swapFunctionSelector,
+         ["uint256","uint256","address[]","address", "uint256"], //amountIn, amountOutMin, path, to, deadline
+         [
+            5, //amountIn
+            1, //amountOutMin
+            [token0, token1], //path
+            newAccountAddress, //to
+            Math.floor(Date.now() / 1000) + 60 * 20, // deadline - 20 minutes from the current Unix time
+        ]
+        );
+    const tx3 :MetaTransaction ={
+            to: uniswapV2RouterAddress,
+            value: 0,
+            data: swapTransactionCallData,
+            operation: Operation.Call
+        }
+
+    let callData = smartAccount.createCallDataBatchTransaction([tx1, tx2, tx3]);
 
     const provider = new JsonRpcProvider(jsonRpcNodeProvider);
 
@@ -68,6 +108,7 @@ async function main(): Promise<void> {
     user_operation.maxPriorityFeePerGas = "0x" + Math.ceil(Number(feeData.maxPriorityFeePerGas)*1.5).toString(16)//convert to hex format
 
     let estimation = await bundler.estimateUserOperationGas(user_operation)
+    console.log("estimation")
     console.log(estimation)
     if("code" in estimation){
         return

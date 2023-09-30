@@ -5,6 +5,7 @@ import { AbiCoder, keccak256 } from "ethers";
 import type { BytesLike, BigNumberish } from "ethers";
 
 import type { AbiInputValue, UserOperation, JsonRpcResponse, JsonRpcParam } from "./types";
+import { id } from "ethers";
 
 export function getUserOperationHash(
 	useroperation: UserOperation,
@@ -99,4 +100,11 @@ export async function sendJsonRpcRequest(
 	const response = await fetch(rpcUrl, requestOptions);
 
 	return await response.json() as JsonRpcResponse;
+}
+
+
+export function getFunctionSelector(
+	functionSignature: string,
+): string {
+	return id(functionSignature).slice(0,10);
 }

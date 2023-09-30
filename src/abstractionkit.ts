@@ -1,5 +1,7 @@
 export { SmartAccount } from "./account/SmartAccount";
-export { CandideAccount } from "./account/CandideAccount";
+export { CandideAccount } from "./account/Candide/CandideAccount";
+export { MetaTransaction } from "./account/Candide/types";
+
 export { SimpleAccount } from "./account/SimpleAccount";
 
 export { SmartAccountFactory } from "./factory/SmartAccountFactory";
@@ -10,9 +12,11 @@ export { Bundler } from "./Bundler";
 
 export {CandideValidationPaymaster} from "./paymaster/CandideValidationPaymaster"
 
-export { getUserOperationHash } from "./utils";
+export { getUserOperationHash, getCallData, getFunctionSelector } from "./utils";
 
 export { UserOperationEmptyValues, UserOperationDummyValues } from "./constants";
+
+export { Operation } from "./types";
 
 export type {
 	UserOperation,

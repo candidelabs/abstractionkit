@@ -1,14 +1,18 @@
-import { SmartAccount } from "./SmartAccount";
+import { SmartAccount } from "../SmartAccount";
 import type { BigNumberish, BytesLike } from "ethers";
-import type { Operation } from "../types";
+import { Operation } from "../../types";
+import { getCallData } from "../../utils";
 import {
 	ZeroAddress,
 	keccak256,
 	solidityPacked,
 	solidityPackedKeccak256,
 } from "ethers";
-import { CandideAccountFactory } from "../factory/CandideAccountFactory";
-import { SmartAccountFactory } from "../factory/SmartAccountFactory";
+import { CandideAccountFactory } from "../../factory/CandideAccountFactory";
+import { SmartAccountFactory } from "../../factory/SmartAccountFactory";
+import { MetaTransaction } from "./types";
+import { encodeMultiSendCallData } from "./multisend";
+
 
 export class CandideAccount extends SmartAccount {
 	readonly entrypointAddress: string;
@@ -116,6 +120,7 @@ export class CandideAccount extends SmartAccount {
 	createSendEthCallData(to: string, value: BigNumberish): BytesLike {
 		return this.createCallData(to, value, "0x", 0, ZeroAddress, ZeroAddress, 0);
 	}
+
 	createCallData(
 		to: string,
 		value: BigNumberish,
@@ -162,4 +167,65 @@ export class CandideAccount extends SmartAccount {
 		).slice(-40);
 		return "0x" + proxyAdd;
 	}
+
+	createCallDataSingleTransactionWithPaymaster(
+		tx: MetaTransaction,
+		paymaster: string,
+		approveToken: string,
+		approveAmount: BigNumberish,
+	): BytesLike {
+		const executorFunctionCallData = this.getExecutorCallData([
+			tx.to,
+			tx.value,
+			tx.data,
+			tx.operation,
+			paymaster,
+			approveToken,
+			approveAmount,
+		]);
+		return executorFunctionCallData;
+	}
+
+	createCallDataSingleTransaction(
+		tx: MetaTransaction
+		): BytesLike{
+			return this.createCallDataSingleTransactionWithPaymaster(
+				tx, ZeroAddress, ZeroAddress, 0);
+		}
+
+	createCallDataBatchTransactionWithPaymaster(
+		txs: MetaTransaction[],
+		paymaster: string,
+		approveToken: string,
+		approveAmount: BigNumberish,
+		): BytesLike {
+			const multisendContractAddress: string = "0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526"
+			const multiData = encodeMultiSendCallData(txs);
+
+			const mutisendSelector = "0x8d80ff0a";
+			const multiSendCallData =  getCallData(
+				mutisendSelector,
+				["bytes"],
+				[multiData]
+				);
+
+			const executorFunctionCallData = this.getExecutorCallData([
+				multisendContractAddress,
+				0,
+				multiSendCallData,
+				Operation.Delegate,
+				paymaster,
+				approveToken,
+				approveAmount,
+			]);
+
+			return executorFunctionCallData;
+	}
+
+	createCallDataBatchTransaction(
+		txs: MetaTransaction[]
+		): BytesLike{
+			return this.createCallDataBatchTransactionWithPaymaster(
+				txs, ZeroAddress, ZeroAddress, 0);
+		}
 }
