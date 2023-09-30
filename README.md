@@ -12,6 +12,12 @@
 
 AbstractionKit - Account Abstraction SDK by Candide
 
+# Get started using the SDK
+<a href="https://docs.candide.dev/wallet/guides/getting-started/">Get started</a>
+
+# Links
+<a href="https://www.npmjs.com/package/abstractionkit">npm</a>
+
 <!-- LICENSE -->
 ## License
 
