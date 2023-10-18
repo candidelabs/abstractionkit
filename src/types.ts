@@ -91,11 +91,11 @@ export type UserOperationReceiptResult = {
 
 export type PmSponsorUserOperationResult = {
 	paymasterAndData: BytesLike;
-	callGasLimit: BigNumberish;
-	preVerificationGas: BigNumberish;
-	verificationGasLimit: BigNumberish;
-	maxFeePerGas: BigNumberish;
-	maxPriorityFeePerGas: BigNumberish;
+	callGasLimit?: BigNumberish;
+	preVerificationGas?: BigNumberish;
+	verificationGasLimit?: BigNumberish;
+	maxFeePerGas?: BigNumberish;
+	maxPriorityFeePerGas?: BigNumberish;
 };
 
 export enum Operation {
