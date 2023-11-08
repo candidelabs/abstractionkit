@@ -68,15 +68,16 @@ export class CandideValidationPaymaster extends Paymaster {
 	async getPaymasterCallData(
 		userOperation: UserOperation,
 		config: string[],
+		context: object = {},
 	): Promise<PmSponsorUserOperationResult | JsonRpcError> {
-		const rpcUrl = config[0];
-		const entrypointAddress = config[1];
+		const rpcUrl = config[0] || this.rpcUrl;
+		const entrypointAddress = config[1] || this.entrypointAddress;
 		const tokenAddress = config[2];
 
 		const jsonRpcResult = await sendJsonRpcRequest(
 			rpcUrl,
 			"pm_sponsorUserOperation",
-			[userOperation, entrypointAddress, { token: tokenAddress }],
+			[userOperation, entrypointAddress, { token: tokenAddress, ...context }],
 		);
 
 		if ("result" in jsonRpcResult) {
