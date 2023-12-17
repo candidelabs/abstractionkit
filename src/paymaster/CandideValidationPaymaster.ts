@@ -5,6 +5,7 @@ import {
 	JsonRpcError,
 	SupportedERC20Tokens,
 	PmSponsorUserOperationResult,
+	SponsorshipEligibility,
 } from "../types";
 
 export class CandideValidationPaymaster extends Paymaster {
@@ -55,6 +56,23 @@ export class CandideValidationPaymaster extends Paymaster {
 		const config = [this.rpcUrl, this.entrypointAddress, erc20TokenAddress];
 
 		return this.getPaymasterCallData(userOperation, config);
+	}
+
+	async checkSponsorshipEligibility(
+		userOperation: UserOperation,
+	): Promise<SponsorshipEligibility | JsonRpcError> {
+		const jsonRpcResult = await sendJsonRpcRequest(
+			this.rpcUrl,
+			"pm_checkSponsorshipEligibility",
+			[userOperation, this.entrypointAddress],
+		);
+
+		if ("result" in jsonRpcResult) {
+			const res = jsonRpcResult.result as SponsorshipEligibility;
+			return { sponsored: res.sponsored, sponsorMeta: res.sponsorMeta };
+		} else {
+			return jsonRpcResult.error as JsonRpcError;
+		}
 	}
 
 	async getPaymasterCallDataForGaslessTx(
