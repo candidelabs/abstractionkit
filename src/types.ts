@@ -43,7 +43,8 @@ export type JsonRpcResult =
 	| UserOperationReceipt
 	| UserOperationReceiptResult
 	| SupportedERC20Tokens
-	| PmSponsorUserOperationResult;
+	| PmSponsorUserOperationResult
+	| SponsorshipEligibility;
 
 export type JsonRpcError = {
 	code: number;
@@ -122,4 +123,16 @@ export interface PaymasterMetadata {
 export interface SupportedERC20Tokens {
 	paymasterMetadata: PaymasterMetadata;
 	tokens: ERC20Token[];
+}
+
+export interface SponsorshipEligibility {
+	sponsored: boolean;
+	sponsorMeta: SponsorMetadata;
+}
+
+interface SponsorMetadata {
+	name: string;
+	description: string;
+	url: string;
+	icons: string[];
 }
