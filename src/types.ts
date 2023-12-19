@@ -127,7 +127,7 @@ export interface SupportedERC20Tokens {
 
 export interface SponsorshipEligibility {
 	sponsored: boolean;
-	sponsorMeta: SponsorMetadata;
+	sponsorMeta?: SponsorMetadata;
 }
 
 interface SponsorMetadata {
