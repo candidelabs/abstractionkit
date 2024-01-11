@@ -1,98 +1,110 @@
 import * as dotenv from 'dotenv'
-import {Wallet, JsonRpcProvider, getBytes, id, ZeroAddress } from "ethers"
 
 import { 
-    Bundler, 
     SafeAccount, 
-    GasEstimationResult, 
-    UserOperation, 
-    getUserOperationHash, 
-    UserOperationDummyValues,
-    getCallData,
     MetaTransaction,
-    getFunctionSelector,
-    Operation
+    Operation,
+    JsonRpcError,
+    BundlerJsonRpcError,
 } from "abstractionkit";
-
 
 async function main(): Promise<void> {
     //get vlues from .env
     dotenv.config()
-    const chainId = process.env.CHAIN_ID as string
+    const chainId = BigInt(process.env.CHAIN_ID as string)
     const bundlerUrl = process.env.BUNDLER_URL as string
     const jsonRpcNodeProvider = process.env.JSON_RPC_NODE_PROVIDER as string
-    const entrypointAddress = process.env.ENTRYPOINT_ADDRESS as string
+    const ownerPublicAddress = process.env.PUBLIC_ADDRESS as string
     const privateKey = process.env.PRIVATE_KEY as string
-    
-    let bundler: Bundler = new Bundler(
-        bundlerUrl,
-        entrypointAddress
-    );
 
-    let eoaSigner = new Wallet(privateKey);
-
-    let smartAccount:SafeAccount = new SafeAccount()
-    
-    //create a new smart account, only needed for the first useroperation for a new account
-    let [newAccountAddress, initCode] = smartAccount.createNewAccount([eoaSigner.address],1,1)
-    console.log("Account address(sender) : " + newAccountAddress)
-
-    // create callData to deposit eth and get wEth in return
-    const wEthTokenAddress = "0xfff9976782d46cc05630d1f6ebab18b2324d6b14";
-    const depositFunctionSignature =  'deposit()';
-    const depositFunctionSelector =  getFunctionSelector(depositFunctionSignature);
-    const depositTransactionCallData = getCallData(depositFunctionSelector, [], []);
-
-    const tx :MetaTransaction ={
-        to: wEthTokenAddress,
-        value: 10, //amount to deposit
-        data: depositTransactionCallData,
-        operation: Operation.Call
-    }
-    let callData = smartAccount.createCallDataSingleTransaction(tx);
-
-    const provider = new JsonRpcProvider(jsonRpcNodeProvider);
-
-    let user_operation :UserOperation={
-        ...UserOperationDummyValues,
-        sender:newAccountAddress,
-        nonce: "0x00",
-        initCode:initCode,//only needed for the first useroperation for a new account
-        callData:callData
-    }
-
-    //fetch gas price - use your prefered source
-    const feeData = await provider.getFeeData()
-    user_operation.maxFeePerGas = "0x" + Math.ceil(Number(feeData.maxFeePerGas)*1.5).toString(16)//convert to hex format
-    user_operation.maxPriorityFeePerGas = "0x" + Math.ceil(Number(feeData.maxPriorityFeePerGas)*1.5).toString(16)//convert to hex format
-
-    let estimation = await bundler.estimateUserOperationGas(user_operation)
-    console.log(estimation)
-    if("code" in estimation){
-        return
-    }
-    //either multiply gas limit with a factor to compensate for the missing paymasterAndData and signature during gas estimation
-    //or supply dummy values that will not cause the useroperation to revert
-    //for the most accurate values, estimate gas again after acquiring the initial gas limits
-    //and a valide paymasterAndData and signature
-    estimation = estimation as GasEstimationResult
-    user_operation.preVerificationGas = "0x" + Math.ceil(Number(estimation.preVerificationGas)*1.2).toString(16)
-    user_operation.verificationGasLimit = "0x" + Math.ceil(Number(estimation.verificationGasLimit)*1.5).toString(16)
-    user_operation.callGasLimit = "0x" + Math.ceil(Number(estimation.callGasLimit)*2).toString(16)
-
-    //sign the user operation hash
-    let user_operation_hash = getUserOperationHash(
-        user_operation, entrypointAddress, chainId
+    //calculateAccountAddressAndInitCode only needed when the smart account
+    //have not been deployed yet for its first useroperation.
+    //You can calculate the account address from its initilizer owners.
+    //You can store the accountAddress to use it to initialize 
+    //the SafeAccount object later after the safe account is deployed
+    let [accountAddress, initCode] = SafeAccount.createAccountAddressAndInitCode(
+        [ownerPublicAddress],
     )
 
-    user_operation.signature = await eoaSigner.signMessage(getBytes(user_operation_hash))
+    //Initialize a Safe account with the accountAddress address
+    let smartAccount:SafeAccount = new SafeAccount(accountAddress)
 
-    //send the user operation to the bundler
-    let bundlerResponse = await bundler.sendUserOperation(user_operation)
-    console.log(bundlerResponse)
-    if("message" in bundlerResponse && bundlerResponse.message as string == "AA21 didn't pay prefund"){
-        console.log("Please fund the new account address with some eth to pay for gas : " + newAccountAddress)
+    console.log("Account address(sender) : " + accountAddress)
+
+    //create two meta transaction to mint two NFTs
+    //use you favorite method (like ethers.js) to construct the call data 
+    const transaction1 :MetaTransaction ={
+        to: "0xD9de104e3386d9A45a61BcE269c43E48B534e4E7", //Nft contract address
+        value: 0n,
+        data: "0x1249c58b", //mint
     }
+
+    const transaction2 :MetaTransaction ={
+        to: "0xD9de104e3386d9A45a61BcE269c43E48B534e4E7", //Nft contract address
+        value: 0n,
+        data: "0x1249c58b", //mint
+    }
+
+    //createUserOperation will determine the nonce, fetch the gas prices,
+    //estimate gas limits and return a useroperation to be signed.
+    //you can override all these values using the overrides parameter.
+    let userOperation = await smartAccount.createUserOperation(
+		[
+            //You can batch multiple transactions to be executed in one useroperation.
+            transaction1, transaction2
+        ],
+        jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
+        bundlerUrl, //the bundler rpc is used to estimate the gas limits.
+        // {
+        //     initCode:initCode //only needed for the first useroperation
+        // }
+	)
+
+    //error handling
+    if("code" in userOperation){
+        const error = userOperation as BundlerJsonRpcError | JsonRpcError
+        console.log(error.message)
+        return
+    }
+ 
+    //Safe is a multisig that can have multiple owners/signers
+    //signUserOperation will create a signature for the provided
+    //privateKeys
+    userOperation.signature = smartAccount.signUserOperation(
+		userOperation,
+        [privateKey],
+        chainId,
+	)
+    console.log(userOperation)
+
+    //use the the bundler rpc to send a useroperation to the bunder
+    //sendUserOperation will return a SendUseroperationResponse object
+    //that can be awaited for the useroperation to be included onchain
+    const sendUserOperationResponse = await smartAccount.sendUserOperation(
+        userOperation, bundlerUrl
+    )
+
+    //error handling
+    if("code" in sendUserOperationResponse){
+        const error = sendUserOperationResponse as BundlerJsonRpcError
+        console.log(error.message)
+        return
+    }
+
+    console.log("Useroperation sent. Waiting to be included ......")
+    //included will return a UserOperationReceiptResult when 
+    //useroperation is included onchain
+    let receipt = await sendUserOperationResponse.included()
+
+    //error handling
+    if("code" in receipt){
+        const error = receipt as BundlerJsonRpcError
+        console.log(error.message)
+        return
+    }
+    console.log("Useroperation receipt received.")
+    console.log(receipt)
+    console.log("Two Nfts were mented. The transaction hash is : " + receipt['receipt']['transactionHash'])
 }
 
 main()

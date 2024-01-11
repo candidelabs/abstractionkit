@@ -12,7 +12,6 @@
   "license": "MIT",
   "dependencies": {
     "dotenv": "^16.3.1",
-    "ethers": "^6.6.7",
     "typescript": "^5.1.6"
   }
 }

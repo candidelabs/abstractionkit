@@ -1,38 +1,38 @@
 import type {
 	UserOperation,
-	JsonRpcError,
+	BundlerJsonRpcError,
 	GasEstimationResult,
 	UserOperationByHashResult,
 	UserOperationReceipt,
 	UserOperationReceiptResult,
+	StateOverrideSet,
+	JsonRpcResponse,
 } from "./types";
 import { BytesLike } from "ethers";
 import {sendJsonRpcRequest} from "./utils";
 
 export class Bundler {
 	readonly rpcUrl: string;
-	readonly entrypointAddress: string;
 
-	constructor(rpcUrl: string, entrypointAddress: string) {
+	constructor(rpcUrl: string) {
 		this.rpcUrl = rpcUrl;
-		this.entrypointAddress = entrypointAddress;
 	}
 
-	async chainId(): Promise<{ chainId: string } | JsonRpcError> {
+	async chainId(): Promise<string| BundlerJsonRpcError> {
 		const jsonRpcResult = await sendJsonRpcRequest(
 			this.rpcUrl,
 			"eth_chainId",
 			[],
 		);
 		if ("result" in jsonRpcResult) {
-			return { chainId: jsonRpcResult.result as string };
+			return jsonRpcResult.result as string
 		} else {
-			return jsonRpcResult.error as JsonRpcError;
+			return jsonRpcResult.error as BundlerJsonRpcError;
 		}
 	}
 
 	async supportedEntryPoints(): Promise<
-		{ supportedEntryPoints: string[] } | JsonRpcError
+		string[] | BundlerJsonRpcError
 	> {
 		const jsonRpcResult = await sendJsonRpcRequest(
 			this.rpcUrl,
@@ -41,47 +41,58 @@ export class Bundler {
 		);
 
 		if ("result" in jsonRpcResult) {
-			return { supportedEntryPoints: jsonRpcResult.result as string[] };
+			return jsonRpcResult.result as string[]
 		} else {
-			return jsonRpcResult.error as JsonRpcError;
+			return jsonRpcResult.error as BundlerJsonRpcError;
 		}
 	}
 
 	async estimateUserOperationGas(
 		useroperation: UserOperation,
-	): Promise<GasEstimationResult | JsonRpcError> {
-		const jsonRpcResult = await sendJsonRpcRequest(
-			this.rpcUrl,
-			"eth_estimateUserOperationGas",
-			[useroperation, this.entrypointAddress],
-		);
-
+		entrypointAddress: string,
+		state_override_set?: StateOverrideSet
+	): Promise<GasEstimationResult | BundlerJsonRpcError> {
+		let jsonRpcResult = {} as JsonRpcResponse
+		if (typeof state_override_set === 'undefined') {
+			jsonRpcResult = await sendJsonRpcRequest(
+				this.rpcUrl,
+				"eth_estimateUserOperationGas",
+				[useroperation, entrypointAddress],
+			);
+		}else{
+			jsonRpcResult = await sendJsonRpcRequest(
+				this.rpcUrl,
+				"eth_estimateUserOperationGas",
+				[useroperation, entrypointAddress, state_override_set],
+			);
+		}
 		if ("result" in jsonRpcResult) {
 			return jsonRpcResult.result as GasEstimationResult;
 		} else {
-			return jsonRpcResult.error as JsonRpcError;
+			return jsonRpcResult.error as BundlerJsonRpcError;
 		}
 	}
 
 	async sendUserOperation(
 		useroperation: UserOperation,
-	): Promise<{ userOperationHash: string } | JsonRpcError> {
+		entrypointAddress: string,
+	): Promise<string | BundlerJsonRpcError> {
 		const jsonRpcResult = await sendJsonRpcRequest(
 			this.rpcUrl,
 			"eth_sendUserOperation",
-			[useroperation, this.entrypointAddress],
+			[useroperation, entrypointAddress],
 		);
 		if ("result" in jsonRpcResult) {
-			return { userOperationHash: jsonRpcResult.result as string };
+			return jsonRpcResult.result as string
 		} else {
-			const error = jsonRpcResult.error as JsonRpcError;
+			const error = jsonRpcResult.error as BundlerJsonRpcError;
 			return error;
 		}
 	}
 
 	async getUserOperationReceipt(
 		useroperationhash: BytesLike,
-	): Promise<UserOperationReceiptResult | JsonRpcError> {
+	): Promise<UserOperationReceiptResult | BundlerJsonRpcError> {
 		const jsonRpcResult = await sendJsonRpcRequest(
 			this.rpcUrl,
 			"eth_getUserOperationReceipt",
@@ -101,14 +112,14 @@ export class Bundler {
 			};
 			return bundlerGetUserOperationReceiptResult;
 		} else {
-			const error = jsonRpcResult.error as JsonRpcError;
+			const error = jsonRpcResult.error as BundlerJsonRpcError;
 			return error;
 		}
 	}
 
 	async getUserOperationByHash(
 		useroperationhash: BytesLike,
-	): Promise<UserOperationByHashResult | JsonRpcError> {
+	): Promise<UserOperationByHashResult | BundlerJsonRpcError> {
 		const jsonRpcResult = await sendJsonRpcRequest(
 			this.rpcUrl,
 			"eth_getUserOperationByHash",
@@ -117,7 +128,7 @@ export class Bundler {
 		if ("result" in jsonRpcResult) {
 			return jsonRpcResult.result as UserOperationByHashResult;
 		} else {
-			const error = jsonRpcResult.error as JsonRpcError;
+			const error = jsonRpcResult.error as BundlerJsonRpcError;
 			return error;
 		}
 	}

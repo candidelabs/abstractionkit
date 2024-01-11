@@ -4,7 +4,6 @@ import {Bundler} from "abstractionkit";
 async function main(): Promise<void> {
     let bundler: Bundler = new Bundler(
         "https://goerli.voltaire.candidewallet.com/rpc",
-        "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
     );
     
     //an example for using a bundler json rpc methods other than sendUserOperation and estimateUserOperationGas which is covered in another example

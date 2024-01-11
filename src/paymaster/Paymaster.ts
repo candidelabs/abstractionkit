@@ -1,10 +1,10 @@
 import "ethers";
 import type { BytesLike } from "ethers";
-import type { UserOperation, JsonRpcError } from "../types";
+import type { UserOperation, BundlerJsonRpcError } from "../types";
 
 export abstract class Paymaster {
 	abstract getPaymasterCallData(
 		userOperation: UserOperation,
 		config: string[],
-	): Promise<{ paymasterAndData: BytesLike } | JsonRpcError>;
+	): Promise<{ paymasterAndData: BytesLike } | BundlerJsonRpcError>;
 }

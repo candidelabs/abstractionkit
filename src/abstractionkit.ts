@@ -1,11 +1,10 @@
 export { SmartAccount } from "./account/SmartAccount";
-export { CandideAccount } from "./account/Candide/CandideAccount";
-export { MetaTransaction } from "./account/Candide/types";
+export { MetaTransaction } from "./account/Safe/types";
 export { SafeAccount } from "./account/Safe/SafeAccount";
-export { SimpleAccount } from "./account/SimpleAccount";
+// export { SimpleAccount } from "./account/SimpleAccount.ts_b";
+export { SendUseroperationResponse } from "./account/SendUseroperationResponse";
 
 export { SmartAccountFactory } from "./factory/SmartAccountFactory";
-export { CandideAccountFactory } from "./factory/CandideAccountFactory";
 export { SafeAccountFactory } from "./factory/SafeAccountFactory";
 export { SimpleAccountFactory } from "./factory/SimpleAccountFactory";
 
@@ -13,7 +12,7 @@ export { Bundler } from "./Bundler";
 
 export {CandideValidationPaymaster} from "./paymaster/CandideValidationPaymaster"
 
-export { getUserOperationHash, getCallData, getFunctionSelector } from "./utils";
+export { createUserOperationHash, createCallData, getFunctionSelector, fetchAccountNonce } from "./utils";
 
 export { UserOperationEmptyValues, UserOperationDummyValues } from "./constants";
 
@@ -25,9 +24,10 @@ export type {
 	JsonRpcParam,
 	JsonRpcResponse,
 	JsonRpcResult,
-	JsonRpcError,
+	BundlerJsonRpcError,
 	GasEstimationResult,
 	UserOperationByHashResult,
 	UserOperationReceipt,
 	UserOperationReceiptResult,
+	JsonRpcError,
 } from "./types";
