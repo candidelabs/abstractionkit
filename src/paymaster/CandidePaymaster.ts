@@ -1,5 +1,5 @@
 import { Paymaster } from "./Paymaster";
-import { sendJsonRpcRequest } from "../utils";
+import { calculateUserOperationMaxGasCost, sendJsonRpcRequest } from "../utils";
 import {
 	UserOperation,
 	JsonRpcError,
@@ -132,6 +132,42 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
+	 * get the paymaster token data
+	 * @param erc20TokenAddress
+	 * @returns ERC20Token or null or JsonRpcError 
+	 */
+	async getSupportedERC20TokenData(
+		erc20TokenAddress: string,
+	): Promise<ERC20Token | null | JsonRpcError> {
+		if (
+			this.entrypointAddress == null ||
+			this.supportedTokens == null ||
+			this.paymasterMetadata == null
+		) {
+			const result = await this.initialize();
+			if (result != null) {
+				return result;
+			}
+		}
+		const supportedTokens = this.supportedTokens as ERC20Token[];
+		const gasToken = supportedTokens.find(
+			(token) => token.address === erc20TokenAddress.toLowerCase(),
+		);
+
+		if (!gasToken) {
+			return null;
+		} else {
+			return {
+				symbol: gasToken.symbol,
+				address: gasToken.address,
+				decimal: Number(gasToken.decimal),
+				fee: BigInt(gasToken.fee),
+				exchangeRate: BigInt(gasToken.exchangeRate),
+			};
+		}
+	}
+
+	/**
 	 * createPaymasterUserOperation will estimate gas and set
 	 * paymasterAndData
 	 * @param userOperation 
@@ -219,6 +255,28 @@ export class CandidePaymaster extends Paymaster {
 			return userOperation;
 		} else {
 			return jsonRpcResult.error as JsonRpcError;
+		}
+	}
+
+	async calculateUserOperationErc20TokenMaxGasCost(
+		userOperation: UserOperation,
+		erc20TokenAddress: string,
+	):Promise<bigint | JsonRpcError>{
+		const supportedERC20TokensDataResult = await this.getSupportedERC20TokenData(erc20TokenAddress)
+		if (supportedERC20TokensDataResult == null) {
+			throw RangeError(
+				"Erc20 token is not supported by the paymaster.",
+			);
+		}else{
+			if("error" in supportedERC20TokensDataResult){
+				return supportedERC20TokensDataResult as JsonRpcError
+			}else{
+				const supportedERC20TokensData = supportedERC20TokensDataResult as ERC20Token
+				const cost = calculateUserOperationMaxGasCost(userOperation)
+				const tokenCost = (supportedERC20TokensData.exchangeRate / cost) + supportedERC20TokensData.fee
+
+				return tokenCost
+			}
 		}
 	}
 }

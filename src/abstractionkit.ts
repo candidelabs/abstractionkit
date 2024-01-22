@@ -10,14 +10,14 @@ export { SimpleAccountFactory } from "./factory/SimpleAccountFactory";
 
 export { Bundler } from "./Bundler";
 
-export {CandidePaymaster} from "./paymaster/CandideValidationPaymaster"
+export {CandidePaymaster} from "./paymaster/CandidePaymaster"
 
 export { 
 	createUserOperationHash,
 	createCallData,
 	getFunctionSelector,
 	fetchAccountNonce,
-	calculateUserOperationMaxGasCostInWei,
+	calculateUserOperationMaxGasCost,
 } from "./utils";
 
 export { UserOperationEmptyValues, UserOperationDummyValues } from "./constants";

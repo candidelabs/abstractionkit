@@ -204,7 +204,7 @@ export async function fetchGasPrice(
 	return [maxFeePerGas, maxPriorityFeePerGas]
 }
 
-export function calculateUserOperationMaxGasCostInWei(
+export function calculateUserOperationMaxGasCost(
 	useroperation: UserOperation,
 ):bigint{
 	const isPaymasterAndData = useroperation.paymasterAndData == "0x" || useroperation.paymasterAndData == null

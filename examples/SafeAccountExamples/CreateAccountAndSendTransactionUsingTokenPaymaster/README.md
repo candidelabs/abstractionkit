@@ -14,7 +14,7 @@ CreateAccountAndSendTransactionUsingPaymaster Example - AbstractionKit - Account
 
 This example is in the Goerli chain.
 
-This example uses a Candide paymaster to sponsor the useroperation, so there is not need to fund the sender account. Get early access to Candide's sponsor paymaster by visiting our discord https://discord.gg/KJSzy2Rqtg
+In this example you will need fund the new account address(sender) with some CTT to pay for gas. Please visit our discord to get some test tokens https://discord.gg/KJSzy2Rqtg.Please visit https://dashboard.candide.dev/ to get a token paymaster url.
 
 # How to use this example
 

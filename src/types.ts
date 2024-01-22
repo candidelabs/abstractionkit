@@ -144,9 +144,9 @@ export interface ERC20Token {
 	/** Token decimal places */
 	decimal: number;
 	/** Paymaster fee for this token*/
-	fee: number;
+	fee: bigint;
 	/** Token exchange rate*/
-	exchangeRate: string;
+	exchangeRate: bigint;
 }
 
 /**

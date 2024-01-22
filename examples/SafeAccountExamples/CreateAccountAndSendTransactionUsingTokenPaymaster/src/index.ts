@@ -3,7 +3,6 @@ import * as dotenv from 'dotenv'
 import {
     SafeAccountV0_2_0 as SafeAccount,
     MetaTransaction,
-    calculateUserOperationMaxGasCost,
     JsonRpcError,
     BundlerJsonRpcError,
     CandidePaymaster,
@@ -22,6 +21,7 @@ async function main(): Promise<void> {
     const ownerPublicAddress = process.env.PUBLIC_ADDRESS as string
     const ownerPrivateKey = process.env.PRIVATE_KEY as string
     const paymasterRPC = process.env.PAYMASTER_RPC as string;
+    const paymasterTokenAddress = process.env.TOKEN_ADDRESS as string;
     
     //initializeNewAccount only needed when the smart account
     //have not been deployed yet for its first useroperation.
@@ -79,17 +79,31 @@ async function main(): Promise<void> {
         return
     }
 
-    const cost = calculateUserOperationMaxGasCost(userOperation)
-    console.log("This useroperation may cost upto : " + cost + " wei")
-    console.log("This example uses a Candide paymaster to sponsor the useroperation, so there is not need to fund the sender account.")
-    console.log("Get early access to Candide's sponsor paymaster by visiting our discord https://discord.gg/KJSzy2Rqtg")
-
     let paymaster: CandidePaymaster = new CandidePaymaster(
-        paymasterRPC
+        paymasterRPC,
     )
 
+    const cost = await paymaster.calculateUserOperationErc20TokenMaxGasCost(
+        userOperation,
+        paymasterTokenAddress
+    )
+    console.log("This useroperation may cost upto : " + cost + " wei in CTT token")
+    console.log(
+        "Please fund the sender account : " + 
+        userOperation.sender +
+        " with more than "+ cost + " wei CTT token"
+    )
+    console.log("This example uses a Candide token paymaster.")
+    console.log("Please visit https://dashboard.candide.dev/ to get a token paymaster url.")
+    console.log("Please visit our discord https://discord.gg/KJSzy2Rqtg to get some CTT token for testing")
+
     let paymasterUserOperation = await paymaster.createPaymasterUserOperation(
-        userOperation, bundlerUrl)
+        userOperation,
+        bundlerUrl,
+        {
+            token: paymasterTokenAddress
+        }
+    )
 
     //error handling
     if("code" in paymasterUserOperation){

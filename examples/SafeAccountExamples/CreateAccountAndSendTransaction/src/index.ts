@@ -6,7 +6,7 @@ import {
     JsonRpcError,
     BundlerJsonRpcError,
     UserOperationReceiptResult,
-    calculateUserOperationMaxGasCostInWei,
+    calculateUserOperationMaxGasCost,
     getFunctionSelector,
     createCallData,
 } from "abstractionkit";
@@ -72,7 +72,7 @@ async function main(): Promise<void> {
         return
     }
 
-    const cost = calculateUserOperationMaxGasCostInWei(userOperation)
+    const cost = calculateUserOperationMaxGasCost(userOperation)
     console.log("This useroperation may cost upto : " + cost + " wei")
     console.log(
         "Please fund the sender account : " + 
