@@ -1,7 +1,7 @@
 export { SmartAccount } from "./account/SmartAccount";
 export { MetaTransaction } from "./account/Safe/types";
-export { SafeAccount } from "./account/Safe/SafeAccount";
-// export { SimpleAccount } from "./account/SimpleAccount.ts_b";
+export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
+
 export { SendUseroperationResponse } from "./account/SendUseroperationResponse";
 
 export { SmartAccountFactory } from "./factory/SmartAccountFactory";
@@ -10,15 +10,19 @@ export { SimpleAccountFactory } from "./factory/SimpleAccountFactory";
 
 export { Bundler } from "./Bundler";
 
-export {CandideValidationPaymaster} from "./paymaster/CandideValidationPaymaster"
+export {CandidePaymaster} from "./paymaster/CandideValidationPaymaster"
 
-export { createUserOperationHash, createCallData, getFunctionSelector, fetchAccountNonce } from "./utils";
+export { 
+	createUserOperationHash,
+	createCallData,
+	getFunctionSelector,
+	fetchAccountNonce,
+	calculateUserOperationMaxGasCostInWei 
+} from "./utils";
 
 export { UserOperationEmptyValues, UserOperationDummyValues } from "./constants";
 
-export { Operation } from "./types";
-
-export type {
+export {
 	UserOperation,
 	AbiInputValue,
 	JsonRpcParam,
@@ -30,4 +34,7 @@ export type {
 	UserOperationReceipt,
 	UserOperationReceiptResult,
 	JsonRpcError,
+	StateOverrideSet,
+	Operation,
+	BundlerErrorCode
 } from "./types";

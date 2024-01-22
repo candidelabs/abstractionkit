@@ -1,12 +1,15 @@
 import * as dotenv from 'dotenv'
 
-import { 
+import {
     SafeAccountV0_2_0 as SafeAccount,
     MetaTransaction,
+    calculateUserOperationMaxGasCostInWei,
     JsonRpcError,
     BundlerJsonRpcError,
+    CandidePaymaster,
+    BundlerErrorCode,
     UserOperationReceiptResult,
-    calculateUserOperationMaxGasCostInWei,
+    UserOperation,
 } from "abstractionkit";
 
 async function main(): Promise<void> {
@@ -17,7 +20,8 @@ async function main(): Promise<void> {
     const jsonRpcNodeProvider = process.env.JSON_RPC_NODE_PROVIDER as string
     const ownerPublicAddress = process.env.PUBLIC_ADDRESS as string
     const ownerPrivateKey = process.env.PRIVATE_KEY as string
-
+    const paymasterRPC = process.env.PAYMASTER_RPC as string;
+    
     //initializeNewAccount only needed when the smart account
     //have not been deployed yet for its first useroperation.
     //You can calculate the account address from its owners.
@@ -26,7 +30,7 @@ async function main(): Promise<void> {
     let smartAccount = SafeAccount.initializeNewAccount(
         [ownerPublicAddress],
     )
-
+    
     //After calculating the accountAddress, you can create a SafeAccount
     //object with the accountAddress
     //let smartAccount:SafeAccount = new SafeAccount(accountAddress)
@@ -53,27 +57,44 @@ async function main(): Promise<void> {
     let userOperation = await smartAccount.createUserOperation(
 		[
             //You can batch multiple transactions to be executed in one useroperation.
-            transaction1, transaction2
+            transaction1, transaction2,
         ],
         jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
         bundlerUrl, //the bundler rpc is used to estimate the gas limits.
 	)
-
     //error handling
     if("code" in userOperation){
         const error = userOperation as BundlerJsonRpcError | JsonRpcError
+        if (Object.values(BundlerErrorCode).includes(error.code)) {
+            console.log(BundlerErrorCode[error.code])
+        }else{
+            console.log(error.code)
+        }
         console.log(error.message)
         return
     }
 
     const cost = calculateUserOperationMaxGasCostInWei(userOperation)
     console.log("This useroperation may cost upto : " + cost + " wei")
-    console.log(
-        "Please fund the sender account : " + 
-        userOperation.sender +
-        " with more than "+ cost + " wei"
+    console.log("This example uses a Candide paymaster to sponsor the useroperation, so there is not need to fund the sender account.")
+    console.log("Get early access to Candide's sponsor paymaster by visiting our discord https://discord.gg/KJSzy2Rqtg")
+
+    let paymaster: CandidePaymaster = new CandidePaymaster(
+        paymasterRPC
     )
- 
+
+    let paymasterUserOperation = await paymaster.createPaymasterUserOperation(
+        userOperation, bundlerUrl)
+
+    //error handling
+    if("code" in paymasterUserOperation){
+        const error = paymasterUserOperation as JsonRpcError
+        console.log(error.message)
+        return
+    }
+
+    userOperation = paymasterUserOperation
+
     //Safe is a multisig that can have multiple owners/signers
     //signUserOperation will create a signature for the provided
     //privateKeys

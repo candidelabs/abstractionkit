@@ -10,9 +10,16 @@ import {
 	JsonRpcResponse, 
 	JsonRpcParam,
 	JsonRpcError,
-	GasOption
+	GasOption,
  } from "./types";
 
+ /**
+  * createUserOperationHash for the standard entrypointv0.6 hash
+  * @param useroperation 
+  * @param entrypointAddress 
+  * @param chainId 
+  * @returns UserOperationHash
+  */
 export function createUserOperationHash(
 	useroperation: UserOperation,
 	entrypointAddress: string,
@@ -33,6 +40,11 @@ export function createUserOperationHash(
 	return userOperationHash;
 }
 
+/**
+ * createPackedUserOperation for the standard entrypointv0.6 hash
+ * @param useroperation 
+ * @returns packed UserOperation
+ */
 export function createPackedUserOperation(
 	useroperation: UserOperation,
 ): BytesLike {
@@ -68,6 +80,13 @@ export function createPackedUserOperation(
 	return packedUserOperation;
 }
 
+/**
+ * creates calldata from the function selector, abi and parameters 
+ * @param functionSelector 
+ * @param functionInputAbi 
+ * @param functionInputParameters 
+ * @returns calldata
+ */
 export function createCallData(
 	functionSelector: string,
 	functionInputAbi: string[],
@@ -113,13 +132,29 @@ export async function sendJsonRpcRequest(
 	return await response.json() as JsonRpcResponse;
 }
 
-
+/**
+ * get function selector from the function signature
+ * @param functionSignature 
+ * @returns fucntion selector
+ * 
+ * @example
+ * const getNonceFunctionSignature =  'getNonce(address,uint192)';
+ * const getNonceFunctionSelector =  getFunctionSelector(getNonceFunctionSignature);
+ */
 export function getFunctionSelector(
 	functionSignature: string,
 ): string {
 	return id(functionSignature).slice(0,10);
 }
 
+/**
+ * fetch account nonce by calling the entrypoint's "getNonce"
+ * @param rpcUrl 
+ * @param entryPoint 
+ * @param account 
+ * @param key 
+ * @returns nonce
+ */
 export async function fetchAccountNonce(
 	rpcUrl: string,
 	entryPoint:string,
@@ -167,4 +202,14 @@ export async function fetchGasPrice(
 		Number(feeData.maxPriorityFeePerGas)*gasLevel))
 
 	return [maxFeePerGas, maxPriorityFeePerGas]
+}
+
+export function calculateUserOperationMaxGasCostInWei(
+	useroperation: UserOperation,
+):bigint{
+	const isPaymasterAndData = useroperation.paymasterAndData == "0x" || useroperation.paymasterAndData == null
+	const mul = isPaymasterAndData?3n:0n
+	const requiredGas = useroperation.callGasLimit + useroperation.verificationGasLimit * mul + useroperation.preVerificationGas;
+
+	return requiredGas * useroperation.maxFeePerGas
 }

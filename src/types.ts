@@ -1,5 +1,8 @@
 import type { BytesLike } from "ethers";
 
+/**
+ * Wrapper for a useroperation for an entrypoint v0.6
+ */
 export type UserOperation = {
 	sender: string;
 	nonce: bigint;
@@ -46,8 +49,8 @@ export type JsonRpcResult =
 	| UserOperationByHashResult
 	| UserOperationReceipt
 	| UserOperationReceiptResult
-	| SupportedERC20Tokens
-	| PmSponsorUserOperationResult;
+	| SupportedERC20TokensAndMetadata
+	| PmUserOperationResult;
 
 export enum BundlerErrorCode {
 	InvalidFields = -32602,
@@ -74,83 +77,111 @@ export type BundlerJsonRpcError = {
 };
 
 export type GasEstimationResult = {
-	callGasLimit: string;
-	preVerificationGas: string;
-	verificationGasLimit: string;
+	callGasLimit: bigint;
+	preVerificationGas: bigint;
+	verificationGasLimit: bigint;
 };
 
 export type UserOperationByHashResult = {
 	userOperation: UserOperation;
 	entryPoint: string;
-	blockNumber: string;
-	blockHash: BytesLike;
-	transactionHash: BytesLike;
+	blockNumber: bigint;
+	blockHash: string;
+	transactionHash: string;
 };
 
 export type UserOperationReceipt = {
-	blockHash: BytesLike;
-	blockNumber: string;
+	blockHash: string;
+	blockNumber: bigint;
 	from: string;
-	cumulativeGasUsed: string;
-	gasUsed: string;
+	cumulativeGasUsed: bigint;
+	gasUsed: bigint;
 	logs: string;
 	logsBloom: string;
-	transactionHash: BytesLike;
-	transactionIndex: string;
+	transactionHash: string;
+	transactionIndex: bigint;
+	effectiveGasPrice?: bigint;
 };
 
 export type UserOperationReceiptResult = {
 	userOpHash: BytesLike;
 	entryPoint: string;
 	sender: string;
-	nonce: string;
+	nonce: bigint;
 	paymaster: string;
-	actualGasCost: string;
-	actualGasUsed: string;
-	success: string;
+	actualGasCost: bigint;
+	actualGasUsed: bigint;
+	success: boolean;
 	logs: string;
 	receipt: UserOperationReceipt;
 };
 
-export type PmSponsorUserOperationResult = {
+export type PmUserOperationResult = {
 	paymasterAndData: BytesLike;
-	callGasLimit?: string;
-	preVerificationGas?: string;
-	verificationGasLimit?: string;
-	maxFeePerGas?: string;
-	maxPriorityFeePerGas?: string;
+	callGasLimit?: bigint;
+	preVerificationGas?: bigint;
+	verificationGasLimit?: bigint;
+	maxFeePerGas?: bigint;
+	maxPriorityFeePerGas?: bigint;
 };
-
+/**
+ * Call or Delegate Operation
+ * @enum
+ */
 export enum Operation {
 	Call = 0,
 	Delegate = 1,
 }
 
+/**
+ * Erc20 token info from the token paymaster
+ */
 export interface ERC20Token {
+	/** Token sympol */
 	symbol: string;
+	/** Token address */
 	address: string;
+	/** Token decimal places */
 	decimal: number;
+	/** Paymaster fee for this token*/
 	fee: number;
+	/** Token exchange rate*/
 	exchangeRate: string;
 }
+
+/**
+ * Paymaster metadata
+ */
 export interface PaymasterMetadata {
 	name: string;
 	description: string;
 	icons: string[];
+	/** Paymaster contract address */
 	address: string;
+	/** the event that will be emitted when a useroperation is sponsored */
 	sponsoredEventTopic: string;
+	/** dummyPaymasterAndData to use for gas estimation */
 	dummyPaymasterAndData: string;
 }
 
-export interface SupportedERC20Tokens {
+/**
+ * Paymaster metadata and supported erc20 tokens
+ */
+export interface SupportedERC20TokensAndMetadata {
 	paymasterMetadata: PaymasterMetadata;
 	tokens: ERC20Token[];
 }
 
+/**
+ * Wrapper for a dictionary type
+ */
 interface Dictionary<T> {
     [Key: string]: T;
 }
 
+/**
+ * Wrapper for a state diff
+ */
 export type AddressToState = {
 	balance?:bigint,
 	nonce?:bigint,
@@ -159,10 +190,16 @@ export type AddressToState = {
 	stateDiff?:Dictionary<string>,
 }
 
+/**
+ * Wrapper for state overrides for gas estimation
+ */
 export type StateOverrideSet = {
 	[key: string]: AddressToState,
 }
 
+/**
+ * Multiplier to determine the gas price for the user operation
+ */
 export enum GasOption {
 	Slow=1,
 	Medium=1.2,

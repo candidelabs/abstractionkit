@@ -24,9 +24,16 @@ export class SendUseroperationResponse {
 		return new Promise((resolve) => setTimeout(resolve, ms));
 	}
 
+	/**
+	 * Query the bundler for the useroperation receipt repeatedly
+	 * and return when successful or timeout
+	 * @param timeoutInSeconds 
+	 * @param requestIntervalInSeconds 
+	 * @returns UserOperationReceiptResult or BundlerJsonRpcError
+	 */
 	async included(
-		timeoutInSeconds: number = 60,
-		requestIntervalInSeconds: number = 1,
+		timeoutInSeconds: number = 120,
+		requestIntervalInSeconds: number = 2,
 	): Promise<UserOperationReceiptResult | BundlerJsonRpcError> {
 		if (timeoutInSeconds <= 0 || requestIntervalInSeconds <= 0) {
 			throw RangeError(

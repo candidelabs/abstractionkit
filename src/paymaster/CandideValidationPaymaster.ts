@@ -2,87 +2,223 @@ import { Paymaster } from "./Paymaster";
 import { sendJsonRpcRequest } from "../utils";
 import {
 	UserOperation,
-	BundlerJsonRpcError,
-	SupportedERC20Tokens,
-	PmSponsorUserOperationResult,
+	JsonRpcError,
+	SupportedERC20TokensAndMetadata,
+	PmUserOperationResult,
+	PaymasterMetadata,
+	ERC20Token,
+	StateOverrideSet,
 } from "../types";
+import { CandidePaymasterContext } from "./types";
+import { Bundler } from "src/Bundler";
 
-export class CandideValidationPaymaster extends Paymaster {
+export class CandidePaymaster extends Paymaster {
 	readonly rpcUrl: string;
-	readonly entrypointAddress: string;
+	private entrypointAddress: string | undefined;
+	private supportedTokens: ERC20Token[] | undefined;
+	private paymasterMetadata: PaymasterMetadata | undefined;
 
-	constructor(entrypointAddress: string, rpcUrl: string) {
+	constructor(rpcUrl: string) {
 		super();
 		this.rpcUrl = rpcUrl;
-		this.entrypointAddress = entrypointAddress;
 	}
 
-	async getSupportedERC20Tokens(): Promise<
-		SupportedERC20Tokens | BundlerJsonRpcError
+	/**
+	 * initialize the paymaster object the paymaster supported tokens,
+	 * entrypoint and metadata from the bundler url
+	 * @returns null or JsonRpcError
+	 */
+	async initialize(): Promise<null | JsonRpcError> {
+		const entrypointResult = await this.getSupportedEntrypoint();
+
+		if (typeof entrypointResult === "string") {
+			this.entrypointAddress = entrypointResult;
+		} else {
+			return entrypointResult;
+		}
+
+		const supportedTokensResult =
+			await this.getSupportedERC20TokensAndPaymasterMetadata();
+
+		if ("code" in supportedTokensResult) {
+			return supportedTokensResult;
+		} else {
+			this.supportedTokens = supportedTokensResult.tokens;
+			this.paymasterMetadata = supportedTokensResult.paymasterMetadata;
+		}
+		return null;
+	}
+
+	async getPaymasterMetaData(): Promise<PaymasterMetadata | JsonRpcError> {
+		if (this.paymasterMetadata == null) {
+			const result = await this.initialize();
+			if (result != null) {
+				return result;
+			}
+		}
+		return this.paymasterMetadata as PaymasterMetadata;
+	}
+
+	async getSupportedERC20TokensAndPaymasterMetadata(): Promise<
+		SupportedERC20TokensAndMetadata | JsonRpcError
 	> {
-		const jsonRpcResult = await sendJsonRpcRequest(
-			this.rpcUrl,
-			"pm_supportedERC20Tokens",
-			[],
-		);
+		if (this.supportedTokens == null || this.paymasterMetadata == null) {
+			const jsonRpcResult = await sendJsonRpcRequest(
+				this.rpcUrl,
+				"pm_supportedERC20Tokens",
+				[],
+			);
 
-		if ("result" in jsonRpcResult) {
-			const res = jsonRpcResult.result as SupportedERC20Tokens;
-			return { tokens: res.tokens, paymasterMetadata: res.paymasterMetadata };
+			if ("result" in jsonRpcResult) {
+				const res = jsonRpcResult.result as SupportedERC20TokensAndMetadata;
+				return { tokens: res.tokens, paymasterMetadata: res.paymasterMetadata };
+			} else {
+				return jsonRpcResult.error as JsonRpcError;
+			}
 		} else {
-			return jsonRpcResult.error as BundlerJsonRpcError;
+			return {
+				tokens: this.supportedTokens,
+				paymasterMetadata: this.paymasterMetadata,
+			};
 		}
 	}
 
-	async getSupportedEntrypoint(): Promise<string | BundlerJsonRpcError> {
-		const jsonRpcResult = await sendJsonRpcRequest(
-			this.rpcUrl,
-			"pm_supportedEntryPoint",
-			[],
-		);
+	async getSupportedEntrypoint(): Promise<string | JsonRpcError> {
+		if (this.entrypointAddress == null) {
+			const jsonRpcResult = await sendJsonRpcRequest(
+				this.rpcUrl,
+				"pm_supportedEntryPoint",
+				[],
+			);
 
-		if ("result" in jsonRpcResult) {
-			return jsonRpcResult.result as string;
+			if ("result" in jsonRpcResult) {
+				return jsonRpcResult.result as string;
+			} else {
+				return jsonRpcResult.error as JsonRpcError;
+			}
 		} else {
-			return jsonRpcResult.error as BundlerJsonRpcError;
+			return this.entrypointAddress;
 		}
 	}
 
-	async getPaymasterCallDataForPayingGasWithErc20(
-		userOperation: UserOperation,
+	/**
+	 * check if the token paymaster accepts an erc20 token
+	 * @param erc20TokenAddress
+	 * @returns boolean or JsonRpcError
+	 */
+	async isSupportedERC20Token(
 		erc20TokenAddress: string,
-	): Promise<PmSponsorUserOperationResult | BundlerJsonRpcError> {
-		const config = [this.rpcUrl, this.entrypointAddress, erc20TokenAddress];
+	): Promise<boolean | JsonRpcError> {
+		if (
+			this.entrypointAddress == null ||
+			this.supportedTokens == null ||
+			this.paymasterMetadata == null
+		) {
+			const result = await this.initialize();
+			if (result != null) {
+				return result;
+			}
+		}
+		const supportedTokens = this.supportedTokens as ERC20Token[];
+		const gasToken = supportedTokens.find(
+			(token) => token.address === erc20TokenAddress.toLowerCase(),
+		);
 
-		return this.getPaymasterCallData(userOperation, config);
+		if (!gasToken) {
+			return false;
+		} else {
+			return true;
+		}
 	}
 
-	async getPaymasterCallDataForGaslessTx(
+	/**
+	 * createPaymasterUserOperation will estimate gas and set
+	 * paymasterAndData
+	 * @param userOperation 
+	 * @param bundlerRpc 
+	 * @param context 
+	 * @param entrypointAddress 
+	 * @param state_override_set 
+	 * @returns UserOperation or JsonRpcError
+	 */
+	async createPaymasterUserOperation(
 		userOperation: UserOperation,
-	): Promise<PmSponsorUserOperationResult | BundlerJsonRpcError> {
-		const config = [this.rpcUrl, this.entrypointAddress];
+		bundlerRpc: string,
+		context: CandidePaymasterContext = {},
+		entrypointAddress: string = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+		state_override_set?: StateOverrideSet,
+	): Promise<UserOperation | JsonRpcError> {
+		if (
+			this.entrypointAddress == null ||
+			this.supportedTokens == null ||
+			this.paymasterMetadata == null
+		) {
+			const result = await this.initialize();
+			if (result != null) {
+				return result;
+			}
+		}
 
-		return this.getPaymasterCallData(userOperation, config);
-	}
+		const paymasterMetadata = this.paymasterMetadata as PaymasterMetadata;
+		userOperation.paymasterAndData = paymasterMetadata.dummyPaymasterAndData;
 
-	async getPaymasterCallData(
-		userOperation: UserOperation,
-		config: string[],
-	): Promise<PmSponsorUserOperationResult | BundlerJsonRpcError> {
-		const rpcUrl = config[0];
-		const entrypointAddress = config[1];
-		const tokenAddress = config[2];
+		const bundler = new Bundler(bundlerRpc);
+		const estimation = await bundler.estimateUserOperationGas(
+			userOperation,
+			entrypointAddress,
+			state_override_set,
+		);
+		if ("code" in estimation) {
+			return estimation;
+		}
+		userOperation.preVerificationGas = estimation.preVerificationGas;
+		userOperation.verificationGasLimit =
+			estimation.verificationGasLimit + 10000n;
+		userOperation.callGasLimit = estimation.callGasLimit;
 
 		const jsonRpcResult = await sendJsonRpcRequest(
-			rpcUrl,
+			this.rpcUrl,
 			"pm_sponsorUserOperation",
-			[userOperation, entrypointAddress, { token: tokenAddress }],
+			[userOperation, this.entrypointAddress, context],
 		);
 
 		if ("result" in jsonRpcResult) {
-			return jsonRpcResult.result as PmSponsorUserOperationResult;
+			const result = jsonRpcResult.result as PmUserOperationResult;
+			const resultMod = {
+				paymasterAndData: result.paymasterAndData,
+				callGasLimit:
+					result.callGasLimit == null ? undefined : BigInt(result.callGasLimit),
+				preVerificationGas:
+					result.preVerificationGas == null
+						? undefined
+						: BigInt(result.preVerificationGas),
+				verificationGasLimit:
+					result.verificationGasLimit == null
+						? undefined
+						: BigInt(result.verificationGasLimit),
+				maxFeePerGas:
+					result.maxFeePerGas == null ? undefined : BigInt(result.maxFeePerGas),
+				maxPriorityFeePerGas:
+					result.maxPriorityFeePerGas == null
+						? undefined
+						: BigInt(result.maxPriorityFeePerGas),
+			};
+
+			userOperation.paymasterAndData = resultMod.paymasterAndData;
+			userOperation.callGasLimit =
+				resultMod.callGasLimit ?? userOperation.callGasLimit;
+			userOperation.preVerificationGas =
+				resultMod.preVerificationGas ?? userOperation.preVerificationGas;
+			userOperation.verificationGasLimit =
+				resultMod.verificationGasLimit ?? userOperation.verificationGasLimit;
+			userOperation.maxFeePerGas =
+				resultMod.maxFeePerGas ?? userOperation.maxFeePerGas;
+			userOperation.maxPriorityFeePerGas =
+				resultMod.maxPriorityFeePerGas ?? userOperation.maxPriorityFeePerGas;
+
+			return userOperation;
 		} else {
-			return jsonRpcResult.error as BundlerJsonRpcError;
+			return jsonRpcResult.error as JsonRpcError;
 		}
 	}
 }
