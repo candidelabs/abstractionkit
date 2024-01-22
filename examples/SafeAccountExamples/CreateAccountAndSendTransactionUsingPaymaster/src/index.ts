@@ -9,7 +9,8 @@ import {
     CandidePaymaster,
     BundlerErrorCode,
     UserOperationReceiptResult,
-    UserOperation,
+    getFunctionSelector,
+    createCallData,
 } from "abstractionkit";
 
 async function main(): Promise<void> {
@@ -38,17 +39,21 @@ async function main(): Promise<void> {
     console.log("Account address(sender) : " + smartAccount.accountAddress)
 
     //create two meta transaction to mint two NFTs
-    //use you favorite method (like ethers.js) to construct the call data 
+    //you can use favorite method (like ethers.js) to construct the call data 
+    const nftContractAddress = "0xD9de104e3386d9A45a61BcE269c43E48B534e4E7";
+    const mintFunctionSignature =  'mint()';
+    const mintFunctionSelector =  getFunctionSelector(mintFunctionSignature);
+    const mintTransactionCallData = createCallData(mintFunctionSelector, [], []);
     const transaction1 :MetaTransaction ={
-        to: "0xD9de104e3386d9A45a61BcE269c43E48B534e4E7", //Nft contract address
+        to: nftContractAddress,
         value: 0n,
-        data: "0x1249c58b", //mint
+        data: mintTransactionCallData,
     }
 
     const transaction2 :MetaTransaction ={
-        to: "0xD9de104e3386d9A45a61BcE269c43E48B534e4E7", //Nft contract address
+        to: nftContractAddress,
         value: 0n,
-        data: "0x1249c58b", //mint
+        data: mintTransactionCallData,
     }
 
     //createUserOperation will determine the nonce, fetch the gas prices,

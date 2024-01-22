@@ -17,7 +17,7 @@ export {
 	createCallData,
 	getFunctionSelector,
 	fetchAccountNonce,
-	calculateUserOperationMaxGasCostInWei 
+	calculateUserOperationMaxGasCostInWei,
 } from "./utils";
 
 export { UserOperationEmptyValues, UserOperationDummyValues } from "./constants";
@@ -36,5 +36,5 @@ export {
 	JsonRpcError,
 	StateOverrideSet,
 	Operation,
-	BundlerErrorCode
+	BundlerErrorCode,
 } from "./types";
