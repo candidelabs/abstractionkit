@@ -1,10 +1,11 @@
-import "ethers";
-import type { BytesLike } from "ethers";
-import type { UserOperation, JsonRpcError } from "../types";
+import type { UserOperation, StateOverrideSet } from "../types";
+import { CandidePaymasterContext } from "./types";
 
 export abstract class Paymaster {
-	abstract getPaymasterCallData(
+	abstract createPaymasterUserOperation(
 		userOperation: UserOperation,
-		config: string[],
-	): Promise<{ paymasterAndData: BytesLike } | JsonRpcError>;
+		bundlerRpc: string,
+		context: CandidePaymasterContext,
+		state_override_set?: StateOverrideSet,
+	): Promise<UserOperation>;
 }

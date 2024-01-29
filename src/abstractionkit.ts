@@ -1,32 +1,42 @@
 export { SmartAccount } from "./account/SmartAccount";
-export { CandideAccount } from "./account/Candide/CandideAccount";
-export { MetaTransaction } from "./account/Candide/types";
+export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
 
-export { SimpleAccount } from "./account/SimpleAccount";
+export { SendUseroperationResponse } from "./account/SendUseroperationResponse";
 
 export { SmartAccountFactory } from "./factory/SmartAccountFactory";
-export { CandideAccountFactory } from "./factory/CandideAccountFactory";
+export { SafeAccountFactory } from "./factory/SafeAccountFactory";
 export { SimpleAccountFactory } from "./factory/SimpleAccountFactory";
 
 export { Bundler } from "./Bundler";
 
-export {CandideValidationPaymaster} from "./paymaster/CandideValidationPaymaster"
+export { CandidePaymaster } from "./paymaster/CandidePaymaster";
 
-export { getUserOperationHash, getCallData, getFunctionSelector } from "./utils";
+export {
+	createUserOperationHash,
+	createCallData,
+	getFunctionSelector,
+	fetchAccountNonce,
+	calculateUserOperationMaxGasCost,
+} from "./utils";
 
-export { UserOperationEmptyValues, UserOperationDummyValues } from "./constants";
+export {
+	UserOperationEmptyValues,
+	UserOperationDummyValues,
+} from "./constants";
 
-export { Operation } from "./types";
-
-export type {
+export {
 	UserOperation,
 	AbiInputValue,
 	JsonRpcParam,
 	JsonRpcResponse,
 	JsonRpcResult,
-	JsonRpcError,
 	GasEstimationResult,
 	UserOperationByHashResult,
 	UserOperationReceipt,
 	UserOperationReceiptResult,
+	JsonRpcError,
+	StateOverrideSet,
+	Operation,
+	BundlerErrorCode,
+	MetaTransaction,
 } from "./types";

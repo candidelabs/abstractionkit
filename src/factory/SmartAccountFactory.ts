@@ -1,6 +1,5 @@
-import type { BytesLike } from "ethers";
 import type { AbiInputValue } from "../types";
-import { getCallData } from "../utils";
+import { createCallData } from "../utils";
 
 export class SmartAccountFactory {
 	readonly address: string;
@@ -19,12 +18,12 @@ export class SmartAccountFactory {
 
 	getFactoryGeneratorFunctionCallData(
 		generatorFunctionInputParameters: AbiInputValue[],
-	): BytesLike {
-		const callData = getCallData(
+	): string {
+		const callData = createCallData(
 			this.generatorFunctionSelector,
 			this.generatorFunctionInputAbi,
 			generatorFunctionInputParameters,
-		) as string;
+		);
 		const res: string = this.address + callData.slice(2);
 
 		return res;

@@ -1,30 +1,32 @@
-import { ZeroAddress } from "ethers";
-import type { UserOperation } from "./types";
+import {type UserOperation } from "./types";
+
+export const ZeroAddress = "0x0000000000000000000000000000000000000000";
 
 export const UserOperationEmptyValues: UserOperation = {
 	sender: ZeroAddress,
-	nonce: "0x00",
+	nonce: 0n,
 	initCode: "0x",
 	callData: "0x",
-	callGasLimit: "0x00",
-	verificationGasLimit: "0x00",
-	preVerificationGas: "0x00",
-	maxFeePerGas: "0x00",
-	maxPriorityFeePerGas: "0x00",
+	callGasLimit: 0n,
+	verificationGasLimit: 0n,
+	preVerificationGas: 0n,
+	maxFeePerGas: 0n,
+	maxPriorityFeePerGas: 0n,
 	paymasterAndData: "0x",
 	signature: "0x",
 };
 
-export const UserOperationDummyValues: UserOperation = { //dummy values for somewhat accurate gas estimation
+export const UserOperationDummyValues: UserOperation = {
+	//dummy values for somewhat accurate gas estimation
 	sender: ZeroAddress,
-	nonce: "0x00",
+	nonce: 0n,
 	initCode: "0x",
 	callData: "0x",
-	callGasLimit: "0xffffff",
-	verificationGasLimit: "0xffffff",
-	preVerificationGas: "0xffffff",
-	maxFeePerGas: "0xffffff",
-	maxPriorityFeePerGas: "0xfffffff",
+	callGasLimit: 0xffffffn,
+	verificationGasLimit: 0xffffffn,
+	preVerificationGas: 0xffffffn,
+	maxFeePerGas: 0xffffffn,
+	maxPriorityFeePerGas: 0xfffffffn,
 	paymasterAndData: "0x",
 	signature: "0x",
 };
