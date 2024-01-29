@@ -25,6 +25,9 @@ async function main(): Promise<void> {
     //the SafeAccount object for the following useroperations
     let smartAccount = SafeAccount.initializeNewAccount(
         [ownerPublicAddress1, ownerPublicAddress2],
+        {
+            threshold:2
+        }
     )
 
     //After the account contract is deployed, no need to call initializeNewAccount
