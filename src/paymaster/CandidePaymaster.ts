@@ -268,14 +268,14 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * createSponserPaymasterUserOperation will estimate gas and set
-	 * paymasterAndData for a sponser paymaster operation
+	 * createSponsorPaymasterUserOperation will estimate gas and set
+	 * paymasterAndData for a sponsor paymaster operation
 	 * @param useroperation - useroperation to add paymaster support for
 	 * @param bundlerRpc - bundler rpc for gas estimation
 	 * @param state_override_set - state override values to set during gs estimation
 	 * @returns promise with UserOperation
 	 */
-	async createSponserPaymasterUserOperation(
+	async createSponsorPaymasterUserOperation(
 		userOperation: UserOperation,
 		bundlerRpc: string,
 		state_override_set?: StateOverrideSet,
