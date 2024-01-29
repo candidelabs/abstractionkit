@@ -1,6 +1,6 @@
 <!-- PROJECT LOGO -->
 <div align="center">
-<img src="https://github.com/candidelabs/abstractionkit/assets/7014833/8f28ba83-003c-4ea9-b205-99f38819e09c">
+<img src="https://github.com/candidelabs/abstractionkit/assets/7014833/6af73235-3f6b-4cb1-8a57-6b04ba2bf327">
 </div>
 
 <div align="center">
