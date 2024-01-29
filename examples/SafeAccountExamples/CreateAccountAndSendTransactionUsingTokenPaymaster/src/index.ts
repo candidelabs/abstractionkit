@@ -73,11 +73,6 @@ async function main(): Promise<void> {
         paymasterRPC,
     )
 
-    const cost = await paymaster.calculateUserOperationErc20TokenMaxGasCost(
-        userOperation,
-        paymasterTokenAddress
-    )
-
     userOperation = await paymaster.createTokenPaymasterUserOperation(
         smartAccount,
         userOperation,
@@ -85,6 +80,10 @@ async function main(): Promise<void> {
         bundlerUrl,
     )
 
+    const cost = await paymaster.calculateUserOperationErc20TokenMaxGasCost(
+        userOperation,
+        paymasterTokenAddress
+    )
     console.log("This useroperation may cost upto : " + cost + " wei in CTT token")
     console.log(
         "Please fund the sender account : " + 
