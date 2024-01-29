@@ -4,9 +4,7 @@ import {
     SafeAccountV0_2_0 as SafeAccount,
     MetaTransaction,
     JsonRpcError,
-    BundlerJsonRpcError,
     CandidePaymaster,
-    BundlerErrorCode,
     UserOperationReceiptResult,
     getFunctionSelector,
     createCallData,
@@ -21,7 +19,7 @@ async function main(): Promise<void> {
     const ownerPublicAddress = process.env.PUBLIC_ADDRESS as string
     const ownerPrivateKey = process.env.PRIVATE_KEY as string
     const paymasterRPC = process.env.PAYMASTER_RPC as string;
-    const paymasterTokenAddress = process.env.TOKEN_ADDRESS as string;
+    const paymasterTokenAddress = process.env.PAYMASTER_TOKEN_ADDRESS as string;
     
     //initializeNewAccount only needed when the smart account
     //have not been deployed yet for its first useroperation.
@@ -31,19 +29,22 @@ async function main(): Promise<void> {
     let smartAccount = SafeAccount.initializeNewAccount(
         [ownerPublicAddress],
     )
-    
-    //After calculating the accountAddress, you can create a SafeAccount
-    //object with the accountAddress
+
+    //After the account contract is deployed, no need to call initializeNewAccount
     //let smartAccount:SafeAccount = new SafeAccount(accountAddress)
 
     console.log("Account address(sender) : " + smartAccount.accountAddress)
 
     //create two meta transaction to mint two NFTs
     //you can use favorite method (like ethers.js) to construct the call data 
-    const nftContractAddress = "0xD9de104e3386d9A45a61BcE269c43E48B534e4E7";
-    const mintFunctionSignature =  'mint()';
+    const nftContractAddress = "0x9a7af758aE5d7B6aAE84fe4C5Ba67c041dFE5336";
+    const mintFunctionSignature =  'mint(address)';
     const mintFunctionSelector =  getFunctionSelector(mintFunctionSignature);
-    const mintTransactionCallData = createCallData(mintFunctionSelector, [], []);
+    const mintTransactionCallData = createCallData(
+        mintFunctionSelector, 
+        ["address"],
+        [smartAccount.accountAddress]
+    );
     const transaction1 :MetaTransaction ={
         to: nftContractAddress,
         value: 0n,
@@ -67,17 +68,6 @@ async function main(): Promise<void> {
         jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
         bundlerUrl, //the bundler rpc is used to estimate the gas limits.
 	)
-    //error handling
-    if("code" in userOperation){
-        const error = userOperation as BundlerJsonRpcError | JsonRpcError
-        if (Object.values(BundlerErrorCode).includes(error.code)) {
-            console.log(BundlerErrorCode[error.code])
-        }else{
-            console.log(error.code)
-        }
-        console.log(error.message)
-        return
-    }
 
     let paymaster: CandidePaymaster = new CandidePaymaster(
         paymasterRPC,
@@ -87,6 +77,14 @@ async function main(): Promise<void> {
         userOperation,
         paymasterTokenAddress
     )
+
+    userOperation = await paymaster.createTokenPaymasterUserOperation(
+        smartAccount,
+        userOperation,
+        paymasterTokenAddress,
+        bundlerUrl,
+    )
+
     console.log("This useroperation may cost upto : " + cost + " wei in CTT token")
     console.log(
         "Please fund the sender account : " + 
@@ -96,23 +94,6 @@ async function main(): Promise<void> {
     console.log("This example uses a Candide token paymaster.")
     console.log("Please visit https://dashboard.candide.dev/ to get a token paymaster url.")
     console.log("Please visit our discord https://discord.gg/KJSzy2Rqtg to get some CTT token for testing")
-
-    let paymasterUserOperation = await paymaster.createPaymasterUserOperation(
-        userOperation,
-        bundlerUrl,
-        {
-            token: paymasterTokenAddress
-        }
-    )
-
-    //error handling
-    if("code" in paymasterUserOperation){
-        const error = paymasterUserOperation as JsonRpcError
-        console.log(error.message)
-        return
-    }
-
-    userOperation = paymasterUserOperation
 
     //Safe is a multisig that can have multiple owners/signers
     //signUserOperation will create a signature for the provided
@@ -131,25 +112,11 @@ async function main(): Promise<void> {
         userOperation, bundlerUrl
     )
 
-    //error handling
-    if("code" in sendUserOperationResponse){
-        const error = sendUserOperationResponse as BundlerJsonRpcError
-        console.log(error.message)
-        return
-    }
-
     console.log("Useroperation sent. Waiting to be included ......")
     //included will return a UserOperationReceiptResult when 
     //useroperation is included onchain
     let userOperationReceiptResult = await sendUserOperationResponse.included()
 
-    //error handling
-    if("code" in userOperationReceiptResult){
-        const error = userOperationReceiptResult as BundlerJsonRpcError
-        console.log(error.message)
-        return
-    }
-    userOperationReceiptResult = userOperationReceiptResult as UserOperationReceiptResult
     console.log("Useroperation receipt received.")
     console.log(userOperationReceiptResult)
     if(userOperationReceiptResult.success){

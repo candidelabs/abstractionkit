@@ -3,9 +3,6 @@ import * as dotenv from 'dotenv'
 import { 
     SafeAccountV0_2_0 as SafeAccount,
     MetaTransaction,
-    JsonRpcError,
-    BundlerJsonRpcError,
-    UserOperationReceiptResult,
     calculateUserOperationMaxGasCost,
     getFunctionSelector,
     createCallData,
@@ -29,18 +26,21 @@ async function main(): Promise<void> {
         [ownerPublicAddress],
     )
 
-    //After calculating the accountAddress, you can create a SafeAccount
-    //object with the accountAddress
+    //After the account contract is deployed, no need to call initializeNewAccount
     //let smartAccount:SafeAccount = new SafeAccount(accountAddress)
 
     console.log("Account address(sender) : " + smartAccount.accountAddress)
 
     //create two meta transaction to mint two NFTs
     //you can use favorite method (like ethers.js) to construct the call data 
-    const nftContractAddress = "0xD9de104e3386d9A45a61BcE269c43E48B534e4E7";
-    const mintFunctionSignature =  'mint()';
+    const nftContractAddress = "0x9a7af758aE5d7B6aAE84fe4C5Ba67c041dFE5336";
+    const mintFunctionSignature =  'mint(address)';
     const mintFunctionSelector =  getFunctionSelector(mintFunctionSignature);
-    const mintTransactionCallData = createCallData(mintFunctionSelector, [], []);
+    const mintTransactionCallData = createCallData(
+        mintFunctionSelector, 
+        ["address"],
+        [smartAccount.accountAddress]
+    );
     const transaction1 :MetaTransaction ={
         to: nftContractAddress,
         value: 0n,
@@ -59,25 +59,18 @@ async function main(): Promise<void> {
     let userOperation = await smartAccount.createUserOperation(
 		[
             //You can batch multiple transactions to be executed in one useroperation.
-            transaction1, transaction2
+            transaction1, transaction2,
         ],
         jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
         bundlerUrl, //the bundler rpc is used to estimate the gas limits.
 	)
-
-    //error handling
-    if("code" in userOperation){
-        const error = userOperation as BundlerJsonRpcError | JsonRpcError
-        console.log(error.message)
-        return
-    }
 
     const cost = calculateUserOperationMaxGasCost(userOperation)
     console.log("This useroperation may cost upto : " + cost + " wei")
     console.log(
         "Please fund the sender account : " + 
         userOperation.sender +
-        " with more than "+ cost + " wei"
+        " with more than " + cost + " wei"
     )
  
     //Safe is a multisig that can have multiple owners/signers
@@ -86,7 +79,7 @@ async function main(): Promise<void> {
     userOperation.signature = smartAccount.signUserOperation(
 		userOperation,
         [ownerPrivateKey],
-        chainId,
+        chainId
 	)
     console.log(userOperation)
 
@@ -97,25 +90,11 @@ async function main(): Promise<void> {
         userOperation, bundlerUrl
     )
 
-    //error handling
-    if("code" in sendUserOperationResponse){
-        const error = sendUserOperationResponse as BundlerJsonRpcError
-        console.log(error.message)
-        return
-    }
-
     console.log("Useroperation sent. Waiting to be included ......")
     //included will return a UserOperationReceiptResult when 
     //useroperation is included onchain
     let userOperationReceiptResult = await sendUserOperationResponse.included()
 
-    //error handling
-    if("code" in userOperationReceiptResult){
-        const error = userOperationReceiptResult as BundlerJsonRpcError
-        console.log(error.message)
-        return
-    }
-    userOperationReceiptResult = userOperationReceiptResult as UserOperationReceiptResult
     console.log("Useroperation receipt received.")
     console.log(userOperationReceiptResult)
     if(userOperationReceiptResult.success){

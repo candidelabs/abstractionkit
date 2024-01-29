@@ -9,7 +9,18 @@ module.exports = {
 	parserOptions: {
 		tsconfigRootDir: __dirname,
 		project: ["./tsconfig.json"],
+		ecmaVersion: 2018,
+    	sourceType: "module"
 	},
-	plugins: ["@typescript-eslint"],
+	plugins: [
+		"@typescript-eslint",
+		"eslint-plugin-tsdoc"
+	],
+	extends:  [
+	  'plugin:@typescript-eslint/recommended'
+	],
+	rules: {
+	  "tsdoc/syntax": "warn"
+	},
 	root: true,
 };

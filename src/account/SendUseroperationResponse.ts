@@ -1,9 +1,6 @@
 import { Bundler } from "src/Bundler";
-import {
-	BundlerErrorCode,
-	BundlerJsonRpcError,
-	UserOperationReceiptResult,
-} from "src/types";
+import { AbstractionKitError, ensureError } from "src/errors";
+import { UserOperationReceiptResult } from "src/types";
 
 export class SendUseroperationResponse {
 	readonly userOperationHash: string;
@@ -27,14 +24,14 @@ export class SendUseroperationResponse {
 	/**
 	 * Query the bundler for the useroperation receipt repeatedly
 	 * and return when successful or timeout
-	 * @param timeoutInSeconds 
-	 * @param requestIntervalInSeconds 
-	 * @returns UserOperationReceiptResult or BundlerJsonRpcError
+	 * @param timeoutInSeconds - number of seconds to stop trying after
+	 * @param requestIntervalInSeconds - time between getUserOperationReceipt request
+	 * @returns UserOperationReceiptResult
 	 */
 	async included(
-		timeoutInSeconds: number = 120,
+		timeoutInSeconds: number = 180,
 		requestIntervalInSeconds: number = 2,
-	): Promise<UserOperationReceiptResult | BundlerJsonRpcError> {
+	): Promise<UserOperationReceiptResult> {
 		if (timeoutInSeconds <= 0 || requestIntervalInSeconds <= 0) {
 			throw RangeError(
 				"timeoutInSeconds and requestIntervalInSeconds should be bigger than zero",
@@ -46,25 +43,28 @@ export class SendUseroperationResponse {
 			);
 		}
 		let count = 0;
-		let error = {} as BundlerJsonRpcError;
 		while (count <= timeoutInSeconds) {
 			await this.delay(requestIntervalInSeconds * 1000);
-			const res = await this.bundler.getUserOperationReceipt(
-				this.userOperationHash,
-			);
-			if ("code" in res) {
-				if (
-					res["code"] == (BundlerErrorCode.InvalidUseroperationHash as number)
-				) {
-					count++;
-					error = res;
+			try {
+				return await this.bundler.getUserOperationReceipt(
+					this.userOperationHash,
+				);
+			} catch (err) {
+				const error = ensureError(err);
+				if ("code" in error && error["code"] == "BUNDLER_ERROR") {
+					const e = error["cause"] as AbstractionKitError;
+					if (e.code == "INVALIDE_USEROPERATION_HASH") {
+						count++;
+					} else {
+						throw err;
+					}
 				} else {
-					return res;
+					throw err;
 				}
-			} else {
-				return res;
 			}
 		}
-		return error;
+		throw new AbstractionKitError("TIMEOUT", "can't find useroperation", {
+			context: this.userOperationHash,
+		});
 	}
 }

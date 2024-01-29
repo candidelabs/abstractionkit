@@ -1,8 +1,6 @@
-import { BytesLike } from "ethers";
-
-export class SmartAccount {
+export abstract class SmartAccount {
 	readonly accountAddress: string;
-	static readonly proxyByteCode: BytesLike;
+	static readonly proxyByteCode: string;
 	static readonly initializerFunctionSelector: string;
 	static readonly initializerFunctionInputAbi: string[];
 	static readonly executorFunctionSelector: string;
@@ -11,4 +9,10 @@ export class SmartAccount {
 	constructor(accountAddress: string) {
 		this.accountAddress = accountAddress;
 	}
+	abstract prependTokenPaymasterApproveToCallData(
+		callData: string,
+		tokenAddress: string,
+		paymasterAddress: string,
+		approveAmount: bigint,
+	): string;
 }

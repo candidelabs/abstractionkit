@@ -1,4 +1,3 @@
-import type { BytesLike } from "ethers";
 import type { AbiInputValue } from "../types";
 import { createCallData } from "../utils";
 
@@ -19,12 +18,12 @@ export class SmartAccountFactory {
 
 	getFactoryGeneratorFunctionCallData(
 		generatorFunctionInputParameters: AbiInputValue[],
-	): BytesLike {
+	): string {
 		const callData = createCallData(
 			this.generatorFunctionSelector,
 			this.generatorFunctionInputAbi,
 			generatorFunctionInputParameters,
-		) as string;
+		);
 		const res: string = this.address + callData.slice(2);
 
 		return res;

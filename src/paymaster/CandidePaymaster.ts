@@ -2,7 +2,6 @@ import { Paymaster } from "./Paymaster";
 import { calculateUserOperationMaxGasCost, sendJsonRpcRequest } from "../utils";
 import {
 	UserOperation,
-	JsonRpcError,
 	SupportedERC20TokensAndMetadata,
 	PmUserOperationResult,
 	PaymasterMetadata,
@@ -11,6 +10,8 @@ import {
 } from "../types";
 import { CandidePaymasterContext } from "./types";
 import { Bundler } from "src/Bundler";
+import { SmartAccount } from "src/abstractionkit";
+import { AbstractionKitError, ensureError } from "src/errors";
 
 export class CandidePaymaster extends Paymaster {
 	readonly rpcUrl: string;
@@ -26,54 +27,62 @@ export class CandidePaymaster extends Paymaster {
 	/**
 	 * initialize the paymaster object the paymaster supported tokens,
 	 * entrypoint and metadata from the bundler url
-	 * @returns null or JsonRpcError
+	 * @returns null
 	 */
-	async initialize(): Promise<null | JsonRpcError> {
-		const entrypointResult = await this.getSupportedEntrypoint();
+	async initialize(): Promise<null> {
+		try {
+			this.entrypointAddress = await this.getSupportedEntrypoint();
 
-		if (typeof entrypointResult === "string") {
-			this.entrypointAddress = entrypointResult;
-		} else {
-			return entrypointResult;
-		}
+			const supportedTokensResult =
+				await this.getSupportedERC20TokensAndPaymasterMetadata();
 
-		const supportedTokensResult =
-			await this.getSupportedERC20TokensAndPaymasterMetadata();
-
-		if ("code" in supportedTokensResult) {
-			return supportedTokensResult;
-		} else {
 			this.supportedTokens = supportedTokensResult.tokens;
 			this.paymasterMetadata = supportedTokensResult.paymasterMetadata;
+
+			return null;
+		} catch (err) {
+			const error = ensureError(err);
+
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				"failed initializing the paymaster",
+				{
+					cause: error,
+				},
+			);
 		}
-		return null;
 	}
 
-	async getPaymasterMetaData(): Promise<PaymasterMetadata | JsonRpcError> {
+	async getPaymasterMetaData(): Promise<PaymasterMetadata> {
 		if (this.paymasterMetadata == null) {
-			const result = await this.initialize();
-			if (result != null) {
-				return result;
-			}
+			await this.initialize();
 		}
 		return this.paymasterMetadata as PaymasterMetadata;
 	}
 
-	async getSupportedERC20TokensAndPaymasterMetadata(): Promise<
-		SupportedERC20TokensAndMetadata | JsonRpcError
-	> {
+	async getSupportedERC20TokensAndPaymasterMetadata(): Promise<SupportedERC20TokensAndMetadata> {
 		if (this.supportedTokens == null || this.paymasterMetadata == null) {
-			const jsonRpcResult = await sendJsonRpcRequest(
-				this.rpcUrl,
-				"pm_supportedERC20Tokens",
-				[],
-			);
+			try {
+				const jsonRpcResult = (await sendJsonRpcRequest(
+					this.rpcUrl,
+					"pm_supportedERC20Tokens",
+					[],
+				)) as SupportedERC20TokensAndMetadata;
 
-			if ("result" in jsonRpcResult) {
-				const res = jsonRpcResult.result as SupportedERC20TokensAndMetadata;
-				return { tokens: res.tokens, paymasterMetadata: res.paymasterMetadata };
-			} else {
-				return jsonRpcResult.error as JsonRpcError;
+				return {
+					tokens: jsonRpcResult.tokens,
+					paymasterMetadata: jsonRpcResult.paymasterMetadata,
+				};
+			} catch (err) {
+				const error = ensureError(err);
+
+				throw new AbstractionKitError(
+					"PAYMASTER_ERROR",
+					"getSupportedERC20TokensAndPaymasterMetadata failed",
+					{
+						cause: error,
+					},
+				);
 			}
 		} else {
 			return {
@@ -83,18 +92,26 @@ export class CandidePaymaster extends Paymaster {
 		}
 	}
 
-	async getSupportedEntrypoint(): Promise<string | JsonRpcError> {
+	async getSupportedEntrypoint(): Promise<string> {
 		if (this.entrypointAddress == null) {
-			const jsonRpcResult = await sendJsonRpcRequest(
-				this.rpcUrl,
-				"pm_supportedEntryPoint",
-				[],
-			);
+			try {
+				const supportedEntrypoint = await sendJsonRpcRequest(
+					this.rpcUrl,
+					"pm_supportedEntryPoint",
+					[],
+				);
 
-			if ("result" in jsonRpcResult) {
-				return jsonRpcResult.result as string;
-			} else {
-				return jsonRpcResult.error as JsonRpcError;
+				return supportedEntrypoint as string;
+			} catch (err) {
+				const error = ensureError(err);
+
+				throw new AbstractionKitError(
+					"PAYMASTER_ERROR",
+					"getSupportedEntrypoint failed",
+					{
+						cause: error,
+					},
+				);
 			}
 		} else {
 			return this.entrypointAddress;
@@ -103,21 +120,15 @@ export class CandidePaymaster extends Paymaster {
 
 	/**
 	 * check if the token paymaster accepts an erc20 token
-	 * @param erc20TokenAddress
-	 * @returns boolean or JsonRpcError
+	 * @param erc20TokenAddress - token address to check if supported
 	 */
-	async isSupportedERC20Token(
-		erc20TokenAddress: string,
-	): Promise<boolean | JsonRpcError> {
+	async isSupportedERC20Token(erc20TokenAddress: string): Promise<boolean> {
 		if (
 			this.entrypointAddress == null ||
 			this.supportedTokens == null ||
 			this.paymasterMetadata == null
 		) {
-			const result = await this.initialize();
-			if (result != null) {
-				return result;
-			}
+			await this.initialize();
 		}
 		const supportedTokens = this.supportedTokens as ERC20Token[];
 		const gasToken = supportedTokens.find(
@@ -133,25 +144,23 @@ export class CandidePaymaster extends Paymaster {
 
 	/**
 	 * get the paymaster token data
-	 * @param erc20TokenAddress
-	 * @returns ERC20Token or null or JsonRpcError 
+	 * @param erc20TokenAddress - token to get data for
+	 * @returns ERC20Token or null
 	 */
 	async getSupportedERC20TokenData(
 		erc20TokenAddress: string,
-	): Promise<ERC20Token | null | JsonRpcError> {
+	): Promise<ERC20Token | null> {
 		if (
 			this.entrypointAddress == null ||
 			this.supportedTokens == null ||
 			this.paymasterMetadata == null
 		) {
-			const result = await this.initialize();
-			if (result != null) {
-				return result;
-			}
+			await this.initialize();
 		}
 		const supportedTokens = this.supportedTokens as ERC20Token[];
 		const gasToken = supportedTokens.find(
-			(token) => token.address === erc20TokenAddress.toLowerCase(),
+			(token) =>
+				token.address.toLowerCase() === erc20TokenAddress.toLowerCase(),
 		);
 
 		if (!gasToken) {
@@ -170,56 +179,48 @@ export class CandidePaymaster extends Paymaster {
 	/**
 	 * createPaymasterUserOperation will estimate gas and set
 	 * paymasterAndData
-	 * @param userOperation 
-	 * @param bundlerRpc 
-	 * @param context 
-	 * @param entrypointAddress 
-	 * @param state_override_set 
-	 * @returns UserOperation or JsonRpcError
+	 * @param useroperation - useroperation to add paymaster support for
+	 * @param bundlerRpc - bundler rpc for gas estimation
+	 * @param context - paymaster context data
+	 * @param state_override_set - state override values to set during gs estimation
+	 * @returns promise with UserOperation
 	 */
 	async createPaymasterUserOperation(
 		userOperation: UserOperation,
 		bundlerRpc: string,
 		context: CandidePaymasterContext = {},
-		entrypointAddress: string = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
 		state_override_set?: StateOverrideSet,
-	): Promise<UserOperation | JsonRpcError> {
+	): Promise<UserOperation> {
 		if (
 			this.entrypointAddress == null ||
 			this.supportedTokens == null ||
 			this.paymasterMetadata == null
 		) {
-			const result = await this.initialize();
-			if (result != null) {
-				return result;
-			}
+			await this.initialize();
 		}
+		try {
+			const paymasterMetadata = this.paymasterMetadata as PaymasterMetadata;
+			userOperation.paymasterAndData = paymasterMetadata.dummyPaymasterAndData;
 
-		const paymasterMetadata = this.paymasterMetadata as PaymasterMetadata;
-		userOperation.paymasterAndData = paymasterMetadata.dummyPaymasterAndData;
+			const bundler = new Bundler(bundlerRpc);
+			const estimation = await bundler.estimateUserOperationGas(
+				userOperation,
+				this.entrypointAddress as string,
+				state_override_set,
+			);
 
-		const bundler = new Bundler(bundlerRpc);
-		const estimation = await bundler.estimateUserOperationGas(
-			userOperation,
-			entrypointAddress,
-			state_override_set,
-		);
-		if ("code" in estimation) {
-			return estimation;
-		}
-		userOperation.preVerificationGas = estimation.preVerificationGas;
-		userOperation.verificationGasLimit =
-			estimation.verificationGasLimit + 10000n;
-		userOperation.callGasLimit = estimation.callGasLimit;
+			userOperation.preVerificationGas = estimation.preVerificationGas;
+			userOperation.verificationGasLimit =
+				estimation.verificationGasLimit + 10000n;
+			userOperation.callGasLimit = estimation.callGasLimit;
 
-		const jsonRpcResult = await sendJsonRpcRequest(
-			this.rpcUrl,
-			"pm_sponsorUserOperation",
-			[userOperation, this.entrypointAddress, context],
-		);
+			const jsonRpcResult = await sendJsonRpcRequest(
+				this.rpcUrl,
+				"pm_sponsorUserOperation",
+				[userOperation, this.entrypointAddress, context],
+			);
 
-		if ("result" in jsonRpcResult) {
-			const result = jsonRpcResult.result as PmUserOperationResult;
+			const result = jsonRpcResult as PmUserOperationResult;
 			const resultMod = {
 				paymasterAndData: result.paymasterAndData,
 				callGasLimit:
@@ -253,30 +254,112 @@ export class CandidePaymaster extends Paymaster {
 				resultMod.maxPriorityFeePerGas ?? userOperation.maxPriorityFeePerGas;
 
 			return userOperation;
-		} else {
-			return jsonRpcResult.error as JsonRpcError;
+		} catch (err) {
+			const error = ensureError(err);
+
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				"pm_sponsorUserOperation failed",
+				{
+					cause: error,
+				},
+			);
 		}
+	}
+
+	/**
+	 * createSponserPaymasterUserOperation will estimate gas and set
+	 * paymasterAndData for a sponser paymaster operation
+	 * @param useroperation - useroperation to add paymaster support for
+	 * @param bundlerRpc - bundler rpc for gas estimation
+	 * @param state_override_set - state override values to set during gs estimation
+	 * @returns promise with UserOperation
+	 */
+	async createSponserPaymasterUserOperation(
+		userOperation: UserOperation,
+		bundlerRpc: string,
+		state_override_set?: StateOverrideSet,
+	): Promise<UserOperation> {
+		return await this.createPaymasterUserOperation(
+			userOperation,
+			bundlerRpc,
+			{},
+			state_override_set,
+		);
+	}
+
+	/**
+	 * createPaymasterUserOperation will estimate gas and set
+	 * paymasterAndData
+	 * @param smartAccount - the SmartAccount object that created the target useroperation
+	 * @param useroperation - useroperation to add paymaster support for
+	 * @param tokenAddress - target token to pay gas with
+	 * @param bundlerRpc - bundler rpc for gas estimation
+	 * @param state_override_set - state override values to set during gs estimation
+	 * @returns promise with UserOperation
+	 */
+	async createTokenPaymasterUserOperation(
+		smartAccount: SmartAccount,
+		userOperation: UserOperation,
+		tokenAddress: string,
+		bundlerRpc: string,
+		state_override_set: StateOverrideSet = {},
+	): Promise<UserOperation> {
+		const maxErc20Cost = await this.calculateUserOperationErc20TokenMaxGasCost(
+			userOperation,
+			tokenAddress,
+		);
+
+		const approveAmount = maxErc20Cost * 2n; //for the extra cost of the paymasterAndData
+
+		let metadata = await this.getPaymasterMetaData();
+
+		metadata = metadata as PaymasterMetadata;
+		const paymasterAddress = metadata.address;
+
+		const callDataWithApprove =
+			smartAccount.prependTokenPaymasterApproveToCallData(
+				userOperation.callData,
+				tokenAddress,
+				paymasterAddress,
+				approveAmount,
+			);
+		userOperation.callData = callDataWithApprove;
+
+		return await this.createPaymasterUserOperation(
+			userOperation,
+			bundlerRpc,
+			{
+				token: tokenAddress,
+			},
+			state_override_set,
+		);
 	}
 
 	async calculateUserOperationErc20TokenMaxGasCost(
 		userOperation: UserOperation,
 		erc20TokenAddress: string,
-	):Promise<bigint | JsonRpcError>{
-		const supportedERC20TokensDataResult = await this.getSupportedERC20TokenData(erc20TokenAddress)
-		if (supportedERC20TokensDataResult == null) {
-			throw RangeError(
-				"Erc20 token is not supported by the paymaster.",
+	): Promise<bigint> {
+		const supportedERC20TokensData = await this.getSupportedERC20TokenData(
+			erc20TokenAddress,
+		);
+		if (supportedERC20TokensData == null) {
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				erc20TokenAddress + " token is not supported by the paymaster.",
+				{
+					context: {
+						supportedERC20TokensAndPaymasterMetadata: JSON.stringify(
+							await this.getSupportedERC20TokensAndPaymasterMetadata(),
+						),
+					},
+				},
 			);
-		}else{
-			if("error" in supportedERC20TokensDataResult){
-				return supportedERC20TokensDataResult as JsonRpcError
-			}else{
-				const supportedERC20TokensData = supportedERC20TokensDataResult as ERC20Token
-				const cost = calculateUserOperationMaxGasCost(userOperation)
-				const tokenCost = (supportedERC20TokensData.exchangeRate / cost) + supportedERC20TokensData.fee
-
-				return tokenCost
-			}
+		} else {
+			const cost = calculateUserOperationMaxGasCost(userOperation);
+			const tokenCost =
+				(supportedERC20TokensData.exchangeRate * cost) / BigInt(10 ** 18);
+			return tokenCost;
 		}
 	}
 }

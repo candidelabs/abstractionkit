@@ -13,8 +13,8 @@
 	"scripts": {
 		"build": "rm -rf dist && microbundle --tsconfig tsconfig.json --no-sourcemap",
 		"clean": "rm -rf dist",
-		"format": "prettier --write src/**/*.ts",
-		"lint": "eslint src/**/*.ts",
+		"format": "prettier --write src/*.ts src/**/*.ts src/**/**/*.ts",
+		"lint": "eslint -f unix \"src/**/*.{ts,tsx}\"",
 		"prepare": "husky install"
 	},
 	"repository": {
@@ -46,6 +46,7 @@
 		"@typescript-eslint/eslint-plugin": "^6.2.0",
 		"@typescript-eslint/parser": "^6.2.0",
 		"eslint": "^8.46.0",
+		"eslint-plugin-tsdoc": "^0.2.17",
 		"husky": ">=6",
 		"lint-staged": ">=10",
 		"microbundle": "^0.15.1",

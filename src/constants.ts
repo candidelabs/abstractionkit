@@ -1,5 +1,6 @@
-import { ZeroAddress } from "ethers";
-import type { UserOperation } from "./types";
+import {type UserOperation } from "./types";
+
+export const ZeroAddress = "0x0000000000000000000000000000000000000000";
 
 export const UserOperationEmptyValues: UserOperation = {
 	sender: ZeroAddress,
@@ -15,7 +16,8 @@ export const UserOperationEmptyValues: UserOperation = {
 	signature: "0x",
 };
 
-export const UserOperationDummyValues: UserOperation = { //dummy values for somewhat accurate gas estimation
+export const UserOperationDummyValues: UserOperation = {
+	//dummy values for somewhat accurate gas estimation
 	sender: ZeroAddress,
 	nonce: 0n,
 	initCode: "0x",

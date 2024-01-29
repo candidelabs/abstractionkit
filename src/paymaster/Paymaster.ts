@@ -1,5 +1,4 @@
-import "ethers";
-import type { UserOperation, JsonRpcError, StateOverrideSet } from "../types";
+import type { UserOperation, StateOverrideSet } from "../types";
 import { CandidePaymasterContext } from "./types";
 
 export abstract class Paymaster {
@@ -7,7 +6,6 @@ export abstract class Paymaster {
 		userOperation: UserOperation,
 		bundlerRpc: string,
 		context: CandidePaymasterContext,
-		entrypointAddress: string,
 		state_override_set?: StateOverrideSet,
-	): Promise<UserOperation | JsonRpcError>;
+	): Promise<UserOperation>;
 }

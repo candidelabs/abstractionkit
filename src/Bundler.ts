@@ -1,15 +1,14 @@
 import type {
 	UserOperation,
-	BundlerJsonRpcError,
 	GasEstimationResult,
 	UserOperationByHashResult,
 	UserOperationReceipt,
 	UserOperationReceiptResult,
 	StateOverrideSet,
-	JsonRpcResponse,
+	JsonRpcResult,
 } from "./types";
-import { BytesLike } from "ethers";
-import {sendJsonRpcRequest} from "./utils";
+import { sendJsonRpcRequest } from "./utils";
+import { AbstractionKitError, ensureError } from "./errors";
 
 export class Bundler {
 	readonly rpcUrl: string;
@@ -20,126 +19,164 @@ export class Bundler {
 
 	/**
 	 * call eth_chainId bundler rpc method
-	 * @returns 
+	 * @returns promise with chainid
 	 */
-	async chainId(): Promise<string| BundlerJsonRpcError> {
-		const jsonRpcResult = await sendJsonRpcRequest(
-			this.rpcUrl,
-			"eth_chainId",
-			[],
-		);
-		if ("result" in jsonRpcResult) {
-			return jsonRpcResult.result as string
-		} else {
-			return jsonRpcResult.error as BundlerJsonRpcError;
+	async chainId(): Promise<string> {
+		try {
+			const chainId = (await sendJsonRpcRequest(
+				this.rpcUrl,
+				"eth_chainId",
+				[],
+			)) as string;
+			if (typeof chainId === "string") {
+				return chainId;
+			} else {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"bundler eth_chainId rpc call failed",
+				);
+			}
+		} catch (err) {
+			const error = ensureError(err);
+
+			throw new AbstractionKitError(
+				"BUNDLER_ERROR",
+				"bundler eth_chainId rpc call failed",
+				{
+					cause: error,
+				},
+			);
 		}
 	}
 
 	/**
 	 * call eth_supportedEntryPoints bundler rpc method
-	 * @returns 
+	 * @returns promise with supportedEntryPoints
 	 */
-	async supportedEntryPoints(): Promise<
-		string[] | BundlerJsonRpcError
-	> {
-		const jsonRpcResult = await sendJsonRpcRequest(
-			this.rpcUrl,
-			"eth_supportedEntryPoints",
-			[],
-		);
+	async supportedEntryPoints(): Promise<string[]> {
+		try {
+			const supportedEntryPoints = (await sendJsonRpcRequest(
+				this.rpcUrl,
+				"eth_supportedEntryPoints",
+				[],
+			)) as string[];
+			return supportedEntryPoints;
+		} catch (err) {
+			const error = ensureError(err);
 
-		if ("result" in jsonRpcResult) {
-			return jsonRpcResult.result as string[]
-		} else {
-			return jsonRpcResult.error as BundlerJsonRpcError;
+			throw new AbstractionKitError(
+				"BUNDLER_ERROR",
+				"bundler eth_supportedEntryPoints rpc call failed",
+				{
+					cause: error,
+				},
+			);
 		}
 	}
 
 	/**
 	 * call eth_estimateUserOperationGas bundler rpc method
-	 * @param useroperation 
-	 * @param entrypointAddress 
-	 * @param state_override_set 
-	 * @returns GasEstimationResult or BundlerJsonRpcError
+	 * @param useroperation - useroperation to estimate gas for
+	 * @param entrypointAddress - supported entrypoint
+	 * @param state_override_set - state override values to set during gs estimation
+	 * @returns promise with GasEstimationResult
 	 */
 	async estimateUserOperationGas(
 		useroperation: UserOperation,
 		entrypointAddress: string,
-		state_override_set?: StateOverrideSet
-	): Promise<GasEstimationResult | BundlerJsonRpcError> {
-		let jsonRpcResult = {} as JsonRpcResponse
-		if (typeof state_override_set === 'undefined') {
-			jsonRpcResult = await sendJsonRpcRequest(
-				this.rpcUrl,
-				"eth_estimateUserOperationGas",
-				[useroperation, entrypointAddress],
-			);
-		}else{
-			jsonRpcResult = await sendJsonRpcRequest(
-				this.rpcUrl,
-				"eth_estimateUserOperationGas",
-				[useroperation, entrypointAddress, state_override_set],
-			);
-		}
-		if ("result" in jsonRpcResult) {
-			const res = jsonRpcResult.result as GasEstimationResult
+		state_override_set?: StateOverrideSet,
+	): Promise<GasEstimationResult> {
+		try {
+			let jsonRpcResult = {} as JsonRpcResult;
+			if (typeof state_override_set === "undefined") {
+				jsonRpcResult = await sendJsonRpcRequest(
+					this.rpcUrl,
+					"eth_estimateUserOperationGas",
+					[useroperation, entrypointAddress],
+				);
+			} else {
+				jsonRpcResult = await sendJsonRpcRequest(
+					this.rpcUrl,
+					"eth_estimateUserOperationGas",
+					[useroperation, entrypointAddress, state_override_set],
+				);
+			}
+			const res = jsonRpcResult as GasEstimationResult;
 			const gasEstimationResult: GasEstimationResult = {
 				callGasLimit: BigInt(res.callGasLimit),
 				preVerificationGas: BigInt(res.preVerificationGas),
-				verificationGasLimit: BigInt(res.verificationGasLimit)
+				verificationGasLimit: BigInt(res.verificationGasLimit),
 			};
 
 			return gasEstimationResult;
-		} else {
-			return jsonRpcResult.error as BundlerJsonRpcError;
+		} catch (err) {
+			const error = ensureError(err);
+
+			throw new AbstractionKitError(
+				"BUNDLER_ERROR",
+				"bundler eth_estimateUserOperationGas rpc call failed",
+				{
+					cause: error,
+				},
+			);
 		}
 	}
 
 	/**
 	 * call eth_sendUserOperation bundler rpc method
-	 * @param useroperation 
-	 * @param entrypointAddress 
-	 * @returns useroperationhash or BundlerJsonRpcError
+	 * @param useroperation - useroperation to estimate gas for
+	 * @param entrypointAddress - supported entrypoint
+	 * @returns promise with useroperationhash
 	 */
 	async sendUserOperation(
 		useroperation: UserOperation,
 		entrypointAddress: string,
-	): Promise<string | BundlerJsonRpcError> {
-		const jsonRpcResult = await sendJsonRpcRequest(
-			this.rpcUrl,
-			"eth_sendUserOperation",
-			[useroperation, entrypointAddress],
-		);
-		if ("result" in jsonRpcResult) {
-			return jsonRpcResult.result as string
-		} else {
-			const error = jsonRpcResult.error as BundlerJsonRpcError;
-			return error;
+	): Promise<string> {
+		try {
+			const jsonRpcResult = (await sendJsonRpcRequest(
+				this.rpcUrl,
+				"eth_sendUserOperation",
+				[useroperation, entrypointAddress],
+			)) as string;
+			return jsonRpcResult;
+		} catch (err) {
+			const error = ensureError(err);
+
+			throw new AbstractionKitError(
+				"BUNDLER_ERROR",
+				"bundler eth_sendUserOperation rpc call failed",
+				{
+					cause: error,
+				},
+			);
 		}
 	}
 
 	/**
 	 * call eth_getUserOperationReceipt bundler rpc method
-	 * @param useroperationhash 
-	 * @returns UserOperationReceiptResult or BundlerJsonRpcError
+	 * @param useroperationhash - useroperation hash
+	 * @returns promise with UserOperationReceiptResult
 	 */
 	async getUserOperationReceipt(
-		useroperationhash: BytesLike,
-	): Promise<UserOperationReceiptResult | BundlerJsonRpcError> {
-		const jsonRpcResult = await sendJsonRpcRequest(
-			this.rpcUrl,
-			"eth_getUserOperationReceipt",
-			[useroperationhash],
-		);
-		if ("result" in jsonRpcResult) {
-			const res = jsonRpcResult.result as UserOperationReceiptResult;
+		useroperationhash: string,
+	): Promise<UserOperationReceiptResult> {
+		try {
+			const jsonRpcResult = await sendJsonRpcRequest(
+				this.rpcUrl,
+				"eth_getUserOperationReceipt",
+				[useroperationhash],
+			);
+			const res = jsonRpcResult as UserOperationReceiptResult;
 			const userOperationReceipt: UserOperationReceipt = {
 				...res.receipt,
 				blockNumber: BigInt(res.receipt.blockNumber),
 				cumulativeGasUsed: BigInt(res.receipt.cumulativeGasUsed),
 				gasUsed: BigInt(res.receipt.gasUsed),
 				transactionIndex: BigInt(res.receipt.transactionIndex),
-				effectiveGasPrice: (res.receipt.effectiveGasPrice == undefined)?undefined:BigInt(res.receipt.effectiveGasPrice),
+				effectiveGasPrice:
+					res.receipt.effectiveGasPrice == undefined
+						? undefined
+						: BigInt(res.receipt.effectiveGasPrice),
 				logs: JSON.stringify(res.receipt.logs),
 			};
 
@@ -152,36 +189,56 @@ export class Bundler {
 				receipt: userOperationReceipt,
 			};
 			return bundlerGetUserOperationReceiptResult;
-		} else {
-			const error = jsonRpcResult.error as BundlerJsonRpcError;
-			return error;
+		} catch (err) {
+			const error = ensureError(err);
+
+			throw new AbstractionKitError(
+				"BUNDLER_ERROR",
+				"bundler eth_getUserOperationReceipt rpc call failed",
+				{
+					cause: error,
+					context: {
+						useroperationhash: useroperationhash,
+					},
+				},
+			);
 		}
 	}
 
 	/**
 	 * call eth_getUserOperationByHash bundler rpc method
-	 * @param useroperationhash 
-	 * @returns UserOperationByHashResult or BundlerJsonRpcError
+	 * @param useroperationhash - useroperation hash
+	 * @returns promise with UserOperationByHashResult
 	 */
 	async getUserOperationByHash(
-		useroperationhash: BytesLike,
-	): Promise<UserOperationByHashResult | BundlerJsonRpcError> {
-		const jsonRpcResult = await sendJsonRpcRequest(
-			this.rpcUrl,
-			"eth_getUserOperationByHash",
-			[useroperationhash],
-		);
-		if ("result" in jsonRpcResult) {
-			const res = jsonRpcResult.result as UserOperationByHashResult;
+		useroperationhash: string,
+	): Promise<UserOperationByHashResult> {
+		try {
+			const jsonRpcResult = await sendJsonRpcRequest(
+				this.rpcUrl,
+				"eth_getUserOperationByHash",
+				[useroperationhash],
+			);
+			const res = jsonRpcResult as UserOperationByHashResult;
 
 			const userOperationByHashResult: UserOperationByHashResult = {
 				...res,
 				blockNumber: BigInt(res.blockNumber),
 			};
 			return userOperationByHashResult;
-		} else {
-			const error = jsonRpcResult.error as BundlerJsonRpcError;
-			return error;
+		} catch (err) {
+			const error = ensureError(err);
+
+			throw new AbstractionKitError(
+				"BUNDLER_ERROR",
+				"bundler eth_getUserOperationByHash rpc call failed",
+				{
+					cause: error,
+					context: {
+						useroperationhash: useroperationhash,
+					},
+				},
+			);
 		}
 	}
 }

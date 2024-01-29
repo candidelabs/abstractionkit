@@ -1,42 +1,34 @@
-import type { BytesLike } from "ethers";
-
 /**
  * Wrapper for a useroperation for an entrypoint v0.6
  */
 export type UserOperation = {
 	sender: string;
 	nonce: bigint;
-	initCode: BytesLike;
-	callData: BytesLike;
+	initCode: string;
+	callData: string;
 	callGasLimit: bigint;
 	verificationGasLimit: bigint;
 	preVerificationGas: bigint;
 	maxFeePerGas: bigint;
 	maxPriorityFeePerGas: bigint;
-	paymasterAndData: BytesLike;
-	signature: BytesLike;
+	paymasterAndData: string;
+	signature: string;
 };
 
 export type AbiInputValue =
 	| string
 	| bigint
 	| number
-	| BytesLike
 	| boolean
 	| AbiInputValue[];
 
-export type JsonRpcParam =
-	| string
-	| bigint
-	| BytesLike
-	| boolean
-	| object
-	| JsonRpcParam[];
+export type JsonRpcParam = string | bigint | boolean | object | JsonRpcParam[];
 
 export type JsonRpcResponse = {
-	id: number;
+	id: number | null;
+	jsonrpc: string;
 	result?: JsonRpcResult;
-	error?: BundlerJsonRpcError;
+	error?: JsonRpcError;
 };
 
 export type ChainIdResult = string;
@@ -54,26 +46,22 @@ export type JsonRpcResult =
 
 export enum BundlerErrorCode {
 	InvalidFields = -32602,
-    SimulateValidation = -32500,
-    SimulatePaymasterValidation = -32501,
-    OpcodeValidation = -32502,
-    ExpiresShortly = -32503,
-    Reputation = -32504,
-    InsufficientStake = -32505,
-    UnsupportedSignatureAggregator = -32506,
-    InvalidSignature = -32507,
-    InvalidUseroperationHash = -32601,
-	ExecutionReverted = -32521
+	SimulateValidation = -32500,
+	SimulatePaymasterValidation = -32501,
+	OpcodeValidation = -32502,
+	ExpiresShortly = -32503,
+	Reputation = -32504,
+	InsufficientStake = -32505,
+	UnsupportedSignatureAggregator = -32506,
+	InvalidSignature = -32507,
+	InvalidUseroperationHash = -32601,
+	ExecutionReverted = -32521,
 }
 
 export type JsonRpcError = {
 	code: number;
 	message: string;
-};
-
-export type BundlerJsonRpcError = {
-	code: BundlerErrorCode | number;
-	message: string;
+	data: object;
 };
 
 export type GasEstimationResult = {
@@ -104,7 +92,7 @@ export type UserOperationReceipt = {
 };
 
 export type UserOperationReceiptResult = {
-	userOpHash: BytesLike;
+	userOpHash: string;
 	entryPoint: string;
 	sender: string;
 	nonce: bigint;
@@ -117,20 +105,30 @@ export type UserOperationReceiptResult = {
 };
 
 export type PmUserOperationResult = {
-	paymasterAndData: BytesLike;
+	paymasterAndData: string;
 	callGasLimit?: bigint;
 	preVerificationGas?: bigint;
 	verificationGasLimit?: bigint;
 	maxFeePerGas?: bigint;
 	maxPriorityFeePerGas?: bigint;
 };
+
 /**
  * Call or Delegate Operation
- * @enum
  */
 export enum Operation {
 	Call = 0,
 	Delegate = 1,
+}
+
+/**
+ * Wrapper for a Metatransaction
+ */
+export interface MetaTransaction {
+	to: string;
+	value: bigint;
+	data: string;
+	operation?: Operation;
 }
 
 /**
@@ -175,33 +173,33 @@ export interface SupportedERC20TokensAndMetadata {
 /**
  * Wrapper for a dictionary type
  */
-interface Dictionary<T> {
-    [Key: string]: T;
+export interface Dictionary<T> {
+	[Key: string]: T;
 }
 
 /**
  * Wrapper for a state diff
  */
 export type AddressToState = {
-	balance?:bigint,
-	nonce?:bigint,
-	code?:BytesLike,
-	state?:Dictionary<string>,
-	stateDiff?:Dictionary<string>,
-}
+	balance?: bigint;
+	nonce?: bigint;
+	code?: string;
+	state?: Dictionary<string>;
+	stateDiff?: Dictionary<string>;
+};
 
 /**
  * Wrapper for state overrides for gas estimation
  */
 export type StateOverrideSet = {
-	[key: string]: AddressToState,
-}
+	[key: string]: AddressToState;
+};
 
 /**
  * Multiplier to determine the gas price for the user operation
  */
 export enum GasOption {
-	Slow=1,
-	Medium=1.2,
-	Fast=1.5
+	Slow = 1,
+	Medium = 1.2,
+	Fast = 1.5,
 }

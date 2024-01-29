@@ -12,7 +12,7 @@
 
 CreateAccountAndSendTransactionUsingPaymaster Example - AbstractionKit - Account Abstraction SDK by Candide
 
-This example is in the Goerli chain.
+This example is in the Sepolia chain.
 
 This example uses a Candide paymaster to sponsor the useroperation, so there is not need to fund the sender account. Get early access to Candide's sponsor paymaster by visiting our discord https://discord.gg/KJSzy2Rqtg
 

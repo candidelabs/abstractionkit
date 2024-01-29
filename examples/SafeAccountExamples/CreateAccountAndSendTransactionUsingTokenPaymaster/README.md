@@ -12,7 +12,7 @@
 
 CreateAccountAndSendTransactionUsingPaymaster Example - AbstractionKit - Account Abstraction SDK by Candide
 
-This example is in the Goerli chain.
+This example is in the Sepolia chain.
 
 In this example you will need fund the new account address(sender) with some CTT to pay for gas. Please visit our discord to get some test tokens https://discord.gg/KJSzy2Rqtg.Please visit https://dashboard.candide.dev/ to get a token paymaster url.
 

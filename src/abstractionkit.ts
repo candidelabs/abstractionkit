@@ -1,5 +1,4 @@
 export { SmartAccount } from "./account/SmartAccount";
-export { MetaTransaction } from "./account/Safe/types";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
 
 export { SendUseroperationResponse } from "./account/SendUseroperationResponse";
@@ -10,9 +9,9 @@ export { SimpleAccountFactory } from "./factory/SimpleAccountFactory";
 
 export { Bundler } from "./Bundler";
 
-export {CandidePaymaster} from "./paymaster/CandidePaymaster"
+export { CandidePaymaster } from "./paymaster/CandidePaymaster";
 
-export { 
+export {
 	createUserOperationHash,
 	createCallData,
 	getFunctionSelector,
@@ -20,7 +19,10 @@ export {
 	calculateUserOperationMaxGasCost,
 } from "./utils";
 
-export { UserOperationEmptyValues, UserOperationDummyValues } from "./constants";
+export {
+	UserOperationEmptyValues,
+	UserOperationDummyValues,
+} from "./constants";
 
 export {
 	UserOperation,
@@ -28,7 +30,6 @@ export {
 	JsonRpcParam,
 	JsonRpcResponse,
 	JsonRpcResult,
-	BundlerJsonRpcError,
 	GasEstimationResult,
 	UserOperationByHashResult,
 	UserOperationReceipt,
@@ -37,4 +38,5 @@ export {
 	StateOverrideSet,
 	Operation,
 	BundlerErrorCode,
+	MetaTransaction,
 } from "./types";
