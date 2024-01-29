@@ -74,7 +74,7 @@ async function main(): Promise<void> {
         paymasterRPC
     )
 
-    userOperation = await paymaster.createPaymasterUserOperation(
+    userOperation = await paymaster.createSponsorPaymasterUserOperation(
         userOperation, bundlerUrl)
 
     const cost = calculateUserOperationMaxGasCost(userOperation)
