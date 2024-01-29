@@ -713,7 +713,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 				{ type: "address", name: "entryPoint" },
 			],
 		};
-		let sig = "";
+		let sig = "0x";
 		for (const privateKey of privateKeys) {
 			const signer = new Wallet(privateKey);
 			const signerSignature = signer.signingKey.sign(
@@ -727,7 +727,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 				),
 			).serialized;
 
-			sig = sig + signerSignature;
+			sig = sig + signerSignature.slice(2);
 		}
 
 		return solidityPacked(
