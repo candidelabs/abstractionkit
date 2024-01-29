@@ -23,15 +23,14 @@ async function main(): Promise<void> {
     
     //initializeNewAccount only needed when the smart account
     //have not been deployed yet for its first useroperation.
-    //You can calculate the account address from its owners.
     //You can store the accountAddress to use it to initialize 
-    //the SafeAccount object later after the safe account is deployed
+    //the SafeAccount object for the following useroperations
     let smartAccount = SafeAccount.initializeNewAccount(
         [ownerPublicAddress],
     )
 
     //After the account contract is deployed, no need to call initializeNewAccount
-    //let smartAccount:SafeAccount = new SafeAccount(accountAddress)
+    //let smartAccount = new SafeAccount(accountAddress)
 
     console.log("Account address(sender) : " + smartAccount.accountAddress)
 
