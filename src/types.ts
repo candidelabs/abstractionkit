@@ -44,20 +44,6 @@ export type JsonRpcResult =
 	| SupportedERC20TokensAndMetadata
 	| PmUserOperationResult;
 
-export enum BundlerErrorCode {
-	InvalidFields = -32602,
-	SimulateValidation = -32500,
-	SimulatePaymasterValidation = -32501,
-	OpcodeValidation = -32502,
-	ExpiresShortly = -32503,
-	Reputation = -32504,
-	InsufficientStake = -32505,
-	UnsupportedSignatureAggregator = -32506,
-	InvalidSignature = -32507,
-	InvalidUseroperationHash = -32601,
-	ExecutionReverted = -32521,
-}
-
 export type JsonRpcError = {
 	code: number;
 	message: string;

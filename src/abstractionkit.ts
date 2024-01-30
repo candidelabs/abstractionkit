@@ -37,6 +37,5 @@ export {
 	JsonRpcError,
 	StateOverrideSet,
 	Operation,
-	BundlerErrorCode,
 	MetaTransaction,
 } from "./types";
