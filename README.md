@@ -9,11 +9,11 @@
 
 A Typescript Library to easily build and send ERC-4337 UserOperations, with first class support for Safe Accounts.
 
-Abstraction Kit is agnostic of:
-- Ethereum **interface libraries**: ethers, web3.js, viem/wagmi
-- **Bundler** implentation: Plug and play from any bundler provider
-- **Paymaster**: use any 3rd party paymaster to sponsor gas, or build your own
-- **Accounts**: Safe Account are supported, but you can use use Bundlers and Paymasters with your own accounts
+AbstractionKit is agnostic of:
+- **Ethereum interface libraries**: ethers, web3.js, viem/wagmi
+- **Bundlers**: Plug and play from any bundler provider
+- **Paymasters**: Candide Paymaster is supported , but you can use any 3rd party paymaster to sponsor gas
+- **Accounts**: The Safe Account first class supported, but you can use use Bundlers and Paymasters with any account
 
 ## Docs
 
@@ -27,36 +27,32 @@ npm install abstractionkit
 
 ## Quickstart
 
-### Smart Accounts
+### Safe Account
 
-Abstraction Kit currently features the Candide Account, a compliant EIP-4337 smart contract account based on Safe v1.4.0 contracts.
+AbstractionKit features the Safe Account. It uses the original Safe Singleton and adds ERC-4337 functionality using a fallback handler module. The contracts have been developed by the Safe Team. It has been audited by Ackee Blockchain. To learn more about the contracts and audits, visit [safe-global/safe-modules](https://github.com/safe-global/safe-modules/tree/main/modules/4337).
 
-In the next releases, it will feature Safe Accounts with the new architecture of Safe{Core}Protocol. 
+
 ```typescript
-import { CandideAccount } from "abstractionkit";
+import { SafeAccountV0_2_0 as SafeAccount } from "abstractionkit";
 
-const smartAccount = new CandideAccount();
+const ownerPublicAddress = "0xBdbc5FBC9cA8C3F514D073eC3de840Ac84FC6D31";
+const smartAccount = SafeAccount.initializeNewAccount([ownerPublicAddress]);
+
 ```
 Then you can consume accout methods:
 ```typescript
-import { Wallet } from "ethers";
-
-const eoaSigner = new Wallet(privateKey);
-const [newAccountAddress, initCode] = smartAccount.createNewAccount([
-  eoaSigner.address,
-]);
+const safeAddress = smartAccount.accountAddress;
 ```
 
 ### Bundler
 
-Initialize a Bundler with your desired bundler RPC url 
+Initialize a Bundler with your desired bundler RPC url. Find more public bundler endpoints on our [docs](https://docs.candide.dev/wallet/bundler/rpc-endpoints/)
 ```typescript
 import { Bundler } from "abstractionkit";
 
 const bundlerRPC = "https://sepolia.voltaire.candidewallet.com/rpc";
-const entrypointAddress = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
 
-const bundler: Bundler = new Bundler(bundlerRPC, entrypointAddress);
+const bundler: Bundler = new Bundler(bundlerRPC);
 ```
 Then you can consume Bundler methods:
 
@@ -65,22 +61,18 @@ const entrypointAddresses = await bundler.supportedEntryPoints();
 ```
 
 ### Paymaster
-Initialize a Paymaster with your RPC url
+Initialize a Candide Paymaster with your RPC url. Get one from the [dashboard](https://dashboard.candide.dev).
 ```typescript
-import { CandideValidationPaymaster } from "abstractionkit";
+import { CandidePaymaster } from "abstractionkit";
 
-const paymasterRpc = "https://api.candide.dev/paymaster/v1/$network/$apikey";
-const entrypointAddress = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
+const paymasterRpc = "https://api.candide.dev/paymaster/$version/$network/$apikey";
 
-const paymaster: CandideValidationPaymaster = new CandideValidationPaymaster(
-  entrypointAddress,
-  paymasterRPC
-);
+const paymaster: CandidePaymaster = new CandidePaymaster(paymasterRPC);
 ```
 Then you can consume Paymaster methods:
 
 ```typescript
-const supportedGasTokens = await paymaster.getSupportedERC20Tokens();
+const erc20s = await paymaster.getSupportedERC20TokensAndPaymasterMetadata();
 ```
 
 ## Guides
