@@ -389,7 +389,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		} else {
 			throw new AbstractionKitError(
 				"BAD_DATA",
-				"Invalide calldata, should start with " +
+				"Invalid calldata, should start with " +
 					SafeModuleExecutorFunctionSelector.executeUserOpWithErrorString +
 					" or " +
 					SafeModuleExecutorFunctionSelector.executeUserOp,

@@ -53,7 +53,7 @@ export class SendUseroperationResponse {
 				const error = ensureError(err);
 				if ("code" in error && error["code"] == "BUNDLER_ERROR") {
 					const e = error["cause"] as AbstractionKitError;
-					if (e.code == "INVALIDE_USEROPERATION_HASH") {
+					if (e.code == "INVALID_USEROPERATION_HASH") {
 						count++;
 					} else {
 						throw err;

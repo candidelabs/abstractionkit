@@ -135,7 +135,7 @@ export interface MetaTransaction {
  * Erc20 token info from the token paymaster
  */
 export interface ERC20Token {
-	/** Token sympol */
+	/** Token symbol */
 	symbol: string;
 	/** Token address */
 	address: string;
