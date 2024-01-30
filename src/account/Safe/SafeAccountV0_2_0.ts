@@ -714,8 +714,14 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			],
 		};
 		let sig = "0x";
+		const signers: Map<string, Wallet> = new Map();
 		for (const privateKey of privateKeys) {
-			const signer = new Wallet(privateKey);
+			const wallet = new Wallet(privateKey);
+			signers.set(wallet.address, wallet);
+		}
+		const signersSorted = Array.from(signers.keys()).sort();
+		for (const _signerAddress of signersSorted){
+			const signer = signers.get(_signerAddress)!;
 			const signerSignature = signer.signingKey.sign(
 				TypedDataEncoder.hash(
 					{
@@ -726,7 +732,6 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 					SafeUserOperation,
 				),
 			).serialized;
-
 			sig = sig + signerSignature.slice(2);
 		}
 
