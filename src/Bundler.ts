@@ -168,7 +168,7 @@ export class Bundler {
 			);
 			const res = jsonRpcResult as UserOperationReceiptResult;
 
-			if(res != null){
+			if (res != null) {
 				const userOperationReceipt: UserOperationReceipt = {
 					...res.receipt,
 					blockNumber: BigInt(res.receipt.blockNumber),
@@ -182,17 +182,18 @@ export class Bundler {
 					logs: JSON.stringify(res.receipt.logs),
 				};
 
-				const bundlerGetUserOperationReceiptResult: UserOperationReceiptResult = {
-					...res,
-					nonce: BigInt(res.nonce),
-					actualGasCost: BigInt(res.actualGasCost),
-					actualGasUsed: BigInt(res.actualGasUsed),
-					logs: JSON.stringify(res.logs),
-					receipt: userOperationReceipt,
-				};
+				const bundlerGetUserOperationReceiptResult: UserOperationReceiptResult =
+					{
+						...res,
+						nonce: BigInt(res.nonce),
+						actualGasCost: BigInt(res.actualGasCost),
+						actualGasUsed: BigInt(res.actualGasUsed),
+						logs: JSON.stringify(res.logs),
+						receipt: userOperationReceipt,
+					};
 				return bundlerGetUserOperationReceiptResult;
-			}else{
-				return null
+			} else {
+				return null;
 			}
 		} catch (err) {
 			const error = ensureError(err);
@@ -225,12 +226,12 @@ export class Bundler {
 				[useroperationhash],
 			);
 			const res = jsonRpcResult as UserOperationByHashResult;
-			if(res != null){
+			if (res != null) {
 				return {
 					...res,
-					blockNumber: res.blockNumber == null?null:BigInt(res.blockNumber),
+					blockNumber: res.blockNumber == null ? null : BigInt(res.blockNumber),
 				};
-			}else{
+			} else {
 				return null;
 			}
 		} catch (err) {

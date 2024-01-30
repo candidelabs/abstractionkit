@@ -48,9 +48,9 @@ export class SendUseroperationResponse {
 			const res = await this.bundler.getUserOperationReceipt(
 				this.userOperationHash,
 			);
-			if(res == null){
-				count++
-			}else{
+			if (res == null) {
+				count++;
+			} else {
 				return res;
 			}
 		}

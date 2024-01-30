@@ -1,4 +1,4 @@
-import {type UserOperation } from "./types";
+import { type UserOperation } from "./types";
 
 export const ZeroAddress = "0x0000000000000000000000000000000000000000";
 
