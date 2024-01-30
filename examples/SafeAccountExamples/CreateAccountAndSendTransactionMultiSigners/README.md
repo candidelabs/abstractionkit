@@ -5,14 +5,11 @@
 </div>
 
 <div align="center">
-<img src="https://user-images.githubusercontent.com/7014833/203773780-04a0c8c0-93a6-43a4-bb75-570cb951dfa0.png" height =200>
+<img src="https://github.com/candidelabs/abstractionkit/assets/7014833/6af73235-3f6b-4cb1-8a57-6b04ba2bf327">
 </div>
 
 # About
-
-CreateAccountAndSendTransactionMultiSigners using Safe Example - AbstractionKit - Account Abstraction SDK by Candide
-
-This example is in the Sepolia chain.
+This example is on Sepolia testnet.
 
 In this example you will need to fund the new account address(sender) with Sepolia eth first.
 

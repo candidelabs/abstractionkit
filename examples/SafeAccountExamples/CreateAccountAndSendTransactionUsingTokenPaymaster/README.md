@@ -5,16 +5,18 @@
 </div>
 
 <div align="center">
-<img src="https://user-images.githubusercontent.com/7014833/203773780-04a0c8c0-93a6-43a4-bb75-570cb951dfa0.png" height =200>
+<img src="https://github.com/candidelabs/abstractionkit/assets/7014833/6af73235-3f6b-4cb1-8a57-6b04ba2bf327">
 </div>
 
 # About
 
-CreateAccountAndSendTransactionUsingPaymaster Example - AbstractionKit - Account Abstraction SDK by Candide
+This example is on Sepolia testnet.
 
-This example is in the Sepolia chain.
+In this example you will need fund the new account address(sender) with some CTT to pay for gas.
 
-In this example you will need fund the new account address(sender) with some CTT to pay for gas. Please visit our discord to get some test tokens https://discord.gg/KJSzy2Rqtg.Please visit https://dashboard.candide.dev/ to get a token paymaster url.
+Get a paymaster API key on our [dashboard](https://dashboard.candide.dev/).
+
+Get test tokens by pinging us on [discord](https://discord.gg/KJSzy2Rqtg).
 
 # How to use this example
 
