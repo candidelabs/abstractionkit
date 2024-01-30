@@ -357,7 +357,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * encode calldata to be executed by Safe account
+	 * decode calldata to [to, value, data, operation]
 	 * @returns to, value, data, operation
 	 */
 	public decodeAccountCallData(
