@@ -20,11 +20,6 @@ export {
 } from "./utils";
 
 export {
-	UserOperationEmptyValues,
-	UserOperationDummyValues,
-} from "./constants";
-
-export {
 	UserOperation,
 	AbiInputValue,
 	JsonRpcParam,
