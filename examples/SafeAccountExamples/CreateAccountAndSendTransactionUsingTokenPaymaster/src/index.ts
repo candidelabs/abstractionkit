@@ -11,7 +11,7 @@ import {
 } from "abstractionkit";
 
 async function main(): Promise<void> {
-    //get vlues from .env
+    //get values from .env
     dotenv.config()
     const chainId = BigInt(process.env.CHAIN_ID as string)
     const bundlerUrl = process.env.BUNDLER_URL as string
@@ -103,7 +103,7 @@ async function main(): Promise<void> {
 	)
     console.log(userOperation)
 
-    //use the the bundler rpc to send a useroperation to the bunder
+    //use the bundler rpc to send a useroperation
     //sendUserOperation will return a SendUseroperationResponse object
     //that can be awaited for the useroperation to be included onchain
     const sendUserOperationResponse = await smartAccount.sendUserOperation(
@@ -118,7 +118,7 @@ async function main(): Promise<void> {
     console.log("Useroperation receipt received.")
     console.log(userOperationReceiptResult)
     if(userOperationReceiptResult.success){
-        console.log("Two Nfts were mented. The transaction hash is : " + userOperationReceiptResult.receipt.transactionHash)
+        console.log("Two Nfts were minted. The transaction hash is : " + userOperationReceiptResult.receipt.transactionHash)
     }else{
         console.log("Useroperation execution failed")
     }
