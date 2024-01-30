@@ -5,7 +5,6 @@ export { SendUseroperationResponse } from "./account/SendUseroperationResponse";
 
 export { SmartAccountFactory } from "./factory/SmartAccountFactory";
 export { SafeAccountFactory } from "./factory/SafeAccountFactory";
-export { SimpleAccountFactory } from "./factory/SimpleAccountFactory";
 
 export { Bundler } from "./Bundler";
 
