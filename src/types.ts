@@ -59,10 +59,10 @@ export type GasEstimationResult = {
 export type UserOperationByHashResult = {
 	userOperation: UserOperation;
 	entryPoint: string;
-	blockNumber: bigint;
-	blockHash: string;
-	transactionHash: string;
-};
+	blockNumber: bigint | null;
+	blockHash: string | null;
+	transactionHash: string | null;
+} | null;
 
 export type UserOperationReceipt = {
 	blockHash: string;
@@ -88,7 +88,7 @@ export type UserOperationReceiptResult = {
 	success: boolean;
 	logs: string;
 	receipt: UserOperationReceipt;
-};
+} | null;
 
 export type PmUserOperationResult = {
 	paymasterAndData: string;

@@ -167,28 +167,33 @@ export class Bundler {
 				[useroperationhash],
 			);
 			const res = jsonRpcResult as UserOperationReceiptResult;
-			const userOperationReceipt: UserOperationReceipt = {
-				...res.receipt,
-				blockNumber: BigInt(res.receipt.blockNumber),
-				cumulativeGasUsed: BigInt(res.receipt.cumulativeGasUsed),
-				gasUsed: BigInt(res.receipt.gasUsed),
-				transactionIndex: BigInt(res.receipt.transactionIndex),
-				effectiveGasPrice:
-					res.receipt.effectiveGasPrice == undefined
-						? undefined
-						: BigInt(res.receipt.effectiveGasPrice),
-				logs: JSON.stringify(res.receipt.logs),
-			};
 
-			const bundlerGetUserOperationReceiptResult: UserOperationReceiptResult = {
-				...res,
-				nonce: BigInt(res.nonce),
-				actualGasCost: BigInt(res.actualGasCost),
-				actualGasUsed: BigInt(res.actualGasUsed),
-				logs: JSON.stringify(res.logs),
-				receipt: userOperationReceipt,
-			};
-			return bundlerGetUserOperationReceiptResult;
+			if(res != null){
+				const userOperationReceipt: UserOperationReceipt = {
+					...res.receipt,
+					blockNumber: BigInt(res.receipt.blockNumber),
+					cumulativeGasUsed: BigInt(res.receipt.cumulativeGasUsed),
+					gasUsed: BigInt(res.receipt.gasUsed),
+					transactionIndex: BigInt(res.receipt.transactionIndex),
+					effectiveGasPrice:
+						res.receipt.effectiveGasPrice == undefined
+							? undefined
+							: BigInt(res.receipt.effectiveGasPrice),
+					logs: JSON.stringify(res.receipt.logs),
+				};
+
+				const bundlerGetUserOperationReceiptResult: UserOperationReceiptResult = {
+					...res,
+					nonce: BigInt(res.nonce),
+					actualGasCost: BigInt(res.actualGasCost),
+					actualGasUsed: BigInt(res.actualGasUsed),
+					logs: JSON.stringify(res.logs),
+					receipt: userOperationReceipt,
+				};
+				return bundlerGetUserOperationReceiptResult;
+			}else{
+				return null
+			}
 		} catch (err) {
 			const error = ensureError(err);
 
@@ -220,12 +225,14 @@ export class Bundler {
 				[useroperationhash],
 			);
 			const res = jsonRpcResult as UserOperationByHashResult;
-
-			const userOperationByHashResult: UserOperationByHashResult = {
-				...res,
-				blockNumber: BigInt(res.blockNumber),
-			};
-			return userOperationByHashResult;
+			if(res != null){
+				return {
+					...res,
+					blockNumber: res.blockNumber == null?null:BigInt(res.blockNumber),
+				};
+			}else{
+				return null;
+			}
 		} catch (err) {
 			const error = ensureError(err);
 

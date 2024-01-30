@@ -1,5 +1,5 @@
 import { Bundler } from "src/Bundler";
-import { AbstractionKitError, ensureError } from "src/errors";
+import { AbstractionKitError } from "src/errors";
 import { UserOperationReceiptResult } from "src/types";
 
 export class SendUseroperationResponse {
@@ -45,22 +45,13 @@ export class SendUseroperationResponse {
 		let count = 0;
 		while (count <= timeoutInSeconds) {
 			await this.delay(requestIntervalInSeconds * 1000);
-			try {
-				return await this.bundler.getUserOperationReceipt(
-					this.userOperationHash,
-				);
-			} catch (err) {
-				const error = ensureError(err);
-				if ("code" in error && error["code"] == "BUNDLER_ERROR") {
-					const e = error["cause"] as AbstractionKitError;
-					if (e.code == "INVALID_USEROPERATION_HASH") {
-						count++;
-					} else {
-						throw err;
-					}
-				} else {
-					throw err;
-				}
+			const res = await this.bundler.getUserOperationReceipt(
+				this.userOperationHash,
+			);
+			if(res == null){
+				count++
+			}else{
+				return res;
 			}
 		}
 		throw new AbstractionKitError("TIMEOUT", "can't find useroperation", {
