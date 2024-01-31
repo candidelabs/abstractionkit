@@ -3,9 +3,7 @@ import * as dotenv from 'dotenv'
 import {
     SafeAccountV0_2_0 as SafeAccount,
     MetaTransaction,
-    JsonRpcError,
     CandidePaymaster,
-    UserOperationReceiptResult,
     getFunctionSelector,
     createCallData,
 } from "abstractionkit";
