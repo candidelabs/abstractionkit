@@ -714,16 +714,11 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			],
 		};
 
-		const signers: Map<string, Wallet> = new Map();
+		const signersAddresses = [];
+		const signatures = [];
 		for (const privateKey of privateKeys) {
 			const wallet = new Wallet(privateKey);
-			signers.set(wallet.address, wallet);
-		}
-		const signersSorted = Array.from(signers.keys()).sort();
-		const signatures = [];
-		for (const _signerAddress of signersSorted){
-			const signer = signers.get(_signerAddress)!;
-			const signerSignature = signer.signingKey.sign(
+			const signerSignature = wallet.signingKey.sign(
 				TypedDataEncoder.hash(
 					{
 						chainId,
@@ -733,10 +728,12 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 					SafeUserOperation,
 				),
 			).serialized;
-			signatures.push(signerSignature.slice(2));
+			signersAddresses.push(wallet.address);
+			signatures.push(signerSignature);
 		}
 
 		return SafeAccountV0_2_0.formatEip712SignaturesToUseroperationSignature(
+			signersAddresses,
 			signatures,
 			validAfter,
 			validUntil,
@@ -745,17 +742,37 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 
 	/**
 	 * formate a list of eip712 signatures to a useroperation signature
+	 * @param signersAddresses - signers public addresses
 	 * @param signatures - list of eip712 signatures
 	 * @param validAfter - timestamp the signature will be valid after
 	 * @param validUntil - timestamp the signature will be valid until
 	 * @returns signature
 	 */
 	public static formatEip712SignaturesToUseroperationSignature(
+		signersAddresses: string[],
 		signatures: string[],
 		validAfter: bigint = 0n,
 		validUntil: bigint = 0n,
 	): string {
-		const formatedSignature = "0x" + signatures.join("");
+		if (signersAddresses.length != signatures.length) {
+			throw RangeError("signersAddresses and signatures arrays should be the same length");
+		}
+		if (validAfter < 0n) {
+			throw RangeError("validAfter can't be negative");
+		}
+		if (validUntil < 0n) {
+			throw RangeError("validUntil can't be negative");
+		}
+		const signersSignatures: Map<string, string> = new Map();
+
+		signersAddresses.forEach((signer, index) => {
+			signersSignatures.set(signer, signatures[index])
+		});
+		const sortedSignersSignatures = new Map(Array.from(signersSignatures).sort());
+		const formatedSignature = "0x" + Array.from(sortedSignersSignatures.values()).reduce(
+			(accumulator, currentValue) => accumulator + currentValue.slice(2),
+			"",
+		);
 
 		return solidityPacked(
 			["uint48", "uint48", "bytes"],
