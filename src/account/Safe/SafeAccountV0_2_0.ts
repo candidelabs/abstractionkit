@@ -755,10 +755,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		validAfter: bigint = 0n,
 		validUntil: bigint = 0n,
 	): string {
-		const formatedSignature = signatures.reduce(
-			(accumulator, currentValue) => accumulator + currentValue.slice(2),
-			"",
-		);
+		const formatedSignature = "0x" + signatures.join("");
 
 		return solidityPacked(
 			["uint48", "uint48", "bytes"],
