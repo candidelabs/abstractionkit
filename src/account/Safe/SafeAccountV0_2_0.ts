@@ -713,13 +713,14 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 				{ type: "address", name: "entryPoint" },
 			],
 		};
-		let sig = "0x";
+
 		const signers: Map<string, Wallet> = new Map();
 		for (const privateKey of privateKeys) {
 			const wallet = new Wallet(privateKey);
 			signers.set(wallet.address, wallet);
 		}
 		const signersSorted = Array.from(signers.keys()).sort();
+		const signatures = [];
 		for (const _signerAddress of signersSorted){
 			const signer = signers.get(_signerAddress)!;
 			const signerSignature = signer.signingKey.sign(
@@ -732,12 +733,36 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 					SafeUserOperation,
 				),
 			).serialized;
-			sig = sig + signerSignature.slice(2);
+			signatures.push(signerSignature.slice(2));
 		}
+
+		return SafeAccountV0_2_0.formatEip712SignaturesToUseroperationSignature(
+			signatures,
+			validAfter,
+			validUntil,
+		);
+	}
+
+	/**
+	 * formate a list of eip712 signatures to a useroperation signature
+	 * @param signatures - list of eip712 signatures
+	 * @param validAfter - timestamp the signature will be valid after
+	 * @param validUntil - timestamp the signature will be valid until
+	 * @returns signature
+	 */
+	public static formatEip712SignaturesToUseroperationSignature(
+		signatures: string[],
+		validAfter: bigint = 0n,
+		validUntil: bigint = 0n,
+	): string {
+		const formatedSignature = signatures.reduce(
+			(accumulator, currentValue) => accumulator + currentValue.slice(2),
+			"",
+		);
 
 		return solidityPacked(
 			["uint48", "uint48", "bytes"],
-			[validAfter, validUntil, sig],
+			[validAfter, validUntil, formatedSignature],
 		);
 	}
 
