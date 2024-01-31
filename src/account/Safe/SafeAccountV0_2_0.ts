@@ -487,8 +487,8 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		state_override_set?: StateOverrideSet,
 		numberOfSigners: number = 1,
 	): Promise<[bigint, bigint, bigint]> {
-		if (numberOfSigners < 0n) {
-			throw RangeError("numberOfSigners can't be negative");
+		if (numberOfSigners < 1n) {
+			throw RangeError("numberOfSigners can't be less than 1");
 		}
 
 		let signatures = "";
