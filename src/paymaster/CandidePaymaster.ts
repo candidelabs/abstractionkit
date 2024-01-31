@@ -305,61 +305,85 @@ export class CandidePaymaster extends Paymaster {
 		bundlerRpc: string,
 		state_override_set: StateOverrideSet = {},
 	): Promise<UserOperation> {
-		const maxErc20Cost = await this.calculateUserOperationErc20TokenMaxGasCost(
-			userOperation,
-			tokenAddress,
-		);
-
-		const approveAmount = maxErc20Cost * 2n; //for the extra cost of the paymasterAndData
-
-		let metadata = await this.getPaymasterMetaData();
-
-		metadata = metadata as PaymasterMetadata;
-		const paymasterAddress = metadata.address;
-
-		const callDataWithApprove =
-			smartAccount.prependTokenPaymasterApproveToCallData(
-				userOperation.callData,
+		try {
+			const maxErc20Cost = await this.calculateUserOperationErc20TokenMaxGasCost(
+				userOperation,
 				tokenAddress,
-				paymasterAddress,
-				approveAmount,
 			);
-		userOperation.callData = callDataWithApprove;
 
-		return await this.createPaymasterUserOperation(
-			userOperation,
-			bundlerRpc,
-			{
-				token: tokenAddress,
-			},
-			state_override_set,
-		);
+			const approveAmount = maxErc20Cost * 2n; //for the extra cost of the paymasterAndData
+
+			let metadata = await this.getPaymasterMetaData();
+
+			metadata = metadata as PaymasterMetadata;
+			const paymasterAddress = metadata.address;
+
+			const callDataWithApprove =
+				smartAccount.prependTokenPaymasterApproveToCallData(
+					userOperation.callData,
+					tokenAddress,
+					paymasterAddress,
+					approveAmount,
+				);
+			userOperation.callData = callDataWithApprove;
+
+			return await this.createPaymasterUserOperation(
+				userOperation,
+				bundlerRpc,
+				{
+					token: tokenAddress,
+				},
+				state_override_set,
+			);
+		} catch (err) {
+			const error = ensureError(err);
+
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				"createTokenPaymasterUserOperation failed",
+				{
+					cause: error,
+				},
+			);
+		}
 	}
 
 	async calculateUserOperationErc20TokenMaxGasCost(
 		userOperation: UserOperation,
 		erc20TokenAddress: string,
 	): Promise<bigint> {
-		const supportedERC20TokensData = await this.getSupportedERC20TokenData(
-			erc20TokenAddress,
-		);
-		if (supportedERC20TokensData == null) {
+		try{
+			const supportedERC20TokensData = await this.getSupportedERC20TokenData(
+				erc20TokenAddress,
+			);
+			if (supportedERC20TokensData == null) {
+				throw new AbstractionKitError(
+					"PAYMASTER_ERROR",
+					erc20TokenAddress + " token is not supported by the paymaster.",
+					{
+						context: {
+							supportedERC20TokensAndPaymasterMetadata: JSON.stringify(
+								await this.getSupportedERC20TokensAndPaymasterMetadata(),
+							),
+						},
+					},
+				);
+			} else {
+				const cost = calculateUserOperationMaxGasCost(userOperation);
+				const tokenCost =
+					(supportedERC20TokensData.exchangeRate * cost) / BigInt(10 ** 18);
+				return tokenCost;
+			}
+		}catch (err) {
+			const error = ensureError(err);
+
 			throw new AbstractionKitError(
 				"PAYMASTER_ERROR",
-				erc20TokenAddress + " token is not supported by the paymaster.",
+				"calculateUserOperationErc20TokenMaxGasCost failed",
 				{
-					context: {
-						supportedERC20TokensAndPaymasterMetadata: JSON.stringify(
-							await this.getSupportedERC20TokensAndPaymasterMetadata(),
-						),
-					},
+					cause: error,
 				},
 			);
-		} else {
-			const cost = calculateUserOperationMaxGasCost(userOperation);
-			const tokenCost =
-				(supportedERC20TokensData.exchangeRate * cost) / BigInt(10 ** 18);
-			return tokenCost;
 		}
 	}
 }
