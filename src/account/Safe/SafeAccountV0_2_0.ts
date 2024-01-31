@@ -755,7 +755,9 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		validUntil: bigint = 0n,
 	): string {
 		if (signersAddresses.length != signatures.length) {
-			throw RangeError("signersAddresses and signatures arrays should be the same length");
+			throw RangeError(
+				"signersAddresses and signatures arrays should be the same length",
+			);
 		}
 		if (validAfter < 0n) {
 			throw RangeError("validAfter can't be negative");
@@ -766,13 +768,17 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		const signersSignatures: Map<string, string> = new Map();
 
 		signersAddresses.forEach((signer, index) => {
-			signersSignatures.set(signer, signatures[index])
+			signersSignatures.set(signer, signatures[index]);
 		});
-		const sortedSignersSignatures = new Map(Array.from(signersSignatures).sort());
-		const formatedSignature = "0x" + Array.from(sortedSignersSignatures.values()).reduce(
-			(accumulator, currentValue) => accumulator + currentValue.slice(2),
-			"",
+		const sortedSignersSignatures = new Map(
+			Array.from(signersSignatures).sort(),
 		);
+		const formatedSignature =
+			"0x" +
+			Array.from(sortedSignersSignatures.values()).reduce(
+				(accumulator, currentValue) => accumulator + currentValue.slice(2),
+				"",
+			);
 
 		return solidityPacked(
 			["uint48", "uint48", "bytes"],

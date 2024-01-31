@@ -306,10 +306,11 @@ export class CandidePaymaster extends Paymaster {
 		state_override_set: StateOverrideSet = {},
 	): Promise<UserOperation> {
 		try {
-			const maxErc20Cost = await this.calculateUserOperationErc20TokenMaxGasCost(
-				userOperation,
-				tokenAddress,
-			);
+			const maxErc20Cost =
+				await this.calculateUserOperationErc20TokenMaxGasCost(
+					userOperation,
+					tokenAddress,
+				);
 
 			const approveAmount = maxErc20Cost * 2n; //for the extra cost of the paymasterAndData
 
@@ -352,7 +353,7 @@ export class CandidePaymaster extends Paymaster {
 		userOperation: UserOperation,
 		erc20TokenAddress: string,
 	): Promise<bigint> {
-		try{
+		try {
 			const supportedERC20TokensData = await this.getSupportedERC20TokenData(
 				erc20TokenAddress,
 			);
@@ -374,7 +375,7 @@ export class CandidePaymaster extends Paymaster {
 					(supportedERC20TokensData.exchangeRate * cost) / BigInt(10 ** 18);
 				return tokenCost;
 			}
-		}catch (err) {
+		} catch (err) {
 			const error = ensureError(err);
 
 			throw new AbstractionKitError(
