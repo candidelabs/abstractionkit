@@ -209,7 +209,7 @@ export class CandidePaymaster extends Paymaster {
 				state_override_set,
 			);
 
-			userOperation.preVerificationGas = estimation.preVerificationGas;
+			userOperation.preVerificationGas = estimation.preVerificationGas + 100n;
 			userOperation.verificationGasLimit =
 				estimation.verificationGasLimit + 10000n;
 			userOperation.callGasLimit = estimation.callGasLimit;
