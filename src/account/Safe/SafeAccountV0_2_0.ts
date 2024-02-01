@@ -787,7 +787,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		const signersSignatures: Map<string, string> = new Map();
 
 		signersAddresses.forEach((signer, index) => {
-			signersSignatures.set(signer, signatures[index]);
+			signersSignatures.set(signer.toLocaleLowerCase(), signatures[index]);
 		});
 		const sortedSignersSignatures = new Map(
 			Array.from(signersSignatures).sort(),
