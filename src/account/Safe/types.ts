@@ -20,6 +20,18 @@ export interface CreateUserOperationOverrides {
 	maxFeePerGas?: bigint;
 	/** set the maxPriorityFeePerGas instead of quering the current gas price from the rpc node */
 	maxPriorityFeePerGas?: bigint;
+
+	/** set the callGasLimitPercentageMultiplier instead of estimating gas using the bundler*/
+	callGasLimitPercentageMultiplier?: number;
+	/** set the verificationGasLimitPercentageMultiplier instead of estimating gas using the bundler*/
+	verificationGasLimitPercentageMultiplier?: number;
+	/** set the preVerificationGasPercentageMultiplier instead of estimating gas using the bundler*/
+	preVerificationGasPercentageMultiplier?: number;
+	/** set the maxFeePerGasPercentageMultiplier instead of quering the current gas price from the rpc node */
+	maxFeePerGasPercentageMultiplier?: number;
+	/** set the maxPriorityFeePerGasPercentageMultiplier instead of quering the current gas price from the rpc node */
+	maxPriorityFeePerGasPercentageMultiplier?: number;
+
 	/** gas estimation depends on the number of signers as each signer will increase the signature size
 	 * @defaultValue 1
 	 */
