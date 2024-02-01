@@ -66,6 +66,24 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		"uint8", //operation
 	];
 
+	static readonly EIP712_SAFE_OPERATION_TYPE = {
+		SafeOp: [
+			{ type: "address", name: "safe" },
+			{ type: "uint256", name: "nonce" },
+			{ type: "bytes", name: "initCode" },
+			{ type: "bytes", name: "callData" },
+			{ type: "uint256", name: "callGasLimit" },
+			{ type: "uint256", name: "verificationGasLimit" },
+			{ type: "uint256", name: "preVerificationGas" },
+			{ type: "uint256", name: "maxFeePerGas" },
+			{ type: "uint256", name: "maxPriorityFeePerGas" },
+			{ type: "bytes", name: "paymasterAndData" },
+			{ type: "uint48", name: "validAfter" },
+			{ type: "uint48", name: "validUntil" },
+			{ type: "address", name: "entryPoint" },
+		],
+	};
+
 	readonly entrypointAddress: string;
 	readonly safe4337ModuleAddress: string;
 	private initCode: string | null;
@@ -715,23 +733,6 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			validUntil: validUntil,
 			entryPoint: this.entrypointAddress,
 		};
-		const EIP712_SAFE_OPERATION_TYPE = {
-			SafeOp: [
-				{ type: "address", name: "safe" },
-				{ type: "uint256", name: "nonce" },
-				{ type: "bytes", name: "initCode" },
-				{ type: "bytes", name: "callData" },
-				{ type: "uint256", name: "callGasLimit" },
-				{ type: "uint256", name: "verificationGasLimit" },
-				{ type: "uint256", name: "preVerificationGas" },
-				{ type: "uint256", name: "maxFeePerGas" },
-				{ type: "uint256", name: "maxPriorityFeePerGas" },
-				{ type: "bytes", name: "paymasterAndData" },
-				{ type: "uint48", name: "validAfter" },
-				{ type: "uint48", name: "validUntil" },
-				{ type: "address", name: "entryPoint" },
-			],
-		};
 
 		const signersAddresses = [];
 		const signatures = [];
@@ -743,7 +744,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 						chainId,
 						verifyingContract: this.safe4337ModuleAddress,
 					},
-					EIP712_SAFE_OPERATION_TYPE,
+					SafeAccountV0_2_0.EIP712_SAFE_OPERATION_TYPE,
 					SafeUserOperation,
 				),
 			).serialized;
