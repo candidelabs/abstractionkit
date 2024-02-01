@@ -593,9 +593,16 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			throw RangeError("maxPriorityFeePerGas overrid can't be negative");
 		}
 
-		maxFeePerGas = overrids.maxFeePerGas ?? maxFeePerGas;
+		maxFeePerGas = 
+			overrids.maxFeePerGas ?? (
+				maxFeePerGas * 
+				BigInt(Math.floor(((overrids.maxFeePerGasPercentageMultiplier??0) + 100) /100))
+			);
 		maxPriorityFeePerGas =
-			overrids.maxPriorityFeePerGas ?? maxPriorityFeePerGas;
+			overrids.maxPriorityFeePerGas ?? (
+				maxPriorityFeePerGas * 
+				BigInt(Math.floor(((overrids.maxPriorityFeePerGasPercentageMultiplier??0) + 100) /100))
+			);
 
 		const userOperation: UserOperation = {
 			...UserOperationDummyValues,
@@ -644,10 +651,22 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			throw RangeError("callGasLimit overrid can't be negative");
 		}
 		userOperation.preVerificationGas =
-			overrids.preVerificationGas ?? preVerificationGas;
+			overrids.preVerificationGas ?? (
+				preVerificationGas * 
+				BigInt(Math.floor(((overrids.preVerificationGasPercentageMultiplier??0) + 100) /100))
+			);
+
 		userOperation.verificationGasLimit =
-			overrids.verificationGasLimit ?? verificationGasLimit;
-		userOperation.callGasLimit = overrids.callGasLimit ?? callGasLimit;
+			overrids.verificationGasLimit ?? (
+				verificationGasLimit * 
+				BigInt(Math.floor(((overrids.verificationGasLimitPercentageMultiplier??0) + 100) /100))
+			);
+
+		userOperation.callGasLimit = 
+			overrids.callGasLimit ?? (
+				callGasLimit * 
+				BigInt(Math.floor(((overrids.callGasLimitPercentageMultiplier??0) + 100) /100))
+			);
 
 		return userOperation;
 	}
