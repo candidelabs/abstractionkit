@@ -70,7 +70,13 @@ export class CandidePaymaster extends Paymaster {
 				)) as SupportedERC20TokensAndMetadata;
 
 				return {
-					tokens: jsonRpcResult.tokens,
+					tokens: jsonRpcResult.tokens.map((gasToken) => ({
+						symbol: gasToken.symbol,
+						address: gasToken.address,
+						decimal: Number(gasToken.decimal),
+						fee: BigInt(gasToken.fee),
+						exchangeRate: BigInt(gasToken.exchangeRate),
+					})),
 					paymasterMetadata: jsonRpcResult.paymasterMetadata,
 				};
 			} catch (err) {
