@@ -11,7 +11,7 @@
 	},
   "license": "MIT",
   "dependencies": {
-    "abstractionkit": "^0.1.0",
+    "abstractionkit": "^0.1.3",
     "typescript": "^5.1.6"
   }
 }
