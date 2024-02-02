@@ -132,7 +132,7 @@ export class CandidePaymaster extends Paymaster {
 		}
 		const supportedTokens = this.supportedTokens as ERC20Token[];
 		const gasToken = supportedTokens.find(
-			(token) => token.address === erc20TokenAddress.toLowerCase(),
+			(token) => token.address.toLowerCase() === erc20TokenAddress.toLowerCase(),
 		);
 
 		if (!gasToken) {
