@@ -77,3 +77,24 @@ export enum SafeModuleExecutorFunctionSelector {
 	executeUserOpWithErrorString = "0x541d63c8",
 	executeUserOp = "0x7bb37428",
 }
+
+export interface SafeUserOperationTypedDataDomain {
+	chainId: bigint,
+	verifyingContract: string;
+}
+
+export interface SafeUserOperationTypedDataValues {
+	safe: string;
+	nonce: bigint,
+	initCode: string;
+	callData: string;
+	callGasLimit: bigint,
+	verificationGasLimit: bigint,
+	preVerificationGas: bigint,
+	maxFeePerGas: bigint,
+	maxPriorityFeePerGas: bigint,
+	paymasterAndData: string;
+	validAfter: bigint,
+	validUntil: bigint,
+	entryPoint: string;
+}

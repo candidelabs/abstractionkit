@@ -25,6 +25,8 @@ import {
 	CreateUserOperationOverrides,
 	InitCodeOverrides,
 	SafeModuleExecutorFunctionSelector,
+	SafeUserOperationTypedDataDomain,
+	SafeUserOperationTypedDataValues,
 } from "./types";
 import { decodeMultiSendCallData, encodeMultiSendCallData } from "./multisend";
 import { Bundler } from "src/Bundler";
@@ -736,7 +738,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			throw RangeError("validUntil can't be negative");
 		}
 
-		const SafeUserOperation = {
+		const SafeUserOperation:SafeUserOperationTypedDataValues = {
 			safe: useroperation.sender,
 			nonce: useroperation.nonce,
 			initCode: useroperation.initCode,
@@ -752,16 +754,18 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			entryPoint: this.entrypointAddress,
 		};
 
+		const domain:SafeUserOperationTypedDataDomain = {
+			chainId,
+			verifyingContract: this.safe4337ModuleAddress,
+		}
+
 		const signersAddresses = [];
 		const signatures = [];
 		for (const privateKey of privateKeys) {
 			const wallet = new Wallet(privateKey);
 			const signerSignature = wallet.signingKey.sign(
 				TypedDataEncoder.hash(
-					{
-						chainId,
-						verifyingContract: this.safe4337ModuleAddress,
-					},
+					domain,
 					SafeAccountV0_2_0.EIP712_SAFE_OPERATION_TYPE,
 					SafeUserOperation,
 				),

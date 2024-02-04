@@ -19,6 +19,11 @@ export {
 } from "./utils";
 
 export {
+	SafeUserOperationTypedDataDomain,
+	SafeUserOperationTypedDataValues,
+} from "./account/Safe/types";
+
+export {
 	UserOperation,
 	AbiInputValue,
 	JsonRpcParam,
