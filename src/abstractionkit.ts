@@ -19,6 +19,9 @@ export {
 } from "./utils";
 
 export {
+	CreateUserOperationOverrides,
+	InitCodeOverrides,
+	SafeModuleExecutorFunctionSelector,
 	SafeUserOperationTypedDataDomain,
 	SafeUserOperationTypedDataValues,
 } from "./account/Safe/types";
@@ -38,3 +41,8 @@ export {
 	Operation,
 	MetaTransaction,
 } from "./types";
+
+export {
+	ZeroAddress,
+	UserOperationDummyValues,
+} from "./constants";
