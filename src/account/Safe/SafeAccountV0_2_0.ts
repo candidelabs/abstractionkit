@@ -122,6 +122,22 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
+	 * calculate account addressfrom initial owners
+	 * @param owners - list of account owners addresses
+	 * @param overrides - override values to change the initialization default values
+	 * @returns account address
+	 */
+	public static createAccountAddress(
+		owners: string[],
+		overrides: InitCodeOverrides = {},
+	): string{
+		const [address, ] = SafeAccountV0_2_0.createAccountAddressAndInitCode(
+			owners, overrides
+		)
+		return address;
+	}
+
+	/**
 	 * calculate account address and initcode from owners
 	 * @param owners - list of account owners addresses
 	 * @param overrides - override values to change the initialization default values
