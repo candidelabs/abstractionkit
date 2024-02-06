@@ -863,12 +863,6 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 				"signersAddresses and signatures arrays should be the same length",
 			);
 		}
-		if (validAfter < 0n) {
-			throw RangeError("validAfter can't be negative");
-		}
-		if (validUntil < 0n) {
-			throw RangeError("validUntil can't be negative");
-		}
 		const signersSignatures: Map<string, string> = new Map();
 
 		signersAddresses.forEach((signer, index) => {
@@ -884,9 +878,35 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 				"",
 			);
 
+		return SafeAccountV0_2_0.formatEip712SingleSignatureToUseroperationSignature(
+			formatedSignature,
+			validAfter,
+			validUntil,
+		);
+	}
+
+	/**
+	 * formate an eip712 signature to a useroperation signature
+	 * @param signature - an eip712 signature
+	 * @param validAfter - timestamp the signature will be valid after
+	 * @param validUntil - timestamp the signature will be valid until
+	 * @returns signature
+	 */
+	public static formatEip712SingleSignatureToUseroperationSignature(
+		signature: string,
+		validAfter: bigint = 0n,
+		validUntil: bigint = 0n,
+	): string {
+		if (validAfter < 0n) {
+			throw RangeError("validAfter can't be negative");
+		}
+		if (validUntil < 0n) {
+			throw RangeError("validUntil can't be negative");
+		}
+
 		return solidityPacked(
 			["uint48", "uint48", "bytes"],
-			[validAfter, validUntil, formatedSignature],
+			[validAfter, validUntil, signature],
 		);
 	}
 
