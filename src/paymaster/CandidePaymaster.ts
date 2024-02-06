@@ -8,7 +8,10 @@ import {
 	ERC20Token,
 	StateOverrideSet,
 } from "../types";
-import { CandidePaymasterContext, PrependTokenPaymasterApproveAccount } from "./types";
+import {
+	CandidePaymasterContext,
+	PrependTokenPaymasterApproveAccount,
+} from "./types";
 import { Bundler } from "src/Bundler";
 import { AbstractionKitError, ensureError } from "src/errors";
 
@@ -137,7 +140,8 @@ export class CandidePaymaster extends Paymaster {
 		}
 		const supportedTokens = this.supportedTokens as ERC20Token[];
 		const gasToken = supportedTokens.find(
-			(token) => token.address.toLowerCase() === erc20TokenAddress.toLowerCase(),
+			(token) =>
+				token.address.toLowerCase() === erc20TokenAddress.toLowerCase(),
 		);
 
 		if (!gasToken) {

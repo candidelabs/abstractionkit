@@ -47,7 +47,4 @@ export {
 	MetaTransaction,
 } from "./types";
 
-export {
-	ZeroAddress,
-	UserOperationDummyValues,
-} from "./constants";
+export { ZeroAddress, UserOperationDummyValues } from "./constants";

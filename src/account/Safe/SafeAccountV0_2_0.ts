@@ -130,10 +130,11 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	public static createAccountAddress(
 		owners: string[],
 		overrides: InitCodeOverrides = {},
-	): string{
+	): string {
 		const [address, ] = SafeAccountV0_2_0.createAccountAddressAndInitCode(
-			owners, overrides
-		)
+			owners,
+			overrides,
+		);
 		return address;
 	}
 
@@ -439,7 +440,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * a non static wrapper function for  prependTokenPaymasterApproveToCallDataStatic 
+	 * a non static wrapper function for  prependTokenPaymasterApproveToCallDataStatic
 	 * which adds a token approve call to the call data for a token paymaster
 	 * @returns callData
 	 */
@@ -455,8 +456,8 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			tokenAddress,
 			paymasterAddress,
 			approveAmount,
-			multisendContractAddress
-		)
+			multisendContractAddress,
+		);
 	}
 
 	/**
@@ -471,7 +472,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		multisendContractAddress: string = SafeAccountV0_2_0.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
 	): string {
 		const [to, value, accountCallData, operation] =
-		SafeAccountV0_2_0.decodeAccountCallData(callData);
+			SafeAccountV0_2_0.decodeAccountCallData(callData);
 		let accountCallDataString = "";
 		if (typeof accountCallData !== "string") {
 			accountCallDataString = new TextDecoder().decode(accountCallData);
@@ -597,13 +598,13 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		let nonce = 0n as bigint;
 
 		if (overrids.nonce == null) {
-			if(providerRpc != null){
+			if (providerRpc != null) {
 				nonce = await fetchAccountNonce(
 					providerRpc,
 					this.entrypointAddress,
 					this.accountAddress,
 				);
-			}else{
+			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
 					"providerRpc cant't be null if nonce is not overriden",
@@ -645,9 +646,9 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			overrids.maxFeePerGas == null ||
 			overrids.maxPriorityFeePerGas == null
 		) {
-			if(providerRpc != null){
+			if (providerRpc != null) {
 				[maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPrice(providerRpc);
-			}else{
+			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
 					"providerRpc cant't be null if maxFeePerGas and maxPriorityFeePerGas are not overriden",
@@ -704,7 +705,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			overrids.verificationGasLimit == null ||
 			overrids.callGasLimit == null
 		) {
-			if(bundlerRpc != null){
+			if (bundlerRpc != null) {
 				[preVerificationGas, verificationGasLimit, callGasLimit] =
 					await this.estimateUserOperationGas(
 						userOperation,
@@ -712,7 +713,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 						overrids.state_override_set,
 						overrids.numberOfSigners,
 					);
-			}else{
+			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
 					"bundlerRpc cant't be null if preVerificationGas,verificationGasLimit and callGasLimit are not overriden",
@@ -800,7 +801,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			throw RangeError("validUntil can't be negative");
 		}
 
-		const SafeUserOperation:SafeUserOperationTypedDataValues = {
+		const SafeUserOperation: SafeUserOperationTypedDataValues = {
 			safe: useroperation.sender,
 			nonce: useroperation.nonce,
 			initCode: useroperation.initCode,
@@ -816,10 +817,10 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			entryPoint: this.entrypointAddress,
 		};
 
-		const domain:SafeUserOperationTypedDataDomain = {
+		const domain: SafeUserOperationTypedDataDomain = {
 			chainId,
 			verifyingContract: this.safe4337ModuleAddress,
-		}
+		};
 
 		const signersAddresses = [];
 		const signatures = [];

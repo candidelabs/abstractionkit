@@ -79,22 +79,22 @@ export enum SafeModuleExecutorFunctionSelector {
 }
 
 export interface SafeUserOperationTypedDataDomain {
-	chainId: bigint,
+	chainId: bigint;
 	verifyingContract: string;
 }
 
 export interface SafeUserOperationTypedDataValues {
 	safe: string;
-	nonce: bigint,
+	nonce: bigint;
 	initCode: string;
 	callData: string;
-	callGasLimit: bigint,
-	verificationGasLimit: bigint,
-	preVerificationGas: bigint,
-	maxFeePerGas: bigint,
-	maxPriorityFeePerGas: bigint,
+	callGasLimit: bigint;
+	verificationGasLimit: bigint;
+	preVerificationGas: bigint;
+	maxFeePerGas: bigint;
+	maxPriorityFeePerGas: bigint;
 	paymasterAndData: string;
-	validAfter: bigint,
-	validUntil: bigint,
+	validAfter: bigint;
+	validUntil: bigint;
 	entryPoint: string;
 }
