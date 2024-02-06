@@ -586,8 +586,8 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	 */
 	public async createUserOperation(
 		transactions: MetaTransaction[],
-		providerRpc: string,
-		bundlerRpc: string,
+		providerRpc?: string,
+		bundlerRpc?: string,
 		overrids: CreateUserOperationOverrides = {},
 	): Promise<UserOperation> {
 		if (transactions.length < 1) {
@@ -597,11 +597,18 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		let nonce = 0n as bigint;
 
 		if (overrids.nonce == null) {
-			nonce = await fetchAccountNonce(
-				providerRpc,
-				this.entrypointAddress,
-				this.accountAddress,
-			);
+			if(providerRpc != null){
+				nonce = await fetchAccountNonce(
+					providerRpc,
+					this.entrypointAddress,
+					this.accountAddress,
+				);
+			}else{
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"providerRpc cant't be null if nonce is not overriden",
+				);
+			}
 		} else {
 			nonce = overrids.nonce;
 		}
@@ -638,7 +645,14 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			overrids.maxFeePerGas == null ||
 			overrids.maxPriorityFeePerGas == null
 		) {
-			[maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPrice(providerRpc);
+			if(providerRpc != null){
+				[maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPrice(providerRpc);
+			}else{
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"providerRpc cant't be null if maxFeePerGas and maxPriorityFeePerGas are not overriden",
+				);
+			}
 		}
 		if (
 			typeof overrids.maxFeePerGas === "bigint" &&
@@ -690,13 +704,20 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			overrids.verificationGasLimit == null ||
 			overrids.callGasLimit == null
 		) {
-			[preVerificationGas, verificationGasLimit, callGasLimit] =
-				await this.estimateUserOperationGas(
-					userOperation,
-					bundlerRpc,
-					overrids.state_override_set,
-					overrids.numberOfSigners,
+			if(bundlerRpc != null){
+				[preVerificationGas, verificationGasLimit, callGasLimit] =
+					await this.estimateUserOperationGas(
+						userOperation,
+						bundlerRpc,
+						overrids.state_override_set,
+						overrids.numberOfSigners,
+					);
+			}else{
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"bundlerRpc cant't be null if preVerificationGas,verificationGasLimit and callGasLimit are not overriden",
 				);
+			}
 		}
 		if (
 			typeof overrids.preVerificationGas === "bigint" &&
