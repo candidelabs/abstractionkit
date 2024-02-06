@@ -9,10 +9,4 @@ export abstract class SmartAccount {
 	constructor(accountAddress: string) {
 		this.accountAddress = accountAddress;
 	}
-	abstract prependTokenPaymasterApproveToCallData(
-		callData: string,
-		tokenAddress: string,
-		paymasterAddress: string,
-		approveAmount: bigint,
-	): string;
 }

@@ -8,9 +8,8 @@ import {
 	ERC20Token,
 	StateOverrideSet,
 } from "../types";
-import { CandidePaymasterContext } from "./types";
+import { CandidePaymasterContext, PrependTokenPaymasterApproveAccount } from "./types";
 import { Bundler } from "src/Bundler";
-import { SmartAccount } from "src/abstractionkit";
 import { AbstractionKitError, ensureError } from "src/errors";
 
 export class CandidePaymaster extends Paymaster {
@@ -305,7 +304,7 @@ export class CandidePaymaster extends Paymaster {
 	 * @returns promise with UserOperation
 	 */
 	async createTokenPaymasterUserOperation(
-		smartAccount: SmartAccount,
+		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperation,
 		tokenAddress: string,
 		bundlerRpc: string,

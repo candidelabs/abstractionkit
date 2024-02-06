@@ -27,6 +27,11 @@ export {
 } from "./account/Safe/types";
 
 export {
+	CandidePaymasterContext,
+	PrependTokenPaymasterApproveAccount,
+} from "./paymaster/types";
+
+export {
 	UserOperation,
 	AbiInputValue,
 	JsonRpcParam,

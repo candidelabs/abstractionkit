@@ -396,7 +396,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	 * decode calldata to [to, value, data, operation]
 	 * @returns to, value, data, operation
 	 */
-	public decodeAccountCallData(
+	public static decodeAccountCallData(
 		callData: string,
 	): [string, bigint, string, number] {
 		if (
@@ -438,6 +438,11 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		}
 	}
 
+	/**
+	 * a non static wrapper function for  prependTokenPaymasterApproveToCallDataStatic 
+	 * which adds a token approve call to the call data for a token paymaster
+	 * @returns callData
+	 */
 	public prependTokenPaymasterApproveToCallData(
 		callData: string,
 		tokenAddress: string,
@@ -445,8 +450,28 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		approveAmount: bigint,
 		multisendContractAddress: string = SafeAccountV0_2_0.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
 	): string {
+		return SafeAccountV0_2_0.prependTokenPaymasterApproveToCallDataStatic(
+			callData,
+			tokenAddress,
+			paymasterAddress,
+			approveAmount,
+			multisendContractAddress
+		)
+	}
+
+	/**
+	 * adds a token approve call to the call data for a token paymaster
+	 * @returns callData
+	 */
+	public static prependTokenPaymasterApproveToCallDataStatic(
+		callData: string,
+		tokenAddress: string,
+		paymasterAddress: string,
+		approveAmount: bigint,
+		multisendContractAddress: string = SafeAccountV0_2_0.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
+	): string {
 		const [to, value, accountCallData, operation] =
-			this.decodeAccountCallData(callData);
+		SafeAccountV0_2_0.decodeAccountCallData(callData);
 		let accountCallDataString = "";
 		if (typeof accountCallData !== "string") {
 			accountCallDataString = new TextDecoder().decode(accountCallData);
