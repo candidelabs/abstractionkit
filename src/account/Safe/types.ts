@@ -38,6 +38,8 @@ export interface CreateUserOperationOverrides {
 	numberOfSigners?: number;
 	/** pass some state overrides for gas estimation"*/
 	state_override_set?: StateOverrideSet;
+
+	dummySingatures?: DummySignature[]|null,
 }
 
 /**
@@ -97,4 +99,32 @@ export interface SafeUserOperationTypedDataValues {
 	validAfter: bigint;
 	validUntil: bigint;
 	entryPoint: string;
+}
+
+export type ECDSAPublicAddress = string
+
+export interface WebauthPublicKey {
+    x:bigint,
+    y:bigint,
+}
+
+export type Signer = ECDSAPublicAddress | WebauthPublicKey
+
+export enum DummySignature {
+	eoa = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+	webauth = "ca66c5a0eeab0fe74f343bb4a539042c68ae45f90000000000000000000000000000000000000000000000000000000000000041000000000000000000000000000000000000000000000000000000000000000120000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000e01e638dbc81c4fc4402ae3c845dd5c7dd76f1abb5ebe281abad04ee9b2d93bbd0b743b83bc1ce08fa3a821dcd3e59903fd5399bd1379c1a34ad9fc2444c425e3b0000000000000000000000000000000000000000000000000000000000000025a24f744b28d73f066bf3203d145765a7bc735e6328168c8b03e476da3ad0d8fe0400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e226f726967696e223a2268747470733a2f2f736166652e676c6f62616c220000",
+}
+
+export type ECDSASignature = string
+
+export interface WebauthSignatureData {
+    authenticatorData: ArrayBuffer
+    clientDataFields: string
+    rs: [bigint, bigint]
+}
+
+export interface SignerSignaturePair {
+	signer: Signer
+	signature: string
+	isContractSignature?: boolean
 }

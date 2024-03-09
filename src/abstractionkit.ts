@@ -1,5 +1,6 @@
 export { SmartAccount } from "./account/SmartAccount";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
+export { SafeAccountWebAuth } from "./account/Safe/SafeAccountWebAuth";
 
 export { SendUseroperationResponse } from "./account/SendUseroperationResponse";
 
@@ -24,6 +25,10 @@ export {
 	SafeModuleExecutorFunctionSelector,
 	SafeUserOperationTypedDataDomain,
 	SafeUserOperationTypedDataValues,
+	WebauthPublicKey,
+	DummySignature,
+	WebauthSignatureData,
+	SignerSignaturePair
 } from "./account/Safe/types";
 
 export {
