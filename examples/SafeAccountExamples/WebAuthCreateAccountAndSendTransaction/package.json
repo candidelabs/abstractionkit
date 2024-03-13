@@ -11,6 +11,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "cbor": "^9.0.2",
     "dotenv": "^16.3.1",
     "ethers": "^6.11.0",
     "typescript": "^5.1.6"
