@@ -12,11 +12,11 @@
 
 This example is on Sepolia chain.
 
-In this example you will need to fund the new account address(sender) with Sepolia eth first.
+It uses a Paymaster Gas Policy to sponsor the gas onbehaf of the Account. Get early access to Candide's Paymaster by visiting our discord https://discord.gg/m2b4juCDfa
 
 # How to use this example
 
-### copy .env.example and add a privatekey for signer
+### copy .env.example
 ```
 cp .env.example .env
 ```
