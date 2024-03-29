@@ -5,12 +5,17 @@
  * @template T - The type of the value being stored.
  */
 function setItem<T>(key: string, value: T) {
-  // to prevent silly mistakes with double stringifying
-  if (typeof value === 'string') {
-    localStorage.setItem(key, value)
-  } else {
-    localStorage.setItem(key, JSON.stringify(value))
-  }
+	// to prevent silly mistakes with double stringifying
+	if (typeof value === "string") {
+		localStorage.setItem(key, value);
+	} else {
+		localStorage.setItem(
+			key,
+			JSON.stringify(value, (_key, value) =>
+				typeof value === "bigint" ? "0x" + value.toString(16) : value,
+			),
+		);
+	}
 }
 
 /**
@@ -20,7 +25,7 @@ function setItem<T>(key: string, value: T) {
  * @returns The value associated with the key, or null if the key does not exist.
  */
 function getItem(key: string): string | null {
-  return localStorage.getItem(key)
+	return localStorage.getItem(key);
 }
 
-export { setItem, getItem }
+export { setItem, getItem };

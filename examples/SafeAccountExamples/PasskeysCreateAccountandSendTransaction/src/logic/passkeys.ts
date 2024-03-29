@@ -13,8 +13,8 @@ type PasskeyCredential = {
 
 type PasskeyCredentialWithPubkeyCoordinates = PasskeyCredential & {
   pubkeyCoordinates: {
-    x: string
-    y: string
+    x: bigint
+    y: bigint
   }
 }
 
@@ -75,8 +75,8 @@ async function createPasskey(): Promise<PasskeyCredentialWithPubkeyCoordinates> 
   // Create a PasskeyCredentialWithPubkeyCoordinates object
   const passkeyWithCoordinates: PasskeyCredentialWithPubkeyCoordinates = Object.assign(passkeyCredential, {
     pubkeyCoordinates: {
-      x: '0x' + Buffer.from(exportedKeyWithXYCoordinates.x, 'base64').toString('hex'),
-      y: '0x' + Buffer.from(exportedKeyWithXYCoordinates.y, 'base64').toString('hex'),
+      x: BigInt('0x' + Buffer.from(exportedKeyWithXYCoordinates.x, 'base64').toString('hex')),
+      y: BigInt('0x' + Buffer.from(exportedKeyWithXYCoordinates.y, 'base64').toString('hex')),
     },
   })
 
@@ -86,8 +86,8 @@ async function createPasskey(): Promise<PasskeyCredentialWithPubkeyCoordinates> 
 export type PasskeyLocalStorageFormat = {
   rawId: string
   pubkeyCoordinates: {
-    x: string
-    y: string
+    x: bigint
+    y: bigint
   }
 }
 

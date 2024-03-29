@@ -5,7 +5,6 @@ import {
   WebauthSignatureData,
   SendUseroperationResponse,
   UserOperation,
-  WebauthPublicKey,
 } from 'abstractionkit'
 
 import { PasskeyLocalStorageFormat } from './passkeys'
@@ -111,13 +110,8 @@ async function signAndSendUserOp(
 
   const webauthSignature: string = SafeAccount.createWebAuthnSignature(webauthSignatureData)
 
-  const webauthPublicKey: WebauthPublicKey = {
-    x: BigInt(passkey.pubkeyCoordinates.x),
-    y: BigInt(passkey.pubkeyCoordinates.y),
-  }
-
   const SignerSignaturePair: SignerSignaturePair = {
-    signer: webauthPublicKey,
+    signer: passkey.pubkeyCoordinates,
     signature: webauthSignature,
   }
 

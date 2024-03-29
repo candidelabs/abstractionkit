@@ -6,7 +6,6 @@ import {
 	MetaTransaction,
 	DummySignature,
 	CandidePaymaster,
-	WebauthPublicKey,
 } from "abstractionkit";
 
 import { PasskeyLocalStorageFormat } from "../logic/passkeys";
@@ -53,12 +52,7 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 			data: mintTransactionCallData,
 		};
 
-		const webauthPublicKey: WebauthPublicKey = {
-			x: BigInt(passkey.pubkeyCoordinates.x),
-			y: BigInt(passkey.pubkeyCoordinates.y),
-		};
-
-		const safeAccount = SafeAccount.initializeNewAccount([webauthPublicKey]);
+		const safeAccount = SafeAccount.initializeNewAccount([passkey.pubkeyCoordinates]);
 
 		let userOperation = await safeAccount.createUserOperation(
 			[mintTransaction],

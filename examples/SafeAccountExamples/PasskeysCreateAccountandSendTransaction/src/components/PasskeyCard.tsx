@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { SafeAccountWebAuth as SafeAccount, WebauthPublicKey } from 'abstractionkit'
+import { SafeAccountWebAuth as SafeAccount } from 'abstractionkit'
 
 import { PasskeyLocalStorageFormat } from '../logic/passkeys'
 import { setItem } from '../logic/storage'
@@ -8,15 +8,10 @@ function PasskeyCard({ passkey, handleCreatePasskeyClick }: { passkey?: PasskeyL
   const getAccountAddress = useMemo(() => {
     if (!passkey) return undefined
 
-    const webauthPublicKey: WebauthPublicKey = {
-      x: BigInt(passkey.pubkeyCoordinates.x),
-      y: BigInt(passkey.pubkeyCoordinates.y),
-    }
+    const accountAddress = SafeAccount.createAccountAddress([passkey.pubkeyCoordinates]);
+    setItem('accountAddress', accountAddress);
 
-    const smartAccount = SafeAccount.initializeNewAccount([webauthPublicKey])
-
-    setItem('accountAddress', smartAccount.accountAddress)
-    return smartAccount.accountAddress
+    return accountAddress;
   }, [passkey])
 
   return passkey ? (
