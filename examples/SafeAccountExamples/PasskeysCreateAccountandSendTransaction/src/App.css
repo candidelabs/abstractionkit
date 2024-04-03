@@ -10,6 +10,16 @@
   justify-content: space-between;
 }
 
+.icon {
+  height: 2em;
+  will-change: filter;
+  transition: filter 300ms;
+
+  @media screen and (max-width: 768px) {
+    height: 2em;
+  }
+}
+
 .logo {
   height: 5em;
   will-change: filter;

@@ -1,5 +1,6 @@
 import safeLogo from "/safe-logo-white.svg";
 import candideLogo from "/candide-atelier-logo.svg";
+import githubLogo from "/github-mark-white.svg";
 import {
 	PasskeyLocalStorageFormat,
 	createPasskey,
@@ -64,6 +65,11 @@ function App() {
 			<h1>Passkeys Demo</h1>
 
 			{content}
+			<br/>
+			<br/>
+			<a href="https://github.com/candidelabs/abstractionkit/tree/webauth/examples/SafeAccountExamples/PasskeysCreateAccountandSendTransaction" target="_blank">
+				<img src={githubLogo} className="icon" alt="Safe logo" />
+			</a>
 		</>
 	);
 }
