@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "abstractionkit": "^0.1.5",
     "buffer": "^6.0.3",
     "ethers": "^6.10.0",
     "react": "^18.2.0",

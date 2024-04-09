@@ -1,11 +1,11 @@
 import type { UserOperation, StateOverrideSet } from "../types";
-import { CandidePaymasterContext } from "./types";
+import { CandidePaymasterContext, CreatePaymasterUserOperationOverrides} from "./types";
 
 export abstract class Paymaster {
 	abstract createPaymasterUserOperation(
 		userOperation: UserOperation,
 		bundlerRpc: string,
 		context: CandidePaymasterContext,
-		state_override_set?: StateOverrideSet,
+        createPaymasterUserOperationOverrides:CreatePaymasterUserOperationOverrides
 	): Promise<UserOperation>;
 }
