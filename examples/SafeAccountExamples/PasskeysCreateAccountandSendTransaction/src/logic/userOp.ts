@@ -36,7 +36,7 @@ function extractClientDataFields(response: AuthenticatorAssertionResponse): stri
  * - <https://datatracker.ietf.org/doc/html/rfc3279#section-2.2.3>
  * - <https://en.wikipedia.org/wiki/X.690#BER_encoding>
  */
-function extractSignature(response: AuthenticatorAssertionResponse): [bigint, bigint] {
+function extractSignature(signature: ArrayBuffer): [bigint, bigint] {
   const check = (x: boolean) => {
     if (!x) {
       throw new Error('invalid signature encoding')
@@ -46,7 +46,7 @@ function extractSignature(response: AuthenticatorAssertionResponse): [bigint, bi
   // Decode the DER signature. Note that we assume that all lengths fit into 8-bit integers,
   // which is true for the kinds of signatures we are decoding but generally false. I.e. this
   // code should not be used in any serious application.
-  const view = new DataView(response.signature)
+  const view = new DataView(signature)
 
   // check that the sequence header is valid
   check(view.getUint8(0) === 0x30)
@@ -94,18 +94,25 @@ async function signAndSendUserOp(
   const assertion = (await navigator.credentials.get({
     publicKey: {
       challenge: ethers.getBytes(safeInitOpHash),
-      allowCredentials: [{ type: 'public-key', id: hexStringToUint8Array(passkey.rawId) }],
+      allowCredentials: [{ type: 'public-key', id: hexStringToUint8Array(passkey.rawId)}],
     },
   })) as Assertion | null
 
   if (!assertion) {
     throw new Error('Failed to sign user operation')
   }
+  
+  let signature: ArrayBuffer;
+  if (assertion.response.signature instanceof Uint8Array) {
+    signature = assertion.response.signature.buffer;
+  } else {
+    signature = assertion.response.signature;
+  }
 
   const webauthSignatureData: WebauthSignatureData = {
     authenticatorData: assertion.response.authenticatorData,
     clientDataFields: extractClientDataFields(assertion.response),
-    rs: extractSignature(assertion.response),
+    rs: extractSignature(signature),
   }
 
   const webauthSignature: string = SafeAccount.createWebAuthnSignature(webauthSignatureData)
