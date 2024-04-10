@@ -15,10 +15,18 @@ function PasskeyCard({ passkey, handleCreatePasskeyClick }: { passkey?: PasskeyL
   }, [passkey])
 
   return passkey ? (
-    <div className="card">
-      <p>Account Address: {getAccountAddress}</p>
-    </div>
-  ) : (
+	<div className="card">
+		<p>
+			Account Address:{" "}
+			<a
+				target="_blank"
+				href={`https://sepolia.etherscan.io/address/${getAccountAddress}`}
+			>
+				{getAccountAddress}
+			</a>
+		</p>
+	</div>
+) : (
     <div className="card">
       <p>First, you need to create a passkey which will be used to sign transactions</p>
       <button onClick={handleCreatePasskeyClick}>Create Account</button>

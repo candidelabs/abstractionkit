@@ -35,8 +35,10 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 		setDeployed(safeCode !== "0x");
 	};
 
-	const handleDeploySafeClick = async () => {
+	const handleMintNFT = async () => {
 		setLoadingTx(true);
+		setTxHash("");
+		setError("");
 		// mint an NFT
 		const nftContractAddress = "0x9a7af758aE5d7B6aAE84fe4C5Ba67c041dFE5336";
 		const mintFunctionSignature = "mint(address)";
@@ -72,7 +74,6 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 			// 	verificationGasLimitPercentageMultiplier:20
 			// }
 		);
-		setLoadingTx(false);
 		try {
 			const bundlerResponse = await signAndSendUserOp(
 				safeAccount,
@@ -86,22 +87,23 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 			if (userOperationReceiptResult.success) {
 				setTxHash(userOperationReceiptResult.receipt.transactionHash);
 				console.log(
-					"Two Nfts were minted. The transaction hash is : " +
+					"One NTF was minted. The transaction hash is : " +
 						userOperationReceiptResult.receipt.transactionHash,
 				);
+				setUserOpHash("");
 			} else {
 				setError("Useroperation execution failed");
 			}
 		} catch (error) {
 			if (error instanceof Error) {
+				console.log(error)
 				setError(error.message);
 			} else {
 				setError("Unknown error");
 			}
 		}
+		setLoadingTx(false);
 	};
-
-	const readyToDeploy = !userOpHash && !deployed;
 
 	useEffect(() => {
 		if (accountAddress) {
@@ -116,7 +118,7 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 		<div className="card">
 			{userOpHash && (
 				<p>
-					Your Safe is being deployed. Track the user operation on{" "}
+					Your account setup is in progress. Track your operation on{" "}
 					<a
 						target="_blank"
 						href={`https://jiffyscan.xyz/userOpHash/${userOpHash}?network=${chainName.toLowerCase()}`}
@@ -125,35 +127,31 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 					</a>
 				</p>
 			)}
-			{(deployed || txHash) && (
-				<p>
-					You deployed a Safe Account and collected an NFT, secured with your
-					Device Passkeys
+			{txHash && (
+				<>
+					You collected an NFT, secured with your Safe Account & authenticated by your Device Passkeys.
 					<br />
 					<br />
 					View more on{" "}
-					{txHash ? (
-						<a
-							target="_blank"
-							href={`https://${chainName}.etherscan.io/tx/${txHash}`}
-						>
-							etherscan
-						</a>
-					) : (
-						<a
-							target="_blank"
-							href={`https://${chainName}.etherscan.io/address/${accountAddress}`}
-						>
-							etherscan
-						</a>
-					)}
-				</p>
+					<a
+						target="_blank"
+						href={`https://${chainName}.etherscan.io/tx/${txHash}`}
+					>
+						etherscan
+					</a>
+					<br />
+				</>
 			)}
-			{loadingTx ? (
+			{loadingTx && !userOpHash ? (
 				<p>"Preparing transaction.."</p>
 			) : (
-				readyToDeploy && (
-					<button onClick={handleDeploySafeClick}>Setup up & Mint</button>
+				accountAddress && (
+					<div className="card">
+						<br/>
+						<button onClick={handleMintNFT} disabled={!!userOpHash}>
+							Mint NFT
+						</button>
+					</div>
 				)
 			)}{" "}
 			{error && (
