@@ -1,4 +1,5 @@
 import { Buffer } from 'buffer'
+import { ethers } from 'ethers'
 
 type PasskeyCredential = {
   id: 'string'
@@ -113,4 +114,76 @@ function isLocalStoragePasskey(x: unknown): x is PasskeyLocalStorageFormat {
   return typeof x === 'object' && x !== null && 'rawId' in x && 'pubkeyCoordinates' in x
 }
 
-export { createPasskey, toLocalStorageFormat, isLocalStoragePasskey }
+/**
+ * Extracts the signature into R and S values from the authenticator response.
+ *
+ * See:
+ * - <https://datatracker.ietf.org/doc/html/rfc3279#section-2.2.3>
+ * - <https://en.wikipedia.org/wiki/X.690#BER_encoding>
+ */
+function extractSignature(signature: ArrayBuffer | Uint8Array): [bigint, bigint] {
+
+  let sig: ArrayBuffer;
+  if (signature instanceof Uint8Array) {
+    sig = signature.buffer;
+  } else {
+    sig = signature;
+  }
+
+  const check = (x: boolean) => {
+    if (!x) {
+      throw new Error('invalid signature encoding')
+    }
+  }
+
+  // Decode the DER signature. Note that we assume that all lengths fit into 8-bit integers,
+  // which is true for the kinds of signatures we are decoding but generally false. I.e. this
+  // code should not be used in any serious application.
+  const view = new DataView(sig)
+
+  // check that the sequence header is valid
+  check(view.getUint8(0) === 0x30)
+  check(view.getUint8(1) === view.byteLength - 2)
+
+  // read r and s
+  const readInt = (offset: number) => {
+    check(view.getUint8(offset) === 0x02)
+    const len = view.getUint8(offset + 1)
+    const start = offset + 2
+    const end = start + len
+    const n = BigInt(ethers.hexlify(new Uint8Array(view.buffer.slice(start, end))))
+    check(n < ethers.MaxUint256)
+    return [n, end] as const
+  }
+  const [r, sOffset] = readInt(2)
+  const [s] = readInt(sOffset)
+
+  return [r, s]
+}
+
+/**
+ * Compute the additional client data JSON fields. This is the fields other than `type` and
+ * `challenge` (including `origin` and any other additional client data fields that may be
+ * added by the authenticator).
+ *
+ * See <https://w3c.github.io/webauthn/#clientdatajson-serialization>
+ */
+function extractClientDataFields(response: AuthenticatorAssertionResponse): string {
+  const clientDataJSON = new TextDecoder('utf-8').decode(response.clientDataJSON)
+  const match = clientDataJSON.match(/^\{"type":"webauthn.get","challenge":"[A-Za-z0-9\-_]{43}",(.*)\}$/)
+
+  if (!match) {
+    throw new Error('challenge not found in client data JSON')
+  }
+
+  const [, fields] = match
+  return ethers.hexlify(ethers.toUtf8Bytes(fields))
+}
+
+export {
+	createPasskey,
+	toLocalStorageFormat,
+	isLocalStoragePasskey,
+	extractSignature,
+	extractClientDataFields,
+};
