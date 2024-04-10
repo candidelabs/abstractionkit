@@ -1,4 +1,4 @@
-import type { UserOperation, StateOverrideSet } from "../types";
+import type { UserOperation } from "../types";
 import { CandidePaymasterContext, CreatePaymasterUserOperationOverrides} from "./types";
 
 export abstract class Paymaster {

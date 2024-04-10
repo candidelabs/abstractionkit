@@ -6,7 +6,6 @@ import {
 	PmUserOperationResult,
 	PaymasterMetadata,
 	ERC20Token,
-	StateOverrideSet,
 } from "../types";
 import {
 	CandidePaymasterContext,

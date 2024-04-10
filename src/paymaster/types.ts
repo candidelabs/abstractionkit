@@ -14,7 +14,7 @@ export interface PrependTokenPaymasterApproveAccount {
 }
 
 /**
- * Overrides for the "createUserOperation" function
+ * Overrides for the "createPaymasterUserOperation" function
  */
 export interface CreatePaymasterUserOperationOverrides {
 	/** set the callGasLimit instead of estimating gas using the bundler*/
