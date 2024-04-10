@@ -1,6 +1,5 @@
 import safeLogo from "/safe-logo-white.svg";
 import candideLogo from "/candide-atelier-logo.svg";
-import githubLogo from "/github-mark-white.svg";
 import {
 	PasskeyLocalStorageFormat,
 	createPasskey,
@@ -11,6 +10,7 @@ import { useLocalStorageState } from "./hooks/useLocalStorageState.ts";
 import { useState } from "react";
 import { PasskeyCard } from "./components/PasskeyCard.tsx";
 import { SafeCard } from "./components/SafeCard.tsx";
+import { FaqCard } from "./components/FaqCard.tsx";
 
 const PASSKEY_LOCALSTORAGE_KEY = "passkeyId";
 
@@ -49,6 +49,7 @@ function App() {
 					<p>Error: {error}</p>
 				</div>
 			)}
+			<FaqCard />
 		</>
 	);
 
@@ -62,14 +63,10 @@ function App() {
 					<img src={safeLogo} className="logo" alt="Safe logo" />
 				</a>
 			</header>
-			<h1>Passkeys Demo</h1>
-
+			<h1>Safe Passkeys Demo</h1>
 			{content}
 			<br/>
 			<br/>
-			<a href="https://github.com/candidelabs/abstractionkit/tree/webauth/examples/SafeAccountExamples/PasskeysCreateAccountandSendTransaction" target="_blank">
-				<img src={githubLogo} className="icon" alt="Safe logo" />
-			</a>
 		</>
 	);
 }
