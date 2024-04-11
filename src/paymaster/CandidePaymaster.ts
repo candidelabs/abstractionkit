@@ -191,14 +191,14 @@ export class CandidePaymaster extends Paymaster {
 	 * @param useroperation - useroperation to add paymaster support for
 	 * @param bundlerRpc - bundler rpc for gas estimation
 	 * @param context - paymaster context data
-	 * @param state_override_set - state override values to set during gs estimation
+	 * @param overrids - overrides values to change default values
 	 * @returns promise with UserOperation
 	 */
 	async createPaymasterUserOperation(
 		userOperation: UserOperation,
 		bundlerRpc: string,
 		context: CandidePaymasterContext = {},
-        createPaymasterUserOperationOverrides:CreatePaymasterUserOperationOverrides = {}
+        overrides:CreatePaymasterUserOperationOverrides = {}
 	): Promise<UserOperation> {
 		if (
 			this.entrypointAddress == null ||
@@ -219,9 +219,9 @@ export class CandidePaymaster extends Paymaster {
             //call the bundler to estimate gas if one of the gas overrides
             //is not provided
             if (
-                createPaymasterUserOperationOverrides.preVerificationGas == null ||
-                createPaymasterUserOperationOverrides.verificationGasLimit == null ||
-                createPaymasterUserOperationOverrides.callGasLimit == null
+                overrides.preVerificationGas == null ||
+                overrides.verificationGasLimit == null ||
+                overrides.callGasLimit == null
             ) {
 
 				if (bundlerRpc != null) {
@@ -231,7 +231,7 @@ export class CandidePaymaster extends Paymaster {
                         await bundler.estimateUserOperationGas(
                             userOperation,
                             this.entrypointAddress as string,
-                            createPaymasterUserOperationOverrides.state_override_set,
+                            overrides.state_override_set,
                         );
 
 						preVerificationGas = estimation.preVerificationGas;
@@ -247,51 +247,51 @@ export class CandidePaymaster extends Paymaster {
 
 			//check gas overrides type and range
             if (
-                typeof createPaymasterUserOperationOverrides.preVerificationGas === "bigint" &&
-                createPaymasterUserOperationOverrides.preVerificationGas < 0n
+                typeof overrides.preVerificationGas === "bigint" &&
+                overrides.preVerificationGas < 0n
             ) {
                 throw RangeError("preVerificationGas overrid can't be negative");
             }
 
             if (
-                typeof createPaymasterUserOperationOverrides.verificationGasLimit === "bigint" &&
-                createPaymasterUserOperationOverrides.verificationGasLimit < 0n
+                typeof overrides.verificationGasLimit === "bigint" &&
+                overrides.verificationGasLimit < 0n
             ) {
                 throw RangeError("verificationGasLimit overrid can't be negative");
             }
 
             if (
-                typeof createPaymasterUserOperationOverrides.callGasLimit === "bigint" &&
-                createPaymasterUserOperationOverrides.callGasLimit < 0n
+                typeof overrides.callGasLimit === "bigint" &&
+                overrides.callGasLimit < 0n
             ) {
                 throw RangeError("callGasLimit overrid can't be negative");
             }
 
 			//apply gas overrides
             userOperation.preVerificationGas =
-                createPaymasterUserOperationOverrides.preVerificationGas ??
+                overrides.preVerificationGas ??
                 (
 					preVerificationGas *
                     BigInt(                       
-                            ((createPaymasterUserOperationOverrides.preVerificationGasPercentageMultiplier ?? 0) + 100)
+                            ((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100)
                     )
 				)/100n;
 
 				userOperation.verificationGasLimit =
-                createPaymasterUserOperationOverrides.verificationGasLimit ??
+                overrides.verificationGasLimit ??
                 (
 					verificationGasLimit *
                     BigInt(                       
-                            ((createPaymasterUserOperationOverrides.verificationGasLimitPercentageMultiplier ?? 0) + 100)
+                            ((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100)
                     )
 				)/100n;
 
 			userOperation.callGasLimit =
-			createPaymasterUserOperationOverrides.callGasLimit ??
+			overrides.callGasLimit ??
 			(
 				callGasLimit *
 				BigInt(                       
-						((createPaymasterUserOperationOverrides.callGasLimitPercentageMultiplier ?? 0) + 100)
+						((overrides.callGasLimitPercentageMultiplier ?? 0) + 100)
 				)
 			)/100n;
             
@@ -364,19 +364,19 @@ export class CandidePaymaster extends Paymaster {
 	 * paymasterAndData for a sponsor paymaster operation
 	 * @param useroperation - useroperation to add paymaster support for
 	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param state_override_set - state override values to set during gs estimation
+	 * @param overrids - overrides values to change default values
 	 * @returns promise with UserOperation
 	 */
 	async createSponsorPaymasterUserOperation(
 		userOperation: UserOperation,
 		bundlerRpc: string,
-        createPaymasterUserOperationOverrides:CreatePaymasterUserOperationOverrides = {}
+        overrides:CreatePaymasterUserOperationOverrides = {}
 	): Promise<UserOperation> {
 		return await this.createPaymasterUserOperation(
 			userOperation,
 			bundlerRpc,
 			{},
-			createPaymasterUserOperationOverrides,
+			overrides,
 		);
 	}
 
@@ -387,7 +387,7 @@ export class CandidePaymaster extends Paymaster {
 	 * @param useroperation - useroperation to add paymaster support for
 	 * @param tokenAddress - target token to pay gas with
 	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param state_override_set - state override values to set during gs estimation
+	 * @param overrids - overrides values to change default values
 	 * @returns promise with UserOperation
 	 */
 	async createTokenPaymasterUserOperation(
@@ -395,7 +395,7 @@ export class CandidePaymaster extends Paymaster {
 		userOperation: UserOperation,
 		tokenAddress: string,
 		bundlerRpc: string,
-        createPaymasterUserOperationOverrides:CreatePaymasterUserOperationOverrides = {}
+        overrides:CreatePaymasterUserOperationOverrides = {}
 	): Promise<UserOperation> {
 		try {
 			const maxErc20Cost =
@@ -426,7 +426,7 @@ export class CandidePaymaster extends Paymaster {
 				{
 					token: tokenAddress,
 				},
-				createPaymasterUserOperationOverrides,
+				overrides,
 			);
 		} catch (err) {
 			const error = ensureError(err);
