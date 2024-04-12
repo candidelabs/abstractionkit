@@ -272,28 +272,22 @@ export class CandidePaymaster extends Paymaster {
                 overrides.preVerificationGas ??
                 (
 					preVerificationGas *
-                    BigInt(                       
-                            ((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100)
-                    )
+                    BigInt((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100)
 				)/100n;
 
-				userOperation.verificationGasLimit =
+			userOperation.verificationGasLimit =
                 overrides.verificationGasLimit ??
                 (
 					verificationGasLimit *
-                    BigInt(                       
-                            ((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100)
-                    )
+                    BigInt((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100)
 				)/100n;
 
 			userOperation.callGasLimit =
-			overrides.callGasLimit ??
-			(
-				callGasLimit *
-				BigInt(                       
-						((overrides.callGasLimitPercentageMultiplier ?? 0) + 100)
-				)
-			)/100n;
+                overrides.callGasLimit ??
+                (
+                    callGasLimit *
+                    BigInt((overrides.callGasLimitPercentageMultiplier ?? 0) + 100)
+                )/100n;
             
             //add small buffer to preVerification gas
 			userOperation.preVerificationGas = userOperation.preVerificationGas + 100n;

@@ -546,21 +546,17 @@ export class SafeAccountWebAuth extends SafeAccount {
 
 		maxFeePerGas =
 			overrids.maxFeePerGas ??
-			maxFeePerGas *
-				BigInt(
-					Math.floor(
-						((overrids.maxFeePerGasPercentageMultiplier ?? 0) + 100) / 100,
-					),
-				);
+            (
+                maxFeePerGas *
+                BigInt((overrids.maxFeePerGasPercentageMultiplier ?? 0) + 100)
+            )/100n;
+
 		maxPriorityFeePerGas =
 			overrids.maxPriorityFeePerGas ??
-			maxPriorityFeePerGas *
-				BigInt(
-					Math.floor(
-						((overrids.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100) /
-							100,
-					),
-				);
+            (
+                maxPriorityFeePerGas *
+                BigInt((overrids.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100)
+            )/100n;
 
 		const userOperation: UserOperation = {
 			...UserOperationDummyValues,
@@ -575,7 +571,6 @@ export class SafeAccountWebAuth extends SafeAccount {
 		let preVerificationGas = UserOperationDummyValues.preVerificationGas;
 		let verificationGasLimit = UserOperationDummyValues.verificationGasLimit;
 		let callGasLimit = UserOperationDummyValues.callGasLimit;
-
 		
 		if (
 			overrids.preVerificationGas == null ||
@@ -618,35 +613,28 @@ export class SafeAccountWebAuth extends SafeAccount {
 		) {
 			throw RangeError("callGasLimit overrid can't be negative");
 		}
+
 		userOperation.preVerificationGas =
 			overrids.preVerificationGas ??
-			preVerificationGas *
-				BigInt(
-					Math.floor(
-						((overrids.preVerificationGasPercentageMultiplier ?? 0) + 100) /
-							100,
-					),
-				);
+            (
+                preVerificationGas *
+                BigInt((overrids.preVerificationGasPercentageMultiplier ?? 0) + 100)
+            )/100n;
 
 		userOperation.verificationGasLimit =
 			overrids.verificationGasLimit ??
-			verificationGasLimit *
-				BigInt(
-					Math.floor(
-						((overrids.verificationGasLimitPercentageMultiplier ?? 0) + 100) /
-							100,
-					),
-				);
-
+            (
+                verificationGasLimit *
+                BigInt((overrids.verificationGasLimitPercentageMultiplier ?? 0) + 100)
+            )/100n;
+			
 		userOperation.callGasLimit =
 			overrids.callGasLimit ??
-			callGasLimit *
-				BigInt(
-					Math.floor(
-						((overrids.callGasLimitPercentageMultiplier ?? 0) + 100) / 100,
-					),
-				);
-
+            (
+                callGasLimit *
+                BigInt((overrids.callGasLimitPercentageMultiplier ?? 0) + 100)
+            )/100n;
+		
 		return userOperation;
 	}
 
