@@ -7,13 +7,12 @@ const data = {
 			title: "What is a Passkey?",
 			content: (
 				<p>
-					A Passkey is a modern authentication method that eliminates the need
-					for passwords entirely. Leveraging the security features of your
-					devices such as Touch ID and Face ID, Passkeys provide a more secure
-					and convenient alternative to traditional passwords and 2-factor
-					authentication (2FA) methods. Developed collaboratively by Apple,
-					Google, and Microsoft, Passkeys adhere to the security standards of
-					FIDO and WebAuthn, making them a robust authentication solution for
+					A Passkey is an authentication method that eliminates the need for
+					passwords entirely. Leveraging the security of your devices such as
+					Touch ID and Face ID, Passkeys provide a more secure and convenient
+					alternative to traditional passwords. Developed collaboratively by an
+					alliance of tech companies, Passkeys adhere to the security standards
+					of FIDO and WebAuthn, making them a robust authentication solution for
 					various applications, not limited to web3.
 				</p>
 			),
@@ -23,12 +22,12 @@ const data = {
 			content: (
 				<p>
 					No, Passkeys operate without the need for recovery phrases. Ethereum
-					EOA (Externally Owned Accounts) typically rely on a specific
-					elliptical curve (secp256k1), requiring users to manage passwords or
-					recovery phrases. Smart Accounts, such as Safe, can utilize
-					programmable logic that can validates a difference curve, such as the
-					one used in Passkeys (secp256r1) to secure account ownership and use
-					it for signing transactions.
+					EOA (Externally Owned Accounts) rely on a specific elliptical curve
+					(secp256k1), requiring users to manage passwords or recovery phrases.
+					Smart Accounts, such as Safe, can utilize programmable logic that can
+					validates a difference curve, such as the one used in Passkeys
+					(secp256r1) to secure account ownership and use it for signing
+					transactions.
 				</p>
 			),
 		},
@@ -49,11 +48,11 @@ const data = {
 			content: (
 				<p>
 					Passkey backup options vary depending on your device and password
-					manager preferences. Apple device users typically utilize iCloud
-					Keychain by default, while Android users rely on Google Password
-					Manager. For those who prefer alternative platforms, password managers
-					such as Bitwarden, 1Password, and ProtonPass offer support for
-					Passkeys. Additionally, YubiKey devices are also compatible.
+					manager preferences. Apple device users npm utilize iCloud Keychain by
+					default, while Android users rely on Google Password Manager. For
+					those who prefer alternative platforms, password managers such as
+					Bitwarden, 1Password, and ProtonPass offer support for Passkeys.
+					Additionally, YubiKey devices are also compatible.
 				</p>
 			),
 		},
