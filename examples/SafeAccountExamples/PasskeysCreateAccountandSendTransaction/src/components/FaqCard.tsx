@@ -61,7 +61,7 @@ const data = {
 			content: (
 				<p>
 					To integrate Safe Passkeys into your app, you can begin by using{" "}
-					<i>abstractionkit@0.1.5</i>. Refer to the complete documentation
+					<i>abstractionkit@0.1.6</i>. Refer to the complete documentation
 					available at{" "}
 					<a
 						target="_blank"
