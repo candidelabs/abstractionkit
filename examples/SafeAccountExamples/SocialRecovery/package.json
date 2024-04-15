@@ -1,7 +1,7 @@
 {
-  "name": "CreateAndSendTransaction",
+  "name": "SocialRecovery",
   "version": "1.0.0",
-  "description": "create a new account and send a useroperation and pay gas with erc20 token using a paymaster.",
+  "description": "Add an onchain Guardian using the Social Recovery Module",
   "main": "dist/index.js",
   "scripts": {
     "build": "rm -rf dist && tsc",
