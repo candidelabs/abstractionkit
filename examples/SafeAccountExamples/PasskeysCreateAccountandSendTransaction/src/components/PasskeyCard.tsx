@@ -18,14 +18,14 @@ function PasskeyCard({ passkey, handleCreatePasskeyClick }: { passkey?: PasskeyL
 
   return passkey ? (
 	<div className="card">
-		<p>Account Address</p>
-    <a
-      style={{fontSize: "15px"}}
-      target="_blank"
-      href={`https://${chainName}.etherscan.io/address/${getAccountAddress}`}
-    >
-      {getAccountAddress}
-    </a>
+		<p>Account Address: {" "}
+      <a
+        target="_blank"
+        href={`https://eth-${chainName}.blockscout.com/address/${getAccountAddress}`}
+      >
+        {getAccountAddress}
+      </a>
+    </p>
 	</div>
 ) : (
     <div className="card">

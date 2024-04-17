@@ -121,9 +121,9 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 					Your account setup is in progress. Track your operation on{" "}
 					<a
 						target="_blank"
-						href={`https://jiffyscan.xyz/userOpHash/${userOpHash}?network=${chainName.toLowerCase()}`}
+						href={`https://eth-${chainName.toLowerCase()}.blockscout.com/op/${userOpHash}`}
 					>
-						jiffyscan explorer
+						the block explorer
 					</a>
 				</p>
 			)}
@@ -135,9 +135,9 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 					View more on{" "}
 					<a
 						target="_blank"
-						href={`https://${chainName}.etherscan.io/tx/${txHash}`}
+						href={`https://eth-${chainName}.blockscout.com/tx/${txHash}`}
 					>
-						etherscan
+						the block explorer
 					</a>
 					<br />
 				</>
