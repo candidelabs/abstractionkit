@@ -4,6 +4,8 @@ import { SafeAccountWebAuth as SafeAccount } from 'abstractionkit'
 import { PasskeyLocalStorageFormat } from '../logic/passkeys'
 import { setItem } from '../logic/storage'
 
+const chainName = import.meta.env.VITE_CHAIN_NAME as string;
+
 function PasskeyCard({ passkey, handleCreatePasskeyClick }: { passkey?: PasskeyLocalStorageFormat; handleCreatePasskeyClick: () => void }) {
   const getAccountAddress = useMemo(() => {
     if (!passkey) return undefined
@@ -16,15 +18,14 @@ function PasskeyCard({ passkey, handleCreatePasskeyClick }: { passkey?: PasskeyL
 
   return passkey ? (
 	<div className="card">
-		<p>
-			Account Address:{" "}
-			<a
-				target="_blank"
-				href={`https://sepolia.etherscan.io/address/${getAccountAddress}`}
-			>
-				{getAccountAddress}
-			</a>
-		</p>
+		<p>Account Address</p>
+    <a
+      style={{fontSize: "15px"}}
+      target="_blank"
+      href={`https://${chainName}.etherscan.io/address/${getAccountAddress}`}
+    >
+      {getAccountAddress}
+    </a>
 	</div>
 ) : (
     <div className="card">
