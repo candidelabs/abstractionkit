@@ -516,7 +516,7 @@ export class SocialRecoveryModule extends SafeModule{
 
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
-            ["string[]"], recoveryRequestResult);
+            ["address[]"], recoveryRequestResult);
 
         return decodedCalldata[0];
     }
