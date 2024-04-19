@@ -12,7 +12,7 @@
 
 This example is on Sepolia chain.
 
-It uses a Paymaster Gas Policy to sponsor the gas onbehaf of the Account. Get early access to Candide's Paymaster by visiting our discord https://discord.gg/m2b4juCDfa
+It uses a Paymaster Gas Policy to sponsor the gas onbehaf of the Account. Get early access to Candide's Paymaster by visiting our Discord
 
 # How to use this example
 

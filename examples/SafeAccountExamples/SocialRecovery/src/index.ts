@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     const cost = calculateUserOperationMaxGasCost(userOperation)
     console.log("This useroperation may cost upto : " + cost + " wei")
     console.log("This example uses a Candide paymaster to sponsor the useroperation, so there is not need to fund the sender account.")
-    console.log("Get early access to Candide's sponsor paymaster by visiting our discord https://discord.gg/KJSzy2Rqtg")
+    console.log("Get early access to Candide's sponsor paymaster by visiting our Discord")
 
     //Safe is a multisig that can have multiple owners/signers
     //signUserOperation will create a signature for the provided

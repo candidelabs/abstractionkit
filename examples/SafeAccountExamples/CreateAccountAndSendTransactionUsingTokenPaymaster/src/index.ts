@@ -89,7 +89,7 @@ async function main(): Promise<void> {
     )
     console.log("This example uses a Candide token paymaster.")
     console.log("Please visit https://dashboard.candide.dev/ to get a token paymaster url.")
-    console.log("Please visit our discord https://discord.gg/KJSzy2Rqtg to get some CTT token for testing")
+    console.log("Please visit our Discord to get some CTT token for testing")
 
     //Safe is a multisig that can have multiple owners/signers
     //signUserOperation will create a signature for the provided

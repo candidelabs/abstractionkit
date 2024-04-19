@@ -11,7 +11,7 @@
 # About
 This example is on Sepolia testnet.
 
-This example uses a Candide paymaster to sponsor the useroperation, so there is not need to fund the sender account. Get early access to Candide's sponsor paymaster by visiting our discord https://discord.gg/KJSzy2Rqtg
+This example uses a Candide paymaster to sponsor the useroperation, so there is not need to fund the sender account. Get early access to Candide's sponsor paymaster by visiting our Discord
 
 # How to use this example
 
