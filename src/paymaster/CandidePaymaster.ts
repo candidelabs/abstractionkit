@@ -451,6 +451,8 @@ export class CandidePaymaster extends Paymaster {
 						context: {
 							supportedERC20TokensAndPaymasterMetadata: JSON.stringify(
 								await this.getSupportedERC20TokensAndPaymasterMetadata(),
+								(_key, value) =>
+									typeof value === "bigint" ? "0x" + value.toString(16) : value
 							),
 						},
 					},
