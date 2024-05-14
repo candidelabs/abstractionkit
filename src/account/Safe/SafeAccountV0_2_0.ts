@@ -720,6 +720,14 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			overrids.callGasLimit == null
 		) {
 			if (bundlerRpc != null) {
+				userOperation.callGasLimit = 0n;
+				userOperation.verificationGasLimit = 0n;
+				userOperation.preVerificationGas = 0n;
+				const inputMaxFeePerGas = userOperation.maxFeePerGas;
+				const inputMaxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
+				userOperation.maxFeePerGas = 0n;
+				userOperation.maxPriorityFeePerGas = 0n;
+
 				[preVerificationGas, verificationGasLimit, callGasLimit] =
 					await this.estimateUserOperationGas(
 						userOperation,
@@ -727,6 +735,9 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 						overrids.state_override_set,
 						overrids.numberOfSigners,
 					);
+
+				userOperation.maxFeePerGas = inputMaxFeePerGas
+				userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas
 			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
