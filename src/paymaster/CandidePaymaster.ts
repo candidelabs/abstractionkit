@@ -227,6 +227,13 @@ export class CandidePaymaster extends Paymaster {
 				if (bundlerRpc != null) {
                     const bundler = new Bundler(bundlerRpc);
 
+                    userOperation.callGasLimit = 0n
+                    userOperation.verificationGasLimit = 0n
+                    userOperation.preVerificationGas = 0n
+                    const inputMaxFeePerGas = userOperation.maxFeePerGas
+                    const inputMaxPriorityFeePerGas = userOperation.maxPriorityFeePerGas
+                    userOperation.maxFeePerGas = 0n
+                    userOperation.maxPriorityFeePerGas = 0n
                     const estimation =
                         await bundler.estimateUserOperationGas(
                             userOperation,
@@ -237,6 +244,8 @@ export class CandidePaymaster extends Paymaster {
 						preVerificationGas = estimation.preVerificationGas;
                     verificationGasLimit = estimation.verificationGasLimit;
                     callGasLimit = estimation.callGasLimit;
+                    userOperation.maxFeePerGas = inputMaxFeePerGas
+                    userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas
                 } else {
                     throw new AbstractionKitError(
                         "BAD_DATA",

@@ -273,11 +273,19 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		}
 		userOperation.signature = "0xffffffffffffffffffffffff" + signatures;
 		const bundler = new Bundler(bundlerRpc);
+
+        const inputMaxFeePerGas = userOperation.maxFeePerGas
+        const inputMaxPriorityFeePerGas = userOperation.maxPriorityFeePerGas
+        userOperation.maxFeePerGas = 0n
+        userOperation.maxPriorityFeePerGas = 0n
+
 		const estimation = await bundler.estimateUserOperationGas(
 			userOperation,
 			this.entrypointAddress,
 			state_override_set,
 		);
+        userOperation.maxFeePerGas = inputMaxFeePerGas
+        userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas
 
 		const preVerificationGas = BigInt(estimation.preVerificationGas);
 		const verificationGasLimit =
