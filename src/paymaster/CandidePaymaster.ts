@@ -1,12 +1,14 @@
 import { Paymaster } from "./Paymaster";
-import { calculateUserOperationMaxGasCost, sendJsonRpcRequest } from "../utils";
+import {
+    calculateUserOperationMaxGasCost,
+    sendJsonRpcRequest
+} from "../utils";
 import {
 	UserOperation,
 	SupportedERC20TokensAndMetadata,
 	PmUserOperationResult,
 	PaymasterMetadata,
 	ERC20Token,
-	StateOverrideSet,
 } from "../types";
 import {
 	CandidePaymasterContext,
@@ -192,7 +194,7 @@ export class CandidePaymaster extends Paymaster {
 	 * @param useroperation - useroperation to add paymaster support for
 	 * @param bundlerRpc - bundler rpc for gas estimation
 	 * @param context - paymaster context data
-	 * @param state_override_set - state override values to set during gs estimation
+	 * @param createPaymasterUserOperationOverrides - createPaymasterUserOperationOverrides values to change default values
 	 * @returns promise with UserOperation
 	 */
 	async createPaymasterUserOperation(
@@ -242,7 +244,7 @@ export class CandidePaymaster extends Paymaster {
                             createPaymasterUserOperationOverrides.state_override_set,
                         );
 
-						preVerificationGas = estimation.preVerificationGas;
+                    preVerificationGas = estimation.preVerificationGas;
                     verificationGasLimit = estimation.verificationGasLimit;
                     callGasLimit = estimation.callGasLimit;
                     userOperation.maxFeePerGas = inputMaxFeePerGas
@@ -287,7 +289,7 @@ export class CandidePaymaster extends Paymaster {
                     )
 				)/100n;
 
-				userOperation.verificationGasLimit =
+			userOperation.verificationGasLimit =
                 createPaymasterUserOperationOverrides.verificationGasLimit ??
                 (
 					verificationGasLimit *
@@ -297,13 +299,13 @@ export class CandidePaymaster extends Paymaster {
 				)/100n;
 
 			userOperation.callGasLimit =
-			createPaymasterUserOperationOverrides.callGasLimit ??
-			(
-				callGasLimit *
-				BigInt(                       
-						((createPaymasterUserOperationOverrides.callGasLimitPercentageMultiplier ?? 0) + 100)
-				)
-			)/100n;
+                createPaymasterUserOperationOverrides.callGasLimit ??
+                (
+                    callGasLimit *
+					BigInt(                       
+							((createPaymasterUserOperationOverrides.callGasLimitPercentageMultiplier ?? 0) + 100)
+					)
+                )/100n;
             
             //add small buffer to preVerification gas
 			userOperation.preVerificationGas = userOperation.preVerificationGas + 100n;
@@ -374,7 +376,7 @@ export class CandidePaymaster extends Paymaster {
 	 * paymasterAndData for a sponsor paymaster operation
 	 * @param useroperation - useroperation to add paymaster support for
 	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param state_override_set - state override values to set during gs estimation
+	 * @param createPaymasterUserOperationOverrides - createPaymasterUserOperationOverrides values to change default values
 	 * @returns promise with UserOperation
 	 */
 	async createSponsorPaymasterUserOperation(
@@ -397,7 +399,7 @@ export class CandidePaymaster extends Paymaster {
 	 * @param useroperation - useroperation to add paymaster support for
 	 * @param tokenAddress - target token to pay gas with
 	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param state_override_set - state override values to set during gs estimation
+	 * @param createPaymasterUserOperationOverrides - createPaymasterUserOperationOverrides values to change default values
 	 * @returns promise with UserOperation
 	 */
 	async createTokenPaymasterUserOperation(
@@ -421,7 +423,7 @@ export class CandidePaymaster extends Paymaster {
 			metadata = metadata as PaymasterMetadata;
 			const paymasterAddress = metadata.address;
 
-			const callDataWithApprove =
+            const callDataWithApprove =
 				smartAccount.prependTokenPaymasterApproveToCallData(
 					userOperation.callData,
 					tokenAddress,
@@ -430,7 +432,7 @@ export class CandidePaymaster extends Paymaster {
 				);
 			userOperation.callData = callDataWithApprove;
 
-			return await this.createPaymasterUserOperation(
+            return await this.createPaymasterUserOperation(
 				userOperation,
 				bundlerRpc,
 				{
