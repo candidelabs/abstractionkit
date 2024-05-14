@@ -648,6 +648,12 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		) {
 			if (providerRpc != null) {
 				[maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPrice(providerRpc);
+                if(maxFeePerGas == 0n){
+                    maxFeePerGas = 1n;
+                }
+                if(maxPriorityFeePerGas == 0n){
+                    maxPriorityFeePerGas = 1n;
+                }
 			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
