@@ -577,7 +577,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 
 		const preVerificationGas = BigInt(estimation.preVerificationGas);
 		const verificationGasLimit =
-			BigInt(estimation.verificationGasLimit) + BigInt(numberOfSigners) * 5000n;
+			BigInt(estimation.verificationGasLimit) + BigInt(numberOfSigners) * 20_000n;
 		const callGasLimit = BigInt(estimation.callGasLimit);
 
 		return [preVerificationGas, verificationGasLimit, callGasLimit];
