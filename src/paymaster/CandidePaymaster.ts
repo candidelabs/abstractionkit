@@ -188,6 +188,9 @@ export class CandidePaymaster extends Paymaster {
 	/**
 	 * createPaymasterUserOperation will estimate gas and set
 	 * paymasterAndData
+     * gas limits will only change if the estimated gas limits returned by 
+     * the bundler is more than the input gas limits, then gas overrides
+     * and multipliers will be applied
 	 * @param useroperation - useroperation to add paymaster support for
 	 * @param bundlerRpc - bundler rpc for gas estimation
 	 * @param context - paymaster context data
@@ -241,9 +244,18 @@ export class CandidePaymaster extends Paymaster {
                             overrides.state_override_set,
                         );
 
-						preVerificationGas = estimation.preVerificationGas;
-                    verificationGasLimit = estimation.verificationGasLimit;
-                    callGasLimit = estimation.callGasLimit;
+                    // only change gas limits if the esitmated limits is higher than 
+                    // the supplied
+                    if(preVerificationGas < estimation.preVerificationGas){
+                        preVerificationGas = estimation.preVerificationGas;
+                    }
+                    if(verificationGasLimit < estimation.verificationGasLimit){
+                        verificationGasLimit = estimation.verificationGasLimit;
+                    }
+                    if(callGasLimit < estimation.callGasLimit){
+                        callGasLimit = estimation.callGasLimit;
+                    }
+
                     userOperation.maxFeePerGas = inputMaxFeePerGas
                     userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas
                 } else {
