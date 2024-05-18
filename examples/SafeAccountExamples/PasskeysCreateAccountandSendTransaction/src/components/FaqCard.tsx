@@ -71,7 +71,7 @@ const data = {
 					</a>
 					. Find the source code to this demo on{" "}
 					<a
-						href="https://github.com/candidelabs/abstractionkit/tree/webauth/examples/SafeAccountExamples/PasskeysCreateAccountandSendTransaction"
+						href="https://github.com/candidelabs/abstractionkit/tree/webauthn/examples/SafeAccountExamples/PasskeysCreateAccountandSendTransaction"
 						target="_blank"
 					>
 						github
