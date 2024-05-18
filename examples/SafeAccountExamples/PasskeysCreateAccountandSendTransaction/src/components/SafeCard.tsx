@@ -61,7 +61,7 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 			jsonRPCProvider,
 			bundlerUrl,
 			{
-				dummySingatures: [DummySignature.webauth],
+				dummySignatures: [DummySignature.webAuthn],
 			},
 		);
 

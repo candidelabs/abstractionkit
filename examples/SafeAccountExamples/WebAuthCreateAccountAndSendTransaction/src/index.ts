@@ -97,7 +97,7 @@ async function main(): Promise<void> {
         jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
         bundlerUrl, //the bundler rpc is used to estimate the gas limits.
         {
-          dummySingatures:[DummySignature.webauth]
+          dummySignatures:[DummySignature.webAuthn]
         }
     )
   
