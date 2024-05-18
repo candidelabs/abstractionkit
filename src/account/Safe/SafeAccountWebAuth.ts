@@ -207,7 +207,7 @@ export class SafeAccountWebAuth extends SafeAccount {
 		for(const owner of owners){
 			if(typeof(owner) != "string"){
 				if (numOfWebAuthOwners > 0) {
-					throw RangeError("Only one Webauth owner can be set during initialization");
+					throw RangeError("Only one WebAuthn owner can be set during initialization");
 				}
 				const addWebauthSigner = createCallData(
 					"0xf9c6055b", //setSigner
@@ -347,26 +347,26 @@ export class SafeAccountWebAuth extends SafeAccount {
 		bundlerRpc: string,
 		state_override_set?: StateOverrideSet,
 		numberOfSigners: number = 1,
-		dummySingatures: DummySignature[]|null = null,
+		dummySignatures: DummySignature[]|null = null,
 	): Promise<[bigint, bigint, bigint]> {
 		if (numberOfSigners < 1n) {
 			throw RangeError("numberOfSigners can't be less than 1");
 		}
 		
 
-		if(dummySingatures != null && numberOfSigners != dummySingatures.length){
-			throw RangeError("dummySingatures list should has the length of numberOfSigners");
+		if(dummySignatures != null && numberOfSigners != dummySignatures.length){
+			throw RangeError("dummySignatures list should has the length of numberOfSigners");
 		}
 
 		let signatures = "";
 		for (let i = 0; i < numberOfSigners; i++) {
 			let dummySignature = ""
-			if(dummySingatures == null){
+			if(dummySignatures == null){
 				dummySignature = DummySignature.eoa
 			}else{
-				dummySignature = dummySingatures[i]
+				dummySignature = dummySignatures[i]
 			}
-			signatures = signatures + dummySignature
+			signatures = signatures + dummySignatures
 		}
 		
 		userOperation.signature = "0xffffffffffffffffffffffffffffffffffffffffffffffff" + signatures;
@@ -584,7 +584,7 @@ export class SafeAccountWebAuth extends SafeAccount {
 						bundlerRpc,
 						overrids.state_override_set,
 						overrids.numberOfSigners,
-						overrids.dummySingatures,
+						overrids.dummySignatures,
 					);
 			} else {
 				throw new AbstractionKitError(
