@@ -380,7 +380,7 @@ export class SafeAccountWebAuth extends SafeAccount {
 
 		const preVerificationGas = BigInt(estimation.preVerificationGas);
 		const verificationGasLimit =
-			BigInt(estimation.verificationGasLimit) + BigInt(numberOfSigners) * 5000n;
+			BigInt(estimation.verificationGasLimit) + BigInt(numberOfSigners) * 20_000n;
 		const callGasLimit = BigInt(estimation.callGasLimit);
 
 		return [preVerificationGas, verificationGasLimit, callGasLimit];
