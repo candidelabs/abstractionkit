@@ -36,10 +36,10 @@ const data = {
 			content: (
 				<p>
 					Gas fees in Smart Accounts can be covered by a third party through a
-					feature called Paymaster. Candide Paymaster facilitate applications in
-					sponsoring gas fees based on conditional gas policies. In our demo, we
-					specified a gas policy to cover the gas for the account deployment and
-					the NFT minting action.
+					Paymaster. Candide Paymaster facilitate applications in sponsoring gas
+					fees based on conditional gas policies. In our demo, we specified a
+					gas policy to cover the gas for the account deployment and the NFT
+					minting action.
 				</p>
 			),
 		},
@@ -61,17 +61,16 @@ const data = {
 			content: (
 				<p>
 					To integrate Safe Passkeys into your app, you can begin by using{" "}
-					<i>abstractionkit@0.1.6</i>. Refer to the complete documentation
-					available at{" "}
+					<i>abstractionkit@0.1.12</i>. Refer to the complete{" "}
 					<a
 						target="_blank"
 						href="https://docs.candide.dev/wallet/plugins/passkeys/"
 					>
-						docs.candide.dev/wallet/plugins/passkeys
-					</a>
-					. Find the source code to this demo on{" "}
+						documentation
+					</a>{" "}
+					and find the source code to this demo on{" "}
 					<a
-						href="https://github.com/candidelabs/abstractionkit/tree/webauthn/examples/SafeAccountExamples/PasskeysCreateAccountandSendTransaction"
+						href="https://github.com/candidelabs/abstractionkit/tree/experimental/examples/SafeAccountExamples/PasskeysCreateAccountandSendTransaction"
 						target="_blank"
 					>
 						github
