@@ -3,7 +3,7 @@ import {Bundler} from "abstractionkit";
 
 async function main(): Promise<void> {
     let bundler: Bundler = new Bundler(
-        "https://sepolia.test.voltaire.candidewallet.com/rpc",
+        "https://sepolia.voltaire.candidewallet.com/rpc",
     );
     
     //an example for using a bundler json rpc methods other than sendUserOperation and estimateUserOperationGas which is covered in another example
