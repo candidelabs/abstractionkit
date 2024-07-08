@@ -1,3 +1,5 @@
+import { AbstractionKitError } from "./errors";
+
 export { SmartAccount } from "./account/SmartAccount";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
 
@@ -48,3 +50,5 @@ export {
 } from "./types";
 
 export { ZeroAddress, UserOperationDummyValues } from "./constants";
+
+export { AbstractionKitError } from "./errors";
