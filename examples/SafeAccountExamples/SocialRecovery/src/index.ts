@@ -2,10 +2,9 @@ import * as dotenv from 'dotenv'
 
 import {
     SafeAccountV0_2_0 as SafeAccount,
-    MetaTransaction,
+    calculateUserOperationMaxGasCost,
     CandidePaymaster,
-    getFunctionSelector,
-    createCallData,
+    SocialRecoveryModule,
 } from "abstractionkit";
 
 async function main(): Promise<void> {
@@ -17,8 +16,9 @@ async function main(): Promise<void> {
     const ownerPublicAddress = process.env.PUBLIC_ADDRESS as string
     const ownerPrivateKey = process.env.PRIVATE_KEY as string
     const paymasterRPC = process.env.PAYMASTER_RPC as string;
-    const paymasterTokenAddress = process.env.PAYMASTER_TOKEN_ADDRESS as string;
     
+    const guardianPublicAddress = process.env.GUARDIAN_PUBLIC_ADDRESS as string
+
     //initializeNewAccount only needed when the smart account
     //have not been deployed yet for its first useroperation.
     //You can store the accountAddress to use it to initialize 
@@ -27,32 +27,18 @@ async function main(): Promise<void> {
         [ownerPublicAddress],
     )
 
-    //After the account contract is deployed, no need to call initializeNewAccount
-    //let smartAccount = new SafeAccount(accountAddress)
-
     console.log("Account address(sender) : " + smartAccount.accountAddress)
+    
+    const srm = new SocialRecoveryModule()
 
-    //create two meta transaction to mint two NFTs
-    //you can use favorite method (like ethers.js) to construct the call data 
-    const nftContractAddress = "0x9a7af758aE5d7B6aAE84fe4C5Ba67c041dFE5336";
-    const mintFunctionSignature =  'mint(address)';
-    const mintFunctionSelector =  getFunctionSelector(mintFunctionSignature);
-    const mintTransactionCallData = createCallData(
-        mintFunctionSelector, 
-        ["address"],
-        [smartAccount.accountAddress]
+    const transction1 = srm.createEnableModuleMetaTransaction(
+        smartAccount.accountAddress
     );
-    const transaction1 :MetaTransaction ={
-        to: nftContractAddress,
-        value: 0n,
-        data: mintTransactionCallData,
-    }
-
-    const transaction2 :MetaTransaction ={
-        to: nftContractAddress,
-        value: 0n,
-        data: mintTransactionCallData,
-    }
+    const transction2 = srm.createAddGuardianWithThresholdMetaTransaction(
+        smartAccount.accountAddress,
+        guardianPublicAddress,
+        1n //threshold
+    );
 
     //createUserOperation will determine the nonce, fetch the gas prices,
     //estimate gas limits and return a useroperation to be signed.
@@ -60,42 +46,24 @@ async function main(): Promise<void> {
     let userOperation = await smartAccount.createUserOperation(
 		[
             //You can batch multiple transactions to be executed in one useroperation.
-            transaction1, transaction2,
+            transction1,
+            transction2
         ],
         jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
         bundlerUrl, //the bundler rpc is used to estimate the gas limits.
-        //uncomment the following values for polygon or any chains where
-        //gas prices change rapidly
-        //{
-        //    maxFeePerGasPercentageMultiplier:130,
-        //    maxPriorityFeePerGasPercentageMultiplier:130
-        //}
 	)
 
     let paymaster: CandidePaymaster = new CandidePaymaster(
-        paymasterRPC,
+        paymasterRPC
     )
 
-    userOperation = await paymaster.createTokenPaymasterUserOperation(
-        smartAccount,
-        userOperation,
-        paymasterTokenAddress,
-        bundlerUrl,
-    )
+    userOperation = await paymaster.createSponsorPaymasterUserOperation(
+        userOperation, bundlerUrl)
 
-    const cost = await paymaster.calculateUserOperationErc20TokenMaxGasCost(
-        userOperation,
-        paymasterTokenAddress
-    )
-    console.log("This useroperation may cost upto : " + cost + " wei in CTT token")
-    console.log(
-        "Please fund the sender account : " + 
-        userOperation.sender +
-        " with more than "+ cost + " wei CTT token"
-    )
-    console.log("This example uses a Candide token paymaster.")
-    console.log("Please visit https://dashboard.candide.dev/ to get a token paymaster url.")
-    console.log("Please visit our Discord to get some CTT token for testing")
+    const cost = calculateUserOperationMaxGasCost(userOperation)
+    console.log("This useroperation may cost upto : " + cost + " wei")
+    console.log("This example uses a Candide paymaster to sponsor the useroperation, so there is not need to fund the sender account.")
+    console.log("Get early access to Candide's sponsor paymaster by visiting our Discord")
 
     //Safe is a multisig that can have multiple owners/signers
     //signUserOperation will create a signature for the provided
@@ -107,7 +75,7 @@ async function main(): Promise<void> {
 	)
     console.log(userOperation)
 
-    //use the bundler rpc to send a useroperation
+    //use the bundler rpc to send a userOperation
     //sendUserOperation will return a SendUseroperationResponse object
     //that can be awaited for the useroperation to be included onchain
     const sendUserOperationResponse = await smartAccount.sendUserOperation(
@@ -122,7 +90,17 @@ async function main(): Promise<void> {
     console.log("Useroperation receipt received.")
     console.log(userOperationReceiptResult)
     if(userOperationReceiptResult.success){
-        console.log("Two Nfts were minted. The transaction hash is : " + userOperationReceiptResult.receipt.transactionHash)
+        console.log("Successful Useroperation. The transaction hash is : " + userOperationReceiptResult.receipt.transactionHash)
+        const isGuardian = await srm.isGuardian(
+            jsonRpcNodeProvider,
+            smartAccount.accountAddress, 
+            guardianPublicAddress
+        );
+        if(isGuardian){
+            console.log("Guardian added confirmed. Guardian address is : " + guardianPublicAddress)
+        }else{
+            console.log("Adding guardian failed.")
+        }
     }else{
         console.log("Useroperation execution failed")
     }

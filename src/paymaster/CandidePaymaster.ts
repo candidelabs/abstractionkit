@@ -325,6 +325,7 @@ export class CandidePaymaster extends Paymaster {
 			userOperation.verificationGasLimit =
 				userOperation.verificationGasLimit + 10000n;
 
+
             //call the paymaster rpc to sponsor the useroperation
 			const jsonRpcResult = await sendJsonRpcRequest(
 				this.rpcUrl,

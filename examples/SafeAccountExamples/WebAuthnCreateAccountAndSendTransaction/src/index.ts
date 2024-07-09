@@ -1,12 +1,18 @@
 import * as dotenv from 'dotenv'
+import * as ethers from 'ethers'
 
-import {
-    SafeAccountV0_2_0 as SafeAccount,
+import { 
+    SafeAccountWebAuth as SafeAccount,
     MetaTransaction,
     CandidePaymaster,
     getFunctionSelector,
     createCallData,
+    WebauthPublicKey,
+    WebauthSignatureData,
+    SignerSignaturePair,
+    DummySignature
 } from "abstractionkit";
+import {UserVerificationRequirement, WebAuthnCredentials, extractClientDataFields, extractPublicKey, extractSignature } from './webauthn';
 
 async function main(): Promise<void> {
     //get values from .env
@@ -14,17 +20,43 @@ async function main(): Promise<void> {
     const chainId = BigInt(process.env.CHAIN_ID as string)
     const bundlerUrl = process.env.BUNDLER_URL as string
     const jsonRpcNodeProvider = process.env.JSON_RPC_NODE_PROVIDER as string
-    const ownerPublicAddress = process.env.PUBLIC_ADDRESS as string
-    const ownerPrivateKey = process.env.PRIVATE_KEY as string
+    const entrypoint = process.env.ENTRYPOINT_ADDRESS as string
     const paymasterRPC = process.env.PAYMASTER_RPC as string;
-    const paymasterTokenAddress = process.env.PAYMASTER_TOKEN_ADDRESS as string;
-    
+
+    const navigator = {
+        credentials: new WebAuthnCredentials(),
+    }
+
+    const credential = navigator.credentials.create({
+        publicKey: {
+          rp: {
+            name: 'Safe',
+            id: 'safe.global',
+          },
+          user: {
+            id: ethers.getBytes(ethers.id('chucknorris')),
+            name: 'chucknorris',
+            displayName: 'Chuck Norris',
+          },
+          challenge: ethers.toBeArray(Date.now()),
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+        },
+      })
+
+   
+    const publicKey = extractPublicKey(credential.response)
+
+    const webauthPublicKey: WebauthPublicKey = {
+      x:publicKey.x,
+      y:publicKey.y,
+    }
+
     //initializeNewAccount only needed when the smart account
     //have not been deployed yet for its first useroperation.
     //You can store the accountAddress to use it to initialize 
     //the SafeAccount object for the following useroperations
     let smartAccount = SafeAccount.initializeNewAccount(
-        [ownerPublicAddress],
+      [webauthPublicKey]
     )
 
     //After the account contract is deployed, no need to call initializeNewAccount
@@ -58,56 +90,63 @@ async function main(): Promise<void> {
     //estimate gas limits and return a useroperation to be signed.
     //you can override all these values using the overrides parameter.
     let userOperation = await smartAccount.createUserOperation(
-		[
+		    [
             //You can batch multiple transactions to be executed in one useroperation.
             transaction1, transaction2,
         ],
         jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
         bundlerUrl, //the bundler rpc is used to estimate the gas limits.
-        //uncomment the following values for polygon or any chains where
-        //gas prices change rapidly
-        //{
-        //    maxFeePerGasPercentageMultiplier:130,
-        //    maxPriorityFeePerGasPercentageMultiplier:130
-        //}
-	)
-
+        {
+          dummySignatures:[DummySignature.webAuthn]
+        }
+    )
+  
     let paymaster: CandidePaymaster = new CandidePaymaster(
-        paymasterRPC,
+        paymasterRPC
     )
 
-    userOperation = await paymaster.createTokenPaymasterUserOperation(
-        smartAccount,
-        userOperation,
-        paymasterTokenAddress,
-        bundlerUrl,
+    userOperation = await paymaster.createSponsorPaymasterUserOperation(
+        userOperation, bundlerUrl)
+  
+
+    const safeInitOpHash = SafeAccount.getUserOperationEip712Hash(
+			userOperation,
+			chainId,
+			0n,
+			0n,
+			entrypoint
+		)
+    
+    const assertion = navigator.credentials.get({
+      publicKey: {
+        challenge: ethers.getBytes(safeInitOpHash),
+        rpId: 'safe.global',
+        allowCredentials: [{ type: 'public-key', id: new Uint8Array(credential.rawId) }],
+        userVerification: UserVerificationRequirement.required,
+      },
+    })
+
+    const webauthSignatureData:WebauthSignatureData = {
+      authenticatorData: assertion.response.authenticatorData,
+      clientDataFields: extractClientDataFields(assertion.response),
+      rs: extractSignature(assertion.response),
+    }
+
+    const webauthSignature:string = SafeAccount.createWebAuthnSignature(
+      webauthSignatureData
     )
 
-    const cost = await paymaster.calculateUserOperationErc20TokenMaxGasCost(
-        userOperation,
-        paymasterTokenAddress
-    )
-    console.log("This useroperation may cost upto : " + cost + " wei in CTT token")
-    console.log(
-        "Please fund the sender account : " + 
-        userOperation.sender +
-        " with more than "+ cost + " wei CTT token"
-    )
-    console.log("This example uses a Candide token paymaster.")
-    console.log("Please visit https://dashboard.candide.dev/ to get a token paymaster url.")
-    console.log("Please visit our Discord to get some CTT token for testing")
+    const SignerSignaturePair:SignerSignaturePair = {
+      signer:webauthPublicKey,
+      signature:webauthSignature,
+    }
 
-    //Safe is a multisig that can have multiple owners/signers
-    //signUserOperation will create a signature for the provided
-    //privateKeys
-    userOperation.signature = smartAccount.signUserOperation(
-		userOperation,
-        [ownerPrivateKey],
-        chainId,
-	)
-    console.log(userOperation)
+    userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
+      [SignerSignaturePair],
+      userOperation.nonce == 0n
+    )
 
-    //use the bundler rpc to send a useroperation
+    //use the bundler rpc to send a userOperation
     //sendUserOperation will return a SendUseroperationResponse object
     //that can be awaited for the useroperation to be included onchain
     const sendUserOperationResponse = await smartAccount.sendUserOperation(

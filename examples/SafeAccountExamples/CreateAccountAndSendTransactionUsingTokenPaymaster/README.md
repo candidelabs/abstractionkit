@@ -16,7 +16,7 @@ In this example you will need fund the new account address(sender) with some CTT
 
 Get a paymaster API key on our [dashboard](https://dashboard.candide.dev/).
 
-Get test tokens by pinging us on [discord](https://discord.gg/KJSzy2Rqtg).
+Get test tokens by pinging us on Discord.
 
 # How to use this example
 
