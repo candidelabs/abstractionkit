@@ -1,7 +1,7 @@
 import * as dotenv from 'dotenv'
 
 import {
-    SafeAccountV0_2_0 as SafeAccount,
+    SafeAccountV0_3_0 as SafeAccount,
     MetaTransaction,
     CandidePaymaster,
     getFunctionSelector,
@@ -64,12 +64,16 @@ async function main(): Promise<void> {
         ],
         jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
         bundlerUrl, //the bundler rpc is used to estimate the gas limits.
+        {
+            //add some extra buffer to the estimated gas limits
+            preVerificationGasPercentageMultiplier:130,
+            callGasLimitPercentageMultiplier:130,
+        
         //uncomment the following values for polygon or any chains where
         //gas prices change rapidly
-        //{
         //    maxFeePerGasPercentageMultiplier:130,
         //    maxPriorityFeePerGasPercentageMultiplier:130
-        //}
+        }
 	)
 
     let paymaster: CandidePaymaster = new CandidePaymaster(

@@ -1,11 +1,12 @@
 import * as dotenv from 'dotenv'
 
 import { 
-    SafeAccountV0_2_0 as SafeAccount,
+    SafeAccountV0_3_0 as SafeAccount,
     MetaTransaction,
     calculateUserOperationMaxGasCost,
     getFunctionSelector,
     createCallData,
+    EOADummySignature,
 } from "abstractionkit";
 
 async function main(): Promise<void> {
@@ -68,7 +69,7 @@ async function main(): Promise<void> {
         jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
         bundlerUrl, //the bundler rpc is used to estimate the gas limits.
         {
-            numberOfSigners:2, // set the number of signers for accurate gas estimation
+            dummySignatures:[EOADummySignature, EOADummySignature]
         //uncomment the following values for polygon or any chains where
         //gas prices change rapidly
         //    maxFeePerGasPercentageMultiplier:130,

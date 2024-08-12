@@ -1,12 +1,13 @@
 import * as dotenv from 'dotenv'
 
 import {
-    SafeAccountV0_2_0 as SafeAccount,
+    SafeAccountV0_3_0 as SafeAccount,
     MetaTransaction,
     calculateUserOperationMaxGasCost,
     CandidePaymaster,
     getFunctionSelector,
     createCallData,
+    UserOperationV7
 } from "abstractionkit";
 
 async function main(): Promise<void> {
@@ -48,19 +49,13 @@ async function main(): Promise<void> {
         data: mintTransactionCallData,
     }
 
-    const transaction2 :MetaTransaction ={
-        to: nftContractAddress,
-        value: 0n,
-        data: mintTransactionCallData,
-    }
-
     //createUserOperation will determine the nonce, fetch the gas prices,
     //estimate gas limits and return a useroperation to be signed.
     //you can override all these values using the overrides parameter.
     let userOperation = await smartAccount.createUserOperation(
 		[
             //You can batch multiple transactions to be executed in one useroperation.
-            transaction1, transaction2,
+            transaction1, //transaction2,
         ],
         jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
         bundlerUrl, //the bundler rpc is used to estimate the gas limits.
@@ -78,8 +73,10 @@ async function main(): Promise<void> {
         paymasterRPC
     )
 
-    userOperation = await paymaster.createSponsorPaymasterUserOperation(
+    let [paymasterUserOperation, _sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
         userOperation, bundlerUrl)
+    userOperation = paymasterUserOperation as UserOperationV7; 
+
 
     const cost = calculateUserOperationMaxGasCost(userOperation)
     console.log("This useroperation may cost upto : " + cost + " wei")

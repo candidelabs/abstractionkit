@@ -2,7 +2,7 @@ import * as dotenv from 'dotenv'
 import * as ethers from 'ethers'
 
 import { 
-    SafeAccountWebAuth as SafeAccount,
+    SafeAccountV0_3_0 as SafeAccount,
     MetaTransaction,
     CandidePaymaster,
     getFunctionSelector,
@@ -10,7 +10,7 @@ import {
     WebauthPublicKey,
     WebauthSignatureData,
     SignerSignaturePair,
-    DummySignature
+    WebauthDummySignerSignaturePair
 } from "abstractionkit";
 import {UserVerificationRequirement, WebAuthnCredentials, extractClientDataFields, extractPublicKey, extractSignature } from './webauthn';
 
@@ -92,22 +92,27 @@ async function main(): Promise<void> {
     let userOperation = await smartAccount.createUserOperation(
 		    [
             //You can batch multiple transactions to be executed in one useroperation.
-            transaction1, transaction2,
+            transaction1, //transaction2,
         ],
         jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
         bundlerUrl, //the bundler rpc is used to estimate the gas limits.
         {
-          dummySignatures:[DummySignature.webAuthn]
+          dummySignatures:[WebauthDummySignerSignaturePair]
         }
     )
   
     let paymaster: CandidePaymaster = new CandidePaymaster(
-        paymasterRPC
+        paymasterRPC,// "v2"
     )
-
-    userOperation = await paymaster.createSponsorPaymasterUserOperation(
-        userOperation, bundlerUrl)
-  
+    console.log(userOperation)
+    let [paymasterUserOperation, _sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
+        userOperation,
+        bundlerUrl,
+        //{
+        //    verificationGasLimitPercentageMultiplier:130
+        //}
+    )
+    userOperation = paymasterUserOperation; 
 
     const safeInitOpHash = SafeAccount.getUserOperationEip712Hash(
 			userOperation,
@@ -143,7 +148,9 @@ async function main(): Promise<void> {
 
     userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
       [SignerSignaturePair],
-      userOperation.nonce == 0n
+      0n, //validAfter - zero means no limits
+      0n, //validUntil - zero means no limits
+      {isInit:userOperation.nonce == 0n}
     )
 
     //use the bundler rpc to send a userOperation

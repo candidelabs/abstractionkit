@@ -1,7 +1,7 @@
 import * as dotenv from 'dotenv'
 
 import { 
-    SafeAccountV0_2_0 as SafeAccount,
+    SafeAccountV0_3_0,
     MetaTransaction,
     calculateUserOperationMaxGasCost,
     getFunctionSelector,
@@ -21,7 +21,7 @@ async function main(): Promise<void> {
     //have not been deployed yet for its first useroperation.
     //You can store the accountAddress to use it to initialize 
     //the SafeAccount object for the following useroperations
-    let smartAccount = SafeAccount.initializeNewAccount(
+    let smartAccount = SafeAccountV0_3_0.initializeNewAccount(
         [ownerPublicAddress],
     )
 
@@ -64,12 +64,12 @@ async function main(): Promise<void> {
         bundlerUrl, //the bundler rpc is used to estimate the gas limits.
         //uncomment the following values for polygon or any chains where
         //gas prices change rapidly
-        //{
+        {
+        //    verificationGasLimitPercentageMultiplier:130
         //    maxFeePerGasPercentageMultiplier:130,
         //    maxPriorityFeePerGasPercentageMultiplier:130
-        //}
+        }
 	)
-
     const cost = calculateUserOperationMaxGasCost(userOperation)
     console.log("This useroperation may cost upto : " + cost + " wei")
     console.log(

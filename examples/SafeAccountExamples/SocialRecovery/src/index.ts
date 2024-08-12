@@ -1,10 +1,10 @@
 import * as dotenv from 'dotenv'
 
 import {
-    SafeAccountV0_2_0 as SafeAccount,
+    SafeAccountV0_3_0 as SafeAccount,
     calculateUserOperationMaxGasCost,
     CandidePaymaster,
-    SocialRecoveryModule,
+    SocialRecoveryModule
 } from "abstractionkit";
 
 async function main(): Promise<void> {
@@ -35,7 +35,6 @@ async function main(): Promise<void> {
         smartAccount.accountAddress
     );
     const transction2 = srm.createAddGuardianWithThresholdMetaTransaction(
-        smartAccount.accountAddress,
         guardianPublicAddress,
         1n //threshold
     );
@@ -57,8 +56,9 @@ async function main(): Promise<void> {
         paymasterRPC
     )
 
-    userOperation = await paymaster.createSponsorPaymasterUserOperation(
+    let [paymasterUserOperation, _sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
         userOperation, bundlerUrl)
+    userOperation = paymasterUserOperation; 
 
     const cost = calculateUserOperationMaxGasCost(userOperation)
     console.log("This useroperation may cost upto : " + cost + " wei")
