@@ -1,18 +1,12 @@
 import { SafeModule } from "./SafeModule";
 import { AbstractionKitError,ensureError } from "src/errors";
-import {
-	createCallData,
-	getFunctionSelector,
-    sendJsonRpcRequest,
-} from "../../../utils";
-
+import { createCallData, sendJsonRpcRequest } from "../../../utils";
 import { MetaTransaction } from "../../../types";
-
 import { AbiCoder } from "ethers";
 
 export class SocialRecoveryModule extends SafeModule{
     static readonly DEFAULT_SOCIAL_RECOVERY_ADDRESS =
-        "0xFc98B4a5120959511873a51daBd6c1889897412d";
+        "0x4Aa5Bf7D840aC607cb5BD3249e6Af6FC86C04897";
 
     constructor(
 		moduleAddress: string = SocialRecoveryModule.DEFAULT_SOCIAL_RECOVERY_ADDRESS,
@@ -36,10 +30,8 @@ export class SocialRecoveryModule extends SafeModule{
         newThreshold: number,
         execute: boolean
     ):MetaTransaction{
-        const functionSignature = "confirmRecovery(address,address[],uint256,bool)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"confirmRecovery(address,address[],uint256,bool)"
+        const functionSelector = "0x064e2d0e";
         const callData = createCallData(
             functionSelector,
             ["address", "address[]", "uint256", "bool"],
@@ -59,7 +51,7 @@ export class SocialRecoveryModule extends SafeModule{
      * @param accountAddress The target account.
      * @param newOwners The new owners' addressess.
      * @param newThreshold The new threshold for the safe.
-     * @param signatures The guardians signatures.
+     * @param signatureData The guardians signers and signatures pair list.
      * @param execute Whether to auto-start execution of recovery.
 	 * @returns a MetaTransaction
      */
@@ -67,17 +59,21 @@ export class SocialRecoveryModule extends SafeModule{
         accountAddress: string,
         newOwners: string[],
         newThreshold: number,
-        signatures: string[],
+        signatureData: RecoverySignatureData,
         execute: boolean
     ):MetaTransaction{
-        const functionSignature = "multiConfirmRecovery(address,address[],uint256,address[],bool)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"multiConfirmRecovery(address,address[],uint256,SignatureData[],bool)"
+        const functionSelector = "0x0728e1e7";
         const callData = createCallData(
             functionSelector,
-            ["address", "address[]", "uint256", "address[]", "bool"],
-            [accountAddress, newOwners, newThreshold, signatures, execute],
+            ["address", "address[]", "uint256", "(address,bytes)", "bool"],
+            [
+                accountAddress,
+                newOwners,
+                newThreshold,
+                [signatureData.signer, signatureData.signature],
+                execute
+            ],
         );
         return {
             to:this.moduleAddress,
@@ -99,10 +95,8 @@ export class SocialRecoveryModule extends SafeModule{
         newOwners: string[],
         newThreshold: number,
     ):MetaTransaction{
-        const functionSignature = "executeRecovery(address,address[],uint256)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"executeRecovery(address,address[],uint256)"
+        const functionSelector = "0xb1f85f69";
         const callData = createCallData(
             functionSelector,
             ["address", "address[]", "uint256"],
@@ -124,10 +118,8 @@ export class SocialRecoveryModule extends SafeModule{
     public createFinalizeRecoveryMetaTransaction(
         accountAddress: string,
     ):MetaTransaction{
-        const functionSignature = "finalizeRecovery(address)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"finalizeRecovery(address)"
+        const functionSelector = "0x315a7af3";
         const callData = createCallData(
             functionSelector,
             ["address"],
@@ -142,21 +134,13 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * create a MetaTransction that lets the account cancel an ongoing recovery request.
-     * @param accountAddress The target account.
 	 * @returns a MetaTransaction
      */
-    public createCancelRecoveryMetaTransaction(
-        accountAddress: string,
-    ):MetaTransaction{
-        const functionSignature = "cancelRecovery(address)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
-        const callData = createCallData(
-            functionSelector,
-            ["address"],
-            [accountAddress],
-        );
+    public createCancelRecoveryMetaTransaction():MetaTransaction{
+        //"cancelRecovery()";
+        const functionSelector = "0x0ba234d6";
+        const callData = functionSelector;
+
         return {
             to:this.moduleAddress,
             data: callData,
@@ -166,24 +150,20 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * create a MetaTransaction that lets the owner add a guardian for its account.
-     * @param accountAddress The target account.
      * @param guardian The guardian to add.
      * @param threshold The new threshold that will be set after addition.
 	 * @returns a MetaTransaction
      */
     public createAddGuardianWithThresholdMetaTransaction(
-        accountAddress: string,
         guardianAddress: string,
         threshold: bigint,
     ):MetaTransaction{
-        const functionSignature = "addGuardianWithThreshold(address,address,uint256)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"addGuardianWithThreshold(address,uint256)"
+        const functionSelector = "0xbe0e54d7";
         const callData = createCallData(
             functionSelector,
-            ["address", "address", "uint256"],
-            [accountAddress, guardianAddress, threshold],
+            ["address", "uint256"],
+            [guardianAddress, threshold],
         );
         return {
             to:this.moduleAddress,
@@ -194,26 +174,22 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * create MetaTransaction that lets the owner revoke a guardian from its account.
-     * @param accountAddress The target account.
      * @param prevGuardian The previous guardian linking to the guardian in the linked list.
      * @param guardian The guardian to revoke.
      * @param threshold The new threshold that will be set after execution of revokation.
 	 * @returns a MetaTransaction
      */
     public createRevokeGuardianWithThresholdMetaTransaction(
-        accountAddress: string,
         prevGuardianAddress: string,
         guardianAddress: string,
         threshold: bigint,
     ):MetaTransaction{
-        const functionSignature = "revokeGuardianWithThreshold(address,address,address,uint256)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"revokeGuardianWithThreshold(address,address,uint256)"
+        const functionSelector = "0x936f7d86";
         const callData = createCallData(
             functionSelector,
-            ["address", "address", "address","uint256"],
-            [accountAddress, prevGuardianAddress, guardianAddress, threshold],
+            ["address", "address", "uint256"],
+            [prevGuardianAddress, guardianAddress, threshold],
         );
         return {
             to:this.moduleAddress,
@@ -224,22 +200,18 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * create MetaTransaction that lets the owner change the guardian threshold required to initiate a recovery.
-     * @param accountAddress The target account.
      * @param threshold The new threshold that will be set after execution of revokation.
 	 * @returns a MetaTransaction
      */
     public createChangeThresholdMetaTransaction(
-        accountAddress: string,
         threshold: bigint,
     ):MetaTransaction{
-        const functionSignature = "changeThreshold(address,uint256)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"changeThreshold(address,uint256)"
+        const functionSelector = "0x694e80c3";
         const callData = createCallData(
             functionSelector,
-            ["address","uint256"],
-            [accountAddress, threshold],
+            ["uint256"],
+            [threshold],
         );
         return {
             to:this.moduleAddress,
@@ -247,8 +219,10 @@ export class SocialRecoveryModule extends SafeModule{
             value: 0n
         }
     }
+
     /**
      * Generates the recovery hash that should be signed by the guardian to authorize a recovery
+     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
      * @param accountAddress The target account.
      * @param newOwners The new owners' addressess.
      * @param newThreshold The new threshold for the safe.
@@ -256,16 +230,14 @@ export class SocialRecoveryModule extends SafeModule{
 	 * @returns a recovery hash
      */
     public async getRecoveryHash(
-        rpcUrl: string,
+        nodeRpcUrl: string,
         accountAddress: string,
         newOwners: string[],
         newThreshold: number,
         nonce: bigint,
     ):Promise<string>{
-        const functionSignature = "getRecoveryHash(address,address[],uint256,uint256)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"getRecoveryHash(address,address[],uint256,uint256)"
+        const functionSelector = "0x5f19df08";
         const callData = createCallData(
             functionSelector,
             ["address", "address[]", "uint256", "uint256"],
@@ -277,22 +249,21 @@ export class SocialRecoveryModule extends SafeModule{
             data: callData,
         };
 
-        return sendEthCallRequest(rpcUrl, ethCallParams, "latest");
+        return sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
     }
 
     /**
      * Retrieves the account's current ongoing recovery request.
+     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
      * @param accountAddress The target account.
      * @return request The account's current recovery request
      */
     public async getRecoveryRequest(
-        rpcUrl: string,
+        nodeRpcUrl: string,
         accountAddress: string,
     ):Promise<RecoveryRequest>{
-        const functionSignature = "getRecoveryRequest(address)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"getRecoveryRequest(address)"
+        const functionSelector = "0x4f9a28b9";
         const callData = createCallData(
             functionSelector,
             ["address"],
@@ -304,37 +275,37 @@ export class SocialRecoveryModule extends SafeModule{
             data: callData,
         };
 
-        const recoveryRequestResult = await sendEthCallRequest(rpcUrl, ethCallParams, "latest");
+        const recoveryRequestResult = await sendEthCallRequest(
+            nodeRpcUrl, ethCallParams, "latest");
 
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
             ["uint256", "uint256", "uint64", "address[]"], recoveryRequestResult);
 
         return {
-            guardiansApprovalCount: decodedCalldata[0],
-            newThreshold: decodedCalldata[1],
-            executeAfter: decodedCalldata[2],
+            guardiansApprovalCount: BigInt(decodedCalldata[0]),
+            newThreshold: BigInt(decodedCalldata[1]),
+            executeAfter: BigInt(decodedCalldata[2]),
             newOwners: decodedCalldata[3],
         }
     }
 
     /**
      * Retrieves the guardian approval count for this particular recovery request at current nonce.
+     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
      * @param accountAddress The target account.
      * @param newOwners The new owners' addressess.
      * @param newThreshold The new threshold for the safe.
      * @return The account's current recovery request
      */
     public async getRecoveryApprovals(
-        rpcUrl: string,
+        nodeRpcUrl: string,
         accountAddress: string,
         newOwners: string[],
         newThreshold: number,
     ):Promise<bigint>{
-        const functionSignature = "getRecoveryApprovals(address,address[],uint256)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"getRecoveryApprovals(address,address[],uint256)"
+        const functionSelector = "0x6c6595ca";
         const callData = createCallData(
             functionSelector,
             ["address", "address[]", "uint256"],
@@ -345,17 +316,18 @@ export class SocialRecoveryModule extends SafeModule{
             to: this.moduleAddress,
             data: callData,
         };
-        const recoveryRequestResult = await sendEthCallRequest(rpcUrl, ethCallParams, "latest");
+        const recoveryRequestResult = await sendEthCallRequest(
+            nodeRpcUrl, ethCallParams, "latest");
 
         const abiCoder = AbiCoder.defaultAbiCoder();
-	    const decodedCalldata = abiCoder.decode(
-            ["uint256"], recoveryRequestResult);
+	    const decodedCalldata = abiCoder.decode(["uint256"], recoveryRequestResult);
 
         return BigInt(decodedCalldata[0]);
     }
 
     /**
      * Retrieves specific guardian approval status a particular recovery request at current nonce.
+     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
      * @param accountAddress The target account.
      * @param guardian The guardian.
      * @param newOwners The new owners' addressess.
@@ -363,16 +335,14 @@ export class SocialRecoveryModule extends SafeModule{
      * @return guardian approval status
      */
     public async hasGuardianApproved(
-        rpcUrl: string,
+        nodeRpcUrl: string,
         accountAddress: string,
         guardian: string,
         newOwners: string[],
         newThreshold: number,
     ):Promise<boolean>{
-        const functionSignature = "hasGuardianApproved(address,address,address[],uint256)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"hasGuardianApproved(address,address,address[],uint256)"
+        const functionSelector = "0x37d82c36";
         const callData = createCallData(
             functionSelector,
             ["address", "address", "address[]", "uint256"],
@@ -383,7 +353,8 @@ export class SocialRecoveryModule extends SafeModule{
             to: this.moduleAddress,
             data: callData,
         };
-        const recoveryRequestResult = await sendEthCallRequest(rpcUrl, ethCallParams, "latest");
+        const recoveryRequestResult = await sendEthCallRequest(
+            nodeRpcUrl, ethCallParams, "latest");
 
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
@@ -394,19 +365,18 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * Checks if an address is a guardian for an account.
+     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
      * @param accountAddress The target account.
      * @param guardian The address to check.
      * @return `true` if the address is a guardian for the account otherwise `false`.
      */
     public async isGuardian(
-        rpcUrl: string,
+        nodeRpcUrl: string,
         accountAddress: string,
         guardian: string,
     ):Promise<boolean>{
-        const functionSignature = "isGuardian(address,address)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"isGuardian(address,address)"
+        const functionSelector = "0xd4ee9734";
         const callData = createCallData(
             functionSelector,
             ["address", "address"],
@@ -417,7 +387,8 @@ export class SocialRecoveryModule extends SafeModule{
             to: this.moduleAddress,
             data: callData,
         };
-        const recoveryRequestResult = await sendEthCallRequest(rpcUrl, ethCallParams, "latest");
+        const recoveryRequestResult = await sendEthCallRequest(
+            nodeRpcUrl, ethCallParams, "latest");
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
             ["bool"], recoveryRequestResult);
@@ -427,17 +398,16 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * Counts the number of active guardians for an account.
+     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
      * @param accountAddress The target account.
      * @return The number of active guardians for an account.
      */
     public async guardiansCount(
-        rpcUrl: string,
+        nodeRpcUrl: string,
         accountAddress: string,
     ):Promise<bigint>{
-        const functionSignature = "guardiansCount(address)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"guardiansCount(address)"
+        const functionSelector = "0xc026e7ee";
         const callData = createCallData(
             functionSelector,
             ["address"],
@@ -448,7 +418,8 @@ export class SocialRecoveryModule extends SafeModule{
             to: this.moduleAddress,
             data: callData,
         };
-        const recoveryRequestResult = await sendEthCallRequest(rpcUrl, ethCallParams, "latest");
+        const recoveryRequestResult = await sendEthCallRequest(
+            nodeRpcUrl, ethCallParams, "latest");
 
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
@@ -459,17 +430,16 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * Retrieves the account threshold.
+     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
      * @param accountAddress The target account.
      * @return Threshold.
      */
     public async threshold(
-        rpcUrl: string,
+        nodeRpcUrl: string,
         accountAddress: string,
     ):Promise<bigint>{
-        const functionSignature = "threshold(address)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"threshold(address)"
+        const functionSelector = "0xc86ec2bf";
         const callData = createCallData(
             functionSelector,
             ["address"],
@@ -480,7 +450,8 @@ export class SocialRecoveryModule extends SafeModule{
             to: this.moduleAddress,
             data: callData,
         };
-        const recoveryRequestResult = await sendEthCallRequest(rpcUrl, ethCallParams, "latest");
+        const recoveryRequestResult = await sendEthCallRequest(
+            nodeRpcUrl, ethCallParams, "latest");
 
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
@@ -491,17 +462,16 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * Get the active guardians for an account.
+     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
      * @param accountAddress The target account.
      * @return the active guardians for an account.
      */
     public async getGuardians(
-        rpcUrl: string,
+        nodeRpcUrl: string,
         accountAddress: string,
     ):Promise<string[]>{
-        const functionSignature = "getGuardians(address)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"getGuardians(address)"
+        const functionSelector = "0xf18858ab";
         const callData = createCallData(
             functionSelector,
             ["address"],
@@ -512,7 +482,8 @@ export class SocialRecoveryModule extends SafeModule{
             to: this.moduleAddress,
             data: callData,
         };
-        const recoveryRequestResult = await sendEthCallRequest(rpcUrl, ethCallParams, "latest");
+        const recoveryRequestResult = await sendEthCallRequest(
+            nodeRpcUrl, ethCallParams, "latest");
 
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
@@ -523,17 +494,16 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * Get the module nonce for an account.
+     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
      * @param accountAddress The target account.
      * @return the nonce for this account.
      */
     public async nonce(
-        rpcUrl: string,
+        nodeRpcUrl: string,
         accountAddress: string,
     ):Promise<bigint>{
-        const functionSignature = "nonce(address)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
-        );
+        //"nonce(address)"
+        const functionSelector = "0x70ae92d2";
         const callData = createCallData(
             functionSelector,
             ["address"],
@@ -544,7 +514,8 @@ export class SocialRecoveryModule extends SafeModule{
             to: this.moduleAddress,
             data: callData,
         };
-        const recoveryRequestResult = await sendEthCallRequest(rpcUrl, ethCallParams, "latest");
+        const recoveryRequestResult = await sendEthCallRequest(
+            nodeRpcUrl, ethCallParams, "latest");
 
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
@@ -552,14 +523,18 @@ export class SocialRecoveryModule extends SafeModule{
 
         return BigInt(decodedCalldata[0]);
     }
-
 }
 
 export type RecoveryRequest  = {
     guardiansApprovalCount:bigint;
     newThreshold:bigint;
-    executeAfter:number;
+    executeAfter:bigint;
     newOwners:string[];
+}
+
+export type RecoverySignatureData  = {
+    signer:bigint;
+    signature:string[];
 }
 
 type EthCallTransaction = {
@@ -572,7 +547,7 @@ type EthCallTransaction = {
 }
 
 async function sendEthCallRequest(
-    rpcUrl: string,
+    nodeRpcUrl: string,
     ethCallTransaction: EthCallTransaction,
     blockNumber: string|bigint,
 ): Promise<string> {
@@ -582,7 +557,7 @@ async function sendEthCallRequest(
     ];
 
     try {
-        const data = await sendJsonRpcRequest(rpcUrl, "eth_call", params);
+        const data = await sendJsonRpcRequest(nodeRpcUrl, "eth_call", params);
 
         if (typeof data === "string") {
             try {
