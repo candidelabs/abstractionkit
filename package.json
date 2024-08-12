@@ -4,7 +4,7 @@
 		"name": "Candidelabs",
 		"url": "https://candide.dev"
 	},
-	"version": "0.1.13",
+	"version": "0.1.14",
 	"description": "Account Abstraction 4337 SDK by Candidelabs",
 	"main": "dist/index.js",
 	"module": "dist/index.m.js",
@@ -39,8 +39,8 @@
 		"tag": "latest"
 	},
 	"dependencies": {
-		"ethers": "^6.6.4",
-		"isomorphic-unfetch": "^3.1.0"
+		"ethers": "^6.13.2",
+		"isomorphic-unfetch": "^4.0.2"
 	},
 	"devDependencies": {
 		"@typescript-eslint/eslint-plugin": "^6.2.0",
