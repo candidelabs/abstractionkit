@@ -1,18 +1,37 @@
 /**
- * Wrapper for a useroperation for an entrypoint v0.6
+ * Base wrapper for a useroperation
  */
-export type UserOperation = {
+export interface BaseUserOperation {
 	sender: string;
 	nonce: bigint;
-	initCode: string;
 	callData: string;
 	callGasLimit: bigint;
 	verificationGasLimit: bigint;
 	preVerificationGas: bigint;
 	maxFeePerGas: bigint;
 	maxPriorityFeePerGas: bigint;
-	paymasterAndData: string;
 	signature: string;
+};
+
+/**
+ * Wrapper for a useroperation for an entrypoint v0.06
+ */
+export interface UserOperationV6 extends BaseUserOperation {
+	initCode: string;
+	paymasterAndData: string;
+};
+
+
+/**
+ * Wrapper for a useroperation for an entrypoint v0.07
+ */
+export interface UserOperationV7 extends BaseUserOperation {
+	factory: string | null;
+	factoryData: string | null;
+    paymaster: string | null;
+    paymasterVerificationGasLimit: bigint | null
+    paymasterPostOpGasLimit: bigint | null
+    paymasterData: string | null
 };
 
 export type AbiInputValue =
@@ -41,8 +60,10 @@ export type JsonRpcResult =
 	| UserOperationByHashResult
 	| UserOperationReceipt
 	| UserOperationReceiptResult
-	| SupportedERC20TokensAndMetadata
-	| PmUserOperationResult;
+	| SupportedERC20TokensAndMetadataV7
+	| SupportedERC20TokensAndMetadataV6
+	| PmUserOperationV7Result
+	| PmUserOperationV6Result;
 
 export type JsonRpcError = {
 	code: number;
@@ -57,7 +78,7 @@ export type GasEstimationResult = {
 };
 
 export type UserOperationByHashResult = {
-	userOperation: UserOperation;
+	userOperation: UserOperationV6 | UserOperationV7;
 	entryPoint: string;
 	blockNumber: bigint | null;
 	blockHash: string | null;
@@ -90,13 +111,34 @@ export type UserOperationReceiptResult = {
 	receipt: UserOperationReceipt;
 } | null;
 
-export type PmUserOperationResult = {
+export type SponsorMetadata = {
+    name: string,
+    description: string,
+    url: string,
+    icons: string[],
+}
+
+export type PmUserOperationV7Result = {
+    paymaster: string,
+    paymasterVerificationGasLimit: bigint,
+    paymasterPostOpGasLimit: bigint,
+    paymasterData: string,
+    callGasLimit?: bigint,
+    verificationGasLimit?: bigint,
+    preVerificationGas?: bigint,
+    maxFeePerGas?: bigint,
+    maxPriorityFeePerGas?: bigint,
+    sponsorMetadata?: SponsorMetadata
+};
+
+export type PmUserOperationV6Result = {
 	paymasterAndData: string;
 	callGasLimit?: bigint;
 	preVerificationGas?: bigint;
 	verificationGasLimit?: bigint;
 	maxFeePerGas?: bigint;
 	maxPriorityFeePerGas?: bigint;
+    sponsorMetadata?: SponsorMetadata
 };
 
 /**
@@ -121,14 +163,13 @@ export interface MetaTransaction {
  * Erc20 token info from the token paymaster
  */
 export interface ERC20Token {
+	name: string;
 	/** Token symbol */
 	symbol: string;
 	/** Token address */
 	address: string;
 	/** Token decimal places */
 	decimal: number;
-	/** Paymaster fee for this token*/
-	fee: bigint;
 	/** Token exchange rate*/
 	exchangeRate: bigint;
 }
@@ -136,7 +177,7 @@ export interface ERC20Token {
 /**
  * Paymaster metadata
  */
-export interface PaymasterMetadata {
+interface BasePaymasterMetadata {
 	name: string;
 	description: string;
 	icons: string[];
@@ -144,6 +185,19 @@ export interface PaymasterMetadata {
 	address: string;
 	/** the event that will be emitted when a useroperation is sponsored */
 	sponsoredEventTopic: string;
+}
+
+export interface PaymasterMetadataV7 extends BasePaymasterMetadata {
+	/** dummyPaymasterAndData to use for gas estimation */
+	dummyPaymasterAndData: {
+      paymaster: string,
+      paymasterVerificationGasLimit: bigint,
+      paymasterPostOpGasLimit: bigint,
+      paymasterData: string
+    };
+}
+
+export interface PaymasterMetadataV6 extends BasePaymasterMetadata {
 	/** dummyPaymasterAndData to use for gas estimation */
 	dummyPaymasterAndData: string;
 }
@@ -151,8 +205,16 @@ export interface PaymasterMetadata {
 /**
  * Paymaster metadata and supported erc20 tokens
  */
-export interface SupportedERC20TokensAndMetadata {
-	paymasterMetadata: PaymasterMetadata;
+export interface SupportedERC20TokensAndMetadataV7 {
+	paymasterMetadata: PaymasterMetadataV7;
+	tokens: ERC20Token[];
+}
+
+/**
+ * Paymaster metadata and supported erc20 tokens
+ */
+export interface SupportedERC20TokensAndMetadataV6 {
+	paymasterMetadata: PaymasterMetadataV6;
 	tokens: ERC20Token[];
 }
 

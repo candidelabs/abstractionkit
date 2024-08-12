@@ -1,5 +1,6 @@
 import type {
-	UserOperation,
+	UserOperationV6,
+	UserOperationV7,
 	GasEstimationResult,
 	UserOperationByHashResult,
 	UserOperationReceipt,
@@ -82,7 +83,7 @@ export class Bundler {
 	 * @returns promise with GasEstimationResult
 	 */
 	async estimateUserOperationGas(
-		useroperation: UserOperation,
+		useroperation: UserOperationV6 | UserOperationV7,
 		entrypointAddress: string,
 		state_override_set?: StateOverrideSet,
 	): Promise<GasEstimationResult> {
@@ -101,8 +102,8 @@ export class Bundler {
 					[useroperation, entrypointAddress, state_override_set],
 				);
 			}
-			const res = jsonRpcResult as GasEstimationResult;
-			const gasEstimationResult: GasEstimationResult = {
+			var res = jsonRpcResult as GasEstimationResult;
+            const gasEstimationResult: GasEstimationResult = {
 				callGasLimit: BigInt(res.callGasLimit),
 				preVerificationGas: BigInt(res.preVerificationGas),
 				verificationGasLimit: BigInt(res.verificationGasLimit),
@@ -129,7 +130,7 @@ export class Bundler {
 	 * @returns promise with useroperationhash
 	 */
 	async sendUserOperation(
-		useroperation: UserOperation,
+		useroperation: UserOperationV6 | UserOperationV7,
 		entrypointAddress: string,
 	): Promise<string> {
 		try {

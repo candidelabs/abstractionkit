@@ -24,8 +24,8 @@ export class SmartAccountFactory {
 			this.generatorFunctionInputAbi,
 			generatorFunctionInputParameters,
 		);
-		const res: string = this.address + callData.slice(2);
+		//const res: string = this.address + callData.slice(2);
 
-		return res;
+		return callData;
 	}
 }

@@ -1,36 +1,51 @@
-import {
-	Wallet,
-} from "ethers";
 import { SafeAccount } from "./SafeAccount";
 import {
-	MetaTransaction,
-	StateOverrideSet,
-	UserOperation,
-} from "../../types";
-import {
-	createCallData,
-	fetchAccountNonce,
-	fetchGasPrice,
-} from "../../utils";
-import { UserOperationDummyValues, ZeroAddress } from "../../constants";
-import {
-	CreateUserOperationOverrides,
 	InitCodeOverrides,
+	Signer,
+    CreateUserOperationV6Overrides,
 } from "./types";
-import { Bundler } from "src/Bundler";
-import { AbstractionKitError } from "src/errors";
+
+import { UserOperationV6, MetaTransaction } from "../../types";
 import { SafeAccountFactory } from "src/factory/SafeAccountFactory";
+import { ENTRYPOINT_V6 } from "src/constants";
 
 export class SafeAccountV0_2_0 extends SafeAccount {
-
-	constructor(
+    static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V6;
+	static readonly DEFAULT_SAFE_4337_MODULE_ADDRESS =
+		"0xa581c4A4DB7175302464fF3C06380BC3270b4037";
+    static readonly DEFAULT_SAFE_MODULE_SETUP_ADDRESS =
+		"0x8EcD4ec46D4D2a6B64fE960B3D64e8B94B2234eb";
+    
+    constructor(
 		accountAddress: string,
 		safe4337ModuleAddress: string = SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 		entrypointAddress: string = SafeAccountV0_2_0.DEFAULT_ENTRYPOINT_ADDRESS,
 	) {
 		super(accountAddress, safe4337ModuleAddress, entrypointAddress);
 	}
-	/**
+    
+    /**
+	 * calculate account addressfrom initial owners
+	 * @param owners - list of account owners addresses
+	 * @param overrides - override values to change the initialization default values
+	 * @returns account address
+	 */
+	public static createAccountAddress(
+		owners: Signer[],
+		overrides: InitCodeOverrides = {},//mod
+    ): string {
+        const [accountAddress, , ] =
+		SafeAccount.createAccountAddressAndFactoryAddressAndData(
+            owners,
+            overrides, 
+            overrides.safe4337ModuleAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+            overrides.safeModuleSetupddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
+        );
+
+        return accountAddress;
+	}
+
+    /**
 	 * To create and initialize a SafeAccount object from its
 	 * initial owners
 	 * @remarks
@@ -41,528 +56,187 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 * @returns a SafeAccount object
 	 */
 	public static initializeNewAccount(
-		owners: string[],
+		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): SafeAccountV0_2_0 {
-		const [accountAddress, initCode] =
-		SafeAccountV0_2_0.createAccountAddressAndInitCode(owners, overrides);
-		const safe = new SafeAccountV0_2_0(accountAddress);
-		safe.initCode = initCode;
+		let isInitWebAuthn = false;
+		let x = 0n;
+		let y = 0n;
+		for(const owner of owners){
+			if(typeof(owner) != "string"){
+                if (isInitWebAuthn) {
+                    throw RangeError(
+                        "Only one Webauth signer is allowed during initialization"
+                    );
+                }
+				isInitWebAuthn = true;
+				x = owner.x;
+				y = owner.y;
+			}
+		}
+        const [accountAddress, factoryAddress, factoryData] =
+		SafeAccountV0_2_0.createAccountAddressAndFactoryAddressAndData(
+            owners,
+            overrides, 
+            overrides.safe4337ModuleAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+            overrides.safeModuleSetupddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
+        );
+
+		const safe = new SafeAccountV0_2_0(
+            accountAddress,
+            overrides.safe4337ModuleAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+            overrides.entrypointAddress ?? SafeAccountV0_2_0.DEFAULT_ENTRYPOINT_ADDRESS,
+        );
+		safe.factoryAddress = factoryAddress;
+		safe.factoryData = factoryData;
+        if(isInitWebAuthn){
+		    safe.isInitWebAuthn = isInitWebAuthn;
+		    safe.x = x;
+		    safe.y = y;
+        }
+		
 		return safe;
 	}
-	
-	/**
-	 * calculate account addressfrom initial owners
-	 * @param owners - list of account owners addresses
-	 * @param overrides - override values to change the initialization default values
-	 * @returns account address
-	 */
-	public static createAccountAddress(
-		owners: string[],
-		overrides: InitCodeOverrides = {},
-	): string {
-		const [address, ] = SafeAccountV0_2_0.createAccountAddressAndInitCode(
-			owners,
-			overrides,
-		);
-		return address;
-	}
 
-	/**
+    public static getUserOperationEip712Hash(
+		useroperation: UserOperationV6,
+		chainId:bigint,
+		validAfter: bigint = 0n,
+		validUntil: bigint = 0n,
+		entrypointAddress: string = SafeAccountV0_2_0.DEFAULT_ENTRYPOINT_ADDRESS,
+        safe4337ModuleAddress: string =
+            SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+    ): string{
+        return SafeAccount.getUserOperationEip712Hash(
+            useroperation,
+            chainId,
+            validAfter,
+            validUntil,
+            entrypointAddress,
+            safe4337ModuleAddress
+        )
+    }
+
+    
+    /**
 	 * calculate account address and initcode from owners
 	 * @param owners - list of account owners addresses
 	 * @param overrides - override values to change the initialization default values
 	 * @returns account address and initcode
 	 */
 	public static createAccountAddressAndInitCode(
-		owners: string[],
-		overrides: InitCodeOverrides = {},
+		owners: Signer[],
+		overrides: InitCodeOverrides,
 	): [string, string] {
-		if (owners.length < 1) {
-			throw RangeError("There should be at least one owner");
-		}
+        let	safeAccountFactory;
+        if(overrides.safeAccountFactoryAddress != null){
+            safeAccountFactory = new SafeAccountFactory(overrides.safeAccountFactoryAddress);
+        }else{
+            safeAccountFactory = new SafeAccountFactory();
+        }
 
-		const threshold = overrides.threshold ?? 1;
-		const c2Nonce = (overrides.c2Nonce as bigint) ?? 0n;
-		const singletonAddress =
-			overrides.singletonAddress ?? SafeAccount.DEFAULT_SINGLETON_ADDRESS;
-		const safe4337ModuleAddress =
-			overrides.safe4337ModuleAddress ??
-			SafeAccount.DEFAULT_SAFE_4337_MODULE_ADDRESS;
-		const addModuleLibAddress =
-			overrides.addModuleLibAddress ??
-			SafeAccount.DEFAULT_ADD_MODULE_LIB_ADDRESS;
+        let [
+            sender,
+            safeAccountFactoryAddress,
+            factoryData
+        ] = SafeAccount.createAccountAddressAndFactoryAddressAndData(
+            owners,
+            overrides,
+            overrides.safe4337ModuleAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+            overrides.safeModuleSetupddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
+        );
 
-		let safeAccountFactory: SafeAccountFactory = new SafeAccountFactory();
-		if (overrides.safeAccountFactoryAddress != null) {
-			safeAccountFactory = new SafeAccountFactory(
-				overrides.safeAccountFactoryAddress,
-			);
-		}
+        let initCode = 
+            safeAccountFactoryAddress + factoryData.slice(2);
+        return [sender, initCode];
+    }
 
-		const initializerCallData = SafeAccountV0_2_0.createInitializerCallData(
-			owners,
-			threshold,
-			safe4337ModuleAddress,
-			addModuleLibAddress,
-		);
-
-		const sender = this.createProxyAddress(
-			initializerCallData,
-			c2Nonce,
-			safeAccountFactory.address,
-			singletonAddress,
-		);
-
-		const generatorFunctionInputParameters = [
-			singletonAddress,
-			initializerCallData,
-			c2Nonce,
-		];
-
-		const initCode = safeAccountFactory.getFactoryGeneratorFunctionCallData(
-			generatorFunctionInputParameters,
-		);
-
-		return [sender, initCode];
-	}
-
-	protected static createInitializerCallData(
-		owners: string[],
+    public static createInitializerCallData(
+		owners: Signer[],
 		threshold: number,
-		safe4337ModuleAddress: string = SafeAccount.DEFAULT_SAFE_4337_MODULE_ADDRESS,
-		addModuleLibAddress: string = SafeAccount.DEFAULT_ADD_MODULE_LIB_ADDRESS,
+		safe4337ModuleAddress: string =
+            SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+		safeModuleSetupddress: string =
+            SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 	): string {
-		if (owners.length < 1) {
-			throw RangeError("There should be at least one owner");
-		}
+        return SafeAccount.createInitializerCallData(
+            owners,
+            threshold,
+            safe4337ModuleAddress,
+            safeModuleSetupddress,
+        );
+    }
 
-		if (threshold < 1) {
-			throw RangeError("threshold should be at least one");
-		}
-
-		if (threshold > owners.length) {
-			throw RangeError("threshold can't be larger than number of owners");
-		}
-
-		const enable4337ModuleCallData = createCallData(
-			"0x8d0dc49f", //enableModules
-			["address[]"],
-			[[safe4337ModuleAddress]],
-		);
-
-		const initializerFunctionInputParameters = [
-			owners, //_owners
-			threshold, //_threshold
-			addModuleLibAddress, //to Contract address for optional delegate call during initialization
-			enable4337ModuleCallData, //Data payload for optional delegate call during initialization
-			safe4337ModuleAddress, //fallbackHandler Handler for fallback calls to this contract
-			ZeroAddress, //paymentToken (Safe specific, can be ignored)
-			0, //payment (Safe specific, can be ignored)
-			ZeroAddress, //paymentReceiver (Safe specific, can be ignored)
-		];
-
-		return createCallData(
-			SafeAccount.initializerFunctionSelector,
-			SafeAccount.initializerFunctionInputAbi,
-			initializerFunctionInputParameters,
-		);
-	}
-
-	/**
+    /**
 	 * create account initcode
 	 * @param owners - list of account owners addresses
-	 * @param threshold - for owners signatures
-	 * @param c2Nonce - create2 nonce
-	 * @param singletonAddress - Safe singleton address
-	 * @param safeAccountFactory - SafeAccountFactory object
-	 * @param safe4337ModuleAddress - Safe 4337 module address
-	 * @param addModuleLibAddress - addModuleLib Address
-	 * @returns initcode
+	 * @param overrides - overrides values to change default values
+     * @returns initcode
 	 */
 	public static createInitCode(
-		owners: string[],
-		threshold: number = 1,
-		c2Nonce: bigint = 0n,
-		singletonAddress: string = SafeAccount.DEFAULT_SINGLETON_ADDRESS,
-		safeAccountFactory: SafeAccountFactory = new SafeAccountFactory(),
-		safe4337ModuleAddress: string = SafeAccount.DEFAULT_SAFE_4337_MODULE_ADDRESS,
-		addModuleLibAddress: string = SafeAccount.DEFAULT_ADD_MODULE_LIB_ADDRESS,
-	): string {
-		if (owners.length < 1) {
-			throw RangeError("There should be at least one owner");
-		}
+		owners: Signer[],
+		overrides: InitCodeOverrides,
+    ): string {
+        let [
+            safeAccountFactoryAddress,
+            factoryData
+        ] = SafeAccount.createFactoryAddressAndData(
+            owners,
+            overrides,
+            overrides.safe4337ModuleAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+            overrides.safeModuleSetupddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
+        );
+        return safeAccountFactoryAddress + factoryData.slice(2);
+    }
 
-		if (threshold < 1) {
-			throw RangeError("threshold should be at least one");
-		}
-
-		if (threshold > owners.length) {
-			throw RangeError("threshold can't be larger than number of owners");
-		}
-
-		if (c2Nonce < 0n) {
-			throw RangeError("c2Nonce can't be negative");
-		}
-
-		const initializerCallData = SafeAccountV0_2_0.createInitializerCallData(
-			owners,
-			threshold,
-			safe4337ModuleAddress,
-			addModuleLibAddress,
-		);
-
-		const generatorFunctionInputParameters = [
-			singletonAddress,
-			initializerCallData,
-			c2Nonce,
-		];
-
-		const factoryGeneratorFunctionCallData =
-			safeAccountFactory.getFactoryGeneratorFunctionCallData(
-				generatorFunctionInputParameters,
-			);
-
-		return factoryGeneratorFunctionCallData;
-	}
-
-	/**
-	 * a non static wrapper function for  prependTokenPaymasterApproveToCallDataStatic
-	 * which adds a token approve call to the call data for a token paymaster
-	 * @returns callData
-	 */
-	public prependTokenPaymasterApproveToCallData(
-		callData: string,
-		tokenAddress: string,
-		paymasterAddress: string,
-		approveAmount: bigint,
-		multisendContractAddress: string = SafeAccountV0_2_0.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
-	): string {
-		return SafeAccountV0_2_0.prependTokenPaymasterApproveToCallDataStatic(
-			callData,
-			tokenAddress,
-			paymasterAddress,
-			approveAmount,
-			multisendContractAddress,
-		);
-	}
-
-	/**
-	 * estimate gas limits for a useroperation
-	 * @param userOperation - useroperation to estimate gas for
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param state_override_set - state override values to set during gs estimation
-	 * @param numberOfSigners - number of sigers
-	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
-	 */
-	public async estimateUserOperationGas(
-		userOperation: UserOperation,
-		bundlerRpc: string,
-		state_override_set?: StateOverrideSet,
-		numberOfSigners: number = 1,
-	): Promise<[bigint, bigint, bigint]> {
-		if (numberOfSigners < 1n) {
-			throw RangeError("numberOfSigners can't be less than 1");
-		}
-
-		let signatures = "";
-		for (let i = 0; i < numberOfSigners; i++) {
-			signatures =
-				signatures +
-				"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-		}
-		userOperation.signature = "0xffffffffffffffffffffffff" + signatures;
-		const bundler = new Bundler(bundlerRpc);
-
-        const inputMaxFeePerGas = userOperation.maxFeePerGas
-        const inputMaxPriorityFeePerGas = userOperation.maxPriorityFeePerGas
-        userOperation.maxFeePerGas = 0n
-        userOperation.maxPriorityFeePerGas = 0n
-
-		const estimation = await bundler.estimateUserOperationGas(
-			userOperation,
-			this.entrypointAddress,
-			state_override_set,
-		);
-        userOperation.maxFeePerGas = inputMaxFeePerGas
-        userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas
-
-		const preVerificationGas = BigInt(estimation.preVerificationGas);
-		const verificationGasLimit =
-			BigInt(estimation.verificationGasLimit) +
-            (BigInt(numberOfSigners) * 30_000n);
-		const callGasLimit = BigInt(estimation.callGasLimit);
-
-		return [preVerificationGas, verificationGasLimit, callGasLimit];
-	}
-
-	/**
+    /**
 	 * createUserOperation will determine the nonce, fetch the gas prices,
 	 * estimate gas limits and return a useroperation to be signed.
 	 * you can override all these values using the overrides parameter.
 	 * @param transactions - metatransaction list to be encoded
 	 * @param providerRpc - node rpc to fetch account nonce and gas prices
 	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param overrids - overrides values to change default values
+	 * @param overrides - overrides values to change default values
 	 * @returns promise with useroperation
 	 */
 	public async createUserOperation(
 		transactions: MetaTransaction[],
 		providerRpc?: string,
 		bundlerRpc?: string,
-		overrids: CreateUserOperationOverrides = {},
-	): Promise<UserOperation> {
-		if (transactions.length < 1) {
-			throw RangeError("There should be at least one transaction");
-		}
+		overrides: CreateUserOperationV6Overrides = {},
+	): Promise<UserOperationV6> {
+        let [
+            userOperation,
+            factoryAddress,
+            factoryData
+        ] = await this.createBaseUserOperationAndFactoryAddressAndFactoryData(
+            transactions,
+            true,
+            providerRpc,
+            bundlerRpc,
+            overrides
+        );
 
-		let nonce = 0n as bigint;
+        let initCode = "0x";
 
-		if (overrids.nonce == null) {
-			if (providerRpc != null) {
-				nonce = await fetchAccountNonce(
-					providerRpc,
-					this.entrypointAddress,
-					this.accountAddress,
-				);
-			} else {
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					"providerRpc cant't be null if nonce is not overriden",
-				);
-			}
-		} else {
-			nonce = overrids.nonce;
-		}
-
-		let initCode = overrids.initCode ?? this.initCode;
-
-		if (initCode == null || nonce > 0n) {
-			initCode = "0x";
-		}
-
-		if (nonce < 0n) {
-			throw RangeError("nonce can't be negative");
-		}
-
-		let callData = "0x" as string;
-		if (overrids.callData == null) {
-			if (transactions.length == 1) {
-				callData = SafeAccountV0_2_0.createAccountCallDataSingleTransaction(
-					transactions[0],
-				);
-			} else {
-				callData =
-					SafeAccountV0_2_0.createAccountCallDataBatchTransactions(
-						transactions,
-					);
-			}
-		} else {
-			callData = overrids.callData;
-		}
-
-		let maxFeePerGas = UserOperationDummyValues.maxFeePerGas;
-		let maxPriorityFeePerGas = UserOperationDummyValues.maxPriorityFeePerGas;
-		if (
-			overrids.maxFeePerGas == null ||
-			overrids.maxPriorityFeePerGas == null
-		) {
-			if (providerRpc != null) {
-				[maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPrice(providerRpc);
-                if(maxFeePerGas == 0n){
-                    maxFeePerGas = 1n;
+        if(overrides.initCode == null){
+            if (factoryAddress != null){
+                let factoryDataStr = "0x";
+                if (factoryData != null){
+                    factoryDataStr = factoryData;
                 }
-                if(maxPriorityFeePerGas == 0n){
-                    maxPriorityFeePerGas = 1n;
-                }
-			} else {
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					"providerRpc cant't be null if maxFeePerGas and maxPriorityFeePerGas are not overriden",
-				);
-			}
-		}
-		if (
-			typeof overrids.maxFeePerGas === "bigint" &&
-			overrids.maxFeePerGas < 0n
-		) {
-			throw RangeError("maxFeePerGas overrid can't be negative");
-		}
+                initCode = factoryAddress + factoryDataStr.slice(2);
+            }
+        }else{
+		    initCode = overrides.initCode;
+        }
 
-		if (
-			typeof overrids.maxPriorityFeePerGas === "bigint" &&
-			overrids.maxPriorityFeePerGas < 0n
-		) {
-			throw RangeError("maxPriorityFeePerGas overrid can't be negative");
-		}
-
-		maxFeePerGas =
-			overrids.maxFeePerGas ??
-			maxFeePerGas *
-				BigInt(
-					Math.floor(
-						((overrids.maxFeePerGasPercentageMultiplier ?? 0) + 100) / 100,
-					),
-				);
-		maxPriorityFeePerGas =
-			overrids.maxPriorityFeePerGas ??
-			maxPriorityFeePerGas *
-				BigInt(
-					Math.floor(
-						((overrids.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100) /
-							100,
-					),
-				);
-
-		const userOperation: UserOperation = {
-			...UserOperationDummyValues,
-			sender: this.accountAddress,
-			nonce: nonce,
-			initCode: initCode,
-			callData: callData,
-			maxFeePerGas: maxFeePerGas,
-			maxPriorityFeePerGas: maxPriorityFeePerGas,
+        const userOperationV6: UserOperationV6 = {
+			...userOperation,
+			initCode,
+            paymasterAndData: "0x"
 		};
 
-		let preVerificationGas = UserOperationDummyValues.preVerificationGas;
-		let verificationGasLimit = UserOperationDummyValues.verificationGasLimit;
-		let callGasLimit = UserOperationDummyValues.callGasLimit;
-		if (
-			overrids.preVerificationGas == null ||
-			overrids.verificationGasLimit == null ||
-			overrids.callGasLimit == null
-		) {
-			if (bundlerRpc != null) {
-				userOperation.callGasLimit = 0n;
-				userOperation.verificationGasLimit = 0n;
-				userOperation.preVerificationGas = 0n;
-				const inputMaxFeePerGas = userOperation.maxFeePerGas;
-				const inputMaxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
-				userOperation.maxFeePerGas = 0n;
-				userOperation.maxPriorityFeePerGas = 0n;
-
-				[preVerificationGas, verificationGasLimit, callGasLimit] =
-					await this.estimateUserOperationGas(
-						userOperation,
-						bundlerRpc,
-						overrids.state_override_set,
-						overrids.numberOfSigners,
-					);
-
-				userOperation.maxFeePerGas = inputMaxFeePerGas
-				userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas
-			} else {
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					"bundlerRpc cant't be null if preVerificationGas,verificationGasLimit and callGasLimit are not overriden",
-				);
-			}
-		}
-		if (
-			typeof overrids.preVerificationGas === "bigint" &&
-			overrids.preVerificationGas < 0n
-		) {
-			throw RangeError("preVerificationGas overrid can't be negative");
-		}
-
-		if (
-			typeof overrids.verificationGasLimit === "bigint" &&
-			overrids.verificationGasLimit < 0n
-		) {
-			throw RangeError("verificationGasLimit overrid can't be negative");
-		}
-
-		if (
-			typeof overrids.callGasLimit === "bigint" &&
-			overrids.callGasLimit < 0n
-		) {
-			throw RangeError("callGasLimit overrid can't be negative");
-		}
-		userOperation.preVerificationGas =
-			overrids.preVerificationGas ??
-			preVerificationGas *
-				BigInt(
-					Math.floor(
-						((overrids.preVerificationGasPercentageMultiplier ?? 0) + 100) /
-							100,
-					),
-				);
-
-		userOperation.verificationGasLimit =
-			overrids.verificationGasLimit ??
-			verificationGasLimit *
-				BigInt(
-					Math.floor(
-						((overrids.verificationGasLimitPercentageMultiplier ?? 0) + 100) /
-							100,
-					),
-				);
-
-		userOperation.callGasLimit =
-			overrids.callGasLimit ??
-			callGasLimit *
-				BigInt(
-					Math.floor(
-						((overrids.callGasLimitPercentageMultiplier ?? 0) + 100) / 100,
-					),
-				);
-
-		return userOperation;
-	}
-
-	/**
-	 * create a useroperation signature
-	 * @param useroperation - useroperation to sign
-	 * @param privateKeys - for the signers
-	 * @param chainId - target chain id
-	 * @param validAfter - timestamp the signature will be valid after
-	 * @param validUntil - timestamp the signature will be valid until
-	 * @returns signature
-	 */
-	public signUserOperation(
-		useroperation: UserOperation,
-		privateKeys: string[],
-		chainId: bigint,
-		validAfter: bigint = 0n,
-		validUntil: bigint = 0n,
-	): string {
-		if (privateKeys.length < 1) {
-			throw RangeError("There should be at least one privateKey");
-		}
-		if (chainId < 0n) {
-			throw RangeError("chainId can't be negative");
-		}
-		if (validAfter < 0n) {
-			throw RangeError("validAfter can't be negative");
-		}
-		if (validUntil < 0n) {
-			throw RangeError("validUntil can't be negative");
-		}
-
-		const userOperationEip712Hash = SafeAccount.getUserOperationEip712Hash(
-			useroperation,
-			chainId,
-			validAfter,
-			validUntil,
-			this.entrypointAddress
-		)
-
-		const signersAddresses = [];
-		const signatures = [];
-		for (const privateKey of privateKeys) {
-			const wallet = new Wallet(privateKey);
-			const SignerSignaturePair = wallet.signingKey.sign(
-				userOperationEip712Hash,
-			).serialized;
-			signersAddresses.push(wallet.address);
-			signatures.push(SignerSignaturePair);
-		}
-
-		return SafeAccountV0_2_0.formatEip712SignaturesToUseroperationSignature(
-			signersAddresses,
-			signatures,
-			validAfter,
-			validUntil,
-		);
-	}
+        return userOperationV6;
+    }
 }

@@ -1,7 +1,7 @@
 export { SmartAccount } from "./account/SmartAccount";
 export { SocialRecoveryModule, RecoveryRequest } from "./account/Safe/modules/SocialRecoveryModule";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
-export { SafeAccountWebAuth } from "./account/Safe/SafeAccountWebAuth";
+export { SafeAccountV0_3_0 } from "./account/Safe/SafeAccountV0_3_0";
 
 export { SendUseroperationResponse } from "./account/SendUseroperationResponse";
 
@@ -21,13 +21,14 @@ export {
 } from "./utils";
 
 export {
-	CreateUserOperationOverrides,
+	CreateUserOperationV6Overrides,
+	CreateUserOperationV7Overrides,
 	InitCodeOverrides,
 	SafeModuleExecutorFunctionSelector,
 	SafeUserOperationTypedDataDomain,
-	SafeUserOperationTypedDataValues,
 	WebauthPublicKey,
-	DummySignature,
+    EOADummySignature,
+	WebauthDummySignerSignaturePair,
 	WebauthSignatureData,
 	SignerSignaturePair
 } from "./account/Safe/types";
@@ -38,7 +39,8 @@ export {
 } from "./paymaster/types";
 
 export {
-	UserOperation,
+	UserOperationV6,
+	UserOperationV7,
 	AbiInputValue,
 	JsonRpcParam,
 	JsonRpcResponse,
@@ -53,6 +55,6 @@ export {
 	MetaTransaction,
 } from "./types";
 
-export { ZeroAddress, UserOperationDummyValues } from "./constants";
+export { ZeroAddress, BaseUserOperationDummyValues } from "./constants";
 
 export { AbstractionKitError } from "./errors";

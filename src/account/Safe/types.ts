@@ -1,14 +1,12 @@
 import type { StateOverrideSet } from "../../types";
 
 /**
- * Overrides for the "createUserOperation" function
+ * Overrides for the "createBaseUserOperationAndFactoryAddressAndFactoryData" function
  */
-export interface CreateUserOperationOverrides {
+export interface CreateBaseUserOperationOverrides {
 	/** set the nonce instead of quering the current nonce from the rpc node */
 	nonce?: bigint;
-	/** set the initCode instead of using the calculated value */
-	initCode?: string;
-	/** set the callData instead of using the enoding the provided Metatransactions*/
+	/** set the callData instead of using the encoding of the provided Metatransactions*/
 	callData?: string;
 	/** set the callGasLimit instead of estimating gas using the bundler*/
 	callGasLimit?: bigint;
@@ -32,14 +30,42 @@ export interface CreateUserOperationOverrides {
 	/** set the maxPriorityFeePerGasPercentageMultiplier instead of quering the current gas price from the rpc node */
 	maxPriorityFeePerGasPercentageMultiplier?: number;
 
-	/** gas estimation depends on the number of signers as each signer will increase the signature size
-	 * @defaultValue 1
-	 */
-	numberOfSigners?: number;
 	/** pass some state overrides for gas estimation"*/
 	state_override_set?: StateOverrideSet;
 
-	dummySignatures?: DummySignature[]|null,
+	dummySignatures?: SignerSignaturePair[],
+
+    webAuthnSharedSigner?:string,
+    webAuthnSignerFactory?:string,
+    webAuthnSignerSingleton?:string,
+
+    eip7212WebAuthPrecompileVerifier?:string,
+    eip7212WebAuthContractVerifier?:string, 
+    safeModuleExecutorFunctionSelector?: SafeModuleExecutorFunctionSelector,
+    multisendContractAddress?: string,
+}
+
+/**
+ * Overrides for the "createUserOperation" function
+ */
+export interface CreateUserOperationV6Overrides extends CreateBaseUserOperationOverrides{
+	/** set the initCode instead of using the calculated value */
+	initCode?: string;
+}
+
+/**
+ * Overrides for the "createUserOperation" function
+ */
+export interface CreateUserOperationV7Overrides extends CreateBaseUserOperationOverrides{
+	/** set the factory address instead of using the calculated value */
+	factory?: string;
+    /** set the factory data instead of using the calculated value */
+	factoryData?: string;
+}
+
+export interface SafeAccountSingleton {
+    singletonAddress:string;
+    singletonInitHash:string;
 }
 
 /**
@@ -54,10 +80,14 @@ export interface InitCodeOverrides {
 	 * @defaultValue 0
 	 */
 	c2Nonce?: bigint;
+    safe4337ModuleAddress?: string;
+    safeModuleSetupddress?: string;
+
+    entrypointAddress?: string;
 	/** Safe contract singleton address
 	 * @defaultValue "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762"
 	 */
-	singletonAddress?: string;
+	safeAccountSingleton?: SafeAccountSingleton;
 	/** Safe Factory address
 	 * @defaultValue "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67"
 	 */
@@ -65,11 +95,43 @@ export interface InitCodeOverrides {
 	/** Safe 4337 module address
 	 * @defaultValue "0xa581c4A4DB7175302464fF3C06380BC3270b4037"
 	 */
-	safe4337ModuleAddress?: string;
-	/** addModuleLib address
-	 * "0x8EcD4ec46D4D2a6B64fE960B3D64e8B94B2234eb"
+    multisendContractAddress?: string;
+    webAuthnSharedSigner?: string;
+    eip7212WebAuthPrecompileVerifierForSharedSigner?:string;
+    eip7212WebAuthContractVerifierForSharedSigner?:string;
+}
+
+export interface BaseInitOverrides {
+	/** signature threshold
+	 * @defaultValue 1
 	 */
-	addModuleLibAddress?: string;
+	threshold?: number;
+	/** create2 nonce - to generate different sender addresses from the same owners
+	 * @defaultValue 0
+	 */
+	c2Nonce?: bigint;
+
+    safeAccountSingleton?: SafeAccountSingleton;
+	/** Safe Factory address
+	 * @defaultValue "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67"
+	 */
+	safeAccountFactoryAddress?: string;
+	/** Safe 4337 module address
+	 * @defaultValue "0xa581c4A4DB7175302464fF3C06380BC3270b4037"
+	 */
+    multisendContractAddress?: string;
+    webAuthnSharedSigner?: string;
+    eip7212WebAuthPrecompileVerifierForSharedSigner?:string;
+    eip7212WebAuthContractVerifierForSharedSigner?:string;
+}
+
+export interface WebAuthnSignatureOverrides {
+    isInit?:boolean,
+    webAuthnSharedSigner?:string,
+    eip7212WebAuthPrecompileVerifier?:string,
+    eip7212WebAuthContractVerifier?:string,
+    webAuthnSignerFactory?:string,
+    webAuthnSignerSingleton?:string,
 }
 
 /**
@@ -84,8 +146,7 @@ export interface SafeUserOperationTypedDataDomain {
 	chainId: bigint;
 	verifyingContract: string;
 }
-
-export interface SafeUserOperationTypedDataValues {
+export interface SafeUserOperationV6TypedDataValues {
 	safe: string;
 	nonce: bigint;
 	initCode: string;
@@ -101,6 +162,22 @@ export interface SafeUserOperationTypedDataValues {
 	entryPoint: string;
 }
 
+export interface SafeUserOperationV7TypedDataValues {
+	safe: string;
+	nonce: bigint;
+    initCode: string;
+	callData: string;
+    verificationGasLimit: bigint;
+    callGasLimit: bigint;
+	preVerificationGas: bigint;
+    maxPriorityFeePerGas: bigint;
+    maxFeePerGas: bigint;
+	paymasterAndData: string;
+	validAfter: bigint;
+	validUntil: bigint;
+	entryPoint: string;
+}
+
 export type ECDSAPublicAddress = string
 
 export interface WebauthPublicKey {
@@ -109,14 +186,6 @@ export interface WebauthPublicKey {
 }
 
 export type Signer = ECDSAPublicAddress | WebauthPublicKey
-
-export enum DummySignature {
-	eoa = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-    //WebAuthn signatures length are not fixed, this is an average WebAuthn signature that should cover most cases
-    //you can supply your own dummy signature that is suitable for your application or add some gas overrides to
-    //createPaymasterUserOperation to compensate for the signature length difference
-	webAuthn ="5715d3b8fc6e09d43d24175720e98c1ed970661400000000000000000000000000000000000000000000000000000000000000410000000000000000000000000000000000000000000000000000000000000001c0000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000e0762c7349c04b09b85aa0b0d21ba70df2195d60c653877df252a16c3f62559fa02d0dbe584b8a794bcf5fc5263f42cf8d50d200c3bc15fe375508e24ca97002ad000000000000000000000000000000000000000000000000000000000000002549960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d9763050000000e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a1226f726967696e223a22687474703a2f2f6c6f63616c686f73743a35313733222c2263726f73734f726967696e223a66616c73652c226f746865725f6b6579735f63616e5f62655f61646465645f68657265223a22646f206e6f7420636f6d7061726520636c69656e74446174614a534f4e20616761696e737420612074656d706c6174652e205365652068747470733a2f2f676f6f2e676c2f7961625065782200000000000000000000000000000000000000000000000000000000000000",
-}
 
 export type ECDSASignature = string
 
@@ -131,3 +200,16 @@ export interface SignerSignaturePair {
 	signature: string
 	isContractSignature?: boolean
 }
+
+export const EOADummySignature : SignerSignaturePair = {
+	signer: "0xfD90FAd33ee8b58f32c00aceEad1358e4AFC23f9",
+    signature: "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+	isContractSignature: false
+}
+
+export const WebauthDummySignerSignaturePair: SignerSignaturePair = {
+	signer: "0xfD90FAd33ee8b58f32c00aceEad1358e4AFC23f9",
+	signature: "0x000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000e06c92f0ac5c4ef9e74721c23d80a9fc12f259ca84afb160f0890483539b9e6080d824c0e6c795157ad5d1ee5eff1ceeb3031009a595f9360919b83dd411c5a78d0000000000000000000000000000000000000000000000000000000000000025a24f744b28d73f066bf3203d145765a7bc735e6328168c8b03e476da3ad0d8fe0400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e226f726967696e223a2268747470733a2f2f736166652e676c6f62616c220000",
+	isContractSignature: true
+}
+

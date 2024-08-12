@@ -4,12 +4,13 @@ import { id, AbiCoder, keccak256, JsonRpcProvider } from "ethers";
 
 import {
 	AbiInputValue,
-	UserOperation,
+	UserOperationV6,
 	JsonRpcResponse,
 	JsonRpcParam,
 	JsonRpcError,
 	GasOption,
 	JsonRpcResult,
+    UserOperationV7,
 } from "./types";
 import {
 	AbstractionKitError,
@@ -25,14 +26,22 @@ import {
  * @returns UserOperationHash
  */
 export function createUserOperationHash(
-	useroperation: UserOperation,
+	useroperation: UserOperationV6 | UserOperationV7,
 	entrypointAddress: string,
 	chainId: bigint,
 ): string {
-	const packedUserOperationHash = keccak256(
-		createPackedUserOperation(useroperation),
-	);
+    let packedUserOperationHash: string;
+    if('initCode' in useroperation){
+        packedUserOperationHash = keccak256(
+		    createPackedUserOperationV6(useroperation),
+	    );
+    }else{
+        packedUserOperationHash = keccak256(
+		    createPackedUserOperationV7(useroperation),
+	    );
 
+    }
+	
 	const abiCoder = AbiCoder.defaultAbiCoder();
 	const encodedUserOperationHash = abiCoder.encode(
 		["bytes32", "address", "uint256"],
@@ -49,8 +58,8 @@ export function createUserOperationHash(
  * @param useroperation -useroperation to pack
  * @returns packed UserOperation
  */
-export function createPackedUserOperation(
-	useroperation: UserOperation,
+export function createPackedUserOperationV6(
+	useroperation: UserOperationV6,
 ): string {
 	const useroperationValuesArrayWithHashedByteValues = [
 		useroperation.sender,
@@ -78,6 +87,106 @@ export function createPackedUserOperation(
 			"uint256",
 			"uint256",
 			"bytes32",
+		],
+		useroperationValuesArrayWithHashedByteValues,
+	);
+	return packedUserOperation;
+}
+
+
+/**
+ * createPackedUserOperation for the standard entrypointv0.7 hash
+ * @param useroperation -useroperation to pack
+ * @returns packed UserOperation
+ */
+export function createPackedUserOperationV7(
+	useroperation: UserOperationV7,
+): string {
+        const abiCoder = AbiCoder.defaultAbiCoder();
+
+        let initCode = "0x";
+        if(useroperation.factory != null){
+            initCode = useroperation.factory;
+            if(useroperation.factoryData != null){
+                initCode += useroperation.factoryData.slice(2);
+            }
+        }
+
+        let accountGasLimits = "0x" + 
+            abiCoder.encode(
+                ["uint128"],
+                [
+                    useroperation.verificationGasLimit,
+                ]
+            ).slice(34) +
+            abiCoder.encode(
+                ["uint128"],
+                [
+                    useroperation.callGasLimit
+                ]
+            ).slice(34);
+        
+        let gasFees = "0x" + 
+            abiCoder.encode(
+                ["uint128"],
+                [
+                    useroperation.maxPriorityFeePerGas,
+                ]
+            ).slice(34) +
+            abiCoder.encode(
+                ["uint128"],
+                [
+                    useroperation.maxFeePerGas
+                ]
+            ).slice(34);
+
+        let paymasterAndData = "0x";
+        if(useroperation.paymaster != null){
+            paymasterAndData = useroperation.paymaster;
+            if(useroperation.paymasterVerificationGasLimit != null){
+                paymasterAndData += 
+                    abiCoder.encode(
+                        ["uint128"],
+                        [
+                            useroperation.paymasterVerificationGasLimit
+                        ]
+                    ).slice(34);
+            }
+            if(useroperation.paymasterPostOpGasLimit != null){
+                paymasterAndData += 
+                    abiCoder.encode(
+                        ["uint128"],
+                        [
+                            useroperation.paymasterPostOpGasLimit
+                        ]
+                    ).slice(34);
+            }
+            if(useroperation.paymasterData != null){
+                paymasterAndData += useroperation.paymasterData.slice(2); 
+            }
+        }
+
+	const useroperationValuesArrayWithHashedByteValues = [
+		useroperation.sender,
+		useroperation.nonce,
+		keccak256(initCode),
+		keccak256(useroperation.callData),
+        accountGasLimits,
+		useroperation.preVerificationGas,
+        gasFees,
+		keccak256(paymasterAndData),
+	];
+
+	const packedUserOperation = abiCoder.encode(
+		[
+            "address",
+            "uint256",
+            "bytes32",
+            "bytes32",
+            "bytes32",
+            "uint256",
+            "bytes32",
+            "bytes32",
 		],
 		useroperationValuesArrayWithHashedByteValues,
 	);
@@ -127,6 +236,7 @@ export async function sendJsonRpcRequest(
 	);
 	const requestOptions: RequestInit = {
 		method: "POST",
+        headers: { 'Content-Type': 'application/json' },
 		body: raw,
 		redirect: "follow",
 	};
@@ -261,16 +371,25 @@ export async function fetchGasPrice(
 }
 
 export function calculateUserOperationMaxGasCost(
-	useroperation: UserOperation,
+	useroperation: UserOperationV6 | UserOperationV7,
 ): bigint {
-	const isPaymasterAndData =
-		useroperation.paymasterAndData == "0x" ||
-		useroperation.paymasterAndData == null;
-	const mul = isPaymasterAndData ? 3n : 0n;
-	const requiredGas =
-		useroperation.callGasLimit +
-		useroperation.verificationGasLimit * mul +
-		useroperation.preVerificationGas;
+    if ('initCode' in useroperation) {
+        const isPaymasterAndData =
+            useroperation.paymasterAndData == "0x" ||
+            useroperation.paymasterAndData == null;
+        const mul = isPaymasterAndData ? 3n : 0n;
+        const requiredGas =
+            useroperation.callGasLimit +
+            useroperation.verificationGasLimit * mul +
+            useroperation.preVerificationGas;
+	    return requiredGas * useroperation.maxFeePerGas;
+    }else{
+        const requiredGas = useroperation.verificationGasLimit +
+                useroperation.callGasLimit +
+                (useroperation.paymasterVerificationGasLimit ?? 0n) +
+                (useroperation.paymasterPostOpGasLimit ?? 0n) +
+                useroperation.preVerificationGas;
 
-	return requiredGas * useroperation.maxFeePerGas;
+        return requiredGas * useroperation.maxFeePerGas;
+    }
 }
