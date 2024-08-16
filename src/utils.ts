@@ -393,3 +393,101 @@ export function calculateUserOperationMaxGasCost(
         return requiredGas * useroperation.maxFeePerGas;
     }
 }
+
+type EthCallTransaction = {
+    from?:string;
+    to:string;
+    gas?:bigint;
+    gasPrice?:bigint;
+    value?:bigint;
+    data?:string;
+}
+
+export async function sendEthCallRequest(
+    nodeRpcUrl: string,
+    ethCallTransaction: EthCallTransaction,
+    blockNumber: string|bigint,
+): Promise<string> {
+    const params = [
+        ethCallTransaction,
+        blockNumber
+    ];
+
+    try {
+        const data = await sendJsonRpcRequest(nodeRpcUrl, "eth_call", params);
+
+        if (typeof data === "string") {
+            try {
+                return data;
+            } catch (err) {
+                const error = ensureError(err);
+
+                throw new AbstractionKitError(
+                    "BAD_DATA",
+                    "eth_call returned ill formed data",
+                    {
+                        cause: error,
+                    },
+                );
+            }
+        } else {
+            throw new AbstractionKitError(
+                "BAD_DATA",
+                "eth_call returned ill formed data",
+                {
+                    context: JSON.stringify(data),
+                },
+            );
+        }
+    } catch (err) {
+        const error = ensureError(err);
+
+        throw new AbstractionKitError("BAD_DATA", "eth_call failed", {
+            cause: error,
+        });
+    }
+}
+export async function sendEthGetCodeRequest(
+    nodeRpcUrl: string,
+    contractAddress: string,
+    blockNumber: string|bigint,
+): Promise<string> {
+    const params = [
+        contractAddress,
+        blockNumber
+    ];
+
+    try {
+        const data = await sendJsonRpcRequest(nodeRpcUrl, "eth_getCode", params);
+
+        if (typeof data === "string") {
+            try {
+                return data;
+            } catch (err) {
+                const error = ensureError(err);
+
+                throw new AbstractionKitError(
+                    "BAD_DATA",
+                    "eth_getCode returned ill formed data",
+                    {
+                        cause: error,
+                    },
+                );
+            }
+        } else {
+            throw new AbstractionKitError(
+                "BAD_DATA",
+                "eth_getCode returned ill formed data",
+                {
+                    context: JSON.stringify(data),
+                },
+            );
+        }
+    } catch (err) {
+        const error = ensureError(err);
+
+        throw new AbstractionKitError("BAD_DATA", "eth_getCode failed", {
+            cause: error,
+        });
+    }
+}

@@ -1,6 +1,6 @@
 import { SafeModule } from "./SafeModule";
 import { AbstractionKitError,ensureError } from "src/errors";
-import { createCallData, sendJsonRpcRequest } from "../../../utils";
+import { createCallData, sendEthCallRequest, sendJsonRpcRequest } from "../../../utils";
 import { MetaTransaction } from "../../../types";
 import { AbiCoder } from "ethers";
 
@@ -537,56 +537,4 @@ export type RecoverySignatureData  = {
     signature:string[];
 }
 
-type EthCallTransaction = {
-    from?:string;
-    to:string;
-    gas?:bigint;
-    gasPrice?:bigint;
-    value?:bigint;
-    data?:string;
-}
 
-async function sendEthCallRequest(
-    nodeRpcUrl: string,
-    ethCallTransaction: EthCallTransaction,
-    blockNumber: string|bigint,
-): Promise<string> {
-    const params = [
-        ethCallTransaction,
-        blockNumber
-    ];
-
-    try {
-        const data = await sendJsonRpcRequest(nodeRpcUrl, "eth_call", params);
-
-        if (typeof data === "string") {
-            try {
-                return data;
-            } catch (err) {
-                const error = ensureError(err);
-
-                throw new AbstractionKitError(
-                    "BAD_DATA",
-                    "eth_call returned ill formed data",
-                    {
-                        cause: error,
-                    },
-                );
-            }
-        } else {
-            throw new AbstractionKitError(
-                "BAD_DATA",
-                "eth_call returned ill formed data",
-                {
-                    context: JSON.stringify(data),
-                },
-            );
-        }
-    } catch (err) {
-        const error = ensureError(err);
-
-        throw new AbstractionKitError("BAD_DATA", "eth_call failed", {
-            cause: error,
-        });
-    }
-}

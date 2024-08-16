@@ -27,6 +27,8 @@ import {
 	getFunctionSelector,
 	fetchAccountNonce,
 	fetchGasPrice,
+    sendEthCallRequest,
+    sendEthGetCodeRequest,
 } from "../../utils";
 
 import {
@@ -1021,18 +1023,18 @@ export class SafeAccount extends SmartAccount {
                     "Webauthn signer publickey can be null!!"
                 );
             }
-            const createDeterministicWebAuthnVerifierOwnerCallData = createCallData(
-				"0x0d2f0489", //createSigner
-				["uint256", "uint256", "uint176"],
-				[this.x, this.y, eip7212WebAuthContractVerifier],
-			);
-
-            const createDeterministicWebAuthnVerifierOwner :MetaTransaction ={
-				to: webAuthnSignerFactory,
-				value: 0n,
-				data: createDeterministicWebAuthnVerifierOwnerCallData,
-			}
-
+            
+            const createDeterministicWebAuthnVerifierOwner :MetaTransaction =
+                SafeAccount.createDeployWebAuthnVerifierMetaTransaction(
+                    this.x,
+                    this.y,
+                    {
+                        eip7212WebAuthPrecompileVerifier,
+                        eip7212WebAuthContractVerifier,
+                        webAuthnSignerFactory,
+                    }
+                );
+            
 			const deterministicWebAuthnVerifierAddress =
                 SafeAccount.createWebAuthnSignerVerifierAddress(
 				    this.x,
@@ -1590,4 +1592,178 @@ export class SafeAccount extends SmartAccount {
 			],
 		)	
 	}
+
+    public async createSwapOwnerMetaTransactions(
+        nodeRpcUrl: string,
+        newOwner: Signer,
+        oldOwner: Signer,
+        overrides:{
+            prevOwner?: string,
+            eip7212WebAuthPrecompileVerifier?:string,
+            eip7212WebAuthContractVerifier?:string,
+            webAuthnSignerFactory?:string,
+            webAuthnSignerSingleton?:string,
+        } = {}
+    ):Promise<MetaTransaction[]>{
+        let deployNewOwnerSignerMetaTransaction: MetaTransaction | null = null;
+        let newOwnerT:string;
+        let oldOwnerT:string;
+        
+        if(typeof(newOwner) != 'string'){
+            newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(
+                newOwner.x,
+                newOwner.y,
+                overrides.eip7212WebAuthPrecompileVerifier,
+                overrides.eip7212WebAuthContractVerifier,
+                overrides.webAuthnSignerFactory,
+                overrides.webAuthnSignerSingleton,
+            )
+            const newOwnerCode = await sendEthGetCodeRequest(
+                nodeRpcUrl, newOwnerT, 'latest');
+            const newOwnerNotDeployed = newOwnerCode.length < 3;
+            if(newOwnerNotDeployed){
+                deployNewOwnerSignerMetaTransaction = 
+                SafeAccount.createDeployWebAuthnVerifierMetaTransaction(
+                    newOwner.x,
+                    newOwner.y,
+                    {
+                        eip7212WebAuthPrecompileVerifier:
+                            overrides.eip7212WebAuthPrecompileVerifier,
+                        eip7212WebAuthContractVerifier:
+                            overrides.eip7212WebAuthContractVerifier,
+                        webAuthnSignerFactory:
+                            overrides.webAuthnSignerFactory,
+                    }
+                );
+            }
+        }else{
+            newOwnerT = newOwner;
+        }
+        if(typeof(oldOwner) != 'string'){
+            oldOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(
+                oldOwner.x,
+                oldOwner.y,
+                overrides.eip7212WebAuthPrecompileVerifier,
+                overrides.eip7212WebAuthContractVerifier,
+                overrides.webAuthnSignerFactory,
+                overrides.webAuthnSignerSingleton,
+            )
+        }else{
+            oldOwnerT = oldOwner;
+        }
+        
+        let prevOwnerT = overrides.prevOwner;
+        if(prevOwnerT == null){
+            const owners = await this.getOwners(nodeRpcUrl);
+            const oldOwnerIndex = owners.indexOf(oldOwnerT);
+            if(oldOwnerIndex == -1){
+                throw RangeError("oldOwner is not a current owner.");
+            }else if(oldOwnerIndex == 0){
+                prevOwnerT = "0x0000000000000000000000000000000000000001";
+            }else if(oldOwnerIndex > 0){
+                prevOwnerT = owners[oldOwnerIndex-1];
+            }else{
+                throw RangeError("Invalid owner index");
+            }
+        }
+        const swapMetaTransaction =  this.createStandardSwapOwnerMetaTransaction(
+            newOwnerT,
+            oldOwnerT,
+            prevOwnerT
+        );
+        if(deployNewOwnerSignerMetaTransaction == null){
+            return [swapMetaTransaction];
+        }else{
+            return [deployNewOwnerSignerMetaTransaction, swapMetaTransaction];
+        }
+    }
+
+    public createStandardSwapOwnerMetaTransaction(
+        newOwner: string,
+        oldOwner: string,
+        prevOwner: string
+    ):MetaTransaction{
+        const functionSelector = "0xe318b52b"; //swapOwner
+        const callData = createCallData(
+            functionSelector,
+            [
+                "address", //prevOwner
+                "address", //oldOwner
+                "address"  //newOwner
+            ],
+            [
+                prevOwner, //SENTINEL_OWNERS
+                newOwner,
+                oldOwner
+            ]
+
+        );
+        return {
+            to: this.accountAddress,
+            data: callData,
+            value: 0n
+        }
+    }
+
+    public static createDeployWebAuthnVerifierMetaTransaction(
+        x: bigint,
+        y: bigint,
+        overrides:{
+            eip7212WebAuthPrecompileVerifier?:string,
+            eip7212WebAuthContractVerifier?:string,
+            webAuthnSignerFactory?:string,
+        } = {}
+    ):MetaTransaction{
+        const eip7212WebAuthPrecompileVerifier =
+            overrides.eip7212WebAuthPrecompileVerifier??
+            SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+        const eip7212WebAuthContractVerifier =
+            overrides.eip7212WebAuthContractVerifier ??
+            SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+        const webAuthnSignerFactory =
+            overrides.webAuthnSignerFactory ??
+            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+
+        const createDeterministicWebAuthnVerifierOwnerCallData = createCallData(
+            "0x0d2f0489", //createSigner
+            ["uint256", "uint256", "uint176"],
+            [
+                x,
+                y,
+                (
+                    "0x" +
+                    eip7212WebAuthPrecompileVerifier.slice(-4) +
+                    eip7212WebAuthContractVerifier.slice(2)
+                )
+            ],
+        );
+
+        return {
+            to: webAuthnSignerFactory,
+            value: 0n,
+            data: createDeterministicWebAuthnVerifierOwnerCallData,
+        }
+    }
+
+    
+    public async getOwners(nodeRpcUrl: string):Promise<string[]>{
+        const functionSignature = "getOwners()";
+        const functionSelector = getFunctionSelector(
+            functionSignature,
+        );
+        const callData = createCallData(functionSelector, [], []);
+
+        const ethCallParams ={
+            to: this.accountAddress,
+            data: callData,
+        };
+        const recoveryRequestResult = await sendEthCallRequest(
+            nodeRpcUrl, ethCallParams, "latest");
+
+        const abiCoder = AbiCoder.defaultAbiCoder();
+	    const decodedCalldata = abiCoder.decode(
+            ["address[]"], recoveryRequestResult);
+
+        return decodedCalldata[0];
+    }
 }
