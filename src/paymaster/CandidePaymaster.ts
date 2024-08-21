@@ -589,8 +589,6 @@ export class CandidePaymaster extends Paymaster {
                     sponsorMetadata
                 ];
             }
-
-            //return [userOperation, sponsorMetadata];
 		} catch (err) {
 			const error = ensureError(err);
 
