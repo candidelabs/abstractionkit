@@ -1677,6 +1677,78 @@ export class SafeAccount extends SmartAccount {
             return [deployNewOwnerSignerMetaTransaction, swapMetaTransaction];
         }
     }
+    
+    public async createRemoveOwnerMetaTransaction(
+        nodeRpcUrl: string,
+        ownerToDelete: Signer,
+        threshold: number,
+        overrides:{
+            prevOwner?: string,
+            eip7212WebAuthPrecompileVerifier?:string,
+            eip7212WebAuthContractVerifier?:string,
+            webAuthnSignerFactory?:string,
+            webAuthnSignerSingleton?:string,
+        } = {}
+    ):Promise<MetaTransaction>{
+        let ownerToDeleteT:string;
+        
+        if(typeof(ownerToDelete) != 'string'){
+            ownerToDeleteT = SafeAccount.createWebAuthnSignerVerifierAddress(
+                ownerToDelete.x,
+                ownerToDelete.y,
+                overrides.eip7212WebAuthPrecompileVerifier,
+                overrides.eip7212WebAuthContractVerifier,
+                overrides.webAuthnSignerFactory,
+                overrides.webAuthnSignerSingleton,
+            )
+        }else{
+            ownerToDeleteT = ownerToDelete;
+        }
+        
+        let prevOwnerT = overrides.prevOwner;
+        if(prevOwnerT == null){
+            const owners = await this.getOwners(nodeRpcUrl);
+            const ownerToDeleteIndex = owners.indexOf(ownerToDeleteT);
+            if(ownerToDeleteIndex == -1){
+                throw RangeError("ownerToDelete is not a current owner.");
+            }else if(ownerToDeleteIndex == 0){
+                prevOwnerT = "0x0000000000000000000000000000000000000001";
+            }else if(ownerToDeleteIndex > 0){
+                prevOwnerT = owners[ownerToDeleteIndex-1];
+            }else{
+                throw RangeError("Invalid owner index");
+            }
+        }
+        return this.createStandardRemoveOwnerMetaTransaction(
+            ownerToDeleteT,
+            threshold,
+            prevOwnerT
+        );
+    }
+
+    public createAddOwnerWithThresholdMetaTransaction(
+        newOwner: string,
+        threshold: number
+    ):MetaTransaction{
+        const functionSelector = "0x0d582f13"; //addOwnerWithThreshold
+        const callData = createCallData(
+            functionSelector,
+            [
+                "address", //owner
+                "uint256"  //_threshold
+            ],
+            [
+                newOwner,
+                threshold
+            ]
+
+        );
+        return {
+            to: this.accountAddress,
+            data: callData,
+            value: 0n
+        }
+    }
 
     public createStandardSwapOwnerMetaTransaction(
         newOwner: string,
@@ -1693,8 +1765,35 @@ export class SafeAccount extends SmartAccount {
             ],
             [
                 prevOwner, //SENTINEL_OWNERS
+                oldOwner,
                 newOwner,
-                oldOwner
+            ]
+
+        );
+        return {
+            to: this.accountAddress,
+            data: callData,
+            value: 0n
+        }
+    }
+    
+    public createStandardRemoveOwnerMetaTransaction(
+        ownerToDelete: string,
+        threshold: number,
+        prevOwner: string
+    ):MetaTransaction{
+        const functionSelector = "0xf8dc5dd9"; //removeOwner
+        const callData = createCallData(
+            functionSelector,
+            [
+                "address", //prevOwner
+                "address", //owner
+                "uint256"  //_threshold
+            ],
+            [
+                prevOwner, //SENTINEL_OWNERS
+                ownerToDelete,
+                threshold
             ]
 
         );

@@ -18,6 +18,7 @@ export {
 	getFunctionSelector,
 	fetchAccountNonce,
 	calculateUserOperationMaxGasCost,
+    sendJsonRpcRequest
 } from "./utils";
 
 export {
