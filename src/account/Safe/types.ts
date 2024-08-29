@@ -132,6 +132,8 @@ export interface WebAuthnSignatureOverrides {
     eip7212WebAuthContractVerifier?:string,
     webAuthnSignerFactory?:string,
     webAuthnSignerSingleton?:string,
+    validAfter?: bigint,
+    validUntil?: bigint,
 }
 
 /**

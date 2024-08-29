@@ -118,14 +118,20 @@ export class SafeAccount extends SmartAccount {
 
 	public static createProxyAddress(
 		initializerCallData: string,
-		c2Nonce: bigint,
-		safeFactoryAddress: string = SafeAccountFactory.DEFAULT_FACTORY_ADDRESS,
-		singletonInitHash: string = this.DEFAULT_SAFE_SINGLETON.singletonInitHash,
+        overrides:{
+		    c2Nonce?: bigint,
+            safeFactoryAddress?: string,
+		    singletonInitHash?: string, 
+        } = {}
 	): string {
+        const c2Nonce = overrides.c2Nonce??0n;
 		if (c2Nonce < 0n) {
 			throw RangeError("c2Nonce can't be negative");
 		}
-
+        const safeFactoryAddress =
+            overrides.safeFactoryAddress??SafeAccountFactory.DEFAULT_FACTORY_ADDRESS;
+        const singletonInitHash =
+            overrides.singletonInitHash??SafeAccount.DEFAULT_SAFE_SINGLETON.singletonInitHash;
 		const salt = keccak256(
 			solidityPacked(
 				["bytes32", "uint256"],
@@ -167,14 +173,18 @@ export class SafeAccount extends SmartAccount {
 	 */
 	public static createAccountCallDataBatchTransactions(
 		metaTransactions: MetaTransaction[],
-        safeModuleExecutorFunctionSelector: SafeModuleExecutorFunctionSelector =
-            SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR,
-		multisendContractAddress: string =
-            SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
+        overrides:{
+            safeModuleExecutorFunctionSelector: SafeModuleExecutorFunctionSelector,
+            multisendContractAddress: string,
+        }
 	): string {
 		if (metaTransactions.length < 1) {
 			throw RangeError("There should be at least one metaTransaction");
 		}
+        const safeModuleExecutorFunctionSelector = overrides.safeModuleExecutorFunctionSelector??
+            SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR;
+		const multisendContractAddress = overrides.multisendContractAddress??
+            SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS;
 
 		const multiData = encodeMultiSendCallData(metaTransactions);
 
@@ -355,14 +365,19 @@ export class SafeAccount extends SmartAccount {
 	public static formatEip712SignaturesToUseroperationSignature(
 		signersAddresses: string[],
 		signatures: string[],
-		validAfter: bigint = 0n,
-		validUntil: bigint = 0n,
+        overrides:{
+            validAfter?: bigint,
+            validUntil?: bigint,
+        } = {}
 	): string {
 		if (signersAddresses.length != signatures.length) {
 			throw RangeError(
 				"signersAddresses and signatures arrays should be the same length",
 			);
 		}
+        const validAfter = overrides.validAfter??0n;
+        const validUntil = overrides.validUntil??0n;
+
 		const signersSignatures: Map<string, string> = new Map();
 
 		signersAddresses.forEach((signer, index) => {
@@ -380,36 +395,34 @@ export class SafeAccount extends SmartAccount {
 
 		return SafeAccount.formatEip712SingleSignatureToUseroperationSignature(
 			formatedSignature,
-			validAfter,
-			validUntil,
+            {
+                validAfter,
+                validUntil,
+            }
 		);
 	}
 
     protected static getUserOperationEip712Hash(
 		useroperation: UserOperationV6 | UserOperationV7,
 		chainId:bigint,
-		validAfter: bigint = 0n,
-		validUntil: bigint = 0n,
-		entrypointAddress: string,
-        safe4337ModuleAddress: string,
+        overrides:{
+            validAfter?: bigint,
+            validUntil?: bigint,
+            entrypointAddress?: string,
+            safe4337ModuleAddress?: string,
+        } = {}
     ): string{
         if('initCode' in useroperation){ 
             return SafeAccount.getUserOperationEip712Hash_V6(
                 useroperation,
                 chainId,
-                validAfter,
-                validUntil,
-                entrypointAddress,
-                safe4337ModuleAddress
+                overrides
             );
        }else{
             return SafeAccount.getUserOperationEip712Hash_V7(
                 useroperation,
                 chainId,
-                validAfter,
-                validUntil,
-                entrypointAddress,
-                safe4337ModuleAddress
+                overrides
             );
        }
     }
@@ -418,11 +431,21 @@ export class SafeAccount extends SmartAccount {
 	public static getUserOperationEip712Hash_V6(
 		useroperation: UserOperationV6,
 		chainId:bigint,
-		validAfter: bigint = 0n,
-		validUntil: bigint = 0n,
-		entrypointAddress: string = ENTRYPOINT_V6,
-        safe4337ModuleAddress: string = "0xa581c4A4DB7175302464fF3C06380BC3270b4037",
+        overrides:{
+            validAfter?: bigint,
+            validUntil?: bigint,
+            entrypointAddress?: string,
+            safe4337ModuleAddress?: string,
+        } = {}
     ): string{
+        const validAfter = overrides.validAfter??0n;
+        const validUntil = overrides.validUntil??0n;
+        
+        const entrypointAddress = overrides.entrypointAddress??ENTRYPOINT_V6;
+        const safe4337ModuleAddress =
+            overrides.safe4337ModuleAddress??
+            "0xa581c4A4DB7175302464fF3C06380BC3270b4037";
+
 		const SafeUserOperation: SafeUserOperationV6TypedDataValues = {
 			safe: useroperation.sender,
 			nonce: useroperation.nonce,
@@ -472,11 +495,21 @@ export class SafeAccount extends SmartAccount {
     public static getUserOperationEip712Hash_V7(
 		useroperation: UserOperationV7,
 		chainId:bigint,
-		validAfter: bigint = 0n,
-		validUntil: bigint = 0n,
-		entrypointAddress: string = ENTRYPOINT_V7,
-        safe4337ModuleAddress: string = "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226",
+        overrides:{
+            validAfter?: bigint,
+            validUntil?: bigint,
+            entrypointAddress?: string,
+            safe4337ModuleAddress?: string,
+        } = {}
     ): string{
+        const validAfter = overrides.validAfter??0n;
+        const validUntil = overrides.validUntil??0n;
+        
+        const entrypointAddress = overrides.entrypointAddress??ENTRYPOINT_V7;
+        const safe4337ModuleAddress =
+            overrides.safe4337ModuleAddress??
+            "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226";
+
         const abiCoder = AbiCoder.defaultAbiCoder();
 
         let initCode = "0x";
@@ -568,9 +601,14 @@ export class SafeAccount extends SmartAccount {
 	 */
 	public static formatEip712SingleSignatureToUseroperationSignature(
 		signature: string,
-		validAfter: bigint = 0n,
-		validUntil: bigint = 0n,
+        overrides:{
+            validAfter?: bigint,
+            validUntil?: bigint,
+        } = {}
 	): string {
+        const validAfter = overrides.validAfter??0n;
+        const validUntil = overrides.validUntil??0n;
+
 		if (validAfter < 0n) {
 			throw RangeError("validAfter can't be negative");
 		}
@@ -622,7 +660,7 @@ export class SafeAccount extends SmartAccount {
 		if (owners.length < 1) {
 			throw RangeError("There should be at least one owner");
 		}
-		const initializerCallData = SafeAccount.createInitializerCallData(
+		const initializerCallData = SafeAccount.createBaseInitializerCallData(
 			owners,
 			overrides.threshold??1,
             safe4337ModuleAddress,
@@ -649,9 +687,11 @@ export class SafeAccount extends SmartAccount {
             SafeAccount.DEFAULT_SAFE_SINGLETON;
 		const sender = this.createProxyAddress(
 			initializerCallData,
-            overrides.c2Nonce ?? 0n,
-			safeAccountFactory.address,
-			safeSingleton.singletonInitHash,
+            {
+                c2Nonce:overrides.c2Nonce ?? 0n,
+                safeFactoryAddress:safeAccountFactory.address,
+                singletonInitHash:safeSingleton.singletonInitHash,
+            }
 		);
 
 		const generatorFunctionInputParameters = [
@@ -668,7 +708,7 @@ export class SafeAccount extends SmartAccount {
 		return [sender, safeAccountFactory.address, factoryGeneratorFunctionCallData];
 	}
 
-	public static createInitializerCallData(
+	protected static createBaseInitializerCallData(
 		owners: Signer[],
 		threshold: number,
 		safe4337ModuleAddress: string,
@@ -825,7 +865,7 @@ export class SafeAccount extends SmartAccount {
 			throw RangeError("c2Nonce can't be negative");
 		}
 
-        const initializerCallData = SafeAccount.createInitializerCallData(
+        const initializerCallData = SafeAccount.createBaseInitializerCallData(
 			owners,
 			overrides.threshold??1,
             safe4337ModuleAddress,
@@ -899,26 +939,32 @@ export class SafeAccount extends SmartAccount {
 	public async estimateUserOperationGas(
 		userOperation: UserOperationV6 | UserOperationV7,
 		bundlerRpc: string,
-		stateOverrideSet?: StateOverrideSet,
-		dummySignatures?: SignerSignaturePair[],
+        overrides:{
+            stateOverrideSet?: StateOverrideSet,
+            dummySignatures?: SignerSignaturePair[],
+        } = {}
 	): Promise<[bigint, bigint, bigint]> {
-        if(dummySignatures != null){
-            if(dummySignatures.length < 1){
+        if(overrides.dummySignatures != null){
+            if(overrides.dummySignatures.length < 1){
                 throw RangeError("Number of dummySignatures can't be less than 1");
             }
 
             userOperation.signature =
                 SafeAccount.formatSignaturesToUseroperationSignature(
-                    dummySignatures,
-                    0xffffffffffffn,
-                    0xffffffffffffn,
+                    overrides.dummySignatures,
+                    {
+                        validAfter:0xffffffffffffn,
+                        validUntil:0xffffffffffffn,
+                    }
                 );
         }else if(userOperation.signature.length < 3){
             userOperation.signature =
                 SafeAccount.formatSignaturesToUseroperationSignature(
                     [EOADummySignature],
-                    0xffffffffffffn,
-                    0xffffffffffffn,
+                    {
+                        validAfter:0xffffffffffffn,
+                        validUntil:0xffffffffffffn,
+                    }
                 );
         }
 		const bundler = new Bundler(bundlerRpc);
@@ -930,7 +976,7 @@ export class SafeAccount extends SmartAccount {
 		const estimation = await bundler.estimateUserOperationGas(
 			userOperation,
 			this.entrypointAddress,
-			stateOverrideSet,
+			overrides.stateOverrideSet,
 		);
         userOperation.maxFeePerGas = inputMaxFeePerGas;
         userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas;
@@ -938,10 +984,10 @@ export class SafeAccount extends SmartAccount {
 		const preVerificationGas = BigInt(estimation.preVerificationGas);
 
 		let verificationGasLimit:bigint;
-        if(dummySignatures != null){
+        if(overrides.dummySignatures != null){
 		    verificationGasLimit =
                 BigInt(estimation.verificationGasLimit) +
-                (BigInt(dummySignatures.length) * 55_000n);
+                (BigInt(overrides.dummySignatures.length) * 55_000n);
         }else{
 		    verificationGasLimit =BigInt(estimation.verificationGasLimit);
         }
@@ -1039,10 +1085,12 @@ export class SafeAccount extends SmartAccount {
                 SafeAccount.createWebAuthnSignerVerifierAddress(
 				    this.x,
 				    this.y,
-                    eip7212WebAuthPrecompileVerifier,
-                    eip7212WebAuthContractVerifier,
-                    webAuthnSignerFactory,
-                    webAuthnSignerSingleton,
+                    {
+                        eip7212WebAuthPrecompileVerifier,
+                        eip7212WebAuthContractVerifier,
+                        webAuthnSignerFactory,
+                        webAuthnSignerSingleton,
+                    }
 			    )
 
 			const swapSingletonWithDeterministicWebAuthnVerifierOwnerCallData =
@@ -1102,8 +1150,10 @@ export class SafeAccount extends SmartAccount {
 				callData =
 					SafeAccount.createAccountCallDataBatchTransactions(
 						transactions,
-                        safeModuleExecutorFunctionSelector,
-                        multisendContractAddress
+                        {
+                            safeModuleExecutorFunctionSelector: safeModuleExecutorFunctionSelector,
+                            multisendContractAddress: multisendContractAddress
+                        }
 					);
 			}
 		} else {
@@ -1230,19 +1280,24 @@ export class SafeAccount extends SmartAccount {
                 }else{
                     dummySignatures = [EOADummySignature];
                 }
-                userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
-                    dummySignatures,
-                    0xffffffffffffn,
-                    0xffffffffffffn,
-                    {webAuthnSharedSigner}
+                userOperation.signature =
+                    SafeAccount.formatSignaturesToUseroperationSignature(
+                        dummySignatures,
+                        {
+                            validAfter:0xffffffffffffn,
+                            validUntil:0xffffffffffffn,
+                            webAuthnSharedSigner
+                        }
                 );
 
 				[preVerificationGas, verificationGasLimit, callGasLimit] =
 					await this.estimateUserOperationGas(
 						userOperationToEstimate,
 						bundlerRpc,
-						overrides.state_override_set,
-						overrides.dummySignatures,
+                        {
+                            stateOverrideSet: overrides.state_override_set,
+                            dummySignatures: overrides.dummySignatures,
+                        }
 					);
                 verificationGasLimit +=
                     (BigInt(dummySignatures.length) * 55_000n);
@@ -1325,9 +1380,14 @@ export class SafeAccount extends SmartAccount {
 		useroperation: UserOperationV6 | UserOperationV7,
 		privateKeys: string[],
 		chainId: bigint,
-		validAfter: bigint = 0n,
-		validUntil: bigint = 0n,
+        overrides:{
+            validAfter?: bigint,
+            validUntil?: bigint,
+        } = {}
 	): string {
+        const validAfter = overrides.validAfter??0n;
+        const validUntil = overrides.validUntil??0n;
+
 		if (privateKeys.length < 1) {
 			throw RangeError("There should be at least one privateKey");
 		}
@@ -1344,10 +1404,12 @@ export class SafeAccount extends SmartAccount {
        const userOperationEip712Hash = SafeAccount.getUserOperationEip712Hash(
             useroperation,
             chainId,
-            validAfter,
-            validUntil,
-            this.entrypointAddress,
-            this.safe4337ModuleAddress
+            {
+                validAfter,
+                validUntil,
+                entrypointAddress:this.entrypointAddress,
+                safe4337ModuleAddress:this.safe4337ModuleAddress
+            }
         )
                
         const signersAddresses = [];
@@ -1364,23 +1426,36 @@ export class SafeAccount extends SmartAccount {
         return SafeAccount.formatEip712SignaturesToUseroperationSignature(
             signersAddresses,
             signatures,
-            validAfter,
-            validUntil,
+            {
+                validAfter,
+                validUntil,
+            }
         );
 	}
 
 	public static createWebAuthnSignerVerifierAddress(
 		x: bigint,
 		y: bigint,
-        eip7212WebAuthPrecompileVerifier:string =
-            SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
-        eip7212WebAuthContractVerifier:string =
-            SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER, 
-		webAuthnSignerFactory =
-            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
-		webAuthnSignerSingleton =
-            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON
+        overrides:{
+            eip7212WebAuthPrecompileVerifier?:string,
+            eip7212WebAuthContractVerifier?:string,
+            webAuthnSignerFactory?:string,
+            webAuthnSignerSingleton?:string,
+        } = {}
 	): string {
+        const eip7212WebAuthPrecompileVerifier =
+            overrides.eip7212WebAuthPrecompileVerifier??
+            SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+        const eip7212WebAuthContractVerifier =
+            overrides.eip7212WebAuthContractVerifier??
+            SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+		const webAuthnSignerFactory =
+            overrides.webAuthnSignerFactory??
+            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+		const webAuthnSignerSingleton =
+            overrides.webAuthnSignerSingleton??
+            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+
         if(
             eip7212WebAuthPrecompileVerifier.length != 42 ||
             eip7212WebAuthPrecompileVerifier.slice(0,38) != ZeroAddress.slice(0,38)
@@ -1436,13 +1511,14 @@ export class SafeAccount extends SmartAccount {
 	 */
 	public static formatSignaturesToUseroperationSignature(
 		signatures: SignerSignaturePair[],
-		validAfter: bigint = 0n,
-		validUntil: bigint = 0n,
-        webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
+        overrides: WebAuthnSignatureOverrides = {},
     ): string {
+        const validAfter = overrides.validAfter??0n;
+        const validUntil = overrides.validUntil??0n;
+
         const formatedSignature =  this.buildSignaturesFromSingerSignaturePairs(
             signatures,
-            webAuthnSignatureOverrides
+            overrides
         );
 
 		return solidityPacked(
@@ -1474,10 +1550,12 @@ export class SafeAccount extends SmartAccount {
 			return SafeAccount.createWebAuthnSignerVerifierAddress(
 				signer.x,
 				signer.y,
-                eip7212WebAuthPrecompileVerifier,
-                eip7212WebAuthContractVerifier,
-                webAuthnSignerFactory,
-                webAuthnSignerSingleton,
+                {
+                    eip7212WebAuthPrecompileVerifier,
+                    eip7212WebAuthContractVerifier,
+                    webAuthnSignerFactory,
+                    webAuthnSignerSingleton,
+                }
 			).toLowerCase()
 		}
 	}
@@ -1546,10 +1624,12 @@ export class SafeAccount extends SmartAccount {
 						signer = SafeAccount.createWebAuthnSignerVerifierAddress(
 							signer.x,
 							signer.y,
-                            eip7212WebAuthPrecompileVerifier,
-                            eip7212WebAuthContractVerifier,
-                            webAuthnSignerFactory,
-                            webAuthnSignerSingleton,
+                            {
+                                eip7212WebAuthPrecompileVerifier,
+                                eip7212WebAuthContractVerifier,
+                                webAuthnSignerFactory,
+                                webAuthnSignerSingleton,
+                            }
 						)
 					}
 					return {
@@ -1613,10 +1693,14 @@ export class SafeAccount extends SmartAccount {
             newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(
                 newOwner.x,
                 newOwner.y,
-                overrides.eip7212WebAuthPrecompileVerifier,
-                overrides.eip7212WebAuthContractVerifier,
-                overrides.webAuthnSignerFactory,
-                overrides.webAuthnSignerSingleton,
+                {
+                    eip7212WebAuthPrecompileVerifier:
+                        overrides.eip7212WebAuthPrecompileVerifier,
+                    eip7212WebAuthContractVerifier:
+                        overrides.eip7212WebAuthContractVerifier,
+                    webAuthnSignerFactory:overrides.webAuthnSignerFactory,
+                    webAuthnSignerSingleton:overrides.webAuthnSignerSingleton,
+                }
             )
             const newOwnerCode = await sendEthGetCodeRequest(
                 nodeRpcUrl, newOwnerT, 'latest');
@@ -1643,10 +1727,14 @@ export class SafeAccount extends SmartAccount {
             oldOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(
                 oldOwner.x,
                 oldOwner.y,
-                overrides.eip7212WebAuthPrecompileVerifier,
-                overrides.eip7212WebAuthContractVerifier,
-                overrides.webAuthnSignerFactory,
-                overrides.webAuthnSignerSingleton,
+                {
+                    eip7212WebAuthPrecompileVerifier:
+                        overrides.eip7212WebAuthPrecompileVerifier,
+                    eip7212WebAuthContractVerifier:
+                        overrides.eip7212WebAuthContractVerifier,
+                    webAuthnSignerFactory:overrides.webAuthnSignerFactory,
+                    webAuthnSignerSingleton:overrides.webAuthnSignerSingleton,
+                }
             )
         }else{
             oldOwnerT = oldOwner;
@@ -1696,10 +1784,14 @@ export class SafeAccount extends SmartAccount {
             ownerToDeleteT = SafeAccount.createWebAuthnSignerVerifierAddress(
                 ownerToDelete.x,
                 ownerToDelete.y,
-                overrides.eip7212WebAuthPrecompileVerifier,
-                overrides.eip7212WebAuthContractVerifier,
-                overrides.webAuthnSignerFactory,
-                overrides.webAuthnSignerSingleton,
+                {
+                    eip7212WebAuthPrecompileVerifier:
+                        overrides.eip7212WebAuthPrecompileVerifier,
+                    eip7212WebAuthContractVerifier:
+                        overrides.eip7212WebAuthContractVerifier,
+                    webAuthnSignerFactory:overrides.webAuthnSignerFactory,
+                    webAuthnSignerSingleton:overrides.webAuthnSignerSingleton,
+                }
             )
         }else{
             ownerToDeleteT = ownerToDelete;

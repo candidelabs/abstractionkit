@@ -17,9 +17,16 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 
     constructor(
 		accountAddress: string,
-		safe4337ModuleAddress: string = SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
-		entrypointAddress: string = SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS,
+        overrides:{
+            safe4337ModuleAddress?: string,
+            entrypointAddress?: string,
+        } = {}
 	) {
+        const safe4337ModuleAddress = overrides.safe4337ModuleAddress??
+            SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+		const entrypointAddress = overrides.entrypointAddress??
+            SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS;
+
 		super(accountAddress, safe4337ModuleAddress, entrypointAddress);
 	}
     
@@ -83,8 +90,10 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 
         const safe = new SafeAccountV0_3_0(
             accountAddress,
-            overrides.safe4337ModuleAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
-            overrides.entrypointAddress ?? SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS,
+            {
+                safe4337ModuleAddress:overrides.safe4337ModuleAddress,
+                entrypointAddress:overrides.entrypointAddress,
+            }
         );
 		safe.factoryAddress = factoryAddress;
 		safe.factoryData = factoryData;
@@ -100,19 +109,30 @@ export class SafeAccountV0_3_0 extends SafeAccount {
     public static getUserOperationEip712Hash(
 		useroperation: UserOperationV7,
 		chainId:bigint,
-		validAfter: bigint = 0n,
-		validUntil: bigint = 0n,
-		entrypointAddress: string = SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS,
-        safe4337ModuleAddress: string =
-            SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+        overrides:{
+            validAfter?: bigint,
+            validUntil?: bigint,
+            entrypointAddress?: string,
+            safe4337ModuleAddress?: string,
+        } = {}
     ): string{
+        const validAfter = overrides.validAfter??0n;
+        const validUntil = overrides.validUntil??0n;
+        const entrypointAddress = overrides.entrypointAddress??
+            SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS;
+        const safe4337ModuleAddress =
+            overrides.safe4337ModuleAddress??
+            SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+
         return SafeAccount.getUserOperationEip712Hash(
             useroperation,
             chainId,
-            validAfter,
-            validUntil,
-            entrypointAddress,
-            safe4337ModuleAddress
+            {
+                validAfter,
+                validUntil,
+                entrypointAddress,
+                safe4337ModuleAddress
+            }
         )
     }
 
@@ -120,16 +140,29 @@ export class SafeAccountV0_3_0 extends SafeAccount {
     public static createInitializerCallData(
 		owners: Signer[],
 		threshold: number,
-		safe4337ModuleAddress: string =
-            SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
-		safeModuleSetupddress: string =
-            SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
+        overrides:{
+            safe4337ModuleAddress?: string,
+            safeModuleSetupddress?: string,
+            multisendContractAddress?: string,
+            webAuthnSharedSigner?:string,
+            eip7212WebAuthPrecompileVerifierForSharedSigner?:string,
+            eip7212WebAuthContractVerifierForSharedSigner?:string,
+        } = {}
 	): string {
-        return SafeAccount.createInitializerCallData(
+        const safe4337ModuleAddress = overrides.safe4337ModuleAddress??
+            SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+		const safeModuleSetupddress = overrides.safeModuleSetupddress??
+            SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS;
+
+        return SafeAccount.createBaseInitializerCallData(
             owners,
             threshold,
             safe4337ModuleAddress,
             safeModuleSetupddress,
+            overrides.multisendContractAddress,
+            overrides.webAuthnSharedSigner,
+            overrides.eip7212WebAuthPrecompileVerifierForSharedSigner,
+            overrides.eip7212WebAuthContractVerifierForSharedSigner,
         );
     }
     

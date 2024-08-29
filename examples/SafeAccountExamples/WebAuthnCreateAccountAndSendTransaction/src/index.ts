@@ -20,7 +20,6 @@ async function main(): Promise<void> {
     const chainId = BigInt(process.env.CHAIN_ID as string)
     const bundlerUrl = process.env.BUNDLER_URL as string
     const jsonRpcNodeProvider = process.env.JSON_RPC_NODE_PROVIDER as string
-    const entrypoint = process.env.ENTRYPOINT_ADDRESS as string
     const paymasterRPC = process.env.PAYMASTER_RPC as string;
 
     const navigator = {
@@ -117,9 +116,6 @@ async function main(): Promise<void> {
     const safeInitOpHash = SafeAccount.getUserOperationEip712Hash(
 			userOperation,
 			chainId,
-			0n,
-			0n,
-			entrypoint
 		)
     
     const assertion = navigator.credentials.get({
@@ -148,8 +144,6 @@ async function main(): Promise<void> {
 
     userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
       [SignerSignaturePair],
-      0n, //validAfter - zero means no limits
-      0n, //validUntil - zero means no limits
       {isInit:userOperation.nonce == 0n}
     )
 
