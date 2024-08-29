@@ -82,14 +82,18 @@ export class AbstractionKitError extends Error {
 		this.context = context;
 	}
 
-    //get a string representation of AbstractionKitError
-    //Usefull with React Native, as Error "cause" is not shown in the error trace
-    stringify(): string {
-        return JSON.stringify(
-            this,
-            ["name", "code", "message", "cause", "errno", "context"]
-        )
-    }
+	//get a string representation of AbstractionKitError
+	//Usefull with React Native, as Error "cause" is not shown in the error trace
+	stringify(): string {
+		return JSON.stringify(this, [
+			"name",
+			"code",
+			"message",
+			"cause",
+			"errno",
+			"context",
+		]);
+	}
 }
 
 export function ensureError(value: unknown): Error {

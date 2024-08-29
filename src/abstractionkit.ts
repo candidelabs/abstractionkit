@@ -1,5 +1,8 @@
 export { SmartAccount } from "./account/SmartAccount";
-export { SocialRecoveryModule, RecoveryRequest } from "./account/Safe/modules/SocialRecoveryModule";
+export {
+	SocialRecoveryModule,
+	RecoveryRequest,
+} from "./account/Safe/modules/SocialRecoveryModule";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
 export { SafeAccountV0_3_0 } from "./account/Safe/SafeAccountV0_3_0";
 
@@ -18,7 +21,7 @@ export {
 	getFunctionSelector,
 	fetchAccountNonce,
 	calculateUserOperationMaxGasCost,
-    sendJsonRpcRequest
+	sendJsonRpcRequest,
 } from "./utils";
 
 export {
@@ -28,10 +31,10 @@ export {
 	SafeModuleExecutorFunctionSelector,
 	SafeUserOperationTypedDataDomain,
 	WebauthPublicKey,
-    EOADummySignature,
+	EOADummySignature,
 	WebauthDummySignerSignaturePair,
 	WebauthSignatureData,
-	SignerSignaturePair
+	SignerSignaturePair,
 } from "./account/Safe/types";
 
 export {

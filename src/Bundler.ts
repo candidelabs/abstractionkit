@@ -103,7 +103,7 @@ export class Bundler {
 				);
 			}
 			var res = jsonRpcResult as GasEstimationResult;
-            const gasEstimationResult: GasEstimationResult = {
+			const gasEstimationResult: GasEstimationResult = {
 				callGasLimit: BigInt(res.callGasLimit),
 				preVerificationGas: BigInt(res.preVerificationGas),
 				verificationGasLimit: BigInt(res.verificationGasLimit),

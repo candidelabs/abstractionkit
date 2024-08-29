@@ -23,15 +23,14 @@ export interface CreatePaymasterUserOperationOverrides {
 	verificationGasLimit?: bigint;
 	/** set the preVerificationGas instead of estimating gas using the bundler*/
 	preVerificationGas?: bigint;
-	
-    /** set the callGasLimitPercentageMultiplier instead of estimating gas using the bundler*/
+
+	/** set the callGasLimitPercentageMultiplier instead of estimating gas using the bundler*/
 	callGasLimitPercentageMultiplier?: number;
 	/** set the verificationGasLimitPercentageMultiplier instead of estimating gas using the bundler*/
 	verificationGasLimitPercentageMultiplier?: number;
 	/** set the preVerificationGasPercentageMultiplier instead of estimating gas using the bundler*/
 	preVerificationGasPercentageMultiplier?: number;
-	
-    /** pass some state overrides for gas estimation"*/
+
+	/** pass some state overrides for gas estimation"*/
 	state_override_set?: StateOverrideSet;
 }
-

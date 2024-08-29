@@ -11,7 +11,7 @@ export interface BaseUserOperation {
 	maxFeePerGas: bigint;
 	maxPriorityFeePerGas: bigint;
 	signature: string;
-};
+}
 
 /**
  * Wrapper for a useroperation for an entrypoint v0.06
@@ -19,8 +19,7 @@ export interface BaseUserOperation {
 export interface UserOperationV6 extends BaseUserOperation {
 	initCode: string;
 	paymasterAndData: string;
-};
-
+}
 
 /**
  * Wrapper for a useroperation for an entrypoint v0.07
@@ -28,11 +27,11 @@ export interface UserOperationV6 extends BaseUserOperation {
 export interface UserOperationV7 extends BaseUserOperation {
 	factory: string | null;
 	factoryData: string | null;
-    paymaster: string | null;
-    paymasterVerificationGasLimit: bigint | null
-    paymasterPostOpGasLimit: bigint | null
-    paymasterData: string | null
-};
+	paymaster: string | null;
+	paymasterVerificationGasLimit: bigint | null;
+	paymasterPostOpGasLimit: bigint | null;
+	paymasterData: string | null;
+}
 
 export type AbiInputValue =
 	| string
@@ -112,23 +111,23 @@ export type UserOperationReceiptResult = {
 } | null;
 
 export type SponsorMetadata = {
-    name: string,
-    description: string,
-    url: string,
-    icons: string[],
-}
+	name: string;
+	description: string;
+	url: string;
+	icons: string[];
+};
 
 export type PmUserOperationV7Result = {
-    paymaster: string,
-    paymasterVerificationGasLimit: bigint,
-    paymasterPostOpGasLimit: bigint,
-    paymasterData: string,
-    callGasLimit?: bigint,
-    verificationGasLimit?: bigint,
-    preVerificationGas?: bigint,
-    maxFeePerGas?: bigint,
-    maxPriorityFeePerGas?: bigint,
-    sponsorMetadata?: SponsorMetadata
+	paymaster: string;
+	paymasterVerificationGasLimit: bigint;
+	paymasterPostOpGasLimit: bigint;
+	paymasterData: string;
+	callGasLimit?: bigint;
+	verificationGasLimit?: bigint;
+	preVerificationGas?: bigint;
+	maxFeePerGas?: bigint;
+	maxPriorityFeePerGas?: bigint;
+	sponsorMetadata?: SponsorMetadata;
 };
 
 export type PmUserOperationV6Result = {
@@ -138,7 +137,7 @@ export type PmUserOperationV6Result = {
 	verificationGasLimit?: bigint;
 	maxFeePerGas?: bigint;
 	maxPriorityFeePerGas?: bigint;
-    sponsorMetadata?: SponsorMetadata
+	sponsorMetadata?: SponsorMetadata;
 };
 
 /**
@@ -190,11 +189,11 @@ interface BasePaymasterMetadata {
 export interface PaymasterMetadataV7 extends BasePaymasterMetadata {
 	/** dummyPaymasterAndData to use for gas estimation */
 	dummyPaymasterAndData: {
-      paymaster: string,
-      paymasterVerificationGasLimit: bigint,
-      paymasterPostOpGasLimit: bigint,
-      paymasterData: string
-    };
+		paymaster: string;
+		paymasterVerificationGasLimit: bigint;
+		paymasterPostOpGasLimit: bigint;
+		paymasterData: string;
+	};
 }
 
 export interface PaymasterMetadataV6 extends BasePaymasterMetadata {
