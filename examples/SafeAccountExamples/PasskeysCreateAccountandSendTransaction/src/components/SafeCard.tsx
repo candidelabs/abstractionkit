@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import {
-	SafeAccountWebAuth as SafeAccount,
+	SafeAccountV0_3_0 as SafeAccount,
 	getFunctionSelector,
 	createCallData,
 	MetaTransaction,
-	DummySignature,
+	WebauthDummySignerSignaturePair,
 	CandidePaymaster,
 } from "abstractionkit";
 
@@ -16,7 +16,6 @@ import { JsonRpcProvider } from "ethers";
 const jsonRPCProvider = import.meta.env.VITE_JSON_RPC_PROVIDER;
 const bundlerUrl = import.meta.env.VITE_BUNDLER_URL;
 const paymasterUrl = import.meta.env.VITE_PAYMASTER_URL;
-const entrypoint = import.meta.env.VITE_ENTRYPOINT_ADDRESS;
 const chainId = import.meta.env.VITE_CHAIN_ID;
 const chainName = import.meta.env.VITE_CHAIN_NAME as string;
 
@@ -61,25 +60,23 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 			jsonRPCProvider,
 			bundlerUrl,
 			{
-				dummySignatures: [DummySignature.webAuthn],
+				dummySignatures: [WebauthDummySignerSignaturePair],
+				preVerificationGasPercentageMultiplier: 120,
+				verificationGasLimitPercentageMultiplier: 120,
 			},
 		);
 
 		let paymaster: CandidePaymaster = new CandidePaymaster(paymasterUrl);
-		userOperation = await paymaster.createSponsorPaymasterUserOperation(
+		let [userOperationSponsored, _sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
 			userOperation,
 			bundlerUrl,
-			// {
-			// 	preVerificationGasPercentageMultiplier:20,
-			// 	verificationGasLimitPercentageMultiplier:20
-			// }
 		);
+		userOperation = userOperationSponsored;
 		try {
 			const bundlerResponse = await signAndSendUserOp(
 				safeAccount,
 				userOperation,
 				passkey,
-				entrypoint,
 				chainId,
 			);
 			setUserOpHash(bundlerResponse.userOperationHash);

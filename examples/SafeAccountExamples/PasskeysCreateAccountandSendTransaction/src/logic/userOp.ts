@@ -1,10 +1,10 @@
 import { ethers } from 'ethers'
 import {
-  SafeAccountWebAuth as SafeAccount,
+  SafeAccountV0_3_0 as SafeAccount,
   SignerSignaturePair,
   WebauthSignatureData,
   SendUseroperationResponse,
-  UserOperation,
+  UserOperationV7,
 } from 'abstractionkit'
 
 import { 
@@ -22,20 +22,18 @@ type Assertion = {
  * Signs and sends a user operation to the specified entry point on the blockchain.
  * @param userOp The unsigned user operation to sign and send.
  * @param passkey The passkey used for signing the user operation.
- * @param entryPoint The entry point address on the blockchain. Defaults to ENTRYPOINT_ADDRESS if not provided.
  * @param chainId The chain ID of the blockchain. Defaults to APP_CHAIN_ID if not provided.
  * @returns User Operation hash promise.
  * @throws An error if signing the user operation fails.
  */
 async function signAndSendUserOp(
   smartAccount: SafeAccount,
-  userOp: UserOperation,
+  userOp: UserOperationV7,
   passkey: PasskeyLocalStorageFormat,
-  entryPoint: string = import.meta.env.VITE_ENTRYPOINT_ADDRESS,
   chainId: ethers.BigNumberish = import.meta.env.VITE_CHAIN_ID,
   bundlerUrl: string = import.meta.env.VITE_BUNDLER_URL,
 ): Promise<SendUseroperationResponse> {
-  const safeInitOpHash = SafeAccount.getUserOperationEip712Hash(userOp, BigInt(chainId), 0n, 0n, entryPoint)
+  const safeInitOpHash = SafeAccount.getUserOperationEip712Hash(userOp, BigInt(chainId))
 
   const assertion = (await navigator.credentials.get({
     publicKey: {
@@ -61,8 +59,10 @@ async function signAndSendUserOp(
     signature: webauthSignature,
   }
 
-  userOp.signature = SafeAccount.formatSignaturesToUseroperationSignature([SignerSignaturePair], userOp.nonce == 0n)
-
+  userOp.signature = SafeAccount.formatSignaturesToUseroperationSignature(
+    [SignerSignaturePair],
+    { isInit: userOp.nonce == 0n },
+  );
   console.log(userOp, "userOp");
   return await smartAccount.sendUserOperation(userOp, bundlerUrl)
 }

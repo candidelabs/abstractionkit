@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { SafeAccountWebAuth as SafeAccount } from 'abstractionkit'
+import { SafeAccountV0_3_0 as SafeAccount } from 'abstractionkit'
 
 import { PasskeyLocalStorageFormat } from '../logic/passkeys'
 import { setItem } from '../logic/storage'

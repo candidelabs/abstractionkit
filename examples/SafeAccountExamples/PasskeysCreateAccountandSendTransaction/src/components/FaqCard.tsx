@@ -61,7 +61,7 @@ const data = {
 			content: (
 				<p>
 					To integrate Safe Passkeys into your app, you can begin by using{" "}
-					<i>abstractionkit@0.1.12</i>. Refer to the complete{" "}
+					<i>abstractionkit@0.1.16</i>. Refer to the complete{" "}
 					<a
 						target="_blank"
 						href="https://docs.candide.dev/wallet/plugins/passkeys/"
