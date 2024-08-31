@@ -171,6 +171,50 @@ export class SocialRecoveryModule extends SafeModule{
             value: 0n
         }
     }
+    
+    /**
+     * create MetaTransaction that lets the owner revoke a guardian from its account.
+     * @param nodeRpcUrl The JSON-RPC API url for the target chain
+     * (to get the prevGuardian paramter).
+     * @param accountAddress The target account.
+     * @param guardianAddress The guardian to revoke.
+     * @param threshold The new threshold that will be set after execution of revokation.
+     * @param prevGuardian (if not provided, will be detected using the nodeRpcUrl)
+     * The previous guardian linking to the guardian in the linked list.
+	 * @returns a MetaTransaction
+     */
+    public async createRevokeGuardianWithThresholdMetaTransaction(
+        nodeRpcUrl: string,
+        accountAddress: string,
+        guardianAddress: string,
+        threshold: bigint,
+        prevGuardianAddress?: string,
+    ):Promise<MetaTransaction>{
+        let prevGuardianAddressT = prevGuardianAddress;
+		if (prevGuardianAddressT == null) {
+			const guardians = await this.getGuardians(nodeRpcUrl, accountAddress);
+			const guardianToDeleteIndex = guardians.indexOf(guardianAddress);
+			if (guardianToDeleteIndex == -1) {
+				throw RangeError(
+                    guardianAddress + 
+                    " is not a current guardian for account : " +
+                    accountAddress
+                );
+			} else if (guardianToDeleteIndex == 0) {
+                //SENTINEL_ADDRESS
+				prevGuardianAddressT = "0x0000000000000000000000000000000000000001";
+			} else if (guardianToDeleteIndex > 0) {
+				prevGuardianAddressT = guardians[guardianToDeleteIndex - 1];
+			} else {
+				throw RangeError("Invalid guardian index");
+			}
+		}
+		return this.createStandardRevokeGuardianWithThresholdMetaTransaction(
+			prevGuardianAddressT,
+            guardianAddress,
+			threshold,
+		);
+    }
 
     /**
      * create MetaTransaction that lets the owner revoke a guardian from its account.
@@ -179,7 +223,7 @@ export class SocialRecoveryModule extends SafeModule{
      * @param threshold The new threshold that will be set after execution of revokation.
 	 * @returns a MetaTransaction
      */
-    public createRevokeGuardianWithThresholdMetaTransaction(
+    public createStandardRevokeGuardianWithThresholdMetaTransaction(
         prevGuardianAddress: string,
         guardianAddress: string,
         threshold: bigint,
