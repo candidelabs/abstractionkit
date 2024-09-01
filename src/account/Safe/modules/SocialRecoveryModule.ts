@@ -1,6 +1,5 @@
 import { SafeModule } from "./SafeModule";
-import { AbstractionKitError,ensureError } from "src/errors";
-import { createCallData, sendEthCallRequest, sendJsonRpcRequest } from "../../../utils";
+import { createCallData, sendEthCallRequest } from "../../../utils";
 import { MetaTransaction } from "../../../types";
 import { AbiCoder } from "ethers";
 
@@ -66,7 +65,7 @@ export class SocialRecoveryModule extends SafeModule{
         accountAddress: string,
         newOwners: string[],
         newThreshold: number,
-        signatureData: RecoverySignatureData,
+        signaturePairList: RecoverySignaturePair[],
         execute: boolean
     ):MetaTransaction{
         //"multiConfirmRecovery(address,address[],uint256,SignatureData[],bool)"
@@ -78,7 +77,8 @@ export class SocialRecoveryModule extends SafeModule{
                 accountAddress,
                 newOwners,
                 newThreshold,
-                [signatureData.signer, signatureData.signature],
+                signaturePairList.map(
+                    signaturePair=> [signaturePair.signer, signaturePair.signature]),
                 execute
             ],
         );
@@ -583,9 +583,7 @@ export type RecoveryRequest  = {
     newOwners:string[];
 }
 
-export type RecoverySignatureData  = {
+export type RecoverySignaturePair  = {
     signer:bigint;
-    signature:string[];
+    signature:string;
 }
-
-
