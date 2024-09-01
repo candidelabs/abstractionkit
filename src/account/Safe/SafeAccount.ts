@@ -1107,18 +1107,18 @@ export class SafeAccount extends SmartAccount {
 				["uint256", "uint256", "uint176"],
 				[0, 0, 0],
 			);
-
+            /*
 			const clearWebauthSharedSigner: MetaTransaction = {
 				to: webAuthnSharedSigner,
 				value: 0n,
 				data: clearWebauthSharedSignerCallData,
 				operation: Operation.Delegate,
-			};
+			};*/
 
 			transactions = [
 				createDeterministicWebAuthnVerifierOwner,
 				swapSingletonWithDeterministicWebAuthnVerifierOwner,
-				clearWebauthSharedSigner,
+				//clearWebauthSharedSigner,
 			].concat(transactions);
 		}
 
