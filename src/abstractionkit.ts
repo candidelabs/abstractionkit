@@ -2,6 +2,8 @@ export { SmartAccount } from "./account/SmartAccount";
 export {
 	SocialRecoveryModule,
 	RecoveryRequest,
+    SocialRecoveryModuleGracePeriodSelector,
+    RecoverySignaturePair
 } from "./account/Safe/modules/SocialRecoveryModule";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
 export { SafeAccountV0_3_0 } from "./account/Safe/SafeAccountV0_3_0";
