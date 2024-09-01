@@ -39,8 +39,8 @@ export interface CreateBaseUserOperationOverrides {
 	webAuthnSignerFactory?: string;
 	webAuthnSignerSingleton?: string;
 
-	eip7212WebAuthPrecompileVerifier?: string;
-	eip7212WebAuthContractVerifier?: string;
+	eip7212WebAuthnPrecompileVerifier?: string;
+	eip7212WebAuthnContractVerifier?: string;
 	safeModuleExecutorFunctionSelector?: SafeModuleExecutorFunctionSelector;
 	multisendContractAddress?: string;
 }
@@ -99,8 +99,8 @@ export interface InitCodeOverrides {
 	 */
 	multisendContractAddress?: string;
 	webAuthnSharedSigner?: string;
-	eip7212WebAuthPrecompileVerifierForSharedSigner?: string;
-	eip7212WebAuthContractVerifierForSharedSigner?: string;
+	eip7212WebAuthnPrecompileVerifierForSharedSigner?: string;
+	eip7212WebAuthnContractVerifierForSharedSigner?: string;
 }
 
 export interface BaseInitOverrides {
@@ -123,15 +123,15 @@ export interface BaseInitOverrides {
 	 */
 	multisendContractAddress?: string;
 	webAuthnSharedSigner?: string;
-	eip7212WebAuthPrecompileVerifierForSharedSigner?: string;
-	eip7212WebAuthContractVerifierForSharedSigner?: string;
+	eip7212WebAuthnPrecompileVerifierForSharedSigner?: string;
+	eip7212WebAuthnContractVerifierForSharedSigner?: string;
 }
 
 export interface WebAuthnSignatureOverrides {
 	isInit?: boolean;
 	webAuthnSharedSigner?: string;
-	eip7212WebAuthPrecompileVerifier?: string;
-	eip7212WebAuthContractVerifier?: string;
+	eip7212WebAuthnPrecompileVerifier?: string;
+	eip7212WebAuthnContractVerifier?: string;
 	webAuthnSignerFactory?: string;
 	webAuthnSignerSingleton?: string;
 	validAfter?: bigint;
@@ -184,16 +184,16 @@ export interface SafeUserOperationV7TypedDataValues {
 
 export type ECDSAPublicAddress = string;
 
-export interface WebauthPublicKey {
+export interface WebauthnPublicKey {
 	x: bigint;
 	y: bigint;
 }
 
-export type Signer = ECDSAPublicAddress | WebauthPublicKey;
+export type Signer = ECDSAPublicAddress | WebauthnPublicKey;
 
 export type ECDSASignature = string;
 
-export interface WebauthSignatureData {
+export interface WebauthnSignatureData {
 	authenticatorData: ArrayBuffer;
 	clientDataFields: string;
 	rs: [bigint, bigint];
@@ -212,7 +212,7 @@ export const EOADummySignature: SignerSignaturePair = {
 	isContractSignature: false,
 };
 
-export const WebauthDummySignerSignaturePair: SignerSignaturePair = {
+export const WebauthnDummySignerSignaturePair: SignerSignaturePair = {
 	signer: "0xfD90FAd33ee8b58f32c00aceEad1358e4AFC23f9",
 	signature:
 		"0x000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000e06c92f0ac5c4ef9e74721c23d80a9fc12f259ca84afb160f0890483539b9e6080d824c0e6c795157ad5d1ee5eff1ceeb3031009a595f9360919b83dd411c5a78d0000000000000000000000000000000000000000000000000000000000000025a24f744b28d73f066bf3203d145765a7bc735e6328168c8b03e476da3ad0d8fe0400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e226f726967696e223a2268747470733a2f2f736166652e676c6f62616c220000",

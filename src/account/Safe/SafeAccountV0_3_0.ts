@@ -76,7 +76,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			if (typeof owner != "string") {
 				if (isInitWebAuthn) {
 					throw RangeError(
-						"Only one Webauth signer is allowed during initialization",
+						"Only one Webauthn signer is allowed during initialization",
 					);
 				}
 				isInitWebAuthn = true;
@@ -144,8 +144,8 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			safeModuleSetupddress?: string;
 			multisendContractAddress?: string;
 			webAuthnSharedSigner?: string;
-			eip7212WebAuthPrecompileVerifierForSharedSigner?: string;
-			eip7212WebAuthContractVerifierForSharedSigner?: string;
+			eip7212WebAuthnPrecompileVerifierForSharedSigner?: string;
+			eip7212WebAuthnContractVerifierForSharedSigner?: string;
 		} = {},
 	): string {
 		const safe4337ModuleAddress =
@@ -162,8 +162,8 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			safeModuleSetupddress,
 			overrides.multisendContractAddress,
 			overrides.webAuthnSharedSigner,
-			overrides.eip7212WebAuthPrecompileVerifierForSharedSigner,
-			overrides.eip7212WebAuthContractVerifierForSharedSigner,
+			overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner,
+			overrides.eip7212WebAuthnContractVerifierForSharedSigner,
 		);
 	}
 

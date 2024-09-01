@@ -32,10 +32,10 @@ export {
 	InitCodeOverrides,
 	SafeModuleExecutorFunctionSelector,
 	SafeUserOperationTypedDataDomain,
-	WebauthPublicKey,
+	WebauthnPublicKey,
 	EOADummySignature,
-	WebauthDummySignerSignaturePair,
-	WebauthSignatureData,
+	WebauthnDummySignerSignaturePair,
+	WebauthnSignatureData,
 	SignerSignaturePair,
 } from "./account/Safe/types";
 
