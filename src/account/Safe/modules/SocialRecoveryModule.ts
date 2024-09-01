@@ -4,9 +4,16 @@ import { createCallData, sendEthCallRequest, sendJsonRpcRequest } from "../../..
 import { MetaTransaction } from "../../../types";
 import { AbiCoder } from "ethers";
 
+export enum SocialRecoveryModuleGracePeriodSelector {
+	After3Minutes = "0x949d01d424bE050D09C16025dd007CB59b3A8c66",
+	After3Days = "0x38275826E1933303E508433dD5f289315Da2541c",
+	After7Days = "0x088f6cfD8BB1dDb1BB069CCb3fc1A98927D233f2",
+	After14Days = "0x9BacD92F4687Db306D7ded5d4513a51EA05df25b",
+}
+
 export class SocialRecoveryModule extends SafeModule{
     static readonly DEFAULT_SOCIAL_RECOVERY_ADDRESS =
-        "0x4Aa5Bf7D840aC607cb5BD3249e6Af6FC86C04897";
+        SocialRecoveryModuleGracePeriodSelector.After3Days;
 
     constructor(
 		moduleAddress: string = SocialRecoveryModule.DEFAULT_SOCIAL_RECOVERY_ADDRESS,
