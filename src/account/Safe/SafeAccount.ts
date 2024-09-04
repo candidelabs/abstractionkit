@@ -1489,7 +1489,7 @@ export class SafeAccount extends SmartAccount {
 		);
 	}
 
-	public static getLowerCaseAddress(
+	public static getSignerLowerCaseAddress(
 		signer: Signer,
 		webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
 	): string {
@@ -1527,11 +1527,11 @@ export class SafeAccount extends SmartAccount {
 		webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
 	) {
 		signatures.sort((left, right) =>
-			SafeAccount.getLowerCaseAddress(
+			SafeAccount.getSignerLowerCaseAddress(
 				left.signer,
 				webAuthnSignatureOverrides,
 			).localeCompare(
-				SafeAccount.getLowerCaseAddress(
+				SafeAccount.getSignerLowerCaseAddress(
 					right.signer,
 					webAuthnSignatureOverrides,
 				),
