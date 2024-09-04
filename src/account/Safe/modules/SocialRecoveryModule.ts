@@ -195,9 +195,11 @@ export class SocialRecoveryModule extends SafeModule{
         accountAddress: string,
         guardianAddress: string,
         threshold: bigint,
-        prevGuardianAddress?: string,
+		overrides: {
+            prevGuardianAddress?: string,
+		} = {},
     ):Promise<MetaTransaction>{
-        let prevGuardianAddressT = prevGuardianAddress;
+        let prevGuardianAddressT = overrides.prevGuardianAddress;
 		if (prevGuardianAddressT == null) {
 			const guardians = await this.getGuardians(nodeRpcUrl, accountAddress);
 			const guardianToDeleteIndex = guardians.indexOf(guardianAddress);

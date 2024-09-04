@@ -154,18 +154,24 @@ export class SafeAccount extends SmartAccount {
 	 */
 	public static createAccountCallDataSingleTransaction(
 		metaTransaction: MetaTransaction,
-		safeModuleExecutorFunctionSelector: SafeModuleExecutorFunctionSelector =
-            SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR,
+		overrides: {
+            safeModuleExecutorFunctionSelector?: SafeModuleExecutorFunctionSelector
+		} = {},
 	): string {
 		const value = metaTransaction.value ?? 0;
 		const data = metaTransaction.data ?? "0x";
 		const operation = metaTransaction.operation ?? Operation.Call;
+        const safeModuleExecutorFunctionSelector =
+            overrides.safeModuleExecutorFunctionSelector ??
+            SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR;
 		const executorFunctionCallData = SafeAccount.createAccountCallData(
 			metaTransaction.to,
 			value,
 			data,
 			operation,
-			safeModuleExecutorFunctionSelector,
+            {
+                safeModuleExecutorFunctionSelector,
+            }
 		);
 		return executorFunctionCallData;
 	}
@@ -176,9 +182,9 @@ export class SafeAccount extends SmartAccount {
 	public static createAccountCallDataBatchTransactions(
 		metaTransactions: MetaTransaction[],
 		overrides: {
-			safeModuleExecutorFunctionSelector: SafeModuleExecutorFunctionSelector;
-			multisendContractAddress: string;
-		},
+			safeModuleExecutorFunctionSelector?: SafeModuleExecutorFunctionSelector;
+			multisendContractAddress?: string;
+		} = {},
 	): string {
 		if (metaTransactions.length < 1) {
 			throw RangeError("There should be at least one metaTransaction");
@@ -204,7 +210,9 @@ export class SafeAccount extends SmartAccount {
 			0n,
 			multiSendCallData,
 			Operation.Delegate,
-			safeModuleExecutorFunctionSelector,
+            {
+                safeModuleExecutorFunctionSelector,
+            }
 		);
 
 		return executorFunctionCallData;
@@ -218,9 +226,13 @@ export class SafeAccount extends SmartAccount {
 		value: bigint,
 		data: string,
 		operation: Operation,
-		safeModuleExecutorFunctionSelector: SafeModuleExecutorFunctionSelector =
-            SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR,
+        overrides: {
+            safeModuleExecutorFunctionSelector?: SafeModuleExecutorFunctionSelector
+		} = {},
 	): string {
+        const safeModuleExecutorFunctionSelector =
+            overrides.safeModuleExecutorFunctionSelector?? 
+            SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR;
 		const executorFunctionInputParameters = [to, value, data, operation];
 		const callData = createCallData(
 			safeModuleExecutorFunctionSelector,
@@ -305,9 +317,12 @@ export class SafeAccount extends SmartAccount {
 		tokenAddress: string,
 		paymasterAddress: string,
 		approveAmount: bigint,
-		multisendContractAddress: string =
-            SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
+        overrides: {
+            multisendContractAddress?: string
+		} = {},
 	): string {
+        const multisendContractAddress = overrides.multisendContractAddress??
+            SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS;
 		const [metaTransaction, safeModuleExecutorFunctionSelector] =
 			SafeAccount.decodeAccountCallData(callData);
 
@@ -355,7 +370,9 @@ export class SafeAccount extends SmartAccount {
 			0n,
 			multiSendCallData,
 			Operation.Delegate,
-			safeModuleExecutorFunctionSelector,
+            {
+                safeModuleExecutorFunctionSelector,
+            }
 		);
 
 		return executorFunctionCallData;
@@ -593,27 +610,29 @@ export class SafeAccount extends SmartAccount {
 	public static async sendUserOperation(
 		userOperation: UserOperationV6 | UserOperationV7,
 		bundlerRpc: string,
-		entrypointAddress?: string,
+        overrides: {
+            entrypointAddress?: string,
+		} = {},
 	): Promise<SendUseroperationResponse> {
-        let entrypointAddressT = entrypointAddress;
-        if(entrypointAddressT == null){
+        let entrypointAddress = overrides.entrypointAddress;
+        if(entrypointAddress == null){
             if ("initCode" in userOperation) {
-                entrypointAddressT = ENTRYPOINT_V6;
+                entrypointAddress = ENTRYPOINT_V6;
             }else{
-                entrypointAddressT = ENTRYPOINT_V7;
+                entrypointAddress = ENTRYPOINT_V7;
             }
         }
 
 		const bundler = new Bundler(bundlerRpc);
         const sendUserOperationRes = await bundler.sendUserOperation(
 			userOperation,
-			entrypointAddressT,
+			entrypointAddress,
 		);
 
 		return new SendUseroperationResponse(
 			sendUserOperationRes,
 			bundler,
-			entrypointAddressT,
+			entrypointAddress,
 		);
 	}
 
@@ -889,15 +908,20 @@ export class SafeAccount extends SmartAccount {
 		tokenAddress: string,
 		paymasterAddress: string,
 		approveAmount: bigint,
-		multisendContractAddress: string =
-            SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
+        overrides: {
+            multisendContractAddress?: string
+		} = {},
 	): string {
+        const multisendContractAddress = overrides.multisendContractAddress??
+            SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS;
 		return SafeAccount.prependTokenPaymasterApproveToCallDataStatic(
 			callData,
 			tokenAddress,
 			paymasterAddress,
 			approveAmount,
-			multisendContractAddress,
+            {
+                multisendContractAddress,
+            }
 		);
 	}
 
@@ -1126,7 +1150,9 @@ export class SafeAccount extends SmartAccount {
 			if (transactions.length == 1) {
 				callData = SafeAccount.createAccountCallDataSingleTransaction(
 					transactions[0],
-					safeModuleExecutorFunctionSelector,
+                    {
+                        safeModuleExecutorFunctionSelector,
+                    }
 				);
 			} else {
 				callData = SafeAccount.createAccountCallDataBatchTransactions(
