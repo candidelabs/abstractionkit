@@ -175,7 +175,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 	 */
 	public static createFactoryAddressAndData(
 		owners: Signer[],
-		overrides: InitCodeOverrides,
+		overrides: InitCodeOverrides = {},
 	): [string, string] {
 		return SafeAccount.createFactoryAddressAndData(
 			owners,

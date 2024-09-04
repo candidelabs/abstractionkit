@@ -145,7 +145,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 */
 	public static createAccountAddressAndInitCode(
 		owners: Signer[],
-		overrides: InitCodeOverrides,
+		overrides: InitCodeOverrides = {},
 	): [string, string] {
 		let safeAccountFactory;
 		if (overrides.safeAccountFactoryAddress != null) {
@@ -209,7 +209,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 */
 	public static createInitCode(
 		owners: Signer[],
-		overrides: InitCodeOverrides,
+		overrides: InitCodeOverrides = {},
 	): string {
 		let [safeAccountFactoryAddress, factoryData] =
 			SafeAccount.createFactoryAddressAndData(
