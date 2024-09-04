@@ -604,35 +604,22 @@ export class SafeAccount extends SmartAccount {
 	 * sends a useroperation to a bundler rpc
 	 * @param userOperation - useroperation to send
 	 * @param bundlerRpc - bundler rpc to send useroperation
-	 * @param entrypointAddress - target entrypoint
 	 * @returns promise with SendUseroperationResponse
 	 */
-	public static async sendUserOperation(
+	public async sendUserOperation(
 		userOperation: UserOperationV6 | UserOperationV7,
 		bundlerRpc: string,
-        overrides: {
-            entrypointAddress?: string,
-		} = {},
 	): Promise<SendUseroperationResponse> {
-        let entrypointAddress = overrides.entrypointAddress;
-        if(entrypointAddress == null){
-            if ("initCode" in userOperation) {
-                entrypointAddress = ENTRYPOINT_V6;
-            }else{
-                entrypointAddress = ENTRYPOINT_V7;
-            }
-        }
-
 		const bundler = new Bundler(bundlerRpc);
-        const sendUserOperationRes = await bundler.sendUserOperation(
+		const sendUserOperationRes = await bundler.sendUserOperation(
 			userOperation,
-			entrypointAddress,
+			this.entrypointAddress,
 		);
 
 		return new SendUseroperationResponse(
 			sendUserOperationRes,
 			bundler,
-			entrypointAddress,
+			this.entrypointAddress,
 		);
 	}
 
@@ -933,24 +920,14 @@ export class SafeAccount extends SmartAccount {
 	 * @param dummySignatures - list of dummy signatures
 	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
 	 */
-	public static async estimateUserOperationGas(
+	public async estimateUserOperationGas(
 		userOperation: UserOperationV6 | UserOperationV7,
 		bundlerRpc: string,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
 			dummySignatures?: SignerSignaturePair[];
-		    entrypointAddress?: string,
 		} = {},
 	): Promise<[bigint, bigint, bigint]> {
-        let entrypointAddressT = overrides.entrypointAddress;
-        if(entrypointAddressT == null){
-            if ("initCode" in userOperation) {
-                entrypointAddressT = ENTRYPOINT_V6;
-            }else{
-                entrypointAddressT = ENTRYPOINT_V7;
-            }
-        }
-
 		if (overrides.dummySignatures != null) {
 			if (overrides.dummySignatures.length < 1) {
 				throw RangeError("Number of dummySignatures can't be less than 1");
@@ -982,7 +959,7 @@ export class SafeAccount extends SmartAccount {
 		userOperation.maxPriorityFeePerGas = 0n;
 		const estimation = await bundler.estimateUserOperationGas(
 			userOperation,
-			entrypointAddressT,
+			this.entrypointAddress,
 			overrides.stateOverrideSet,
 		);
 		userOperation.maxFeePerGas = inputMaxFeePerGas;
@@ -1298,7 +1275,7 @@ export class SafeAccount extends SmartAccount {
 					);
 
 				[preVerificationGas, verificationGasLimit, callGasLimit] =
-					await SafeAccount.estimateUserOperationGas(
+					await this.estimateUserOperationGas(
 						userOperationToEstimate,
 						bundlerRpc,
 						{
