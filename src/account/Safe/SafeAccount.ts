@@ -154,7 +154,8 @@ export class SafeAccount extends SmartAccount {
 	 */
 	public static createAccountCallDataSingleTransaction(
 		metaTransaction: MetaTransaction,
-		safeModuleExecutorFunctionSelector: SafeModuleExecutorFunctionSelector = SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR,
+		safeModuleExecutorFunctionSelector: SafeModuleExecutorFunctionSelector =
+            SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR,
 	): string {
 		const value = metaTransaction.value ?? 0;
 		const data = metaTransaction.data ?? "0x";
@@ -217,7 +218,8 @@ export class SafeAccount extends SmartAccount {
 		value: bigint,
 		data: string,
 		operation: Operation,
-		safeModuleExecutorFunctionSelector: SafeModuleExecutorFunctionSelector = SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR,
+		safeModuleExecutorFunctionSelector: SafeModuleExecutorFunctionSelector =
+            SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR,
 	): string {
 		const executorFunctionInputParameters = [to, value, data, operation];
 		const callData = createCallData(
@@ -303,7 +305,8 @@ export class SafeAccount extends SmartAccount {
 		tokenAddress: string,
 		paymasterAddress: string,
 		approveAmount: bigint,
-		multisendContractAddress: string = SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
+		multisendContractAddress: string =
+            SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
 	): string {
 		const [metaTransaction, safeModuleExecutorFunctionSelector] =
 			SafeAccount.decodeAccountCallData(callData);
@@ -684,10 +687,14 @@ export class SafeAccount extends SmartAccount {
 		threshold: number,
 		safe4337ModuleAddress: string,
 		safeModuleSetupddress: string,
-		multisendContractAddress: string = SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
-		webAuthnSharedSigner = SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
-		eip7212WebAuthnPrecompileVerifierForSharedSigner: string = SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
-		eip7212WebAuthnContractVerifierForSharedSigner: string = SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER,
+		multisendContractAddress: string =
+            SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
+		webAuthnSharedSigner =
+            SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+		eip7212WebAuthnPrecompileVerifierForSharedSigner: string =
+            SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
+		eip7212WebAuthnContractVerifierForSharedSigner: string =
+            SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER,
 	): string {
 		if (owners.length < 1) {
 			throw RangeError("There should be at least one owner");
@@ -803,7 +810,7 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * create account initcode
+	 * create factory address and factoryData (initcode)
 	 * @param owners - list of account owners signers
 	 * @param overrides - overrides values to change default values
 	 * @returns factoryAddress and factoryData
@@ -882,7 +889,8 @@ export class SafeAccount extends SmartAccount {
 		tokenAddress: string,
 		paymasterAddress: string,
 		approveAmount: bigint,
-		multisendContractAddress: string = SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
+		multisendContractAddress: string =
+            SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
 	): string {
 		return SafeAccount.prependTokenPaymasterApproveToCallDataStatic(
 			callData,
@@ -1176,7 +1184,8 @@ export class SafeAccount extends SmartAccount {
 			maxFeePerGas *
 				BigInt(
 					Math.floor(
-						((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100) / 100,
+						((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100) /
+                            100,
 					),
 				);
 		maxPriorityFeePerGas =
@@ -1329,7 +1338,8 @@ export class SafeAccount extends SmartAccount {
 			callGasLimit *
 				BigInt(
 					Math.floor(
-						((overrides.callGasLimitPercentageMultiplier ?? 0) + 100) / 100,
+						((overrides.callGasLimitPercentageMultiplier ?? 0) + 100) /
+                            100,
 					),
 				);
 
@@ -1464,22 +1474,19 @@ export class SafeAccount extends SmartAccount {
 
 	/**
 	 * formate a list of eip712 signatures to a useroperation signature
-	 * @param signersAddresses - signers public addresses
-	 * @param signatures - list of eip712 signatures
-	 * @param validAfter - timestamp the signature will be valid after
-	 * @param validUntil - timestamp the signature will be valid until
+	 * @param signerSignaturePairs
 	 * @param webAuthnSignaturesOverrides - overrides values to change default values
 	 * @returns signature
 	 */
 	public static formatSignaturesToUseroperationSignature(
-		signatures: SignerSignaturePair[],
+		signerSignaturePairs: SignerSignaturePair[],
 		overrides: WebAuthnSignatureOverrides = {},
 	): string {
 		const validAfter = overrides.validAfter ?? 0n;
 		const validUntil = overrides.validUntil ?? 0n;
 
 		const formatedSignature = this.buildSignaturesFromSingerSignaturePairs(
-			signatures,
+			signerSignaturePairs,
 			overrides,
 		);
 
