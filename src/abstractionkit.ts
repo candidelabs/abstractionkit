@@ -61,6 +61,11 @@ export {
 	MetaTransaction,
 } from "./types";
 
-export { ZeroAddress, BaseUserOperationDummyValues } from "./constants";
+export { 
+	ZeroAddress,
+	BaseUserOperationDummyValues,
+	EIP712_SAFE_OPERATION_V7_TYPE,
+    EIP712_SAFE_OPERATION_V6_TYPE,
+} from "./constants";
 
 export { AbstractionKitError } from "./errors";
