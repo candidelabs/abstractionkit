@@ -14,6 +14,8 @@ import {
 	Safe_L2_V1_4_1,
 	ENTRYPOINT_V6,
 	ENTRYPOINT_V7,
+    EIP712_SAFE_OPERATION_V7_TYPE,
+    EIP712_SAFE_OPERATION_V6_TYPE,
 } from "../../constants";
 import {
 	MetaTransaction,
@@ -463,24 +465,6 @@ export class SafeAccount extends SmartAccount {
 			entryPoint: entrypointAddress,
 		};
 
-		const EIP712_SAFE_OPERATION_V6_TYPE = {
-			SafeOp: [
-				{ type: "address", name: "safe" },
-				{ type: "uint256", name: "nonce" },
-				{ type: "bytes", name: "initCode" },
-				{ type: "bytes", name: "callData" },
-				{ type: "uint256", name: "callGasLimit" },
-				{ type: "uint256", name: "verificationGasLimit" },
-				{ type: "uint256", name: "preVerificationGas" },
-				{ type: "uint256", name: "maxFeePerGas" },
-				{ type: "uint256", name: "maxPriorityFeePerGas" },
-				{ type: "bytes", name: "paymasterAndData" },
-				{ type: "uint48", name: "validAfter" },
-				{ type: "uint48", name: "validUntil" },
-				{ type: "address", name: "entryPoint" },
-			],
-		};
-
 		const domain: SafeUserOperationTypedDataDomain = {
 			chainId,
 			verifyingContract: safe4337ModuleAddress,
@@ -552,24 +536,6 @@ export class SafeAccount extends SmartAccount {
 			validAfter: validAfter,
 			validUntil: validUntil,
 			entryPoint: entrypointAddress,
-		};
-
-		const EIP712_SAFE_OPERATION_V7_TYPE = {
-			SafeOp: [
-				{ type: "address", name: "safe" },
-				{ type: "uint256", name: "nonce" },
-				{ type: "bytes", name: "initCode" },
-				{ type: "bytes", name: "callData" },
-				{ type: "uint128", name: "verificationGasLimit" },
-				{ type: "uint128", name: "callGasLimit" },
-				{ type: "uint256", name: "preVerificationGas" },
-				{ type: "uint128", name: "maxPriorityFeePerGas" },
-				{ type: "uint128", name: "maxFeePerGas" },
-				{ type: "bytes", name: "paymasterAndData" },
-				{ type: "uint48", name: "validAfter" },
-				{ type: "uint48", name: "validUntil" },
-				{ type: "address", name: "entryPoint" },
-			],
 		};
 
 		const domain: SafeUserOperationTypedDataDomain = {
