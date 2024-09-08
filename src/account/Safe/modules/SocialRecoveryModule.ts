@@ -24,10 +24,10 @@ export class SocialRecoveryModule extends SafeModule{
 	 * create MetaTransaction that lets single guardian confirm the execution of the recovery request.
      * Can also trigger the start of the execution by passing true to 'execute' parameter.
      * Once triggered the recovery is pending for the recovery period before it can be finalised.
-     * @param accountAddress The target account.
-     * @param newOwners The new owners' addressess.
-     * @param newThreshold The new threshold for the safe.
-     * @param execute Whether to auto-start execution of recovery.
+     * @param accountAddress - The target account.
+     * @param newOwners - The new owners' addressess.
+     * @param newThreshold - The new threshold for the safe.
+     * @param execute - Whether to auto-start execution of recovery.
 	 * @returns a MetaTransaction
 	 */
     public createConfirmRecoveryMetaTransaction(
@@ -54,11 +54,11 @@ export class SocialRecoveryModule extends SafeModule{
      * create MetaTransaction that lets multiple guardians confirm the execution of the recovery request.
      * Can also trigger the start of the execution by passing true to 'execute' parameter.
      * Once triggered the recovery is pending for the recovery period before it can be finalised.
-     * @param accountAddress The target account.
-     * @param newOwners The new owners' addressess.
-     * @param newThreshold The new threshold for the safe.
-     * @param signatureData The guardians signers and signatures pair list.
-     * @param execute Whether to auto-start execution of recovery.
+     * @param accountAddress - The target account.
+     * @param newOwners - The new owners' addressess.
+     * @param newThreshold - The new threshold for the safe.
+     * @param signatureData - The guardians signers and signatures pair list.
+     * @param execute - true to auto-start execution of recovery or false for not.
 	 * @returns a MetaTransaction
      */
     public createMultiConfirmRecoveryMetaTransaction(
@@ -92,9 +92,9 @@ export class SocialRecoveryModule extends SafeModule{
     /**
      * @notice create MetaTransaction that lets the guardians start the execution of the recovery request.
      * Once triggered the recovery is pending for the recovery period before it can be finalised.
-     * @param accountAddress The target account.
-     * @param newOwners The new owners' addressess.
-     * @param newThreshold The new threshold for the safe.
+     * @param accountAddress - The target account.
+     * @param newOwners - The new owners' addressess.
+     * @param newThreshold - The new threshold for the safe.
 	 * @returns a MetaTransaction
      */
     public createExecuteRecoveryMetaTransaction(
@@ -119,7 +119,7 @@ export class SocialRecoveryModule extends SafeModule{
     /**
      * create a MetaTransaction that finalizes an ongoing recovery request if the recovery period is over.
      * The method is public and callable by anyone to enable orchestration.
-     * @param accountAddress The target account.
+     * @param accountAddress - The target account.
 	 * @returns a MetaTransaction
      */
     public createFinalizeRecoveryMetaTransaction(
@@ -157,8 +157,8 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * create a MetaTransaction that lets the owner add a guardian for its account.
-     * @param guardian The guardian to add.
-     * @param threshold The new threshold that will be set after addition.
+     * @param guardianAddress - The guardian to add.
+     * @param threshold - The new threshold that will be set after addition.
 	 * @returns a MetaTransaction
      */
     public createAddGuardianWithThresholdMetaTransaction(
@@ -181,14 +181,14 @@ export class SocialRecoveryModule extends SafeModule{
     
     /**
      * create MetaTransaction that lets the owner revoke a guardian from its account.
-     * @param nodeRpcUrl The JSON-RPC API url for the target chain
+     * @param nodeRpcUrl - The JSON-RPC API url for the target chain
      * (to get the prevGuardian paramter).
-     * @param accountAddress The target account.
-     * @param guardianAddress The guardian to revoke.
-     * @param threshold The new threshold that will be set after execution of revokation.
-     * @param prevGuardian (if not provided, will be detected using the nodeRpcUrl)
+     * @param accountAddress - The target account.
+     * @param guardianAddress - The guardian to revoke.
+     * @param threshold - The new threshold that will be set after execution of revokation.
+     * @param prevGuardian - (if not provided, will be detected using the nodeRpcUrl)
      * The previous guardian linking to the guardian in the linked list.
-	 * @returns a MetaTransaction
+	 * @returns promise of a MetaTransaction
      */
     public async createRevokeGuardianWithThresholdMetaTransaction(
         nodeRpcUrl: string,
@@ -227,9 +227,9 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * create MetaTransaction that lets the owner revoke a guardian from its account.
-     * @param prevGuardian The previous guardian linking to the guardian in the linked list.
-     * @param guardian The guardian to revoke.
-     * @param threshold The new threshold that will be set after execution of revokation.
+     * @param prevGuardian - The previous guardian linking to the guardian in the linked list.
+     * @param guardian - The guardian to revoke.
+     * @param threshold - The new threshold that will be set after execution of revokation.
 	 * @returns a MetaTransaction
      */
     public createStandardRevokeGuardianWithThresholdMetaTransaction(
@@ -253,7 +253,7 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * create MetaTransaction that lets the owner change the guardian threshold required to initiate a recovery.
-     * @param threshold The new threshold that will be set after execution of revokation.
+     * @param threshold - The new threshold that will be set after execution of revokation.
 	 * @returns a MetaTransaction
      */
     public createChangeThresholdMetaTransaction(
@@ -275,12 +275,12 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * Generates the recovery hash that should be signed by the guardian to authorize a recovery
-     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
-     * @param accountAddress The target account.
-     * @param newOwners The new owners' addressess.
-     * @param newThreshold The new threshold for the safe.
-     * @param nonce
-	 * @returns a recovery hash
+     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+     * @param accountAddress - The target account.
+     * @param newOwners - The new owners' addressess.
+     * @param newThreshold - The new threshold for the safe.
+     * @param nonce - recovery nonce
+	 * @returns promise of a recovery hash
      */
     public async getRecoveryHash(
         nodeRpcUrl: string,
@@ -307,9 +307,9 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * Retrieves the account's current ongoing recovery request.
-     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
-     * @param accountAddress The target account.
-     * @return request The account's current recovery request
+     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+     * @param accountAddress - The target account.
+     * @return promise of the account's current recovery request
      */
     public async getRecoveryRequest(
         nodeRpcUrl: string,
@@ -345,11 +345,11 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * Retrieves the guardian approval count for this particular recovery request at current nonce.
-     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
-     * @param accountAddress The target account.
-     * @param newOwners The new owners' addressess.
-     * @param newThreshold The new threshold for the safe.
-     * @return The account's current recovery request
+     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+     * @param accountAddress - The target account.
+     * @param newOwners - The new owners' addressess.
+     * @param newThreshold - The new threshold for the safe.
+     * @return promise of the account's current recovery approvals count
      */
     public async getRecoveryApprovals(
         nodeRpcUrl: string,
@@ -380,12 +380,12 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * Retrieves specific guardian approval status a particular recovery request at current nonce.
-     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
-     * @param accountAddress The target account.
-     * @param guardian The guardian.
-     * @param newOwners The new owners' addressess.
-     * @param newThreshold The new threshold for the safe.
-     * @return guardian approval status
+     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+     * @param accountAddress - The target account.
+     * @param guardian - The guardian.
+     * @param newOwners - The new owners' addressess.
+     * @param newThreshold - The new threshold for the safe.
+     * @return promise of guardian approval status
      */
     public async hasGuardianApproved(
         nodeRpcUrl: string,
@@ -418,10 +418,11 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * Checks if an address is a guardian for an account.
-     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
-     * @param accountAddress The target account.
-     * @param guardian The address to check.
-     * @return `true` if the address is a guardian for the account otherwise `false`.
+     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+     * @param accountAddress - The target account.
+     * @param guardian - The address to check.
+     * @return promise of `true` if the address is a guardian for
+     * the account otherwise `false`.
      */
     public async isGuardian(
         nodeRpcUrl: string,
@@ -451,9 +452,9 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * Counts the number of active guardians for an account.
-     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
-     * @param accountAddress The target account.
-     * @return The number of active guardians for an account.
+     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+     * @param accountAddress - The target account.
+     * @return promise of The number of active guardians for an account.
      */
     public async guardiansCount(
         nodeRpcUrl: string,
@@ -483,9 +484,9 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * Retrieves the account threshold.
-     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
-     * @param accountAddress The target account.
-     * @return Threshold.
+     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+     * @param accountAddress - The target account.
+     * @return promise of Threshold.
      */
     public async threshold(
         nodeRpcUrl: string,
@@ -515,9 +516,9 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * Get the active guardians for an account.
-     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
-     * @param accountAddress The target account.
-     * @return the active guardians for an account.
+     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+     * @param accountAddress - The target account.
+     * @return promise of a list of the active guardians for an account.
      */
     public async getGuardians(
         nodeRpcUrl: string,
@@ -547,9 +548,9 @@ export class SocialRecoveryModule extends SafeModule{
 
     /**
      * Get the module nonce for an account.
-     * @param nodeRpcUrl The JSON-RPC API url for the target chain.
-     * @param accountAddress The target account.
-     * @return the nonce for this account.
+     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+     * @param accountAddress - The target account.
+     * @return promise of the nonce for this account.
      */
     public async nonce(
         nodeRpcUrl: string,

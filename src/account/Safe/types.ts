@@ -87,15 +87,12 @@ export interface InitCodeOverrides {
 
 	entrypointAddress?: string;
 	/** Safe contract singleton address
-	 * @defaultValue "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762"
 	 */
 	safeAccountSingleton?: SafeAccountSingleton;
 	/** Safe Factory address
-	 * @defaultValue "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67"
 	 */
 	safeAccountFactoryAddress?: string;
 	/** Safe 4337 module address
-	 * @defaultValue "0xa581c4A4DB7175302464fF3C06380BC3270b4037"
 	 */
 	multisendContractAddress?: string;
 	webAuthnSharedSigner?: string;
@@ -115,11 +112,9 @@ export interface BaseInitOverrides {
 
 	safeAccountSingleton?: SafeAccountSingleton;
 	/** Safe Factory address
-	 * @defaultValue "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67"
 	 */
 	safeAccountFactoryAddress?: string;
 	/** Safe 4337 module address
-	 * @defaultValue "0xa581c4A4DB7175302464fF3C06380BC3270b4037"
 	 */
 	multisendContractAddress?: string;
 	webAuthnSharedSigner?: string;

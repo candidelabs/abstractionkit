@@ -116,6 +116,19 @@ export class SafeAccount extends SmartAccount {
 		this.isInitWebAuthn = false;
 	}
 
+    /**
+	 * calculate proxy/account address using initilizer call data
+	 * @param initializerCallData from createBaseInitializerCallData
+	 * @param overrides - overrides for the default values
+	 * @param overrides.c2Nonce - create2 nonce to generate different sender addresses from the same owners
+     * defaults to zero
+	 * @param overrides.safeFactoryAddress - safeFactoryAddress, defaults to 
+     * SafeAccountFactory.DEFAULT_FACTORY_ADDRESS
+	 * @param overrides.singletonInitHash - a hash that includes the singleton address and thr proxy bytecode 
+     * keccak256(solidityPacked(["bytes", "bytes"], [proxyByteCode, abiCoder.encode(["uint256"], [singletonAddress])]))
+     * defaults to SafeAccount.DEFAULT_SAFE_SINGLETON.singletonInitHash
+	 * @returns proxy/account address
+	 */
 	public static createProxyAddress(
 		initializerCallData: string,
 		overrides: {
@@ -151,6 +164,12 @@ export class SafeAccount extends SmartAccount {
 
 	/**
 	 * encode calldata for a single MetaTransaction to be executed by Safe account
+	 * @param metaTransaction - metaTransaction to create calldata for
+	 * @param overrides - overrides for the default values
+	 * @param overrides.safeModuleExecutorFunctionSelector - select the
+     * executor function, either "executeUserOpWithErrorString" or "executeUserOp"
+     * defaults to "executeUserOpWithErrorString"
+	 * @returns calldata
 	 */
 	public static createAccountCallDataSingleTransaction(
 		metaTransaction: MetaTransaction,
@@ -176,8 +195,16 @@ export class SafeAccount extends SmartAccount {
 		return executorFunctionCallData;
 	}
 
-	/**
+    /**
 	 * encode calldata for a list of MetaTransactions to be executed by Safe account
+	 * @param metaTransaction - metaTransaction to create calldata for
+	 * @param overrides - overrides for the default values
+	 * @param overrides.safeModuleExecutorFunctionSelector - select the
+     * executor function, either "executeUserOpWithErrorString" or "executeUserOp"
+     * defaults to "executeUserOpWithErrorString"
+	 * @param overrides.multisendContractAddress - defaults to 
+     * SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS
+	 * @returns calldata
 	 */
 	public static createAccountCallDataBatchTransactions(
 		metaTransactions: MetaTransaction[],
@@ -220,6 +247,15 @@ export class SafeAccount extends SmartAccount {
 
 	/**
 	 * encode calldata to be executed by Safe account
+     * @param to - target address
+     * @param value - amount of natic token to transafer to target address
+     * @param data - calldata
+     * @param operation - either call or delegate call
+     * @param overrides - overrides for the default values
+	 * @param overrides.safeModuleExecutorFunctionSelector - select the
+     * executor function, either "executeUserOpWithErrorString" or "executeUserOp"
+     * defaults to "executeUserOpWithErrorString"
+	 * @returns callData 
 	 */
 	public static createAccountCallData(
 		to: string,
@@ -244,7 +280,8 @@ export class SafeAccount extends SmartAccount {
 
 	/**
 	 * decode calldata to a Metatransaction
-	 * @returns MetaTransaction, SafeModuleExecutorFunctionSelector
+     * @param callData - calldata to decode
+	 * @returns [MetaTransaction, SafeModuleExecutorFunctionSelector]
 	 */
 	public static decodeAccountCallData(
 		callData: string,
@@ -310,6 +347,14 @@ export class SafeAccount extends SmartAccount {
 
 	/**
 	 * adds a token approve call to the call data for a token paymaster
+     * @param callData - calldata to be added to, if after decoding it is not
+     * a multisend transaction, it will be encoded as a multisend transaction 
+     * @param tokenAddress - token to add approve for
+     * @param paymasterAddress - paymaster to add approve for
+     * @param approveAmount - amount to add approve for
+     * @param overrides - overrides for the default values
+     * @param overrides.multisendContractAddress - defaults to 
+     * SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS
 	 * @returns callData
 	 */
 	public static prependTokenPaymasterApproveToCallDataStatic(
@@ -382,8 +427,9 @@ export class SafeAccount extends SmartAccount {
 	 * formate a list of eip712 signatures to a useroperation signature
 	 * @param signersAddresses - signers public addresses
 	 * @param signatures - list of eip712 signatures
-	 * @param validAfter - timestamp the signature will be valid after
-	 * @param validUntil - timestamp the signature will be valid until
+     * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @returns signature
 	 */
 	public static formatEip712SignaturesToUseroperationSignature(
@@ -450,7 +496,19 @@ export class SafeAccount extends SmartAccount {
 			);
 		}
 	}
-
+    
+    /**
+	 * create a v0.06 useroperation eip712 hash
+	 * @param useroperation - useroperation to hash
+	 * @param chainId - target chain id
+     * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @param overrides.entrypoint - target entrypoint
+     * defaults to ENTRYPOINT_V6
+	 * @param overrides.safe4337ModuleAddress - defaults to "0xa581c4A4DB7175302464fF3C06380BC3270b4037"
+	 * @returns useroperation hash
+	 */
 	public static getUserOperationEip712Hash_V6(
 		useroperation: UserOperationV6,
 		chainId: bigint,
@@ -496,7 +554,19 @@ export class SafeAccount extends SmartAccount {
 			SafeUserOperation,
 		);
 	}
-
+    
+    /**
+	 * create a v0.07 useroperation eip712 hash
+	 * @param useroperation - useroperation to hash
+	 * @param chainId - target chain id
+     * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @param overrides.entrypoint - target entrypoint
+     * defaults to ENTRYPOINT_V7
+	 * @param overrides.safe4337ModuleAddress - defaults to "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226"
+	 * @returns useroperation hash
+	 */
 	public static getUserOperationEip712Hash_V7(
 		useroperation: UserOperationV7,
 		chainId: bigint,
@@ -573,9 +643,10 @@ export class SafeAccount extends SmartAccount {
 	/**
 	 * formate an eip712 signature to a useroperation signature
 	 * @param signature - an eip712 signature
-	 * @param validAfter - timestamp the signature will be valid after
-	 * @param validUntil - timestamp the signature will be valid until
-	 * @returns signature
+     * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @returns formated signature
 	 */
 	public static formatEip712SingleSignatureToUseroperationSignature(
 		signature: string,
@@ -627,7 +698,7 @@ export class SafeAccount extends SmartAccount {
 	 * calculate account address and initcode from owners
 	 * @param owners - list of account owners addresses
 	 * @param overrides - override values to change the initialization default values
-	 * @returns account address and initcode
+	 * @returns account address ,factory address and factorydata
 	 */
 	protected static createAccountAddressAndFactoryAddressAndData(
 		owners: Signer[],
@@ -818,7 +889,7 @@ export class SafeAccount extends SmartAccount {
 	/**
 	 * create factory address and factoryData (initcode)
 	 * @param owners - list of account owners signers
-	 * @param overrides - overrides values to change default values
+	 * @param overrides - overrides for the default values
 	 * @returns factoryAddress and factoryData
 	 */
 	protected static createFactoryAddressAndData(
@@ -888,6 +959,14 @@ export class SafeAccount extends SmartAccount {
 	/**
 	 * a non static wrapper function for  prependTokenPaymasterApproveToCallDataStatic
 	 * which adds a token approve call to the call data for a token paymaster
+     * @param callData - calldata to be added to, if after decoding it is not
+     * a multisend transaction, it will be encoded as a multisend transaction 
+     * @param tokenAddress - token to add approve for
+     * @param paymasterAddress - paymaster to add approve for
+     * @param approveAmount - amount to add approve for
+     * @param overrides - overrides for the default values
+     * @param overrides.multisendContractAddress - defaults to 
+     * SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS
 	 * @returns callData
 	 */
 	public prependTokenPaymasterApproveToCallData(
@@ -916,8 +995,10 @@ export class SafeAccount extends SmartAccount {
 	 * estimate gas limits for a useroperation
 	 * @param userOperation - useroperation to estimate gas for
 	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param stateOverrideSet - state override values to set during gs estimation
-	 * @param dummySignatures - list of dummy signatures
+     * @param overrides - overrides for the default values
+	 * @param overrides.stateOverrideSet - state override values to set during gs estimation
+	 * @param overrides.dummySignatures - list of dummy signatures
+     * defaults to a single eoa signature
 	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
 	 */
 	public async estimateUserOperationGas(
@@ -982,14 +1063,15 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * createUserOperation will determine the nonce, fetch the gas prices,
+	 * createBaseUserOperationAndFactoryAddressAndFactoryData will 
+     * determine the nonce, fetch the gas prices,
 	 * estimate gas limits and return a useroperation to be signed.
 	 * you can override all these values using the overrides parameter.
 	 * @param transactions - metatransaction list to be encoded
 	 * @param providerRpc - node rpc to fetch account nonce and gas prices
 	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param overrides - overrides values to change default values
-	 * @returns promise with useroperation
+	 * @param overrides - overrides for the default values
+	 * @returns a promise with (base useroperation, factoryAddress, factoryData)
 	 */
 	protected async createBaseUserOperationAndFactoryAddressAndFactoryData(
 		transactions: MetaTransaction[],
@@ -1354,8 +1436,9 @@ export class SafeAccount extends SmartAccount {
 	 * @param useroperation - useroperation to sign
 	 * @param privateKeys - for the signers
 	 * @param chainId - target chain id
-	 * @param validAfter - timestamp the signature will be valid after
-	 * @param validUntil - timestamp the signature will be valid until
+     * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @returns signature
 	 */
 	public signUserOperation(
@@ -1415,6 +1498,14 @@ export class SafeAccount extends SmartAccount {
 		);
 	}
 
+    /**
+	 * compute the deterministic address for a webauthn proxy verifier based on a
+     * webauthn public key(x, y)
+	 * @param x - webauthn public key x parameter
+	 * @param y - webauthn public key y parameter
+     * @param overrides - overrides for the default values
+	 * @returns webauthn verifier address 
+	 */
 	public static createWebAuthnSignerVerifierAddress(
 		x: bigint,
 		y: bigint,
@@ -1477,8 +1568,8 @@ export class SafeAccount extends SmartAccount {
 
 	/**
 	 * formate a list of eip712 signatures to a useroperation signature
-	 * @param signerSignaturePairs
-	 * @param webAuthnSignaturesOverrides - overrides values to change default values
+	 * @param signerSignaturePairs - a list of a pair of a signer and it's signature
+     * @param overrides - overrides for the default values
 	 * @returns signature
 	 */
 	public static formatSignaturesToUseroperationSignature(
@@ -1499,24 +1590,30 @@ export class SafeAccount extends SmartAccount {
 		);
 	}
 
+    /**
+	 * calculate a signer public address lowercase 
+	 * @param signer - a signer to compute address for 
+     * @param overrides - overrides for the default values
+	 * @returns signer address
+	 */
 	public static getSignerLowerCaseAddress(
 		signer: Signer,
-		webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
+		overrides: WebAuthnSignatureOverrides = {},
 	): string {
 		if (typeof signer == "string") {
 			return signer.toLowerCase();
 		} else {
 			const eip7212WebAuthnPrecompileVerifier =
-				webAuthnSignatureOverrides.eip7212WebAuthnPrecompileVerifier ??
+				overrides.eip7212WebAuthnPrecompileVerifier ??
 				SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
 			const eip7212WebAuthnContractVerifier =
-				webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier ??
+				overrides.eip7212WebAuthnContractVerifier ??
 				SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
 			const webAuthnSignerFactory =
-				webAuthnSignatureOverrides.webAuthnSignerFactory ??
+				overrides.webAuthnSignerFactory ??
 				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 			const webAuthnSignerSingleton =
-				webAuthnSignatureOverrides.webAuthnSignerSingleton ??
+				overrides.webAuthnSignerSingleton ??
 				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
 
 			return SafeAccount.createWebAuthnSignerVerifierAddress(
@@ -1532,30 +1629,43 @@ export class SafeAccount extends SmartAccount {
 		}
 	}
 
+    /**
+	 * sorts a list of signerSginaturesPairs in place based on the signer 
+     * public address, as the signatures needs to be sorted to be validated
+     * by a safe account
+	 * @param signer - a signer to compute address for 
+     * @param overrides - overrides for the default values
+	 */
 	public static sortSignatures(
-		signatures: SignerSignaturePair[],
-		webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
+		signerSignaturePairs: SignerSignaturePair[],
+		overrides: WebAuthnSignatureOverrides = {},
 	) {
-		signatures.sort((left, right) =>
+		signerSignaturePairs.sort((left, right) =>
 			SafeAccount.getSignerLowerCaseAddress(
 				left.signer,
-				webAuthnSignatureOverrides,
+				overrides,
 			).localeCompare(
 				SafeAccount.getSignerLowerCaseAddress(
 					right.signer,
-					webAuthnSignatureOverrides,
+					overrides,
 				),
 			),
 		);
 	}
-
+    
+    /**
+	 * formate a list of eip712 signatures to a safe signature(without the time range)
+	 * @param signerSignaturePairs - a list of a pair of a signer and it's signature
+     * @param overrides - overrides for the default values
+	 * @returns signature
+	 */
 	public static buildSignaturesFromSingerSignaturePairs(
-		signatures: SignerSignaturePair[],
+		signerSignaturePairs: SignerSignaturePair[],
 		webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
 	): string {
-		SafeAccount.sortSignatures(signatures, webAuthnSignatureOverrides);
-		const start = 65 * signatures.length;
-		const { segments } = signatures.reduce(
+		SafeAccount.sortSignatures(signerSignaturePairs, webAuthnSignatureOverrides);
+		const start = 65 * signerSignaturePairs.length;
+		const { segments } = signerSignaturePairs.reduce(
 			({ segments, offset }, { signer, signature, isContractSignature }) => {
 				isContractSignature = isContractSignature || typeof signer != "string";
 				if (isContractSignature) {
@@ -1633,7 +1743,7 @@ export class SafeAccount extends SmartAccount {
 		);
 		return ethers.concat([
 			...segments,
-			...signatures.map(({ signature }) =>
+			...signerSignaturePairs.map(({ signature }) =>
 				ethers.solidityPacked(
 					["uint256", "bytes"],
 					[ethers.dataLength(signature), signature],
@@ -1642,6 +1752,11 @@ export class SafeAccount extends SmartAccount {
 		]);
 	}
 
+    /**
+	 * encode webauthn signature from WebauthnSignatureData
+	 * @param signatureData - signature data to format 
+	 * @returns formatted signature
+	 */
 	public static createWebAuthnSignature(
 		signatureData: WebauthnSignatureData,
 	): string {
@@ -1654,7 +1769,20 @@ export class SafeAccount extends SmartAccount {
 			],
 		);
 	}
-
+    
+    /**
+	 * create a swapOwner metatransaction, create a metatransaction to 
+     * deploy a webauthn verifier owner if not deployed and it will automatically
+     * fetch the prevowner needed for the swap
+     * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+     * (to get the prevOwner paramter).
+     * @param newOwner - newOwner public address
+     * @param oldOwner - oldOwner to replace public address
+     * @param overrides - overrides for the default values
+     * @param overrides.prevOwner - if set, it will be used as the previous owner and
+     * nideRpcUrl won't be used to fetch it
+	 * @returns a promise of a list of metaTransactions
+	 */
 	public async createSwapOwnerMetaTransactions(
 		nodeRpcUrl: string,
 		newOwner: Signer,
@@ -1749,7 +1877,19 @@ export class SafeAccount extends SmartAccount {
 			return [deployNewOwnerSignerMetaTransaction, swapMetaTransaction];
 		}
 	}
-
+    
+    /**
+	 * create a removeOwner metatransaction, and fetch the prevowner
+     * needed for the remove
+     * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+     * (to get the prevOwner paramter).
+     * @param ownerToDelete - owner to delete public address
+     * @param threshold - new threshold
+     * @param overrides - overrides for the default values
+     * @param overrides.prevOwner - if set, it will be used as the previous owner and
+     * nideRpcUrl won't be used to fetch it
+	 * @returns a promise of a metaTransaction
+	 */
 	public async createRemoveOwnerMetaTransaction(
 		nodeRpcUrl: string,
 		ownerToDelete: Signer,
@@ -1802,6 +1942,12 @@ export class SafeAccount extends SmartAccount {
 		);
 	}
 
+    /**
+	 * create a addOwner metatransaction
+     * @param newOwner - newOwner public address
+     * @param threshold - new threshold
+	 * @returns a metaTransaction
+	 */
 	public createAddOwnerWithThresholdMetaTransaction(
 		newOwner: string,
 		threshold: number,
@@ -1822,6 +1968,13 @@ export class SafeAccount extends SmartAccount {
 		};
 	}
 
+    /**
+	 * create a standard swapOwner metatransaction
+     * @param newOwner - newOwner public address
+     * @param oldOwner - oldOwner public address
+     * @param prevOwner - prevOwner public address in the owners linked list
+	 * @returns a metaTransaction
+	 */
 	public createStandardSwapOwnerMetaTransaction(
 		newOwner: string,
 		oldOwner: string,
@@ -1847,7 +2000,14 @@ export class SafeAccount extends SmartAccount {
 			value: 0n,
 		};
 	}
-
+    
+    /**
+	 * create a standard removeOwner metatransaction
+     * @param ownerToDelete - owner to delete public address
+     * @param threshold - new threshold
+     * @param prevOwner - prevOwner public address in the owners linked list
+	 * @returns a metaTransaction
+	 */
 	public createStandardRemoveOwnerMetaTransaction(
 		ownerToDelete: string,
 		threshold: number,
@@ -1874,6 +2034,13 @@ export class SafeAccount extends SmartAccount {
 		};
 	}
 
+    /**
+	 * create a deploy webauthn verifier metatransaction 
+	 * @param x - webauthn public key x parameter
+	 * @param y - webauthn public key y parameter
+     * @param overrides - overrides for the default values
+	 * @returns a metaTransaction
+	 */
 	public static createDeployWebAuthnVerifierMetaTransaction(
 		x: bigint,
 		y: bigint,
@@ -1912,6 +2079,11 @@ export class SafeAccount extends SmartAccount {
 		};
 	}
 
+    /**
+	 * fetches a list of the account owners public addresses
+     * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * @returns a promise of a list of owners public addresses
+	 */
 	public async getOwners(nodeRpcUrl: string): Promise<string[]> {
 		const functionSignature = "getOwners()";
 		const functionSelector = getFunctionSelector(functionSignature);

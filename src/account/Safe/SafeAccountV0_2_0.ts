@@ -3,6 +3,7 @@ import {
 	InitCodeOverrides,
 	Signer,
 	CreateUserOperationV6Overrides,
+    SafeAccountSingleton,
 } from "./types";
 
 import { UserOperationV6, MetaTransaction } from "../../types";
@@ -34,14 +35,25 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	}
 
 	/**
-	 * calculate account addressfrom initial owners
-	 * @param owners - list of account owners addresses
+	 * calculate account address from initial owners
+	 * @param owners - list of account owners signers
 	 * @param overrides - override values to change the initialization default values
 	 * @returns account address
 	 */
 	public static createAccountAddress(
 		owners: Signer[],
-		overrides: InitCodeOverrides = {}, //mod
+		overrides: {
+            threshold?: number;
+            c2Nonce?: bigint;
+            safe4337ModuleAddress?: string;
+            safeModuleSetupddress?: string;
+            safeAccountSingleton?: SafeAccountSingleton;
+            safeAccountFactoryAddress?: string;
+            multisendContractAddress?: string;
+            webAuthnSharedSigner?: string;
+            eip7212WebAuthnPrecompileVerifierForSharedSigner?: string;
+            eip7212WebAuthnContractVerifierForSharedSigner?: string;
+        } = {},
 	): string {
 		const [accountAddress, ,] =
 			SafeAccount.createAccountAddressAndFactoryAddressAndData(
@@ -62,7 +74,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 * @remarks
 	 * initializeNewAccount only needed when the smart account
 	 * have not been deployed yet and the account address is unknown.
-	 * @param owners - list of account owners addresses
+	 * @param owners - list of account owners signers
 	 * @param overrides - override values to change the initialization default values
 	 * @returns a SafeAccount object
 	 */
@@ -109,7 +121,19 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 
 		return safe;
 	}
-
+    
+    /**
+	 * create a useroperation eip712 hash
+	 * @param useroperation - useroperation to hash
+	 * @param chainId - target chain id
+     * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @param overrides.entrypoint - target entrypoint
+     * defaults to ENTRYPOINT_V6
+	 * @param overrides.safe4337ModuleAddress - defaults to DEFAULT_SAFE_4337_MODULE_ADDRESS
+	 * @returns useroperation hash
+	 */
 	public static getUserOperationEip712Hash(
 		useroperation: UserOperationV6,
 		chainId: bigint,
@@ -139,7 +163,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 
 	/**
 	 * calculate account address and initcode from owners
-	 * @param owners - list of account owners addresses
+	 * @param owners - list of account owners signers
 	 * @param overrides - override values to change the initialization default values
 	 * @returns account address and initcode
 	 */
@@ -204,7 +228,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	/**
 	 * create account initcode
 	 * @param owners - list of account owners addresses
-	 * @param overrides - overrides values to change default values
+	 * @param overrides - overrides for the default values
 	 * @returns initcode
 	 */
 	public static createInitCode(
@@ -230,7 +254,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 * @param transactions - metatransaction list to be encoded
 	 * @param providerRpc - node rpc to fetch account nonce and gas prices
 	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param overrides - overrides values to change default values
+	 * @param overrides - overrides for the default values
 	 * @returns promise with useroperation
 	 */
 	public async createUserOperation(

@@ -203,7 +203,11 @@ export class CandidePaymaster extends Paymaster {
 			);
 		}
 	}
-
+    
+    /**
+	 * gets the entrypoints that the paymaster supports,
+	 * @returns a promise of a list of entrypoints addresses
+	 */
 	async getSupportedEntrypoints(): Promise<string[]> {
 		if (!this.isInitilized) {
 			await this.initialize();
@@ -237,6 +241,8 @@ export class CandidePaymaster extends Paymaster {
 	/**
 	 * check if the token paymaster accepts an erc20 token
 	 * @param erc20TokenAddress - token address to check if supported
+	 * @param entrypoint - target entrypoint address 
+	 * @returns a promise of a boolean(true if the token is supported)
 	 */
 	async isSupportedERC20Token(
 		erc20TokenAddress: string,
@@ -256,7 +262,8 @@ export class CandidePaymaster extends Paymaster {
 	/**
 	 * get the paymaster token data
 	 * @param erc20TokenAddress - token to get data for
-	 * @returns ERC20Token or null
+	 * @param entrypoint - target entrypoint address 
+	 * @returns promise of ERC20Token or null
 	 */
 	async getSupportedERC20TokenData(
 		erc20TokenAddress: string,
@@ -293,38 +300,38 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * createPaymasterUserOperation will estimate gas and set
-	 * paymasterAndData
+	 * createPaymasterUserOperation will estimate gas and set paymasterAndData.
 	 * gas limits will only change if the estimated gas limits returned by
 	 * the bundler is more than the input gas limits, then gas overrides
 	 * and multipliers will be applied
 	 * @param useroperation - useroperation to add paymaster support for
 	 * @param bundlerRpc - bundler rpc for gas estimation
 	 * @param context - paymaster context data
-	 * @param createPaymasterUserOperationOverrides - createPaymasterUserOperationOverrides values to change default values
-	 * @returns promise with UserOperation
+     * @param overrides - overrides for the default values
+	 * @returns promise of UserOperation and SponsorMetadata
 	 */
 	async createPaymasterUserOperation(
 		userOperationInput: UserOperationV7,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
-		createPaymasterUserOperationOverrides?: CreatePaymasterUserOperationOverrides,
+		overrides?: CreatePaymasterUserOperationOverrides,
 	): Promise<[UserOperationV7, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
 		userOperationInput: UserOperationV6,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
-		createPaymasterUserOperationOverrides?: CreatePaymasterUserOperationOverrides,
+		overrides?: CreatePaymasterUserOperationOverrides,
 	): Promise<[UserOperationV6, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
 		userOperationInput: UserOperationV7 | UserOperationV6,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
-		createPaymasterUserOperationOverrides?: CreatePaymasterUserOperationOverrides,
+		overrides?: CreatePaymasterUserOperationOverrides,
 	): Promise<[UserOperationV7 | UserOperationV6, SponsorMetadata | undefined]> {
 		if (context == null) {
 			context = {};
 		}
+        let createPaymasterUserOperationOverrides = overrides;
 		if (createPaymasterUserOperationOverrides == null) {
 			createPaymasterUserOperationOverrides = {};
 		}
@@ -599,24 +606,25 @@ export class CandidePaymaster extends Paymaster {
 	 * paymasterAndData for a sponsor paymaster operation
 	 * @param useroperation - useroperation to add paymaster support for
 	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param createPaymasterUserOperationOverrides - createPaymasterUserOperationOverrides values to change default values
-	 * @returns promise with UserOperation
+     * @param overrides - overrides for the default values
+	 * @returns promise with [UserOperationV7, SponsorMetadata | undefined]
 	 */
 	async createSponsorPaymasterUserOperation(
 		userOperation: UserOperationV7,
 		bundlerRpc: string,
-		createPaymasterUserOperationOverrides?: CreatePaymasterUserOperationOverrides,
+		overrides?: CreatePaymasterUserOperationOverrides,
 	): Promise<[UserOperationV7, SponsorMetadata | undefined]>;
 	async createSponsorPaymasterUserOperation(
 		userOperation: UserOperationV6,
 		bundlerRpc: string,
-		createPaymasterUserOperationOverrides?: CreatePaymasterUserOperationOverrides,
+		overrides?: CreatePaymasterUserOperationOverrides,
 	): Promise<[UserOperationV6, SponsorMetadata | undefined]>;
 	async createSponsorPaymasterUserOperation(
 		userOperation: UserOperationV7 | UserOperationV6,
 		bundlerRpc: string,
-		createPaymasterUserOperationOverrides: CreatePaymasterUserOperationOverrides = {},
+		overrides: CreatePaymasterUserOperationOverrides = {},
 	): Promise<[UserOperationV7 | UserOperationV6, SponsorMetadata | undefined]> {
+        let createPaymasterUserOperationOverrides = overrides;
 		if ("initCode" in userOperation) {
 			return await this.createPaymasterUserOperation(
 				userOperation as UserOperationV6,
@@ -641,7 +649,7 @@ export class CandidePaymaster extends Paymaster {
 	 * @param useroperation - useroperation to add paymaster support for
 	 * @param tokenAddress - target token to pay gas with
 	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param createPaymasterUserOperationOverrides - createPaymasterUserOperationOverrides values to change default values
+     * @param overrides - overrides for the default values
 	 * @returns promise with UserOperation
 	 */
 	async createTokenPaymasterUserOperation(
@@ -649,22 +657,23 @@ export class CandidePaymaster extends Paymaster {
 		userOperation: UserOperationV7,
 		tokenAddress: string,
 		bundlerRpc: string,
-		createPaymasterUserOperationOverrides?: CreatePaymasterUserOperationOverrides,
+		overrides?: CreatePaymasterUserOperationOverrides,
 	): Promise<UserOperationV7>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV6,
 		tokenAddress: string,
 		bundlerRpc: string,
-		createPaymasterUserOperationOverrides?: CreatePaymasterUserOperationOverrides,
+		overrides?: CreatePaymasterUserOperationOverrides,
 	): Promise<UserOperationV6>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV7 | UserOperationV6,
 		tokenAddress: string,
 		bundlerRpc: string,
-		createPaymasterUserOperationOverrides: CreatePaymasterUserOperationOverrides = {},
+		overrides: CreatePaymasterUserOperationOverrides = {},
 	): Promise<UserOperationV7 | UserOperationV6> {
+        let createPaymasterUserOperationOverrides = overrides;
 		try {
 			if (!this.isInitilized) {
 				await this.initialize();
