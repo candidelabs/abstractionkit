@@ -7,7 +7,6 @@ import {
     CandidePaymaster,
     getFunctionSelector,
     createCallData,
-    UserOperationV7
 } from "abstractionkit";
 
 async function main(): Promise<void> {
@@ -75,7 +74,7 @@ async function main(): Promise<void> {
 
     let [paymasterUserOperation, _sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
         userOperation, bundlerUrl)
-    userOperation = paymasterUserOperation as UserOperationV7; 
+    userOperation = paymasterUserOperation; 
 
 
     const cost = calculateUserOperationMaxGasCost(userOperation)
