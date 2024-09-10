@@ -5,8 +5,7 @@ This minimalistic example application demonstrates a Safe Account deployment and
 ## Install dependencies
 
 ```bash
-npm install 
-npm run build
+npm install
 ```
 
 ## Fill in the environment variables

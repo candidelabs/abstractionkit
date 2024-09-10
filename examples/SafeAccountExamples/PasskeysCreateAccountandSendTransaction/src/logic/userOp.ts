@@ -2,7 +2,7 @@ import { ethers } from 'ethers'
 import {
   SafeAccountV0_3_0 as SafeAccount,
   SignerSignaturePair,
-  WebauthSignatureData,
+  WebauthnSignatureData,
   SendUseroperationResponse,
   UserOperationV7,
 } from 'abstractionkit'
@@ -46,13 +46,13 @@ async function signAndSendUserOp(
     throw new Error('Failed to sign user operation')
   }
 
-  const webauthSignatureData: WebauthSignatureData = {
+  const webauthnSignatureData: WebauthnSignatureData = {
     authenticatorData: assertion.response.authenticatorData,
     clientDataFields: extractClientDataFields(assertion.response),
     rs: extractSignature(assertion.response.signature),
   }
 
-  const webauthSignature: string = SafeAccount.createWebAuthnSignature(webauthSignatureData)
+  const webauthSignature: string = SafeAccount.createWebAuthnSignature(webauthnSignatureData)
 
   const SignerSignaturePair: SignerSignaturePair = {
     signer: passkey.pubkeyCoordinates,
