@@ -2,8 +2,8 @@ export { SmartAccount } from "./account/SmartAccount";
 export {
 	SocialRecoveryModule,
 	RecoveryRequest,
-    SocialRecoveryModuleGracePeriodSelector,
-    RecoverySignaturePair
+	SocialRecoveryModuleGracePeriodSelector,
+	RecoverySignaturePair,
 } from "./account/Safe/modules/SocialRecoveryModule";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
 export { SafeAccountV0_3_0 } from "./account/Safe/SafeAccountV0_3_0";
@@ -61,11 +61,11 @@ export {
 	MetaTransaction,
 } from "./types";
 
-export { 
+export {
 	ZeroAddress,
 	BaseUserOperationDummyValues,
 	EIP712_SAFE_OPERATION_V7_TYPE,
-    EIP712_SAFE_OPERATION_V6_TYPE,
+	EIP712_SAFE_OPERATION_V6_TYPE,
 } from "./constants";
 
 export { AbstractionKitError } from "./errors";

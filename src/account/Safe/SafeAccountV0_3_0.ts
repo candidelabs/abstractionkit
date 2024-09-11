@@ -108,16 +108,16 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 
 		return safe;
 	}
-    
-    /**
+
+	/**
 	 * create a useroperation eip712 hash
 	 * @param useroperation - useroperation to hash
 	 * @param chainId - target chain id
-     * @param overrides - overrides for the default values
+	 * @param overrides - overrides for the default values
 	 * @param overrides.validAfter - timestamp the signature will be valid after
 	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @param overrides.entrypoint - target entrypoint
-     * defaults to ENTRYPOINT_V7
+	 * defaults to ENTRYPOINT_V7
 	 * @param overrides.safe4337ModuleAddress - defaults to DEFAULT_SAFE_4337_MODULE_ADDRESS
 	 * @returns useroperation hash
 	 */

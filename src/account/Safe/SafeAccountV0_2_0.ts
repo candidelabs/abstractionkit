@@ -3,7 +3,7 @@ import {
 	InitCodeOverrides,
 	Signer,
 	CreateUserOperationV6Overrides,
-    SafeAccountSingleton,
+	SafeAccountSingleton,
 } from "./types";
 
 import { UserOperationV6, MetaTransaction } from "../../types";
@@ -42,17 +42,17 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	public static createAccountAddress(
 		owners: Signer[],
 		overrides: {
-            threshold?: number;
-            c2Nonce?: bigint;
-            safe4337ModuleAddress?: string;
-            safeModuleSetupddress?: string;
-            safeAccountSingleton?: SafeAccountSingleton;
-            safeAccountFactoryAddress?: string;
-            multisendContractAddress?: string;
-            webAuthnSharedSigner?: string;
-            eip7212WebAuthnPrecompileVerifierForSharedSigner?: string;
-            eip7212WebAuthnContractVerifierForSharedSigner?: string;
-        } = {},
+			threshold?: number;
+			c2Nonce?: bigint;
+			safe4337ModuleAddress?: string;
+			safeModuleSetupddress?: string;
+			safeAccountSingleton?: SafeAccountSingleton;
+			safeAccountFactoryAddress?: string;
+			multisendContractAddress?: string;
+			webAuthnSharedSigner?: string;
+			eip7212WebAuthnPrecompileVerifierForSharedSigner?: string;
+			eip7212WebAuthnContractVerifierForSharedSigner?: string;
+		} = {},
 	): string {
 		const [accountAddress, ,] =
 			SafeAccount.createAccountAddressAndFactoryAddressAndData(
@@ -120,16 +120,16 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 
 		return safe;
 	}
-    
-    /**
+
+	/**
 	 * create a useroperation eip712 hash
 	 * @param useroperation - useroperation to hash
 	 * @param chainId - target chain id
-     * @param overrides - overrides for the default values
+	 * @param overrides - overrides for the default values
 	 * @param overrides.validAfter - timestamp the signature will be valid after
 	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @param overrides.entrypoint - target entrypoint
-     * defaults to ENTRYPOINT_V6
+	 * defaults to ENTRYPOINT_V6
 	 * @param overrides.safe4337ModuleAddress - defaults to DEFAULT_SAFE_4337_MODULE_ADDRESS
 	 * @returns useroperation hash
 	 */
