@@ -43,7 +43,7 @@ import {
 	SignerSignaturePair,
 	WebauthnSignatureData,
 	SafeModuleExecutorFunctionSelector,
-	EOADummySignature,
+	EOADummySignerSignaturePair,
 	WebAuthnSignatureOverrides,
 	BaseInitOverrides,
 } from "./types";
@@ -997,7 +997,7 @@ export class SafeAccount extends SmartAccount {
 	 * @param bundlerRpc - bundler rpc for gas estimation
      * @param overrides - overrides for the default values
 	 * @param overrides.stateOverrideSet - state override values to set during gs estimation
-	 * @param overrides.dummySignatures - list of dummy signatures
+	 * @param overrides.dummySignerSignaturePairs - list of dummy signers signature pairs
      * defaults to a single eoa signature
 	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
 	 */
@@ -1006,17 +1006,18 @@ export class SafeAccount extends SmartAccount {
 		bundlerRpc: string,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
-			dummySignatures?: SignerSignaturePair[];
+			dummySignerSignaturePairs?: SignerSignaturePair[];
 		} = {},
 	): Promise<[bigint, bigint, bigint]> {
-		if (overrides.dummySignatures != null) {
-			if (overrides.dummySignatures.length < 1) {
-				throw RangeError("Number of dummySignatures can't be less than 1");
+		if (overrides.dummySignerSignaturePairs != null) {
+			if (overrides.dummySignerSignaturePairs.length < 1) {
+				throw RangeError(
+					"Number of dummy signers signature pairs can't be less than 1");
 			}
 
 			userOperation.signature =
 				SafeAccount.formatSignaturesToUseroperationSignature(
-					overrides.dummySignatures,
+					overrides.dummySignerSignaturePairs,
 					{
 						validAfter: 0xffffffffffffn,
 						validUntil: 0xffffffffffffn,
@@ -1025,7 +1026,7 @@ export class SafeAccount extends SmartAccount {
 		} else if (userOperation.signature.length < 3) {
 			userOperation.signature =
 				SafeAccount.formatSignaturesToUseroperationSignature(
-					[EOADummySignature],
+					[EOADummySignerSignaturePair],
 					{
 						validAfter: 0xffffffffffffn,
 						validUntil: 0xffffffffffffn,
@@ -1049,10 +1050,10 @@ export class SafeAccount extends SmartAccount {
 		const preVerificationGas = BigInt(estimation.preVerificationGas);
 
 		let verificationGasLimit: bigint;
-		if (overrides.dummySignatures != null) {
+		if (overrides.dummySignerSignaturePairs != null) {
 			verificationGasLimit =
 				BigInt(estimation.verificationGasLimit) +
-				BigInt(overrides.dummySignatures.length) * 55_000n;
+				BigInt(overrides.dummySignerSignaturePairs.length) * 55_000n;
 		} else {
 			verificationGasLimit = BigInt(estimation.verificationGasLimit);
 		}
@@ -1337,18 +1338,19 @@ export class SafeAccount extends SmartAccount {
 						paymasterData: null,
 					};
 				}
-				let dummySignatures;
-				if (overrides.dummySignatures != null) {
-					if (overrides.dummySignatures.length < 1) {
-						throw RangeError("Number of dummySignatures can't be less than 1");
+				let dummySignerSignaturePairs;
+				if (overrides.dummySignerSignaturePairs != null) {
+					if (overrides.dummySignerSignaturePairs.length < 1) {
+						throw RangeError(
+							"Number of dummySignerSignaturePairs can't be less than 1");
 					}
-					dummySignatures = overrides.dummySignatures;
+					dummySignerSignaturePairs = overrides.dummySignerSignaturePairs;
 				} else {
-					dummySignatures = [EOADummySignature];
+					dummySignerSignaturePairs = [EOADummySignerSignaturePair];
 				}
 				userOperation.signature =
 					SafeAccount.formatSignaturesToUseroperationSignature(
-						dummySignatures,
+						dummySignerSignaturePairs,
 						{
 							validAfter: 0xffffffffffffn,
 							validUntil: 0xffffffffffffn,
@@ -1362,10 +1364,10 @@ export class SafeAccount extends SmartAccount {
 						bundlerRpc,
 						{
 							stateOverrideSet: overrides.state_override_set,
-							dummySignatures: overrides.dummySignatures,
+							dummySignerSignaturePairs: overrides.dummySignerSignaturePairs,
 						},
 					);
-				verificationGasLimit += BigInt(dummySignatures.length) * 55_000n;
+				verificationGasLimit += BigInt(dummySignerSignaturePairs.length) * 55_000n;
 
 				userOperation.maxFeePerGas = inputMaxFeePerGas;
 				userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas;

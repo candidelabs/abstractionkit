@@ -33,7 +33,7 @@ export interface CreateBaseUserOperationOverrides {
 	/** pass some state overrides for gas estimation"*/
 	state_override_set?: StateOverrideSet;
 
-	dummySignatures?: SignerSignaturePair[];
+	dummySignerSignaturePairs?: SignerSignaturePair[];
 
 	webAuthnSharedSigner?: string;
 	webAuthnSignerFactory?: string;
@@ -200,7 +200,7 @@ export interface SignerSignaturePair {
 	isContractSignature?: boolean;
 }
 
-export const EOADummySignature: SignerSignaturePair = {
+export const EOADummySignerSignaturePair: SignerSignaturePair = {
 	signer: "0xfD90FAd33ee8b58f32c00aceEad1358e4AFC23f9",
 	signature:
 		"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",

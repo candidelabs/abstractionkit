@@ -33,7 +33,7 @@ export {
 	SafeModuleExecutorFunctionSelector,
 	SafeUserOperationTypedDataDomain,
 	WebauthnPublicKey,
-	EOADummySignature,
+	EOADummySignerSignaturePair,
 	WebauthnDummySignerSignaturePair,
 	WebauthnSignatureData,
 	SignerSignaturePair,
