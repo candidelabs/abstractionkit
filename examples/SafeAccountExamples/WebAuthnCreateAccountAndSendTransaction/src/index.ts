@@ -101,7 +101,7 @@ async function main(): Promise<void> {
     )
   
     let paymaster: CandidePaymaster = new CandidePaymaster(
-        paymasterRPC,// "v2"
+        paymasterRPC,
     )
     console.log(userOperation)
     let [paymasterUserOperation, _sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
