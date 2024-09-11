@@ -102,7 +102,7 @@ export class Bundler {
 					[useroperation, entrypointAddress, state_override_set],
 				);
 			}
-			var res = jsonRpcResult as GasEstimationResult;
+			const res = jsonRpcResult as GasEstimationResult;
 			const gasEstimationResult: GasEstimationResult = {
 				callGasLimit: BigInt(res.callGasLimit),
 				preVerificationGas: BigInt(res.preVerificationGas),

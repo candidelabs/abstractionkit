@@ -110,14 +110,14 @@ export function createPackedUserOperationV7(
 		}
 	}
 
-	let accountGasLimits =
+	const accountGasLimits =
 		"0x" +
 		abiCoder
 			.encode(["uint128"], [useroperation.verificationGasLimit])
 			.slice(34) +
 		abiCoder.encode(["uint128"], [useroperation.callGasLimit]).slice(34);
 
-	let gasFees =
+	const gasFees =
 		"0x" +
 		abiCoder
 			.encode(["uint128"], [useroperation.maxPriorityFeePerGas])

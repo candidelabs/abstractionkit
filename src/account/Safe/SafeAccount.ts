@@ -733,7 +733,7 @@ export class SafeAccount extends SmartAccount {
 			safeAccountFactory = new SafeAccountFactory();
 		}
 
-		let safeSingleton =
+		const safeSingleton =
 			overrides.safeAccountSingleton ?? SafeAccount.DEFAULT_SAFE_SINGLETON;
 		const sender = this.createProxyAddress(initializerCallData, {
 			c2Nonce: overrides.c2Nonce ?? 0n,
@@ -939,7 +939,7 @@ export class SafeAccount extends SmartAccount {
 			safeAccountFactory = new SafeAccountFactory();
 		}
 
-		let safeSingleton =
+		const safeSingleton =
 			overrides.safeAccountSingleton ?? SafeAccount.DEFAULT_SAFE_SINGLETON;
 
 		const generatorFunctionInputParameters = [
@@ -1181,12 +1181,12 @@ export class SafeAccount extends SmartAccount {
 					data: swapSingletonWithDeterministicWebAuthnVerifierOwnerCallData,
 				};
 
-			const clearWebauthnSharedSignerCallData = createCallData(
+			/*const clearWebauthnSharedSignerCallData = createCallData(
 				"0x0dd9692f", //configure
 				["uint256", "uint256", "uint176"],
 				[0, 0, 0],
 			);
-            /*
+            
 			const clearWebauthnSharedSigner: MetaTransaction = {
 				to: webAuthnSharedSigner,
 				value: 0n,

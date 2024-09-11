@@ -170,7 +170,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): [string, string] {
-		let [sender, safeAccountFactoryAddress, factoryData] =
+		const [sender, safeAccountFactoryAddress, factoryData] =
 			SafeAccount.createAccountAddressAndFactoryAddressAndData(
 				owners,
 				overrides,
@@ -180,7 +180,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 					SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
-		let initCode = safeAccountFactoryAddress + factoryData.slice(2);
+		const initCode = safeAccountFactoryAddress + factoryData.slice(2);
 		return [sender, initCode];
 	}
 
@@ -225,7 +225,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): string {
-		let [safeAccountFactoryAddress, factoryData] =
+		const [safeAccountFactoryAddress, factoryData] =
 			SafeAccount.createFactoryAddressAndData(
 				owners,
 				overrides,
@@ -253,7 +253,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		bundlerRpc?: string,
 		overrides: CreateUserOperationV6Overrides = {},
 	): Promise<UserOperationV6> {
-		let [userOperation, factoryAddress, factoryData] =
+		const [userOperation, factoryAddress, factoryData] =
 			await this.createBaseUserOperationAndFactoryAddressAndFactoryData(
 				transactions,
 				true,

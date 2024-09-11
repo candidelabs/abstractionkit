@@ -212,7 +212,7 @@ export class CandidePaymaster extends Paymaster {
 		if (!this.isInitilized) {
 			await this.initialize();
 		}
-		let suppotedEntrypoints = [];
+		const suppotedEntrypoints = [];
 		if (this.entrypointDataV7 != null) {
 			suppotedEntrypoints.push(ENTRYPOINT_V7);
 		}
@@ -335,7 +335,7 @@ export class CandidePaymaster extends Paymaster {
 		if (createPaymasterUserOperationOverrides == null) {
 			createPaymasterUserOperationOverrides = {};
 		}
-		let userOperation = { ...userOperationInput };
+		const userOperation = { ...userOperationInput };
 		if (!this.isInitilized) {
 			await this.initialize();
 		}
@@ -359,7 +359,7 @@ export class CandidePaymaster extends Paymaster {
 				entrypointAddress = ENTRYPOINT_V7;
                 
                 const paymasterMetadata = this.entrypointDataV7.paymasterMetadata;
-				let paymasterAndData = paymasterMetadata.dummyPaymasterAndData;
+				const paymasterAndData = paymasterMetadata.dummyPaymasterAndData;
 				userOperation.paymaster = paymasterAndData.paymaster;
 				userOperation.paymasterVerificationGasLimit =
 					paymasterAndData.paymasterVerificationGasLimit;
@@ -605,7 +605,7 @@ export class CandidePaymaster extends Paymaster {
 		bundlerRpc: string,
 		overrides: CreatePaymasterUserOperationOverrides = {},
 	): Promise<[UserOperationV7 | UserOperationV6, SponsorMetadata | undefined]> {
-        let createPaymasterUserOperationOverrides = overrides;
+        const createPaymasterUserOperationOverrides = overrides;
 		if ("initCode" in userOperation) {
 			return await this.createPaymasterUserOperation(
 				userOperation as UserOperationV6,
@@ -654,7 +654,7 @@ export class CandidePaymaster extends Paymaster {
 		bundlerRpc: string,
 		overrides: CreatePaymasterUserOperationOverrides = {},
 	): Promise<UserOperationV7 | UserOperationV6> {
-        let createPaymasterUserOperationOverrides = overrides;
+        const createPaymasterUserOperationOverrides = overrides;
 		try {
 			if (!this.isInitilized) {
 				await this.initialize();
@@ -692,7 +692,7 @@ export class CandidePaymaster extends Paymaster {
 			userOperation.callData = callDataWithApprove;
 
 			if ("initCode" in userOperation) {
-				let [resultUserOp] = await this.createPaymasterUserOperation(
+				const [resultUserOp] = await this.createPaymasterUserOperation(
 					userOperation as UserOperationV6,
 					bundlerRpc,
 					{
@@ -702,7 +702,7 @@ export class CandidePaymaster extends Paymaster {
 				);
 				return resultUserOp;
 			} else {
-				let [resultUserOp] = await this.createPaymasterUserOperation(
+				const [resultUserOp] = await this.createPaymasterUserOperation(
 					userOperation as UserOperationV7,
 					bundlerRpc,
 					{

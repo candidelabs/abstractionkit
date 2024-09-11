@@ -215,7 +215,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		bundlerRpc?: string,
 		overrides: CreateUserOperationV7Overrides = {},
 	): Promise<UserOperationV7> {
-		let [userOperation, factoryAddress, factoryData] =
+		const [userOperation, factoryAddress, factoryData] =
 			await this.createBaseUserOperationAndFactoryAddressAndFactoryData(
 				transactions,
 				false,
