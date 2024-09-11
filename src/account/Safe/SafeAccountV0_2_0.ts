@@ -7,7 +7,6 @@ import {
 } from "./types";
 
 import { UserOperationV6, MetaTransaction } from "../../types";
-import { SafeAccountFactory } from "src/factory/SafeAccountFactory";
 import { ENTRYPOINT_V6 } from "src/constants";
 
 export class SafeAccountV0_2_0 extends SafeAccount {
@@ -171,15 +170,6 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): [string, string] {
-		let safeAccountFactory;
-		if (overrides.safeAccountFactoryAddress != null) {
-			safeAccountFactory = new SafeAccountFactory(
-				overrides.safeAccountFactoryAddress,
-			);
-		} else {
-			safeAccountFactory = new SafeAccountFactory();
-		}
-
 		let [sender, safeAccountFactoryAddress, factoryData] =
 			SafeAccount.createAccountAddressAndFactoryAddressAndData(
 				owners,
