@@ -6,6 +6,7 @@ import {
 	solidityPacked,
 	solidityPackedKeccak256,
 	ethers,
+    getAddress
 } from "ethers";
 import { SmartAccount } from "../SmartAccount";
 import {
@@ -159,7 +160,7 @@ export class SafeAccount extends SmartAccount {
 			["0xff", safeFactoryAddress, salt, singletonInitHash],
 		).slice(-40);
 
-		return "0x" + proxyAdd;
+		return getAddress("0x" + proxyAdd);//to checksummed
 	}
 
 	/**

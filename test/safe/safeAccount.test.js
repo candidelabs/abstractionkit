@@ -2,17 +2,17 @@ const accountAbstractionkit = require('../../dist/index.umd');
 require('dotenv').config()
 
 jest.setTimeout(300000);
+const ownerPublicAddress=process.env.PUBLIC_ADDRESS1
+const ownerPrivateKey=process.env.PRIVATE_KEY1
+const chainId = process.env.CHAIN_ID
+const jsonRpcNodeProvider=process.env.JSON_RPC_NODE_PROVIDER
+const bundlerUrl=process.env.BUNDLER_URL
+const safeAccountVersions = [
+    accountAbstractionkit.SafeAccountV0_3_0,
+    accountAbstractionkit.SafeAccountV0_2_0
+]
 
 describe('safe account', () => {
-    const ownerPublicAddress=process.env.PUBLIC_ADDRESS1
-    const ownerPrivateKey=process.env.PRIVATE_KEY1
-    const chainId = process.env.CHAIN_ID
-    const jsonRpcNodeProvider=process.env.JSON_RPC_NODE_PROVIDER
-    const bundlerUrl=process.env.BUNDLER_URL
-    const safeAccountVersions = [
-        accountAbstractionkit.SafeAccountV0_3_0,
-        accountAbstractionkit.SafeAccountV0_2_0
-    ]
     let safeAccountVersionName;    
     safeAccountVersions.forEach((safeAccountVersion, index) => {
         if(index == 0){
