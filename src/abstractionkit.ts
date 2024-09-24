@@ -5,6 +5,10 @@ export {
 	SocialRecoveryModuleGracePeriodSelector,
 	RecoverySignaturePair,
 } from "./account/Safe/modules/SocialRecoveryModule";
+export {
+	AllowanceModule,
+	Allowance,
+} from "./account/Safe/modules/AllowanceModule";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
 export { SafeAccountV0_3_0 } from "./account/Safe/SafeAccountV0_3_0";
 
