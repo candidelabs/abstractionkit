@@ -168,7 +168,7 @@ export interface ERC20Token {
 	/** Token address */
 	address: string;
 	/** Token decimal places */
-	decimal: number;
+	decimals: number;
 }
 
 /**

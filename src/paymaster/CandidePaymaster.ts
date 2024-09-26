@@ -133,7 +133,7 @@ export class CandidePaymaster extends Paymaster {
 							name: gasToken.name,
 							symbol: gasToken.symbol,
 							address: gasToken.address,
-							decimal: Number(gasToken.decimal),
+							decimals: Number(gasToken.decimals),
 							//exchangeRate: BigInt(gasToken.exchangeRate),
 						})),
 						paymasterMetadata: jsonRpcResult.paymasterMetadata,
@@ -145,7 +145,7 @@ export class CandidePaymaster extends Paymaster {
 							name: gasToken.name,
 							symbol: gasToken.symbol,
 							address: gasToken.address,
-							decimal: Number(gasToken.decimal),
+							decimals: Number(gasToken.decimals),
 							//exchangeRate: BigInt(gasToken.exchangeRate),
 						})),
 						paymasterMetadata: jsonRpcResult.paymasterMetadata,
@@ -295,7 +295,7 @@ export class CandidePaymaster extends Paymaster {
 				name: gasToken.name,
 				symbol: gasToken.symbol,
 				address: gasToken.address,
-				decimal: Number(gasToken.decimal),
+				decimals: Number(gasToken.decimals),
 				//exchangeRate: BigInt(gasToken.exchangeRate),
 			};
 		}
