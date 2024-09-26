@@ -829,7 +829,7 @@ export class CandidePaymaster extends Paymaster {
                     },
                 );
             } else {
-                return gasToken.exchangeRate
+                return BigInt(gasToken.exchangeRate)
             }
         } catch (err) {
             const error = ensureError(err);
@@ -869,10 +869,36 @@ export class CandidePaymaster extends Paymaster {
                     [],
                 );
             }
-
-            return jsonRpcResult as
-                SupportedERC20TokensAndMetadataV7WithExchangeRate | 
-                SupportedERC20TokensAndMetadataV6WithExchangeRate;
+            
+            if (entrypoint == ENTRYPOINT_V7) {
+					jsonRpcResult = jsonRpcResult as
+                        SupportedERC20TokensAndMetadataV7WithExchangeRate;
+					return {
+						tokens: jsonRpcResult.tokens.map((gasToken) => ({
+							name: gasToken.name,
+							symbol: gasToken.symbol,
+							address: gasToken.address,
+							decimals: Number(gasToken.decimals),
+							exchangeRate: BigInt(gasToken.exchangeRate),
+						})),
+						paymasterMetadata: jsonRpcResult.paymasterMetadata,
+					};
+            } else if (entrypoint == ENTRYPOINT_V6) {
+                jsonRpcResult = jsonRpcResult as
+                    SupportedERC20TokensAndMetadataV6WithExchangeRate;
+                return {
+                    tokens: jsonRpcResult.tokens.map((gasToken) => ({
+                        name: gasToken.name,
+                        symbol: gasToken.symbol,
+                        address: gasToken.address,
+                        decimals: Number(gasToken.decimals),
+                        exchangeRate: BigInt(gasToken.exchangeRate),
+                    })),
+                    paymasterMetadata: jsonRpcResult.paymasterMetadata,
+                };
+            } else {
+                throw RangeError("unsupported entrypoint.");
+            }
         } catch (err) {
             const error = ensureError(err);
 
