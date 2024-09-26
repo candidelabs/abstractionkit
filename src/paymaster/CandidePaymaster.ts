@@ -11,6 +11,8 @@ import {
 	PaymasterMetadataV6,
 	ERC20Token,
 	SponsorMetadata,
+    SupportedERC20TokensAndMetadataV7WithExchangeRate,
+    SupportedERC20TokensAndMetadataV6WithExchangeRate,
 } from "../types";
 import {
 	CandidePaymasterContext,
@@ -132,7 +134,7 @@ export class CandidePaymaster extends Paymaster {
 							symbol: gasToken.symbol,
 							address: gasToken.address,
 							decimal: Number(gasToken.decimal),
-							exchangeRate: BigInt(gasToken.exchangeRate),
+							//exchangeRate: BigInt(gasToken.exchangeRate),
 						})),
 						paymasterMetadata: jsonRpcResult.paymasterMetadata,
 					};
@@ -144,7 +146,7 @@ export class CandidePaymaster extends Paymaster {
 							symbol: gasToken.symbol,
 							address: gasToken.address,
 							decimal: Number(gasToken.decimal),
-							exchangeRate: BigInt(gasToken.exchangeRate),
+							//exchangeRate: BigInt(gasToken.exchangeRate),
 						})),
 						paymasterMetadata: jsonRpcResult.paymasterMetadata,
 					};
@@ -294,7 +296,7 @@ export class CandidePaymaster extends Paymaster {
 				symbol: gasToken.symbol,
 				address: gasToken.address,
 				decimal: Number(gasToken.decimal),
-				exchangeRate: BigInt(gasToken.exchangeRate),
+				//exchangeRate: BigInt(gasToken.exchangeRate),
 			};
 		}
 	}
@@ -743,35 +745,12 @@ export class CandidePaymaster extends Paymaster {
 				entrypoint = ENTRYPOINT_V7;
 			}
 
-			const supportedERC20TokensData = await this.getSupportedERC20TokenData(
+			const exchangeRate = await this.fetchTokenPaymasterExchangeRate(
 				erc20TokenAddress,
 				entrypoint,
 			);
-			if (supportedERC20TokensData == null) {
-				throw new AbstractionKitError(
-					"PAYMASTER_ERROR",
-					erc20TokenAddress + " token is not supported by the paymaster.",
-					{
-						context: {
-							supportedERC20TokensAndPaymasterMetadataV7: JSON.stringify(
-								this.entrypointDataV7,
-								(_key, value) =>
-									typeof value === "bigint" ? "0x" + value.toString(16) : value,
-							),
-							supportedERC20TokensAndPaymasterMetadataV6: JSON.stringify(
-								this.entrypointDataV6,
-								(_key, value) =>
-									typeof value === "bigint" ? "0x" + value.toString(16) : value,
-							),
-						},
-					},
-				);
-			} else {
-				const cost = calculateUserOperationMaxGasCost(userOperation);
-				const tokenCost =
-					(supportedERC20TokensData.exchangeRate * cost) / BigInt(10 ** 18);
-				return tokenCost;
-			}
+            const cost = calculateUserOperationMaxGasCost(userOperation);
+            return (exchangeRate * cost) / BigInt(10 ** 18);
 		} catch (err) {
 			const error = ensureError(err);
 
@@ -784,4 +763,126 @@ export class CandidePaymaster extends Paymaster {
 			);
 		}
 	}
+
+    async fetchTokenPaymasterExchangeRate(
+		erc20TokenAddress: string,
+        entrypoint: string = ENTRYPOINT_V7,
+	): Promise<bigint> {
+        try {
+            if (!this.isInitilized) {
+                await this.initialize();
+            }
+
+            let jsonRpcResult;
+            if (this.version == "v3") {
+                jsonRpcResult = await sendJsonRpcRequest(
+                    this.rpcUrl,
+                    "pm_supportedERC20Tokens",
+                    [entrypoint],
+                );
+            } else {
+                jsonRpcResult = await sendJsonRpcRequest(
+                    this.rpcUrl,
+                    "pm_supportedERC20Tokens",
+                    [],
+                );
+            }
+
+            jsonRpcResult = jsonRpcResult as
+                SupportedERC20TokensAndMetadataV7WithExchangeRate | 
+                SupportedERC20TokensAndMetadataV6WithExchangeRate;
+
+            const supportedTokensExchangeRates =
+                jsonRpcResult.tokens.map((gasToken) =>
+                 ({
+                     address: gasToken.address,
+                     exchangeRate:gasToken.exchangeRate,
+                 })
+                )
+
+            const gasToken = supportedTokensExchangeRates.find(
+                (token) =>
+                    token.address.toLowerCase() === erc20TokenAddress.toLowerCase(),
+            );
+
+            if (!gasToken) {
+                throw new AbstractionKitError(
+                    "PAYMASTER_ERROR",
+                    erc20TokenAddress + " token is not supported by the paymaster.",
+                    {
+                        context: {
+                            supportedERC20TokensAndPaymasterMetadataV7: 
+                                JSON.stringify(
+                                    this.entrypointDataV7,
+                                    (_key, value) =>
+                                        typeof value === "bigint" ? "0x" +
+                                            value.toString(16) : value,
+                                ),
+                            supportedERC20TokensAndPaymasterMetadataV6:
+                                JSON.stringify(
+                                    this.entrypointDataV6,
+                                    (_key, value) =>
+                                        typeof value === "bigint" ? 
+                                            "0x" + value.toString(16) : value,
+                            ),
+                        },
+                    },
+                );
+            } else {
+                return gasToken.exchangeRate
+            }
+        } catch (err) {
+            const error = ensureError(err);
+
+            throw new AbstractionKitError(
+                "PAYMASTER_ERROR",
+                "fetchTokenPaymasterExchangeRate failed",
+                {
+                    cause: error,
+                },
+            );
+        }
+    }
+    
+    async fetchSupportedERC20TokensAndPaymasterMetadata(
+        entrypoint: string = ENTRYPOINT_V7,
+	): Promise<
+        SupportedERC20TokensAndMetadataV7WithExchangeRate | 
+        SupportedERC20TokensAndMetadataV6WithExchangeRate
+    > {
+        try{
+            if (!this.isInitilized) {
+                await this.initialize();
+            }
+
+            let jsonRpcResult;
+            if (this.version == "v3") {
+                jsonRpcResult = await sendJsonRpcRequest(
+                    this.rpcUrl,
+                    "pm_supportedERC20Tokens",
+                    [entrypoint],
+                );
+            } else {
+                jsonRpcResult = await sendJsonRpcRequest(
+                    this.rpcUrl,
+                    "pm_supportedERC20Tokens",
+                    [],
+                );
+            }
+
+            return jsonRpcResult as
+                SupportedERC20TokensAndMetadataV7WithExchangeRate | 
+                SupportedERC20TokensAndMetadataV6WithExchangeRate;
+        } catch (err) {
+            const error = ensureError(err);
+
+            throw new AbstractionKitError(
+                "PAYMASTER_ERROR",
+                "fetchSupportedERC20TokensAndPaymasterMetadata failed",
+                {
+                    cause: error,
+                },
+            );
+        }
+    }
 }
