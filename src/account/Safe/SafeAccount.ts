@@ -1235,7 +1235,8 @@ export class SafeAccount extends SmartAccount {
 			overrides.maxPriorityFeePerGas == null
 		) {
 			if (providerRpc != null) {
-				[maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPrice(providerRpc);
+				[maxFeePerGas, maxPriorityFeePerGas] =
+                    await fetchGasPrice(providerRpc, overrides.gasLevel);
 				if (maxFeePerGas == 0n) {
 					maxFeePerGas = 1n;
 				}
