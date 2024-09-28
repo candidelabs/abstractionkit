@@ -33,7 +33,7 @@ AbstractionKit features the Safe Account. It uses the original Safe Singleton an
 
 
 ```typescript
-import { SafeAccountV0_2_0 as SafeAccount } from "abstractionkit";
+import { SafeAccountV0_3_0 as SafeAccount } from "abstractionkit";
 
 const ownerPublicAddress = "0xBdbc5FBC9cA8C3F514D073eC3de840Ac84FC6D31";
 const smartAccount = SafeAccount.initializeNewAccount([ownerPublicAddress]);
@@ -72,7 +72,7 @@ const paymaster: CandidePaymaster = new CandidePaymaster(paymasterRPC);
 Then you can consume Paymaster methods:
 
 ```typescript
-const erc20s = await paymaster.getSupportedERC20TokensAndPaymasterMetadata();
+const supportedERC20TokensAndPaymasterMetadata = await paymaster.fetchSupportedERC20TokensAndPaymasterMetadata();
 ```
 
 ## Guides
@@ -89,3 +89,9 @@ const erc20s = await paymaster.getSupportedERC20TokensAndPaymasterMetadata();
 ## License
 
 MIT
+
+<!-- ACKNOWLEDGMENTS -->
+## Acknowledgments
+
+* <a href='https://eips.ethereum.org/EIPS/eip-4337'>EIP-4337: Account Abstraction via Entry Point Contract specification </a>
+* <a href='https://github.com/safe-global/safe-modules'>Safe modules</a>
