@@ -7,10 +7,10 @@ import {
     CandidePaymaster,
     getFunctionSelector,
     createCallData,
-    WebauthPublicKey,
-    WebauthSignatureData,
+    WebauthnPublicKey,
+    WebauthnSignatureData,
     SignerSignaturePair,
-    WebauthDummySignerSignaturePair
+    WebauthnDummySignerSignaturePair
 } from "abstractionkit";
 import {UserVerificationRequirement, WebAuthnCredentials, extractClientDataFields, extractPublicKey, extractSignature } from './webauthn';
 
@@ -45,7 +45,7 @@ async function main(): Promise<void> {
    
     const publicKey = extractPublicKey(credential.response)
 
-    const webauthPublicKey: WebauthPublicKey = {
+    const webauthPublicKey: WebauthnPublicKey = {
       x:publicKey.x,
       y:publicKey.y,
     }
@@ -96,7 +96,7 @@ async function main(): Promise<void> {
         jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
         bundlerUrl, //the bundler rpc is used to estimate the gas limits.
         {
-          dummySignerSignaturePairs:[WebauthDummySignerSignaturePair]
+          dummySignatures:[WebauthnDummySignerSignaturePair]
         }
     )
   
@@ -127,7 +127,7 @@ async function main(): Promise<void> {
       },
     })
 
-    const webauthSignatureData:WebauthSignatureData = {
+    const webauthSignatureData:WebauthnSignatureData = {
       authenticatorData: assertion.response.authenticatorData,
       clientDataFields: extractClientDataFields(assertion.response),
       rs: extractSignature(assertion.response),
