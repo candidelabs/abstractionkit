@@ -28,6 +28,7 @@ export {
 	fetchAccountNonce,
 	calculateUserOperationMaxGasCost,
 	sendJsonRpcRequest,
+    fetchGasPrice
 } from "./utils";
 
 export {
@@ -63,6 +64,7 @@ export {
 	StateOverrideSet,
 	Operation,
 	MetaTransaction,
+    GasOption
 } from "./types";
 
 export {

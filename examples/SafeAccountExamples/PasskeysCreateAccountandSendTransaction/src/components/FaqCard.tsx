@@ -70,7 +70,7 @@ const data = {
 					</a>{" "}
 					and find the source code to this demo on{" "}
 					<a
-						href="https://github.com/candidelabs/abstractionkit/tree/experimental/examples/SafeAccountExamples/PasskeysCreateAccountandSendTransaction"
+						href="https://github.com/candidelabs/abstractionkit/tree/main/examples/SafeAccountExamples/PasskeysCreateAccountandSendTransaction"
 						target="_blank"
 					>
 						github

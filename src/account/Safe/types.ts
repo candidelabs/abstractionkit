@@ -1,4 +1,4 @@
-import type { StateOverrideSet } from "../../types";
+import type { GasOption, StateOverrideSet } from "../../types";
 
 /**
  * Overrides for the "createBaseUserOperationAndFactoryAddressAndFactoryData" function
@@ -43,6 +43,8 @@ export interface CreateBaseUserOperationOverrides {
 	eip7212WebAuthnContractVerifier?: string;
 	safeModuleExecutorFunctionSelector?: SafeModuleExecutorFunctionSelector;
 	multisendContractAddress?: string;
+
+	gasLevel?: GasOption;
 }
 
 /**

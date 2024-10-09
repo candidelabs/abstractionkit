@@ -25,6 +25,15 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 	const [loadingTx, setLoadingTx] = useState<boolean>(false);
 	const [error, setError] = useState<string>();
 	const [txHash, setTxHash] = useState<string>();
+	const [gasSponsor, setGasSponsor] = useState<
+		| {
+				name: string;
+				description: string;
+				url: string;
+				icons: string[];
+		  }
+		| undefined
+	>(undefined);
 
 	const accountAddress = getItem("accountAddress") as string;
 	const provider = new JsonRpcProvider(import.meta.env.VITE_JSON_RPC_PROVIDER);
@@ -53,26 +62,30 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 			data: mintTransactionCallData,
 		};
 
-		const safeAccount = SafeAccount.initializeNewAccount([passkey.pubkeyCoordinates]);
+		const safeAccount = SafeAccount.initializeNewAccount([
+			passkey.pubkeyCoordinates,
+		]);
 
-		let userOperation = await safeAccount.createUserOperation(
-			[mintTransaction],
-			jsonRPCProvider,
-			bundlerUrl,
-			{
-				dummySignerSignaturePairs: [WebauthnDummySignerSignaturePair],
-				preVerificationGasPercentageMultiplier: 120,
-				verificationGasLimitPercentageMultiplier: 120,
-			},
-		);
-
-		let paymaster: CandidePaymaster = new CandidePaymaster(paymasterUrl);
-		let [userOperationSponsored, _sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
-			userOperation,
-			bundlerUrl,
-		);
-		userOperation = userOperationSponsored;
 		try {
+			let userOperation = await safeAccount.createUserOperation(
+				[mintTransaction],
+				jsonRPCProvider,
+				bundlerUrl,
+				{
+					dummySignatures: [WebauthnDummySignerSignaturePair],
+					preVerificationGasPercentageMultiplier: 120,
+					verificationGasLimitPercentageMultiplier: 120,
+				},
+			);
+
+			let paymaster: CandidePaymaster = new CandidePaymaster(paymasterUrl);
+			let [userOperationSponsored, sponsorMetadata] =
+				await paymaster.createSponsorPaymasterUserOperation(
+					userOperation,
+					bundlerUrl,
+				);
+			setGasSponsor(sponsorMetadata);
+			userOperation = userOperationSponsored;
 			const bundlerResponse = await signAndSendUserOp(
 				safeAccount,
 				userOperation,
@@ -93,7 +106,7 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 			}
 		} catch (error) {
 			if (error instanceof Error) {
-				console.log(error)
+				console.log(error);
 				setError(error.message);
 			} else {
 				setError("Unknown error");
@@ -115,7 +128,23 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 		<div className="card">
 			{userOpHash && (
 				<p>
-					Your account setup is in progress. Track your operation on{" "}
+					Your account setup is in progress. This operation gas is sponsored by{" "}
+					{gasSponsor?.name}
+					<a
+						href={gasSponsor?.url}
+						target="_blank"
+						rel="noopener noreferrer"
+						style={{ marginLeft: "5px" }}
+					>
+						<img
+							src={gasSponsor?.icons[0]}
+							alt="logo"
+							style={{ width: "25px", height: "25px", verticalAlign: "middle" }}
+						/>
+					</a>
+					<br />
+					<br />
+					Track your operation on{" "}
 					<a
 						target="_blank"
 						href={`https://eth-${chainName.toLowerCase()}.blockscout.com/op/${userOpHash}`}
@@ -126,7 +155,8 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 			)}
 			{txHash && (
 				<>
-					You collected an NFT, secured with your Safe Account & authenticated by your Device Passkeys.
+					You collected an NFT, secured with your Safe Account & authenticated
+					by your Device Passkeys.
 					<br />
 					<br />
 					View more on{" "}
@@ -144,7 +174,7 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 			) : (
 				accountAddress && (
 					<div className="card">
-						<br/>
+						<br />
 						<button onClick={handleMintNFT} disabled={!!userOpHash}>
 							Mint NFT
 						</button>

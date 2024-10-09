@@ -168,7 +168,13 @@ export interface ERC20Token {
 	/** Token address */
 	address: string;
 	/** Token decimal places */
-	decimal: number;
+	decimals: number;
+}
+
+/**
+ * Erc20 token info from the token paymaster with exchange rate
+ */
+export interface ERC20TokenWithExchangeRate extends ERC20Token {
 	/** Token exchange rate*/
 	exchangeRate: bigint;
 }
@@ -215,6 +221,22 @@ export interface SupportedERC20TokensAndMetadataV7 {
 export interface SupportedERC20TokensAndMetadataV6 {
 	paymasterMetadata: PaymasterMetadataV6;
 	tokens: ERC20Token[];
+}
+
+/**
+ * Paymaster metadata and supported erc20 tokens
+ */
+export interface SupportedERC20TokensAndMetadataV7WithExchangeRate {
+	paymasterMetadata: PaymasterMetadataV7;
+	tokens: ERC20TokenWithExchangeRate[];
+}
+
+/**
+ * Paymaster metadata and supported erc20 tokens
+ */
+export interface SupportedERC20TokensAndMetadataV6WithExchangeRate {
+	paymasterMetadata: PaymasterMetadataV6;
+	tokens: ERC20TokenWithExchangeRate[];
 }
 
 /**
