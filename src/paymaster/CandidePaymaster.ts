@@ -597,32 +597,33 @@ export class CandidePaymaster extends Paymaster {
 	async createSponsorPaymasterUserOperation(
 		userOperation: UserOperationV7,
 		bundlerRpc: string,
-		overrides?: CreatePaymasterUserOperationOverrides,
+		sponsorshipPolicyId?: string,
 	): Promise<[UserOperationV7, SponsorMetadata | undefined]>;
 	async createSponsorPaymasterUserOperation(
 		userOperation: UserOperationV6,
 		bundlerRpc: string,
-		overrides?: CreatePaymasterUserOperationOverrides,
+		sponsorshipPolicyId?: string,
 	): Promise<[UserOperationV6, SponsorMetadata | undefined]>;
 	async createSponsorPaymasterUserOperation(
 		userOperation: UserOperationV7 | UserOperationV6,
 		bundlerRpc: string,
-		overrides: CreatePaymasterUserOperationOverrides = {},
+		sponsorshipPolicyId?: string,
 	): Promise<[UserOperationV7 | UserOperationV6, SponsorMetadata | undefined]> {
-		const createPaymasterUserOperationOverrides = overrides;
+		const context: CandidePaymasterContext = {};
+		if (sponsorshipPolicyId && sponsorshipPolicyId.trim().length > 0){
+			context["sponsorshipPolicyId"] = sponsorshipPolicyId;
+		}
 		if ("initCode" in userOperation) {
 			return await this.createPaymasterUserOperation(
 				userOperation as UserOperationV6,
 				bundlerRpc,
-				{},
-				createPaymasterUserOperationOverrides,
+				context
 			);
 		} else {
 			return await this.createPaymasterUserOperation(
 				userOperation as UserOperationV7,
 				bundlerRpc,
-				{},
-				createPaymasterUserOperationOverrides,
+				context
 			);
 		}
 	}

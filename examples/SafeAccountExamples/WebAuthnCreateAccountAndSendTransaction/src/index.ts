@@ -107,9 +107,6 @@ async function main(): Promise<void> {
     let [paymasterUserOperation, _sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
         userOperation,
         bundlerUrl,
-        //{
-        //    verificationGasLimitPercentageMultiplier:130
-        //}
     )
     userOperation = paymasterUserOperation; 
 
