@@ -18,7 +18,8 @@ async function main(): Promise<void> {
     const ownerPublicAddress = process.env.PUBLIC_ADDRESS as string
     const ownerPrivateKey = process.env.PRIVATE_KEY as string
     const paymasterRPC = process.env.PAYMASTER_RPC as string;
-    
+    const sponsorshipPolicyId = process.env.SPONSORSHIP_POLICY_ID as string;
+
     //initializeNewAccount only needed when the smart account
     //have not been deployed yet for its first useroperation.
     //You can store the accountAddress to use it to initialize 
@@ -73,7 +74,7 @@ async function main(): Promise<void> {
     )
 
     let [paymasterUserOperation, _sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
-        userOperation, bundlerUrl)
+        userOperation, bundlerUrl, sponsorshipPolicyId) // sponsorshipPolicyId will have no effect if empty
     userOperation = paymasterUserOperation; 
 
 
