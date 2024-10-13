@@ -4,8 +4,8 @@
   "description": "Add an onchain Guardian using the Social Recovery Module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "rm -rf dist && tsc",
-    "clean": "rm -rf dist",
+    "build": "rimraf dist && tsc",
+    "clean": "rimraf dist",
     "format": "prettier --write src/**/*.ts",
     "lint": "eslint src/**/*.ts"
   },
@@ -15,5 +15,8 @@
     "ethers": "^6.6.7",
     "typescript": "^5.1.6",
     "abstractionkit": "^0.2.0"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1"
   }
 }
