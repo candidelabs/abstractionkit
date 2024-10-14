@@ -209,16 +209,6 @@ export class AllowanceModule extends SafeModule{
                 delegateSignature
             ]
         );
-        console.log([
-                safeAddress,
-                token,
-                to,
-                amount,
-                paymentToken,
-                payment,
-                delegate,
-                delegateSignature
-            ])
         return {
             to:this.moduleAddress,
             data: callData,
