@@ -2110,4 +2110,38 @@ export class SafeAccount extends SmartAccount {
 
 		return decodedCalldata[0];
 	}
+
+    /**
+	 * check if a module is enabled 
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * @param moduleAddress - the module address to check if enabled 
+	 * @returns a promise of boolean 
+	 */
+	public async isModuleEnabled(
+        nodeRpcUrl: string, moduleAddress: string
+    ): Promise<boolean> {
+		const functionSignature = "isModuleEnabled(address)";
+		const functionSelector = getFunctionSelector(functionSignature);
+		const callData = createCallData(
+            functionSelector, ["address"], [moduleAddress]);
+
+		const ethCallParams = {
+			to: this.accountAddress,
+			data: callData,
+		};
+		const isModuleEnabledResult = await sendEthCallRequest(
+			nodeRpcUrl,
+			ethCallParams,
+			"latest",
+		);
+
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		const decodedCalldata = abiCoder.decode(
+			["bool"],
+			isModuleEnabledResult,
+		);
+
+		return decodedCalldata[0];
+	}
+
 }
