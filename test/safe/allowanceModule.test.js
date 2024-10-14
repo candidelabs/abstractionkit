@@ -38,6 +38,15 @@ describe('allowance module', () => {
         let delegateAccount = new safeAccountVersion(
             delegateExpectedAccountAddress
         )
+        console.log(
+            "please fund the allowance source address : " + 
+            allowanceSourceExpectedAccountAddress +
+            " with eth and the target allowance token for the test to pass")
+        
+        console.log(
+            "please fund the delegate address : " + 
+            delegateExpectedAccountAddress +
+            " with eth for the test to pass")
 
         const allowanceModule = new accountAbstractionkit.AllowanceModule()
 
