@@ -2096,7 +2096,7 @@ export class SafeAccount extends SmartAccount {
 			to: this.accountAddress,
 			data: callData,
 		};
-		const recoveryRequestResult = await sendEthCallRequest(
+		const getOwnersResult = await sendEthCallRequest(
 			nodeRpcUrl,
 			ethCallParams,
 			"latest",
@@ -2105,7 +2105,7 @@ export class SafeAccount extends SmartAccount {
 		const abiCoder = AbiCoder.defaultAbiCoder();
 		const decodedCalldata = abiCoder.decode(
 			["address[]"],
-			recoveryRequestResult,
+			getOwnersResult,
 		);
 
 		return decodedCalldata[0];
