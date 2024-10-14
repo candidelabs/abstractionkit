@@ -2,6 +2,7 @@ import type { StateOverrideSet } from "../types";
 
 export interface CandidePaymasterContext {
 	token?: string;
+	sponsorshipPolicyId?: string;
 }
 
 export interface PrependTokenPaymasterApproveAccount {
