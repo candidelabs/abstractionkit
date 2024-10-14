@@ -11,7 +11,7 @@ const chainId = process.env.CHAIN_ID
 const jsonRpcNodeProvider=process.env.JSON_RPC_NODE_PROVIDER
 const bundlerUrl=process.env.BUNDLER_URL
 const safeAccountVersions = [
-    //accountAbstractionkit.SafeAccountV0_3_0,
+    accountAbstractionkit.SafeAccountV0_3_0,
     accountAbstractionkit.SafeAccountV0_2_0
 ]
 
@@ -59,7 +59,7 @@ describe('allowance module', () => {
             if(delegates.includes(delegateAccount.accountAddress)){
                 const deleteAllowanceMetaTransaction = 
                     allowanceModule.createDeleteAllowanceMetaTransaction(
-                        delegateAccount.accountAddress,
+                        delegateAccount.accountAddress, allowanceToken
                     )
                 const deleteAllowanceUserOperation =
                     await allowanceSourceAccount.createUserOperation(
@@ -82,15 +82,14 @@ describe('allowance module', () => {
                         deleteAllowanceUserOperation, bundlerUrl
                     )
 
+                await sendUserOperationResponse.included()
             }
         });
-
-        test('create allowance - ' + safeAccountVersionName, async() => {
-
-            const enableModule = allowanceModule.createEnableModuleMetaTransaction(
-                allowanceSourceAccount.accountAddress
-            );
-
+        
+        test(
+            'create one time allowance and execute transfer- ' + safeAccountVersionName
+            , async() => {
+            
             const addDelegateMetaTransaction = 
                 allowanceModule.createAddDelegateMetaTransaction(
                     delegateAccount.accountAddress,
@@ -103,14 +102,25 @@ describe('allowance module', () => {
                     1, //allowanceAmount
                     0 //startAfterInMinutes
                 )
+            
+            let metaTransactionList = [
+                addDelegateMetaTransaction,
+                setAllowanceMetaTransaction
+            ]
+            
+            const isAllowanceModuleEnabled = await allowanceSourceAccount.isModuleEnabled(
+                jsonRpcNodeProvider, allowanceModule.moduleAddress
+            )
+            if(!isAllowanceModuleEnabled){
+                const enableModule = allowanceModule.createEnableModuleMetaTransaction(
+                    allowanceSourceAccount.accountAddress
+                );
+                metaTransactionList.unshift(enableModule)
+            }
 
             const addDelegateAndSetAllowanceUserOperation =
                 await allowanceSourceAccount.createUserOperation(
-                    [
-                        //enableModule,
-                        addDelegateMetaTransaction,
-                        setAllowanceMetaTransaction
-                    ],
+                    metaTransactionList,
                     jsonRpcNodeProvider,
                     bundlerUrl,
                 )
@@ -155,7 +165,6 @@ describe('allowance module', () => {
                     1,
                     delegateAccount.accountAddress
                 )
-            
             
             const allowanceTransferUserOperation =
                 await delegateAccount.createUserOperation(
