@@ -64,7 +64,8 @@ export {
 	StateOverrideSet,
 	Operation,
 	MetaTransaction,
-    GasOption
+    GasOption,
+    SponsorMetadata
 } from "./types";
 
 export {
