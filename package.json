@@ -15,7 +15,7 @@
 		"clean": "rimraf dist",
 		"format": "prettier --write src/*.ts src/**/*.ts src/**/**/*.ts",
 		"lint": "eslint -f unix \"src/**/*.{ts,tsx}\"",
-		"test": "jest"
+		"test": "jest --verbose"
 	},
 	"repository": {
 		"type": "git",
