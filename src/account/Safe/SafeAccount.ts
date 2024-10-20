@@ -25,6 +25,8 @@ import {
 	BaseUserOperation,
 	UserOperationV6,
 	UserOperationV7,
+    PolygonGasStationJsonRpcResponse,
+    GasOption,
 } from "../../types";
 import {
 	createCallData,
@@ -49,7 +51,7 @@ import {
 	BaseInitOverrides,
 } from "./types";
 import { decodeMultiSendCallData, encodeMultiSendCallData } from "./multisend";
-import { AbstractionKitError } from "src/errors";
+import { AbstractionKitError, ensureError } from "src/errors";
 import { Bundler } from "src/Bundler";
 import { SendUseroperationResponse } from "../SendUseroperationResponse";
 import { SafeAccountFactory } from "src/factory/SafeAccountFactory";
@@ -1235,7 +1237,38 @@ export class SafeAccount extends SmartAccount {
 			overrides.maxFeePerGas == null ||
 			overrides.maxPriorityFeePerGas == null
 		) {
-			if (providerRpc != null) {
+			if (overrides.polygonGasStation != null) {
+               const gasStationUrl =
+                   'https://gasstation.polygon.technology/' + overrides.polygonGasStation;
+                try{
+                    const fetchResult = await fetch(gasStationUrl);
+                    const response = (await fetchResult.json()) as PolygonGasStationJsonRpcResponse;
+                    const gasLevel = overrides.gasLevel?? GasOption.Medium;
+                    let gasPrice;
+                    if(gasLevel == GasOption.Slow){
+                       gasPrice = response.safeLow; 
+                    }else if(gasLevel == GasOption.Medium){
+                       gasPrice = response.standard; 
+                    }else{
+                       gasPrice = response.fast; 
+                    }
+                    maxFeePerGas = BigInt(
+                        Math.ceil(Number(gasPrice.maxFee) * 1000000000),
+                    );
+                    maxPriorityFeePerGas = BigInt(
+                        Math.ceil(Number(gasPrice.maxPriorityFee) * 1000000000),
+                    );
+               }catch (err) {
+                    const error = ensureError(err);
+
+                    throw new AbstractionKitError(
+                        "BAD_DATA",
+                        "fetching gas prices from " + gasStationUrl + " failed.", {
+                        cause: error,
+                    });
+                }
+            }
+            else if (providerRpc != null) {
 				[maxFeePerGas, maxPriorityFeePerGas] =
                     await fetchGasPrice(providerRpc, overrides.gasLevel);
 				if (maxFeePerGas == 0n) {

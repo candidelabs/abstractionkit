@@ -1,4 +1,4 @@
-import type { GasOption, StateOverrideSet } from "../../types";
+import type { GasOption, StateOverrideSet, PolygonChain } from "../../types";
 
 /**
  * Overrides for the "createBaseUserOperationAndFactoryAddressAndFactoryData" function
@@ -45,6 +45,7 @@ export interface CreateBaseUserOperationOverrides {
 	multisendContractAddress?: string;
 
 	gasLevel?: GasOption;
+	polygonGasStation?: PolygonChain;
 }
 
 /**
