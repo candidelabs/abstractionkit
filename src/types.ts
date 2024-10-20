@@ -272,3 +272,24 @@ export enum GasOption {
 	Medium = 1.2,
 	Fast = 1.5,
 }
+export enum PolygonChain {
+	Mainnet = 'v2',
+    ZkMainnet = 'zkevm',
+	Amoy = 'amoy',
+	Cardona = 'cardona',
+}
+
+export type GasPrice = {
+    maxPriorityFee:number; //in Gwei
+    maxFee:number; //in Gwei
+}
+
+export type PolygonGasStationJsonRpcResponse = {
+    safeLow: GasPrice;
+    standard: GasPrice;
+    fast: GasPrice;
+    estimatedBaseFee:string;
+    blockTime:number;
+    blockNumber:number;
+};
+

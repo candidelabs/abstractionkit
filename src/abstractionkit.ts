@@ -65,7 +65,8 @@ export {
 	Operation,
 	MetaTransaction,
     GasOption,
-    SponsorMetadata
+    SponsorMetadata,
+    PolygonChain
 } from "./types";
 
 export {
