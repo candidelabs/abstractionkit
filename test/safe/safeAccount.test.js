@@ -168,15 +168,13 @@ describe('safe account', () => {
             ownerPrivateKey,
             newOwnerPublicAddress,
         ) {
-            const addOwnerMetaTransaction = 
-                smartAccount.createAddOwnerWithThresholdMetaTransaction(
+            const addOwnerMetaTransactions = 
+                await smartAccount.createAddOwnerWithThresholdMetaTransactions(
                     newOwnerPublicAddress, 1
                 )
 
             const addOwnerUserOperation = await smartAccount.createUserOperation(
-                [
-                    addOwnerMetaTransaction
-                ],
+                addOwnerMetaTransactions,
                 jsonRpcNodeProvider,
                 bundlerUrl,
             )

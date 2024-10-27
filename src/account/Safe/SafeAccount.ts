@@ -1807,11 +1807,12 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * create a swapOwner metatransaction, create a metatransaction to
+	 * create a swapOwner metatransaction and create a metatransaction to
 	 * deploy a webauthn verifier owner if not deployed and it will automatically
 	 * fetch the prevowner needed for the swap
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
-	 * (to get the prevOwner paramter).
+	 * (to get the prevOwner paramter) and to check if a webauthn newowner verifier 
+     * is already deployed.
 	 * @param newOwner - newOwner public address
 	 * @param oldOwner - oldOwner to replace public address
 	 * @param overrides - overrides for the default values
@@ -1978,13 +1979,89 @@ export class SafeAccount extends SmartAccount {
 		);
 	}
 
+    /**
+	 * create an addOwner metatransaction and create a metatransaction to
+	 * deploy a webauthn verifier owner if it is not deployed
+	 * @param newOwner - newOwner public address
+	 * @param threshold - new threshold
+	 * @param overrides - overrides for the default values
+     * @param overrides.nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * (to check if the new webauthn owner is deployed or not).
+	 * @returns a promise of a list of metaTransactions
+	 */
+	public async createAddOwnerWithThresholdMetaTransactions(
+		newOwner: Signer,
+		threshold: number,
+		overrides: {
+            nodeRpcUrl?: string,
+			eip7212WebAuthnPrecompileVerifier?: string;
+			eip7212WebAuthnContractVerifier?: string;
+			webAuthnSignerFactory?: string;
+			webAuthnSignerSingleton?: string;
+		} = {},
+	): Promise<MetaTransaction[]> {
+		let deployNewOwnerSignerMetaTransaction: MetaTransaction | null = null;
+		let newOwnerT: string;
+
+		if (typeof newOwner != "string") {
+			newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(
+				newOwner.x,
+				newOwner.y,
+				{
+					eip7212WebAuthnPrecompileVerifier:
+						overrides.eip7212WebAuthnPrecompileVerifier,
+					eip7212WebAuthnContractVerifier:
+						overrides.eip7212WebAuthnContractVerifier,
+					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
+					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
+				},
+			);
+            if(overrides.nodeRpcUrl == null){
+				throw RangeError(
+                    "overrides.nodeRpcUrl can't be null if adding a webauthn owner");
+            }
+			const newOwnerCode = await sendEthGetCodeRequest(
+				overrides.nodeRpcUrl,
+				newOwnerT,
+				"latest",
+			);
+			const newOwnerNotDeployed = newOwnerCode.length < 3;
+			if (newOwnerNotDeployed) {
+				deployNewOwnerSignerMetaTransaction =
+					SafeAccount.createDeployWebAuthnVerifierMetaTransaction(
+						newOwner.x,
+						newOwner.y,
+						{
+							eip7212WebAuthnPrecompileVerifier:
+								overrides.eip7212WebAuthnPrecompileVerifier,
+							eip7212WebAuthnContractVerifier:
+								overrides.eip7212WebAuthnContractVerifier,
+							webAuthnSignerFactory: overrides.webAuthnSignerFactory,
+						},
+					);
+			}
+		} else {
+			newOwnerT = newOwner;
+		}
+		
+        const addMetaTransaction = this.createStandardAddOwnerWithThresholdMetaTransaction(
+			newOwnerT,
+            threshold
+		);
+		if (deployNewOwnerSignerMetaTransaction == null) {
+			return [addMetaTransaction];
+		} else {
+			return [deployNewOwnerSignerMetaTransaction, addMetaTransaction];
+		}
+	}
+
 	/**
-	 * create a addOwner metatransaction
+	 * create a standard addOwner metatransaction
 	 * @param newOwner - newOwner public address
 	 * @param threshold - new threshold
 	 * @returns a metaTransaction
 	 */
-	public createAddOwnerWithThresholdMetaTransaction(
+	public createStandardAddOwnerWithThresholdMetaTransaction(
 		newOwner: string,
 		threshold: number,
 	): MetaTransaction {
