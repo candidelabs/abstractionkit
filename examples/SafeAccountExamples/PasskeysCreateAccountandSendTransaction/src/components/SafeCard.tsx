@@ -72,7 +72,7 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 				jsonRPCProvider,
 				bundlerUrl,
 				{
-					dummySignatures: [WebauthnDummySignerSignaturePair],
+					dummySignerSignaturePairs: [WebauthnDummySignerSignaturePair],
 					preVerificationGasPercentageMultiplier: 120,
 					verificationGasLimitPercentageMultiplier: 120,
 				},
