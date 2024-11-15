@@ -43,10 +43,10 @@
   dependencies:
     undici-types "~6.19.2"
 
-abstractionkit@^0.2.2:
-  version "0.2.2"
-  resolved "https://registry.yarnpkg.com/abstractionkit/-/abstractionkit-0.2.2.tgz#7ab3bc0bdf6522d6f1a30fd97df523618fe87937"
-  integrity sha512-kl8Vg+b3zg5Xn08FS1+2B4HpqCrVgTb2/UsKhvz2Za1/sda+oZJWBtZamECA3bqzCRDmvbJtnl6asGG7wu+tug==
+abstractionkit@^0.1.13:
+  version "0.1.17"
+  resolved "https://registry.yarnpkg.com/abstractionkit/-/abstractionkit-0.1.17.tgz#f920f215d3b1ae2cbf31faa3a364bb7aae192bb7"
+  integrity sha512-pBLF5g58CCWiC2wIyVHI/Jn5Mmd/PQOkVv5mWTjHHj0cpdBPsrpSsHSfkmNRoUBElRHSSqGsqsB1ckYY2UZv0g==
   dependencies:
     ethers "^6.13.2"
     isomorphic-unfetch "^3.1.0"
@@ -110,11 +110,6 @@ cross-spawn@^7.0.0:
     path-key "^3.1.0"
     shebang-command "^2.0.0"
     which "^2.0.1"
-
-dotenv@^16.3.1:
-  version "16.3.2"
-  resolved "https://registry.yarnpkg.com/dotenv/-/dotenv-16.3.2.tgz#3cb611ce5a63002dbabf7c281bc331f69d28f03f"
-  integrity sha512-HTlk5nmhkm8F6JcdXvHIzaorzCoziNQT9mGxLPVXW8wJF1TiGSL60ZGB4gHWabHOaMmWmhvk2/lPHfnBiT78AQ==
 
 eastasianwidth@^0.2.0:
   version "0.2.0"
@@ -316,9 +311,9 @@ tslib@2.7.0:
   integrity sha512-gLXCKdN1/j47AiHiOkJN69hJmcbGTHI0ImLmbYLHykhgeN0jVGola9yVjFgzCUklsZQMW55o+dW7IXv3RCXDzA==
 
 typescript@^5.1.6:
-  version "5.3.3"
-  resolved "https://registry.yarnpkg.com/typescript/-/typescript-5.3.3.tgz#b3ce6ba258e72e6305ba66f5c9b452aaee3ffe37"
-  integrity sha512-pXWcraxM0uxAS+tN0AG/BF2TyqmHO014Z070UsJ+pFvYuRSq8KH8DmWpnbXe0pEPDHXZV3FcAbJkijJ5oNEnWw==
+  version "5.6.3"
+  resolved "https://registry.yarnpkg.com/typescript/-/typescript-5.6.3.tgz#5f3449e31c9d94febb17de03cc081dd56d81db5b"
+  integrity sha512-hjcS1mhfuyi4WW8IWtjP7brDrG2cuDZukyrYrSauoXGNgx0S7zceP07adYkJycEr56BOUTNPzbInooiN3fn1qw==
 
 undici-types@~6.19.2:
   version "6.19.8"
