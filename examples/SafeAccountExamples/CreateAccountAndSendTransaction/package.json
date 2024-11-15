@@ -16,6 +16,6 @@
     "abstractionkit": "^0.2.2"
   },
   "devDependencies": {
-    "rimraf": "^6.0.1"
+    "rimraf": "^5.0.10"
   }
 }
