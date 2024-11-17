@@ -4,14 +4,14 @@
   "description": "an example for using the toolkit with the a bundler RPC",
   "main": "dist/index.js",
   "scripts": {
-		"build": "rimraf dist && tsc",
-		"clean": "rimraf dist",
-		"format": "prettier --write .",
-		"lint": "eslint src/**/*.ts"
-	},
+    "build": "rimraf dist && tsc",
+    "clean": "rimraf dist",
+    "format": "prettier --write .",
+    "lint": "eslint src/**/*.ts"
+  },
   "license": "MIT",
   "dependencies": {
-    "abstractionkit": "^0.1.13",
+    "abstractionkit": "0.2.2",
     "typescript": "^5.1.6"
   },
   "devDependencies": {
