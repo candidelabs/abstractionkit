@@ -1705,20 +1705,10 @@ export class SafeAccount extends SmartAccount {
 			({ segments, offset }, { signer, signature, isContractSignature }) => {
 				isContractSignature = isContractSignature || typeof signer != "string";
 				if (isContractSignature) {
-					if (typeof signer == "string") {
-						//ECDSAPublicAddress
-						return {
-							segments: [
-								...segments,
-								ethers.solidityPacked(
-									["uint256", "uint256", "uint8"],
-									[signer, start + offset, 0],
-								),
-							],
-							offset: offset + 32 + ethers.dataLength(signature),
-						};
-					} else {
-						//WebauthnPublicKey
+					if (typeof signer != "string") { //webauthn signature
+                        //check if this is a webAuthn signature to replace 
+                        //the signer address with the shared signer address
+                        //if init
 						if (webAuthnSignatureOverrides.isInit == null) {
 							throw RangeError(
 								"Must define isInit parameter when using WebAuthn",
@@ -1754,24 +1744,24 @@ export class SafeAccount extends SmartAccount {
 								},
 							);
 						}
-						return {
-							segments: [
-								...segments,
-								ethers.solidityPacked(
-									["uint256", "uint256", "uint8"],
-									[signer, start + offset, 0],
-								),
-							],
-							offset: offset + 32 + ethers.dataLength(signature),
-						};
-					}
+                    }
+                    return {
+                        segments: [
+                            ...segments,
+                            ethers.solidityPacked(
+                                ["uint256", "uint256", "uint8"],
+                                [signer, start + offset, 0],
+                            ),
+                        ],
+                        offset: offset + 32 + ethers.dataLength(signature),
+                    };
 				} else {
 					return {
 						segments: [
 							...segments,
 							ethers.solidityPacked(["bytes"], [signature]),
 						],
-						offset: 0,
+						offset: offset,
 					};
 				}
 			},
@@ -1779,11 +1769,18 @@ export class SafeAccount extends SmartAccount {
 		);
 		return ethers.concat([
 			...segments,
-			...signerSignaturePairs.map(({ signature }) =>
-				ethers.solidityPacked(
-					["uint256", "bytes"],
-					[ethers.dataLength(signature), signature],
-				),
+			...signerSignaturePairs.map(({ signer, signature, isContractSignature }) => {
+                    isContractSignature = isContractSignature || typeof signer != "string";
+                    if (isContractSignature) {
+                        return ethers.solidityPacked(
+                            ["uint256", "bytes"],
+                            [ethers.dataLength(signature), signature],
+                        )
+                    }else{
+                        //only append signatures if a contract signature
+                        return "0x";
+                    }
+                },
 			),
 		]);
 	}

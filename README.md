@@ -1,19 +1,33 @@
 <!-- PROJECT LOGO -->
 <div align="center">
-<img src="https://github.com/candidelabs/abstractionkit/assets/7014833/6af73235-3f6b-4cb1-8a57-6b04ba2bf327">
+<img src="https://github.com/user-attachments/assets/ad202256-d3c2-40d3-ac70-c458f9ab0c1c">
 </div>
 
-<div align="center">
-  <h3 align="center">Supported by Safe Grants</h3>
-</div>
-
-A Typescript Library to easily build and send ERC-4337 UserOperations, with first class support for Safe Accounts.
+A Typescript Library to easily build standard Ethereum Smart Wallets, with first class support for Safe Accounts.
 
 AbstractionKit is agnostic of:
 - **Ethereum interface libraries**: ethers, web3.js, viem/wagmi
-- **Bundlers**: Plug and play from any bundler provider
+- **Bundlers**: Plug and play a Bundler URL from any provider, or self-host your own
 - **Paymasters**: Candide Paymaster is supported , but you can use any 3rd party paymaster to sponsor gas
-- **Accounts**: The Safe Account first class supported, but you can use use Bundlers and Paymasters with any account
+- **Accounts**: The Safe Account is first class supported, but you can use use Bundlers and Paymasters with any account
+
+## Features
+### Safe Accounts
+- Built on ERC-4337 account abstraction
+- Passkeys Authentication for secure, passwordless access
+- Social Recovery to regain access easily
+- Multisig Support
+- Allowance Management for controlled spending limits
+
+### Gas Abstraction with Paymasters
+- Full Gas Sponsorship for a seamless user experience
+- Support for ERC-20 Tokens as gas payment options
+
+### Bundler Support
+- Compatibility with standard ERC-4337 Bundler Methods
+
+### UserOperation Utilities
+- A complete toolkit to construct, sign, and send UserOperations, enabling smooth integration
 
 ## Docs
 
@@ -46,11 +60,11 @@ const safeAddress = smartAccount.accountAddress;
 
 ### Bundler
 
-Initialize a Bundler with your desired bundler RPC url. Find more public bundler endpoints on our [docs](https://docs.candide.dev/wallet/bundler/rpc-endpoints/)
+Initialize a Bundler with your desired bundler RPC url. Get a bundler endpoint from the [dashboard](https://dashboard.candide.dev)
 ```typescript
 import { Bundler } from "abstractionkit";
 
-const bundlerRPC = "https://sepolia.voltaire.candidewallet.com/rpc";
+const bundlerRPC = "https://api.candide.dev/bundler/version/network/YOUR_API_KEY";
 
 const bundler: Bundler = new Bundler(bundlerRPC);
 ```
@@ -94,4 +108,4 @@ MIT
 ## Acknowledgments
 
 * <a href='https://eips.ethereum.org/EIPS/eip-4337'>EIP-4337: Account Abstraction via Entry Point Contract specification </a>
-* <a href='https://github.com/safe-global/safe-modules'>Safe modules</a>
+* <a href='https://safe.global/'>Safe Accounts, Modules, and SGP</a>
