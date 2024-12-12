@@ -46,6 +46,8 @@ export interface CreateBaseUserOperationOverrides {
 
 	gasLevel?: GasOption;
 	polygonGasStation?: PolygonChain;
+
+    expectedSigners?: Signer[]
 }
 
 /**

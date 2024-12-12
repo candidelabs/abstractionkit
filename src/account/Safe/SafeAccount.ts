@@ -49,6 +49,8 @@ import {
 	EOADummySignerSignaturePair,
 	WebAuthnSignatureOverrides,
 	BaseInitOverrides,
+    WebauthnDummySignerSignaturePair,
+    WebauthnPublicKey,
 } from "./types";
 import { decodeMultiSendCallData, encodeMultiSendCallData } from "./multisend";
 import { AbstractionKitError, ensureError } from "src/errors";
@@ -1115,6 +1117,19 @@ export class SafeAccount extends SmartAccount {
 			nonce = overrides.nonce;
 		}
 
+        const eip7212WebAuthnPrecompileVerifier =
+            overrides.eip7212WebAuthnPrecompileVerifier ??
+            SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+        const eip7212WebAuthnContractVerifier =
+            overrides.eip7212WebAuthnContractVerifier ??
+            SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+        const webAuthnSignerFactory =
+            overrides.webAuthnSignerFactory ??
+            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+        const webAuthnSignerSingleton =
+            overrides.webAuthnSignerSingleton ??
+            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+
 		let factoryAddress: string | null = this.factoryAddress;
 		let factoryData: string | null = this.factoryData;
 
@@ -1122,19 +1137,7 @@ export class SafeAccount extends SmartAccount {
 			factoryAddress = null;
 			factoryData = null;
 		} else if (this.isInitWebAuthn) {
-			const eip7212WebAuthnPrecompileVerifier =
-				overrides.eip7212WebAuthnPrecompileVerifier ??
-				SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
-			const eip7212WebAuthnContractVerifier =
-				overrides.eip7212WebAuthnContractVerifier ??
-				SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
-			const webAuthnSignerFactory =
-				overrides.webAuthnSignerFactory ??
-				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
-			const webAuthnSignerSingleton =
-				overrides.webAuthnSignerSingleton ??
-				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
-
+			
 			if (this.x == null || this.y == null) {
 				throw RangeError(
 					"Invalide account initialization with Webauthnn signer." +
@@ -1371,8 +1374,16 @@ export class SafeAccount extends SmartAccount {
 						paymasterData: null,
 					};
 				}
+                const validAfter = 0xffffffffffffn;
+                const validUntil = 0xffffffffffffn;
+
 				let dummySignerSignaturePairs;
 				if (overrides.dummySignerSignaturePairs != null) {
+                    if(overrides.expectedSigners != null){
+                        throw RangeError(
+							"Can't use both dummySignerSignaturePairs and expectedSigners overrides.",
+						);
+                    }
 					if (overrides.dummySignerSignaturePairs.length < 1) {
 						throw RangeError(
 							"Number of dummySignerSignaturePairs can't be less than 1",
@@ -1380,14 +1391,31 @@ export class SafeAccount extends SmartAccount {
 					}
 					dummySignerSignaturePairs = overrides.dummySignerSignaturePairs;
 				} else {
-					dummySignerSignaturePairs = [EOADummySignerSignaturePair];
+                    if(overrides.expectedSigners == null){
+                        dummySignerSignaturePairs = [EOADummySignerSignaturePair];
+                    }else{
+                        const isInit = factoryAddress != null && factoryAddress != "0x";
+                        dummySignerSignaturePairs = SafeAccount.createDummySignerSignaturePairForExpectedSigners(
+                            overrides.expectedSigners,
+                            {
+                                isInit,
+                                webAuthnSharedSigner,
+                                eip7212WebAuthnPrecompileVerifier,
+                                eip7212WebAuthnContractVerifier,
+                                webAuthnSignerFactory,
+                                webAuthnSignerSingleton,
+                                validAfter,
+                                validUntil,
+                            }
+                        )
+                    }
 				}
 				userOperation.signature =
 					SafeAccount.formatSignaturesToUseroperationSignature(
 						dummySignerSignaturePairs,
 						{
-							validAfter: 0xffffffffffffn,
-							validUntil: 0xffffffffffffn,
+							validAfter,
+							validUntil,
 							webAuthnSharedSigner,
 						},
 					);
@@ -2250,5 +2278,63 @@ export class SafeAccount extends SmartAccount {
 
 		return decodedCalldata[0];
 	}
+    
+    /**
+	 * create a list of dummy signer signature pair list based on the expected signers
+	 * @param expectedSigners - webauthn public key x parameter
+	 * @param webAuthnSignatureOverrides - overrides for the default values
+	 * @returns a list of dummy SignerSignaturePair
+	 */
+	public static createDummySignerSignaturePairForExpectedSigners(
+		expectedSigners: Signer[],
+		webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
+    ): SignerSignaturePair[] {
+        const signers = [...expectedSigners]; 
+        const dummySignerSignatures: SignerSignaturePair[] = [];
+        for (let signer of signers){
+            let signerSignaturePair: SignerSignaturePair;
+            if (typeof signer == "string") {
+                signerSignaturePair = EOADummySignerSignaturePair;
+            }else{
+                if (webAuthnSignatureOverrides.isInit == null) {
+                    throw RangeError(
+                        "Must define isInit parameter when using WebAuthn",
+                    );
+                }
+                signerSignaturePair = WebauthnDummySignerSignaturePair;
+                if (webAuthnSignatureOverrides.isInit) {
+                    const webauthnsharedsigner =
+                        webAuthnSignatureOverrides.webAuthnSharedSigner ??
+                        SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
+                    signerSignaturePair.signer = webauthnsharedsigner;
+                } else {
+                    const eip7212WebAuthnPrecompileVerifier =
+                        webAuthnSignatureOverrides.eip7212WebAuthnPrecompileVerifier ??
+                        SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+                    const eip7212WebAuthnContractVerifier =
+                        webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier ??
+                        SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+                    const webAuthnSignerFactory =
+                        webAuthnSignatureOverrides.webAuthnSignerFactory ??
+                        SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+                    const webAuthnSignerSingleton =
+                        webAuthnSignatureOverrides.webAuthnSignerSingleton ??
+                        SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
 
+                    signerSignaturePair.signer = SafeAccount.createWebAuthnSignerVerifierAddress(
+                        signer.x,
+                        signer.y,
+                        {
+                            eip7212WebAuthnPrecompileVerifier,
+                            eip7212WebAuthnContractVerifier,
+                            webAuthnSignerFactory,
+                            webAuthnSignerSingleton,
+                        },
+                    );
+                }
+            }
+            dummySignerSignatures.push(signerSignaturePair);
+        }
+        return dummySignerSignatures;
+    }
 }
