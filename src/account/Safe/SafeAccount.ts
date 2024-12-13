@@ -2337,4 +2337,101 @@ export class SafeAccount extends SmartAccount {
         }
         return dummySignerSignatures;
     }
+    
+    public static async verifyWebAuthnSignatureForMessageHash(
+		nodeRpcUrl: string,
+        signer: WebauthnPublicKey,
+        messageHash: string, 
+        signature: string,
+        overrides:{
+            eip7212WebAuthnPrecompileVerifier?: string,
+            eip7212WebAuthnContractVerifier?: string,
+            webAuthnSignerSingleton?: string,
+        } = {}
+    ):Promise<boolean> {
+        if (messageHash.length != 66 || messageHash.slice(0, 2) != "0x") {
+			throw RangeError(
+			    "Invalide messageHash ,must be a 0x prefixed keccak256 hash.",
+			);
+		}
+
+        const eip7212WebAuthnPrecompileVerifier =
+            overrides.eip7212WebAuthnPrecompileVerifier ??
+            SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+        const eip7212WebAuthnContractVerifier =
+            overrides.eip7212WebAuthnContractVerifier ??
+            SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+        const webAuthnSignerSingleton =
+            overrides.webAuthnSignerSingleton ??
+            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+        
+        if (
+			eip7212WebAuthnPrecompileVerifier.length != 42 ||
+			eip7212WebAuthnPrecompileVerifier.slice(0, 38) != ZeroAddress.slice(0, 38)
+		) {
+			throw RangeError(
+				"Invalide precompile address. " +
+                "It should have the format 0x000000000000000000000000000000000000____",
+			);
+		}
+		const functionSelector = "0x1626ba7e"; //isValidSignature(bytes32,bytes)
+		const callData = createCallData(
+            functionSelector,
+            ["bytes32", "bytes"],
+            [messageHash, signature]
+        );
+        
+        const arbitraryAddress = "0x1111111111111111111111111111111111111111";
+		const ethCallParams = {
+			to: arbitraryAddress,
+			data: callData,
+		};
+        const deployedByteCode = SafeAccount.createSafeWebAuthnSignerProxyDeployedByteCode(
+            signer,
+            eip7212WebAuthnPrecompileVerifier,
+            eip7212WebAuthnContractVerifier,
+            webAuthnSignerSingleton
+        )
+
+		const isModuleEnabledResult = await sendEthCallRequest(
+			nodeRpcUrl,
+			ethCallParams,
+			"latest",
+            {[arbitraryAddress]: {"code": deployedByteCode}}
+		);
+
+		const decodedCalldata = AbiCoder.defaultAbiCoder().decode(
+			["bool"],
+			isModuleEnabledResult,
+		);
+
+		return decodedCalldata[0];
+    }
+
+    private static createSafeWebAuthnSignerProxyDeployedByteCode(
+        signer: WebauthnPublicKey, 
+        eip7212WebAuthnPrecompileVerifier: string,
+        eip7212WebAuthnContractVerifier: string,
+        webAuthnSignerSingleton: string,
+    ):string {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+        const x = abiCoder.encode(["uint256"], [signer.x])
+        const y = abiCoder.encode(["uint256"], [signer.y])
+        const verifiers = abiCoder.encode(
+            ["uint176"],
+            [
+                "0x" +
+				eip7212WebAuthnPrecompileVerifier.slice(-4) +
+				eip7212WebAuthnContractVerifier.slice(2),
+            ]
+        )
+        const byteCode = 
+            "0x608060408190527f" + verifiers.slice(2) +
+            "3660b681018290527f" + y.slice(2) +
+            "60a082018190527f" + x.slice(2) + 
+            "8285018190527f000000000000000000000000" +
+            webAuthnSignerSingleton.slice(2) +
+            "9490939192600082376000806056360183885af490503d6000803e8060c3573d6000fd5b503d6000f3fea2646970667358221220ddd9bb059ba7a6497d560ca97aadf4dbf0476f578378554a50d41c6bb654beae64736f6c63430008180033";
+        return byteCode;
+    }
 }
