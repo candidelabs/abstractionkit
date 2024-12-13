@@ -384,8 +384,14 @@ export async function sendEthCallRequest(
 	nodeRpcUrl: string,
 	ethCallTransaction: EthCallTransaction,
 	blockNumber: string | bigint,
+    stateOverrides?:object
 ): Promise<string> {
-	const params = [ethCallTransaction, blockNumber];
+    let params = [];
+    if(stateOverrides == null){
+	    params = [ethCallTransaction, blockNumber];
+    }else{
+	    params = [ethCallTransaction, blockNumber, stateOverrides];
+    }
 
 	try {
 		const data = await sendJsonRpcRequest(nodeRpcUrl, "eth_call", params);
@@ -421,6 +427,7 @@ export async function sendEthCallRequest(
 		});
 	}
 }
+
 export async function sendEthGetCodeRequest(
 	nodeRpcUrl: string,
 	contractAddress: string,
