@@ -1010,33 +1010,78 @@ export class SafeAccount extends SmartAccount {
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
 			dummySignerSignaturePairs?: SignerSignaturePair[];
+            expectedSigners?: Signer[];
+            webAuthnSharedSigner?: string;
+            webAuthnSignerFactory?: string;
+            webAuthnSignerSingleton?: string;
+            eip7212WebAuthnPrecompileVerifier?: string;
+            eip7212WebAuthnContractVerifier?: string;
 		} = {},
 	): Promise<[bigint, bigint, bigint]> {
+        const validAfter = 0xffffffffffffn;
+		const validUntil = 0xffffffffffffn;
+
 		if (overrides.dummySignerSignaturePairs != null) {
+            if(overrides.expectedSigners != null){
+                throw RangeError(
+                    "Can't use both dummySignerSignaturePairs and expectedSigners overrides.",
+                );
+            }
 			if (overrides.dummySignerSignaturePairs.length < 1) {
 				throw RangeError(
 					"Number of dummy signers signature pairs can't be less than 1",
 				);
 			}
-
-			userOperation.signature =
+		    userOperation.signature =
 				SafeAccount.formatSignaturesToUseroperationSignature(
 					overrides.dummySignerSignaturePairs,
 					{
-						validAfter: 0xffffffffffffn,
-						validUntil: 0xffffffffffffn,
+						validAfter,
+						validUntil,
 					},
 				);
+		} else if (overrides.expectedSigners != null) {
+            let initCode;
+
+            if ("initCode" in userOperation) {
+                initCode = userOperation.initCode;
+            }else{
+                initCode = userOperation.factory;
+            }
+            const isInit = initCode != null && initCode != "0x";
+            
+            const dummySignerSignaturePairs = SafeAccount.createDummySignerSignaturePairForExpectedSigners(
+                overrides.expectedSigners,
+                {
+                    isInit,
+                    webAuthnSharedSigner:overrides.webAuthnSharedSigner,
+                    eip7212WebAuthnPrecompileVerifier:overrides.eip7212WebAuthnPrecompileVerifier,
+                    eip7212WebAuthnContractVerifier:overrides.eip7212WebAuthnContractVerifier,
+                    webAuthnSignerFactory:overrides.webAuthnSignerFactory,
+                    webAuthnSignerSingleton:overrides.webAuthnSignerSingleton,
+                    validAfter,
+                    validUntil,
+                }
+            )
+            userOperation.signature =
+                SafeAccount.formatSignaturesToUseroperationSignature(
+                    dummySignerSignaturePairs,
+                    {
+                        validAfter,
+                        validUntil,
+                    },
+                );
 		} else if (userOperation.signature.length < 3) {
-			userOperation.signature =
-				SafeAccount.formatSignaturesToUseroperationSignature(
-					[EOADummySignerSignaturePair],
-					{
-						validAfter: 0xffffffffffffn,
-						validUntil: 0xffffffffffffn,
-					},
-				);
-		}
+            userOperation.signature =
+                SafeAccount.formatSignaturesToUseroperationSignature(
+                    [EOADummySignerSignaturePair],
+                    {
+                        validAfter,
+                        validUntil,
+                    },
+                );
+        }
+        
 		const bundler = new Bundler(bundlerRpc);
 
 		const inputMaxFeePerGas = userOperation.maxFeePerGas;
@@ -1426,7 +1471,6 @@ export class SafeAccount extends SmartAccount {
 						bundlerRpc,
 						{
 							stateOverrideSet: overrides.state_override_set,
-							dummySignerSignaturePairs: overrides.dummySignerSignaturePairs,
 						},
 					);
 				verificationGasLimit +=
