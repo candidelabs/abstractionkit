@@ -59,3 +59,5 @@ export const EIP712_SAFE_OPERATION_V7_TYPE = {
 		{ type: "address", name: "entryPoint" },
 	],
 };
+
+export const DEFAULT_SECP256R1_PRECOMPILE_ADDRESS = "0x0000000000000000000000000000000000000100";

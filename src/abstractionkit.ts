@@ -74,6 +74,7 @@ export {
 	BaseUserOperationDummyValues,
 	EIP712_SAFE_OPERATION_V7_TYPE,
 	EIP712_SAFE_OPERATION_V6_TYPE,
+    DEFAULT_SECP256R1_PRECOMPILE_ADDRESS
 } from "./constants";
 
 export { AbstractionKitError } from "./errors";
