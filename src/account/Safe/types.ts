@@ -208,7 +208,7 @@ export interface SignerSignaturePair {
 export const EOADummySignerSignaturePair: SignerSignaturePair = {
 	signer: "0xfD90FAd33ee8b58f32c00aceEad1358e4AFC23f9",
 	signature:
-		"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "0x47003599ffa7e9198f321afa774e34a12a959844efd6363b88896e9c24ed33cf4e1be876ef123a3c4467e7d451511434039539699f2baa2f44955fa3d1c1c6d81c",
 	isContractSignature: false,
 };
 
