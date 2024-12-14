@@ -79,6 +79,11 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 						"Only one Webauthn signer is allowed during initialization",
 					);
 				}
+                if(owners.indexOf(owner) != 0){
+                    throw RangeError(
+						"Webauthn signer has to be the first signer for an init transaction.",
+					);
+                }
 				isInitWebAuthn = true;
 				x = owner.x;
 				y = owner.y;
