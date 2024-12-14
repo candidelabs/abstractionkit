@@ -101,7 +101,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		safe.factoryAddress = factoryAddress;
 		safe.factoryData = factoryData;
 		if (isInitWebAuthn) {
-			safe.isInitWebAuthn = isInitWebAuthn;
+			safe.isInitWebAuthn = true;
 			safe.x = x;
 			safe.y = y;
 		}
