@@ -93,7 +93,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 				}
                 if(owners.indexOf(owner) != 0){
                     throw RangeError(
-						"Webauthn signer has to be the first signer for an init transaction.",
+						"Webauthn owner has to be the first owner for an init transaction.",
 					);
                 }
 
