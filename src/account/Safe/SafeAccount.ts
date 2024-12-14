@@ -2338,6 +2338,20 @@ export class SafeAccount extends SmartAccount {
         return dummySignerSignatures;
     }
     
+    /**
+	 * verify a webauthn signature against a signer and a message hash 
+     * @note: this function works by constructing the bytecode of a webatuhn
+     * verifying contract proxy that represent the input signer, then overriding
+     * an arbitrary address code and caling "isValidSignature" using eth_call 
+     * this way we can check a signature even if the verifying contract is not
+     * deployed
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * @param signer - a signer to check the signature against 
+	 * @param messageHash - a messageHash to check the signature against 
+	 * @param signature - a webauthn signature to check
+	 * @param overrides - overrides for the default values
+	 * @returns a promise of boolean - True if a valid signature
+	 */
     public static async verifyWebAuthnSignatureForMessageHash(
 		nodeRpcUrl: string,
         signer: WebauthnPublicKey,
