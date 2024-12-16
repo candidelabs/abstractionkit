@@ -150,7 +150,7 @@ export interface SafeUserOperationTypedDataDomain {
 	chainId: bigint;
 	verifyingContract: string;
 }
-export interface SafeUserOperationV6TypedDataValues {
+export interface SafeUserOperationV6TypedMessageValue {
 	safe: string;
 	nonce: bigint;
 	initCode: string;
@@ -166,7 +166,7 @@ export interface SafeUserOperationV6TypedDataValues {
 	entryPoint: string;
 }
 
-export interface SafeUserOperationV7TypedDataValues {
+export interface SafeUserOperationV7TypedMessageValue {
 	safe: string;
 	nonce: bigint;
 	initCode: string;

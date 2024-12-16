@@ -41,8 +41,8 @@ import {
 	CreateBaseUserOperationOverrides,
 	Signer,
 	SafeUserOperationTypedDataDomain,
-	SafeUserOperationV6TypedDataValues,
-	SafeUserOperationV7TypedDataValues,
+	SafeUserOperationV6TypedMessageValue,
+	SafeUserOperationV7TypedMessageValue,
 	SignerSignaturePair,
 	WebauthnSignatureData,
 	SafeModuleExecutorFunctionSelector,
@@ -537,8 +537,8 @@ export class SafeAccount extends SmartAccount {
 		},
 	): {
         domain: SafeUserOperationTypedDataDomain,
-        eip712_safe_operation_type:{},
-        safeUserOperationTypedDataValues: SafeUserOperationV6TypedDataValues
+        types:{},
+        messageValue: SafeUserOperationV6TypedMessageValue
     } 
     protected static getUserOperationEip712Data(
 		useroperation: UserOperationV7,
@@ -551,8 +551,8 @@ export class SafeAccount extends SmartAccount {
 		},
 	): {
         domain: SafeUserOperationTypedDataDomain,
-        eip712_safe_operation_type:{},
-        safeUserOperationTypedDataValues: SafeUserOperationV7TypedDataValues
+        types:{},
+        messageValue: SafeUserOperationV7TypedMessageValue
     } 
     protected static getUserOperationEip712Data(
 		useroperation: UserOperationV6 | UserOperationV7,
@@ -565,8 +565,8 @@ export class SafeAccount extends SmartAccount {
 		},
 	): {
         domain: SafeUserOperationTypedDataDomain,
-        eip712_safe_operation_type:{},
-        safeUserOperationTypedDataValues: SafeUserOperationV6TypedDataValues | SafeUserOperationV6TypedDataValues
+        types:{},
+        messageValue: SafeUserOperationV6TypedMessageValue | SafeUserOperationV6TypedMessageValue
     }  {
 		if ("initCode" in useroperation) {
 			const data = SafeAccount.getUserOperationEip712Data_V6(
@@ -576,8 +576,8 @@ export class SafeAccount extends SmartAccount {
 			);
             return {
                 domain: data.domain,
-                eip712_safe_operation_type: data.EIP712_SAFE_OPERATION_V6_TYPE,
-                safeUserOperationTypedDataValues: data.safeUserOperationV6TypedDataValues
+                types: data.types,
+                messageValue: data.messageValue
             }
 		} else {
 			const data = SafeAccount.getUserOperationEip712Data_V7(
@@ -587,8 +587,8 @@ export class SafeAccount extends SmartAccount {
 			);
             return {
                 domain: data.domain,
-                eip712_safe_operation_type: data.EIP712_SAFE_OPERATION_V7_TYPE,
-                safeUserOperationTypedDataValues: data.safeUserOperationV7TypedDataValues
+                types: data.types,
+                messageValue: data.messageValue
             }
 		}
 	}
@@ -617,8 +617,8 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): {
         domain: SafeUserOperationTypedDataDomain,
-        EIP712_SAFE_OPERATION_V6_TYPE:{},
-        safeUserOperationV6TypedDataValues: SafeUserOperationV6TypedDataValues
+        types:{},
+        messageValue: SafeUserOperationV6TypedMessageValue
     } {
 		const validAfter = overrides.validAfter ?? 0n;
 		const validUntil = overrides.validUntil ?? 0n;
@@ -628,7 +628,7 @@ export class SafeAccount extends SmartAccount {
 			overrides.safe4337ModuleAddress ??
 			"0xa581c4A4DB7175302464fF3C06380BC3270b4037";
 
-		const safeUserOperationV6TypedDataValues: SafeUserOperationV6TypedDataValues = {
+		const messageValue: SafeUserOperationV6TypedMessageValue = {
 			safe: useroperation.sender,
 			nonce: useroperation.nonce,
 			initCode: useroperation.initCode,
@@ -651,8 +651,8 @@ export class SafeAccount extends SmartAccount {
 
 		return {
 			domain,
-			EIP712_SAFE_OPERATION_V6_TYPE,
-			safeUserOperationV6TypedDataValues,
+			types: EIP712_SAFE_OPERATION_V6_TYPE,
+			messageValue,
         };
 	}
 
@@ -683,8 +683,8 @@ export class SafeAccount extends SmartAccount {
             useroperation, chainId, overrides)	
 		return TypedDataEncoder.hash(
 			data.domain,
-			data.EIP712_SAFE_OPERATION_V6_TYPE,
-			data.safeUserOperationV6TypedDataValues,
+			data.types,
+			data.messageValue,
 		);
 	}
     
@@ -712,8 +712,8 @@ export class SafeAccount extends SmartAccount {
 		} = {},
     ): {
         domain: SafeUserOperationTypedDataDomain,
-        EIP712_SAFE_OPERATION_V7_TYPE:{},
-        safeUserOperationV7TypedDataValues: SafeUserOperationV6TypedDataValues
+        types:{},
+        messageValue: SafeUserOperationV6TypedMessageValue
     } {
 		const validAfter = overrides.validAfter ?? 0n;
 		const validUntil = overrides.validUntil ?? 0n;
@@ -750,7 +750,7 @@ export class SafeAccount extends SmartAccount {
 				paymasterAndData += useroperation.paymasterData.slice(2);
 			}
 		}
-		const safeUserOperationV7TypedDataValues: SafeUserOperationV7TypedDataValues = {
+		const messageValue: SafeUserOperationV7TypedMessageValue = {
 			safe: useroperation.sender,
 			nonce: useroperation.nonce,
 			initCode: initCode,
@@ -773,8 +773,8 @@ export class SafeAccount extends SmartAccount {
         
         return {
 			domain,
-			EIP712_SAFE_OPERATION_V7_TYPE,
-			safeUserOperationV7TypedDataValues,
+			types: EIP712_SAFE_OPERATION_V7_TYPE,
+			messageValue,
         };
     }
 
@@ -804,8 +804,8 @@ export class SafeAccount extends SmartAccount {
             useroperation, chainId, overrides)	
 		return TypedDataEncoder.hash(
 			data.domain,
-			data.EIP712_SAFE_OPERATION_V7_TYPE,
-			data.safeUserOperationV7TypedDataValues,
+			data.types,
+			data.messageValue,
 		);
 	}
 
