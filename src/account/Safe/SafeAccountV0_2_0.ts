@@ -4,6 +4,8 @@ import {
 	Signer,
 	CreateUserOperationV6Overrides,
 	SafeAccountSingleton,
+    SafeUserOperationTypedDataDomain,
+    SafeUserOperationV6TypedMessageValue,
 } from "./types";
 
 import { UserOperationV6, MetaTransaction } from "../../types";
@@ -159,6 +161,50 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 
 		return SafeAccount.getUserOperationEip712Hash(useroperation, chainId, {
+			validAfter,
+			validUntil,
+			entrypointAddress,
+			safe4337ModuleAddress,
+		});
+	}
+
+    /**
+	 * create a useroperation eip712 data
+	 * @param useroperation - useroperation to hash
+	 * @param chainId - target chain id
+	 * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @param overrides.entrypoint - target entrypoint
+	 * @param overrides.safe4337ModuleAddress - target module address 
+	 * @returns an object containing the typed data domain, type and typed data vales
+     * object needed for hashing and signing
+	 */
+	public static getUserOperationEip712Data(
+		useroperation: UserOperationV6,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		} = {},
+	): {
+        domain: SafeUserOperationTypedDataDomain,
+        types:{},
+        messageValue: SafeUserOperationV6TypedMessageValue
+    } 
+     {
+		const validAfter = overrides.validAfter ?? 0n;
+		const validUntil = overrides.validUntil ?? 0n;
+		const entrypointAddress =
+			overrides.entrypointAddress ??
+			SafeAccountV0_2_0.DEFAULT_ENTRYPOINT_ADDRESS;
+		const safe4337ModuleAddress =
+			overrides.safe4337ModuleAddress ??
+			SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+
+		return SafeAccount.getUserOperationEip712Data(useroperation, chainId, {
 			validAfter,
 			validUntil,
 			entrypointAddress,

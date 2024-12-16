@@ -527,34 +527,6 @@ export class SafeAccount extends SmartAccount {
      * object needed for hashing and signing
 	 */
     protected static getUserOperationEip712Data(
-		useroperation: UserOperationV6,
-		chainId: bigint,
-		overrides?: {
-			validAfter?: bigint;
-			validUntil?: bigint;
-			entrypointAddress?: string;
-			safe4337ModuleAddress?: string;
-		},
-	): {
-        domain: SafeUserOperationTypedDataDomain,
-        types:{},
-        messageValue: SafeUserOperationV6TypedMessageValue
-    } 
-    protected static getUserOperationEip712Data(
-		useroperation: UserOperationV7,
-		chainId: bigint,
-		overrides?: {
-			validAfter?: bigint;
-			validUntil?: bigint;
-			entrypointAddress?: string;
-			safe4337ModuleAddress?: string;
-		},
-	): {
-        domain: SafeUserOperationTypedDataDomain,
-        types:{},
-        messageValue: SafeUserOperationV7TypedMessageValue
-    } 
-    protected static getUserOperationEip712Data(
 		useroperation: UserOperationV6 | UserOperationV7,
 		chainId: bigint,
 		overrides?: {
