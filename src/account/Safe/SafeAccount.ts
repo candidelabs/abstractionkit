@@ -477,7 +477,18 @@ export class SafeAccount extends SmartAccount {
 			},
 		);
 	}
-
+    
+    /**
+	 * create a v0.07 or v0.06 useroperation eip712 data
+	 * @param useroperation - useroperation to hash
+	 * @param chainId - target chain id
+	 * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @param overrides.entrypoint - target entrypoint
+	 * @param overrides.safe4337ModuleAddress - target module address 
+	 * @returns useroperation hash
+	 */
 	protected static getUserOperationEip712Hash(
 		useroperation: UserOperationV6 | UserOperationV7,
 		chainId: bigint,
@@ -502,9 +513,88 @@ export class SafeAccount extends SmartAccount {
 			);
 		}
 	}
+    
+    /**
+	 * create a v0.07 or v0.06 useroperation eip712 data
+	 * @param useroperation - useroperation to hash
+	 * @param chainId - target chain id
+	 * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @param overrides.entrypoint - target entrypoint
+	 * @param overrides.safe4337ModuleAddress - target module address 
+	 * @returns an object containing the typed data domain, type and typed data vales
+     * object needed for hashing and signing
+	 */
+    protected static getUserOperationEip712Data(
+		useroperation: UserOperationV6,
+		chainId: bigint,
+		overrides?: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		},
+	): {
+        domain: SafeUserOperationTypedDataDomain,
+        eip712_safe_operation_type:{},
+        safeUserOperationTypedDataValues: SafeUserOperationV6TypedDataValues
+    } 
+    protected static getUserOperationEip712Data(
+		useroperation: UserOperationV7,
+		chainId: bigint,
+		overrides?: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		},
+	): {
+        domain: SafeUserOperationTypedDataDomain,
+        eip712_safe_operation_type:{},
+        safeUserOperationTypedDataValues: SafeUserOperationV7TypedDataValues
+    } 
+    protected static getUserOperationEip712Data(
+		useroperation: UserOperationV6 | UserOperationV7,
+		chainId: bigint,
+		overrides?: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		},
+	): {
+        domain: SafeUserOperationTypedDataDomain,
+        eip712_safe_operation_type:{},
+        safeUserOperationTypedDataValues: SafeUserOperationV6TypedDataValues | SafeUserOperationV6TypedDataValues
+    }  {
+		if ("initCode" in useroperation) {
+			const data = SafeAccount.getUserOperationEip712Data_V6(
+				useroperation,
+				chainId,
+				overrides,
+			);
+            return {
+                domain: data.domain,
+                eip712_safe_operation_type: data.EIP712_SAFE_OPERATION_V6_TYPE,
+                safeUserOperationTypedDataValues: data.safeUserOperationV6TypedDataValues
+            }
+		} else {
+			const data = SafeAccount.getUserOperationEip712Data_V7(
+				useroperation,
+				chainId,
+				overrides,
+			);
+            return {
+                domain: data.domain,
+                eip712_safe_operation_type: data.EIP712_SAFE_OPERATION_V7_TYPE,
+                safeUserOperationTypedDataValues: data.safeUserOperationV7TypedDataValues
+            }
+		}
+	}
 
-	/**
-	 * create a v0.06 useroperation eip712 hash
+    /**
+	 * create a v0.06 useroperation eip712 data
 	 * @param useroperation - useroperation to hash
 	 * @param chainId - target chain id
 	 * @param overrides - overrides for the default values
@@ -513,9 +603,10 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.entrypoint - target entrypoint
 	 * defaults to ENTRYPOINT_V6
 	 * @param overrides.safe4337ModuleAddress - defaults to "0xa581c4A4DB7175302464fF3C06380BC3270b4037"
-	 * @returns useroperation hash
+	 * @returns an object containing the typed data domain, type and typed data vales
+     * object needed for hashing and signing
 	 */
-	public static getUserOperationEip712Hash_V6(
+	public static getUserOperationEip712Data_V6(
 		useroperation: UserOperationV6,
 		chainId: bigint,
 		overrides: {
@@ -524,7 +615,11 @@ export class SafeAccount extends SmartAccount {
 			entrypointAddress?: string;
 			safe4337ModuleAddress?: string;
 		} = {},
-	): string {
+	): {
+        domain: SafeUserOperationTypedDataDomain,
+        EIP712_SAFE_OPERATION_V6_TYPE:{},
+        safeUserOperationV6TypedDataValues: SafeUserOperationV6TypedDataValues
+    } {
 		const validAfter = overrides.validAfter ?? 0n;
 		const validUntil = overrides.validUntil ?? 0n;
 
@@ -533,7 +628,7 @@ export class SafeAccount extends SmartAccount {
 			overrides.safe4337ModuleAddress ??
 			"0xa581c4A4DB7175302464fF3C06380BC3270b4037";
 
-		const SafeUserOperation: SafeUserOperationV6TypedDataValues = {
+		const safeUserOperationV6TypedDataValues: SafeUserOperationV6TypedDataValues = {
 			safe: useroperation.sender,
 			nonce: useroperation.nonce,
 			initCode: useroperation.initCode,
@@ -554,14 +649,46 @@ export class SafeAccount extends SmartAccount {
 			verifyingContract: safe4337ModuleAddress,
 		};
 
-		return TypedDataEncoder.hash(
+		return {
 			domain,
 			EIP712_SAFE_OPERATION_V6_TYPE,
-			SafeUserOperation,
-		);
+			safeUserOperationV6TypedDataValues,
+        };
 	}
 
+
 	/**
+	 * create a v0.06 useroperation eip712 data
+	 * @param useroperation - useroperation to hash
+	 * @param chainId - target chain id
+	 * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @param overrides.entrypoint - target entrypoint
+	 * defaults to ENTRYPOINT_V6
+	 * @param overrides.safe4337ModuleAddress - defaults to "0xa581c4A4DB7175302464fF3C06380BC3270b4037"
+	 * @returns useroperation hash
+	 */
+	public static getUserOperationEip712Hash_V6(
+		useroperation: UserOperationV6,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		} = {},
+	): string {
+	    const data = SafeAccount.getUserOperationEip712Data_V6(
+            useroperation, chainId, overrides)	
+		return TypedDataEncoder.hash(
+			data.domain,
+			data.EIP712_SAFE_OPERATION_V6_TYPE,
+			data.safeUserOperationV6TypedDataValues,
+		);
+	}
+    
+    /**
 	 * create a v0.07 useroperation eip712 hash
 	 * @param useroperation - useroperation to hash
 	 * @param chainId - target chain id
@@ -571,9 +698,10 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.entrypoint - target entrypoint
 	 * defaults to ENTRYPOINT_V7
 	 * @param overrides.safe4337ModuleAddress - defaults to "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226"
-	 * @returns useroperation hash
+     * @returns an object containing the typed data domain, type and typed data vales
+     * object needed for hashing and signing
 	 */
-	public static getUserOperationEip712Hash_V7(
+	public static getUserOperationEip712Data_V7(
 		useroperation: UserOperationV7,
 		chainId: bigint,
 		overrides: {
@@ -582,7 +710,11 @@ export class SafeAccount extends SmartAccount {
 			entrypointAddress?: string;
 			safe4337ModuleAddress?: string;
 		} = {},
-	): string {
+    ): {
+        domain: SafeUserOperationTypedDataDomain,
+        EIP712_SAFE_OPERATION_V7_TYPE:{},
+        safeUserOperationV7TypedDataValues: SafeUserOperationV6TypedDataValues
+    } {
 		const validAfter = overrides.validAfter ?? 0n;
 		const validUntil = overrides.validUntil ?? 0n;
 
@@ -618,7 +750,7 @@ export class SafeAccount extends SmartAccount {
 				paymasterAndData += useroperation.paymasterData.slice(2);
 			}
 		}
-		const SafeUserOperation: SafeUserOperationV7TypedDataValues = {
+		const safeUserOperationV7TypedDataValues: SafeUserOperationV7TypedDataValues = {
 			safe: useroperation.sender,
 			nonce: useroperation.nonce,
 			initCode: initCode,
@@ -638,11 +770,42 @@ export class SafeAccount extends SmartAccount {
 			chainId,
 			verifyingContract: safe4337ModuleAddress,
 		};
-
-		return TypedDataEncoder.hash(
+        
+        return {
 			domain,
 			EIP712_SAFE_OPERATION_V7_TYPE,
-			SafeUserOperation,
+			safeUserOperationV7TypedDataValues,
+        };
+    }
+
+	/**
+	 * create a v0.07 useroperation eip712 hash
+	 * @param useroperation - useroperation to hash
+	 * @param chainId - target chain id
+	 * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @param overrides.entrypoint - target entrypoint
+	 * defaults to ENTRYPOINT_V7
+	 * @param overrides.safe4337ModuleAddress - defaults to "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226"
+	 * @returns useroperation hash
+	 */
+	public static getUserOperationEip712Hash_V7(
+		useroperation: UserOperationV7,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		} = {},
+	): string {
+        const data = SafeAccount.getUserOperationEip712Data_V7(
+            useroperation, chainId, overrides)	
+		return TypedDataEncoder.hash(
+			data.domain,
+			data.EIP712_SAFE_OPERATION_V7_TYPE,
+			data.safeUserOperationV7TypedDataValues,
 		);
 	}
 
