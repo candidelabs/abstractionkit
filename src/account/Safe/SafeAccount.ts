@@ -537,7 +537,7 @@ export class SafeAccount extends SmartAccount {
 		},
 	): {
         domain: SafeUserOperationTypedDataDomain,
-        types:{},
+        types:Record<string, {name: string;type: string;}[]>,
         messageValue: SafeUserOperationV6TypedMessageValue | SafeUserOperationV6TypedMessageValue
     }  {
 		if ("initCode" in useroperation) {
@@ -589,7 +589,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): {
         domain: SafeUserOperationTypedDataDomain,
-        types:object,
+        types:Record<string, {name: string;type: string;}[]>,
         messageValue: SafeUserOperationV6TypedMessageValue
     } {
 		const validAfter = overrides.validAfter ?? 0n;
@@ -684,7 +684,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
     ): {
         domain: SafeUserOperationTypedDataDomain,
-        types:object,
+        types:Record<string, {name: string;type: string;}[]>,
         messageValue: SafeUserOperationV6TypedMessageValue
     } {
 		const validAfter = overrides.validAfter ?? 0n;
