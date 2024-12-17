@@ -147,7 +147,7 @@ export enum SafeModuleExecutorFunctionSelector {
 }
 
 export interface SafeUserOperationTypedDataDomain {
-	chainId: bigint;
+	chainId: number;
 	verifyingContract: string;
 }
 export interface SafeUserOperationV6TypedMessageValue {

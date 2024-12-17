@@ -617,7 +617,7 @@ export class SafeAccount extends SmartAccount {
 		};
 
 		const domain: SafeUserOperationTypedDataDomain = {
-			chainId,
+			chainId: Number(chainId),
 			verifyingContract: safe4337ModuleAddress,
 		};
 
@@ -739,7 +739,7 @@ export class SafeAccount extends SmartAccount {
 		};
 
 		const domain: SafeUserOperationTypedDataDomain = {
-			chainId,
+			chainId: Number(chainId),
 			verifyingContract: safe4337ModuleAddress,
 		};
         
