@@ -589,7 +589,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): {
         domain: SafeUserOperationTypedDataDomain,
-        types:{},
+        types:object,
         messageValue: SafeUserOperationV6TypedMessageValue
     } {
 		const validAfter = overrides.validAfter ?? 0n;
@@ -684,7 +684,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
     ): {
         domain: SafeUserOperationTypedDataDomain,
-        types:{},
+        types:object,
         messageValue: SafeUserOperationV6TypedMessageValue
     } {
 		const validAfter = overrides.validAfter ?? 0n;
