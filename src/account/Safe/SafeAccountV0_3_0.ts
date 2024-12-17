@@ -178,7 +178,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		} = {},
 	): {
         domain: SafeUserOperationTypedDataDomain,
-        types:{},
+        types:Record<string, {name: string;type: string;}[]>,
         messageValue: SafeUserOperationV7TypedMessageValue
     } 
      {
