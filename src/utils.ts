@@ -336,13 +336,26 @@ export async function fetchGasPrice(
 ): Promise<[bigint, bigint]> {
 	const jsonRpcProvider = new JsonRpcProvider(provideRpc);
 	const feeData = await jsonRpcProvider.getFeeData();
-	const maxFeePerGas = BigInt(
-		Math.ceil(Number(feeData.maxFeePerGas) * gasLevel),
-	);
-	const maxPriorityFeePerGas = BigInt(
-		Math.ceil(Number(feeData.maxPriorityFeePerGas) * gasLevel),
-	);
+    let maxFeePerGas:bigint;
+	let maxPriorityFeePerGas:bigint;
 
+    if(feeData.maxFeePerGas != null && feeData.maxPriorityFeePerGas != null){
+        maxFeePerGas = BigInt(
+            Math.ceil(Number(feeData.maxFeePerGas) * gasLevel),
+        );
+        maxPriorityFeePerGas = BigInt(
+            Math.ceil(Number(feeData.maxPriorityFeePerGas) * gasLevel),
+        );
+    }else if(feeData.gasPrice != null){
+        maxFeePerGas = BigInt(
+            Math.ceil(Number(feeData.gasPrice) * gasLevel),
+        );
+        maxPriorityFeePerGas = maxFeePerGas;
+    }
+    else{
+        maxFeePerGas = BigInt(Math.ceil(1000000000 * gasLevel));
+        maxPriorityFeePerGas = maxFeePerGas;
+    }
 	return [maxFeePerGas, maxPriorityFeePerGas];
 }
 
