@@ -1378,7 +1378,6 @@ export class SafeAccount extends SmartAccount {
 			throw RangeError("nonce can't be negative");
 		}
         else if (nonce > 0n) {
-            //todo: handle the condition if factory is predeployed
 			factoryAddress = null;
 			factoryData = null;
 		} 
