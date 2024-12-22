@@ -11,6 +11,8 @@ import {
 	GasOption,
 	JsonRpcResult,
 	UserOperationV7,
+    PolygonChain,
+    PolygonGasStationJsonRpcResponse,
 } from "./types";
 import {
 	AbstractionKitError,
@@ -334,29 +336,89 @@ export async function fetchGasPrice(
 	provideRpc: string,
 	gasLevel: GasOption = GasOption.Medium,
 ): Promise<[bigint, bigint]> {
-	const jsonRpcProvider = new JsonRpcProvider(provideRpc);
-	const feeData = await jsonRpcProvider.getFeeData();
-    let maxFeePerGas:bigint;
-	let maxPriorityFeePerGas:bigint;
+    try{
+        const jsonRpcProvider = new JsonRpcProvider(provideRpc);
+        const feeData = await jsonRpcProvider.getFeeData();
+        let maxFeePerGas:bigint;
+        let maxPriorityFeePerGas:bigint;
 
-    if(feeData.maxFeePerGas != null && feeData.maxPriorityFeePerGas != null){
-        maxFeePerGas = BigInt(
-            Math.ceil(Number(feeData.maxFeePerGas) * gasLevel),
-        );
-        maxPriorityFeePerGas = BigInt(
-            Math.ceil(Number(feeData.maxPriorityFeePerGas) * gasLevel),
-        );
-    }else if(feeData.gasPrice != null){
-        maxFeePerGas = BigInt(
-            Math.ceil(Number(feeData.gasPrice) * gasLevel),
-        );
-        maxPriorityFeePerGas = maxFeePerGas;
+        if(feeData.maxFeePerGas != null && feeData.maxPriorityFeePerGas != null){
+            maxFeePerGas = BigInt(
+                Math.ceil(Number(feeData.maxFeePerGas) * gasLevel),
+            );
+            maxPriorityFeePerGas = BigInt(
+                Math.ceil(Number(feeData.maxPriorityFeePerGas) * gasLevel),
+            );
+        }else if(feeData.gasPrice != null){
+            maxFeePerGas = BigInt(
+                Math.ceil(Number(feeData.gasPrice) * gasLevel),
+            );
+            maxPriorityFeePerGas = maxFeePerGas;
+        }
+        else{
+            maxFeePerGas = BigInt(Math.ceil(1000000000 * gasLevel));
+            maxPriorityFeePerGas = maxFeePerGas;
+        }
+
+        if (maxFeePerGas == 0n) {
+            maxFeePerGas = 1n;
+        }
+        if (maxPriorityFeePerGas == 0n) {
+            maxPriorityFeePerGas = 1n;
+        }
+
+        return [maxFeePerGas, maxPriorityFeePerGas];
+    }catch (err) {
+        const error = ensureError(err);
+
+        throw new AbstractionKitError(
+            "BAD_DATA",
+            "fetching gas prices from node failed.", {
+            cause: error,
+        });
     }
-    else{
-        maxFeePerGas = BigInt(Math.ceil(1000000000 * gasLevel));
-        maxPriorityFeePerGas = maxFeePerGas;
+}
+
+export async function fetchGasPricePolygon(
+	polygonChain: PolygonChain,
+	gasLevel: GasOption = GasOption.Medium,
+): Promise<[bigint, bigint]> {
+    const gasStationUrl = 'https://gasstation.polygon.technology/' + polygonChain;
+    try{
+        const fetchResult = await fetch(gasStationUrl);
+        const response = (await fetchResult.json()) as PolygonGasStationJsonRpcResponse;
+        let gasPrice;
+        if(gasLevel == GasOption.Slow){
+           gasPrice = response.safeLow; 
+        }else if(gasLevel == GasOption.Medium){
+           gasPrice = response.standard; 
+        }else{
+           gasPrice = response.fast; 
+        }
+        let maxFeePerGas = BigInt(
+            Math.ceil(Number(gasPrice.maxFee) * 1000000000),
+        );
+        let maxPriorityFeePerGas = BigInt(
+            Math.ceil(Number(gasPrice.maxPriorityFee) * 1000000000),
+        );
+
+        if (maxFeePerGas == 0n) {
+            maxFeePerGas = 1n;
+        }
+        if (maxPriorityFeePerGas == 0n) {
+            maxPriorityFeePerGas = 1n;
+        }
+
+        return [maxFeePerGas, maxPriorityFeePerGas];
+    }catch (err) {
+        const error = ensureError(err);
+
+        throw new AbstractionKitError(
+            "BAD_DATA",
+            "fetching gas prices from " + gasStationUrl + " failed.", {
+            cause: error,
+        });
     }
-	return [maxFeePerGas, maxPriorityFeePerGas];
 }
 
 export function calculateUserOperationMaxGasCost(

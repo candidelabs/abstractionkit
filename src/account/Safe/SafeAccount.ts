@@ -25,8 +25,8 @@ import {
 	BaseUserOperation,
 	UserOperationV6,
 	UserOperationV7,
-    PolygonGasStationJsonRpcResponse,
     GasOption,
+    PolygonChain,
 } from "../../types";
 import {
 	createCallData,
@@ -35,6 +35,7 @@ import {
 	fetchGasPrice,
 	sendEthCallRequest,
 	sendEthGetCodeRequest,
+    fetchGasPricePolygon,
 } from "../../utils";
 
 import {
@@ -1278,11 +1279,12 @@ export class SafeAccount extends SmartAccount {
 			overrides.multisendContractAddress ??
 			SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS;
 
-		let nonce = 0n as bigint;
+		let nonce:bigint | null = null;
+		let nonceOp:Promise<bigint> | null = null;
 
 		if (overrides.nonce == null) {
 			if (providerRpc != null) {
-				nonce = await fetchAccountNonce(
+				nonceOp = fetchAccountNonce(
 					providerRpc,
 					this.entrypointAddress,
 					this.accountAddress,
@@ -1296,6 +1298,62 @@ export class SafeAccount extends SmartAccount {
 		} else {
 			nonce = overrides.nonce;
 		}
+
+        if (
+			typeof overrides.maxFeePerGas === "bigint" &&
+			overrides.maxFeePerGas < 0n
+		) {
+			throw RangeError("maxFeePerGas overrid can't be negative");
+		}
+
+		if (
+			typeof overrides.maxPriorityFeePerGas === "bigint" &&
+			overrides.maxPriorityFeePerGas < 0n
+		) {
+			throw RangeError("maxPriorityFeePerGas overrid can't be negative");
+		}
+        let maxFeePerGas = BaseUserOperationDummyValues.maxFeePerGas;
+		let maxPriorityFeePerGas =
+			BaseUserOperationDummyValues.maxPriorityFeePerGas;
+
+        let gasPriceOp:Promise<[bigint, bigint]> | null = null;
+        if (
+			overrides.maxFeePerGas == null ||
+			overrides.maxPriorityFeePerGas == null
+		) {
+            gasPriceOp = SafeAccount.handlefetchGasPrice(
+                providerRpc, overrides.polygonGasStation, overrides.gasLevel
+            )
+        }
+        
+        if(gasPriceOp != null && nonceOp != null){
+            await Promise.all([nonceOp, gasPriceOp]).then((values) => {
+                nonce = values[0];
+                [maxFeePerGas, maxPriorityFeePerGas] = values[1]; 
+            });
+        }else if(gasPriceOp != null){
+            [maxFeePerGas, maxPriorityFeePerGas] = await gasPriceOp; 
+        }else if(nonceOp != null){
+            nonce = await nonceOp;
+        }
+ 
+		maxFeePerGas =
+			overrides.maxFeePerGas ??
+			maxFeePerGas *
+				BigInt(
+					Math.floor(
+						((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100) / 100,
+					),
+				);
+		maxPriorityFeePerGas =
+			overrides.maxPriorityFeePerGas ??
+			maxPriorityFeePerGas *
+				BigInt(
+					Math.floor(
+						((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100) /
+							100,
+					),
+				);
 
         const eip7212WebAuthnPrecompileVerifier =
             overrides.eip7212WebAuthnPrecompileVerifier ??
@@ -1312,12 +1370,19 @@ export class SafeAccount extends SmartAccount {
 
 		let factoryAddress: string | null = this.factoryAddress;
 		let factoryData: string | null = this.factoryData;
-
-		if (nonce > 0n) {
+        
+        if(nonce == null){
+			throw RangeError("failed to determine nonce");
+        }
+        else if (nonce < 0n) {
+			throw RangeError("nonce can't be negative");
+		}
+        else if (nonce > 0n) {
+            //todo: handle the condition if factory is predeployed
 			factoryAddress = null;
 			factoryData = null;
-		} else if (this.isInitWebAuthn) {
-			
+		} 
+        else if (this.isInitWebAuthn) { //nonce = 0
 			if (this.x == null || this.y == null) {
 				throw RangeError(
 					"Invalide account initialization with Webauthnn signer." +
@@ -1386,9 +1451,6 @@ export class SafeAccount extends SmartAccount {
 			].concat(transactions);
 		}
 
-		if (nonce < 0n) {
-			throw RangeError("nonce can't be negative");
-		}
 
 		let callData = "0x" as string;
 		if (overrides.callData == null) {
@@ -1412,93 +1474,6 @@ export class SafeAccount extends SmartAccount {
 		} else {
 			callData = overrides.callData;
 		}
-
-		let maxFeePerGas = BaseUserOperationDummyValues.maxFeePerGas;
-		let maxPriorityFeePerGas =
-			BaseUserOperationDummyValues.maxPriorityFeePerGas;
-		if (
-			overrides.maxFeePerGas == null ||
-			overrides.maxPriorityFeePerGas == null
-		) {
-			if (overrides.polygonGasStation != null) {
-               const gasStationUrl =
-                   'https://gasstation.polygon.technology/' + overrides.polygonGasStation;
-                try{
-                    const fetchResult = await fetch(gasStationUrl);
-                    const response = (await fetchResult.json()) as PolygonGasStationJsonRpcResponse;
-                    const gasLevel = overrides.gasLevel?? GasOption.Medium;
-                    let gasPrice;
-                    if(gasLevel == GasOption.Slow){
-                       gasPrice = response.safeLow; 
-                    }else if(gasLevel == GasOption.Medium){
-                       gasPrice = response.standard; 
-                    }else{
-                       gasPrice = response.fast; 
-                    }
-                    maxFeePerGas = BigInt(
-                        Math.ceil(Number(gasPrice.maxFee) * 1000000000),
-                    );
-                    maxPriorityFeePerGas = BigInt(
-                        Math.ceil(Number(gasPrice.maxPriorityFee) * 1000000000),
-                    );
-               }catch (err) {
-                    const error = ensureError(err);
-
-                    throw new AbstractionKitError(
-                        "BAD_DATA",
-                        "fetching gas prices from " + gasStationUrl + " failed.", {
-                        cause: error,
-                    });
-                }
-            }
-            else if (providerRpc != null) {
-				[maxFeePerGas, maxPriorityFeePerGas] =
-                    await fetchGasPrice(providerRpc, overrides.gasLevel);
-				if (maxFeePerGas == 0n) {
-					maxFeePerGas = 1n;
-				}
-				if (maxPriorityFeePerGas == 0n) {
-					maxPriorityFeePerGas = 1n;
-				}
-			} else {
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					"providerRpc cant't be null if maxFeePerGas and " +
-						"maxPriorityFeePerGas are not overriden",
-				);
-			}
-		}
-		if (
-			typeof overrides.maxFeePerGas === "bigint" &&
-			overrides.maxFeePerGas < 0n
-		) {
-			throw RangeError("maxFeePerGas overrid can't be negative");
-		}
-
-		if (
-			typeof overrides.maxPriorityFeePerGas === "bigint" &&
-			overrides.maxPriorityFeePerGas < 0n
-		) {
-			throw RangeError("maxPriorityFeePerGas overrid can't be negative");
-		}
-
-		maxFeePerGas =
-			overrides.maxFeePerGas ??
-			maxFeePerGas *
-				BigInt(
-					Math.floor(
-						((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100) / 100,
-					),
-				);
-		maxPriorityFeePerGas =
-			overrides.maxPriorityFeePerGas ??
-			maxPriorityFeePerGas *
-				BigInt(
-					Math.floor(
-						((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100) /
-							100,
-					),
-				);
 
 		const userOperation = {
 			...BaseUserOperationDummyValues,
@@ -1673,6 +1648,31 @@ export class SafeAccount extends SmartAccount {
 
 		return [userOperation, factoryAddress, factoryData];
 	}
+
+    private static async handlefetchGasPrice(
+        providerRpc: string | undefined,
+	    polygonGasStation: PolygonChain | undefined,
+        gasLevel: GasOption = GasOption.Medium,
+    ): Promise<[bigint, bigint]> {
+        let maxFeePerGas:bigint;
+	    let maxPriorityFeePerGas:bigint;
+
+        if (polygonGasStation != null) {
+            [maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPricePolygon(
+                    polygonGasStation, gasLevel);
+        }
+        else if (providerRpc != null) {
+            [maxFeePerGas, maxPriorityFeePerGas] =
+                await fetchGasPrice(providerRpc, gasLevel);
+        } else {
+            throw new AbstractionKitError(
+                "BAD_DATA",
+                "providerRpc cant't be null if maxFeePerGas and " +
+                    "maxPriorityFeePerGas are not overriden",
+            );
+        }
+        return [maxFeePerGas, maxPriorityFeePerGas];
+    }
 
 	/**
 	 * create a useroperation signature
