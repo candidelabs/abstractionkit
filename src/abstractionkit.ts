@@ -31,6 +31,16 @@ export {
     fetchGasPrice
 } from "./utils";
 
+
+export {
+    createAndSignLegacyRawTransaction,
+    createAndSignEip7702RawTransaction,
+    createEip7702TransactionHash,
+    createAndSignEip7702DelegationAuthorization,
+    createEip7702DelegationAuthorizationHash,
+    signHash
+} from "./utils7702";
+
 export {
 	CreateUserOperationV6Overrides,
 	CreateUserOperationV7Overrides,
