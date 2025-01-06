@@ -446,6 +446,90 @@ export function calculateUserOperationMaxGasCost(
 	}
 }
 
+export type DepositInfo = {
+    deposit: bigint;
+    staked: boolean;
+    stake:bigint;
+    unstakeDelaySec: bigint;
+    withdrawTime: bigint;
+};
+
+export async function getBalanceOf(
+	nodeRpcUrl: string,
+	address: string,
+	entrypointAddress: string,
+): Promise<bigint> {
+   const depositInfo = await getDepositInfo(
+        nodeRpcUrl, address, entrypointAddress
+    )
+    return depositInfo.deposit;
+}
+
+export async function getDepositInfo(
+	nodeRpcUrl: string,
+	address: string,
+	entrypointAddress: string,
+): Promise<DepositInfo> {
+	const getDepositInfoSelector = "0x5287ce12"; //"getDepositInfo(address)"
+	const getDepositInfoCallData = createCallData(
+		getDepositInfoSelector,
+		["address"],
+		[address],
+	);
+
+	const params = {
+        from: "0x0000000000000000000000000000000000000000",
+        to: entrypointAddress,
+        data: getDepositInfoCallData,
+    };
+
+	try {
+        const recoveryRequestResult = await sendEthCallRequest(
+            nodeRpcUrl, params, "latest");
+
+        const abiCoder = AbiCoder.defaultAbiCoder();
+	    const decodedCalldata = abiCoder.decode(
+            ["uint256", "bool", "uint112", "uint32", "uint48"], recoveryRequestResult);
+
+
+		if (decodedCalldata.length === 5) {
+			try {
+				return {
+                    deposit:BigInt(decodedCalldata[0]),
+                    staked:Boolean(decodedCalldata[1]),
+                    stake:BigInt(decodedCalldata[2]),
+                    unstakeDelaySec:BigInt(decodedCalldata[3]),
+                    withdrawTime:BigInt(decodedCalldata[4]),
+                };
+			} catch (err) {
+				const error = ensureError(err);
+
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"getNonce returned ill formed data",
+					{
+						cause: error,
+					},
+				);
+			}
+		} else {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"getNonce returned ill formed data",
+				{
+					context: JSON.stringify(decodedCalldata),
+				},
+			);
+		}
+	} catch (err) {
+		const error = ensureError(err);
+
+		throw new AbstractionKitError("BAD_DATA", "getNonce failed", {
+			cause: error,
+		});
+	}
+}
+
 type EthCallTransaction = {
 	from?: string;
 	to: string;

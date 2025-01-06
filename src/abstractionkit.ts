@@ -28,7 +28,10 @@ export {
 	fetchAccountNonce,
 	calculateUserOperationMaxGasCost,
 	sendJsonRpcRequest,
-    fetchGasPrice
+    fetchGasPrice,
+    DepositInfo,
+    getDepositInfo,
+    getBalanceOf
 } from "./utils";
 
 export {
