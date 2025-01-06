@@ -484,12 +484,14 @@ export async function getDepositInfo(
     };
 
 	try {
-        const recoveryRequestResult = await sendEthCallRequest(
+        const depositInfoRequestResult = await sendEthCallRequest(
             nodeRpcUrl, params, "latest");
 
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
-            ["uint256", "bool", "uint112", "uint32", "uint48"], recoveryRequestResult);
+            ["uint256", "bool", "uint112", "uint32", "uint48"],
+            depositInfoRequestResult
+        );
 
 
 		if (decodedCalldata.length === 5) {
@@ -506,7 +508,7 @@ export async function getDepositInfo(
 
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					"getNonce returned ill formed data",
+					"getDepositInfo returned ill formed data",
 					{
 						cause: error,
 					},
@@ -515,7 +517,7 @@ export async function getDepositInfo(
 		} else {
 			throw new AbstractionKitError(
 				"BAD_DATA",
-				"getNonce returned ill formed data",
+				"getDepositInfo returned ill formed data",
 				{
 					context: JSON.stringify(decodedCalldata),
 				},
@@ -524,7 +526,7 @@ export async function getDepositInfo(
 	} catch (err) {
 		const error = ensureError(err);
 
-		throw new AbstractionKitError("BAD_DATA", "getNonce failed", {
+		throw new AbstractionKitError("BAD_DATA", "getDepositInfo failed", {
 			cause: error,
 		});
 	}
