@@ -103,7 +103,6 @@ export class SafeAccount extends SmartAccount {
 	protected x: bigint | null = null;
 	protected y: bigint | null = null;
 
-	readonly entrypointAddress: string;
 	readonly safe4337ModuleAddress: string;
 	protected factoryAddress: string | null;
 	protected factoryData: string | null;
@@ -113,8 +112,7 @@ export class SafeAccount extends SmartAccount {
 		safe4337ModuleAddress: string,
 		entrypointAddress: string,
 	) {
-		super(accountAddress);
-		this.entrypointAddress = entrypointAddress;
+		super(accountAddress, entrypointAddress);
 		this.safe4337ModuleAddress = safe4337ModuleAddress;
 		this.factoryAddress = null;
 		this.factoryData = null;

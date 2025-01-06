@@ -332,5 +332,21 @@ describe('safe account', () => {
 
             expect(owners).toStrictEqual([ownerPublicAddress]);
         });
+
+        test('check deposit info and balance ' + safeAccountVersionName, async() => {
+            const smartAccount = new safeAccountVersion(
+                expectedAccountAddress
+            );
+
+            const depositInfo = await smartAccount.getDepositInfo(jsonRpcNodeProvider);
+            const balance = await smartAccount.getBalanceOf(jsonRpcNodeProvider);
+            
+            expect(depositInfo["deposit"]).toStrictEqual(balance);
+            expect(typeof depositInfo["deposit"]).toBe("bigint");
+            expect(typeof depositInfo["staked"]).toBe("boolean");
+            expect(typeof depositInfo["stake"]).toBe("bigint");
+            expect(typeof depositInfo["unstakeDelaySec"]).toBe("bigint");
+            expect(typeof depositInfo["withdrawTime"]).toBe("bigint");
+        });
     });
 });
