@@ -32,6 +32,6 @@ export function encodeMultiSendCallData(
 
 export function decodeMultiSendCallData(callData: string): string {
 	const abiCoder = AbiCoder.defaultAbiCoder();
-	const decodedCalldata = abiCoder.decode(["bytes"], "0x" + callData.slice(10));
+	const decodedCalldata = abiCoder.decode(["bytes"], callData.slice(10));
 	return decodedCalldata[0] as string;
 }

@@ -399,7 +399,8 @@ export class SafeAccount extends SmartAccount {
 		const mutisendSelector = "0x8d80ff0a";
 		if (metaTransaction.data.startsWith(mutisendSelector)) {
 			//multisend
-			const decodedCalldata = decodeMultiSendCallData(metaTransaction.data);
+			const decodedCalldata = decodeMultiSendCallData(
+                "0x" + metaTransaction.data);
 			multiSendCallDataParams =
 				decodedCalldata + encodedApproveMetatransaction.slice(2);
 		} else {
