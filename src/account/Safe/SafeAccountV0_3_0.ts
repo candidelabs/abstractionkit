@@ -8,7 +8,17 @@ import {
 } from "./types";
 
 import { UserOperationV7, MetaTransaction } from "../../types";
-import { ENTRYPOINT_V7 } from "src/constants";
+import { ENTRYPOINT_V7, ZeroAddress } from "src/constants";
+import {
+    entryPoint07Abi, entryPoint07Address, toSmartAccount, EntryPointVersion,
+    UserOperationRequest, type UserOperation,
+} from "viem/account-abstraction"
+import { 
+    Chain, Hex, LocalAccount, SignableMessage, UnionPartialBy,
+    createClient, http 
+} from "viem";
+import { Call } from "viem/_types/types/calls";
+import { fetchAccountNonce } from "src/utils";
 
 export class SafeAccountV0_3_0 extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V7;
@@ -287,4 +297,109 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 
 		return userOperationV7;
 	}
+
+    public async toViemSmartAccount(
+		providerRpc: string,
+		owners: LocalAccount[],
+        chain:Chain,
+    ){
+        const version: EntryPointVersion = '0.7';
+        const entryPoint = {
+          abi: entryPoint07Abi,
+          address: entryPoint07Address,
+          version,
+        };
+        const client = createClient({
+            chain: chain,
+            transport: http(providerRpc)
+        });
+        const getAddress = async () => {
+            return this.accountAddress as `0x{string}`;
+        };
+        const decodeCalls = async(data: Hex) => {
+            return [];
+        };
+        const encodeCalls = async(calls: readonly Call[]) => {
+            return SafeAccount.createAccountCallDataBatchTransactions(
+                calls.map(
+                    call => {
+                        return {
+                            to: call.to,
+                            data: call.data??"0x",
+                            value: call.value??0n,
+                        }
+                    }
+                )
+            ) as `0x{string}`;
+        };
+        const getFactoryArgs = async () =>{
+            return {
+                factory: this.factoryAddress as `0x{string}`,
+                factoryData: this.factoryData as `0x{string}`,
+            }
+        }
+
+        const getNonce = async () =>{
+            return fetchAccountNonce(
+                providerRpc,
+                this.entrypointAddress,
+                this.accountAddress,
+            );
+        };
+        
+        const getStubSignature = async (
+            parameters?: UserOperationRequest | undefined
+        ) =>{
+          return "0x000000000000000000000000df20afc89f49c78f8615b27f368898788b02eb99665f7426ba097400c5083ff908de6417d21536146e7b54a15be1013c3a209b0047a079ca8e0564435aa438611c" as `0x{string}`;
+        };
+        
+        const signMessage = async (
+            parameters: { message: SignableMessage }
+        ) =>{
+            return "" as `0x{string}`;
+        };
+        const signTypedData = async (parameters:any) => {
+            return "" as `0x{string}`;
+        };
+        const signUserOperation = async (
+            parameters: UnionPartialBy<UserOperation, 'sender'> & {
+              chainId?: number | undefined
+            },
+        ) => {
+          const { chainId = client.chain.id, ...userOperation } = parameters
+          const userOp: UserOperationV7 = {
+            ...userOperation,
+            sender: userOperation.sender??ZeroAddress,
+            factory: userOperation.factory??null,
+            factoryData: userOperation.factoryData??null,
+            paymaster: userOperation.paymaster??null,
+            paymasterVerificationGasLimit: userOperation.paymasterVerificationGasLimit??null,
+            paymasterPostOpGasLimit: userOperation.paymasterVerificationGasLimit??null,
+            paymasterData: userOperation.paymasterData??null
+          }
+          const { domain, types, messageValue } =
+            SafeAccountV0_3_0.getUserOperationEip712Data(userOp, BigInt(chainId));
+          return SafeAccountV0_3_0.formatEip712SignaturesToUseroperationSignature(
+              owners.map(owner => owner.address),
+              await Promise.all(owners.map(async owner => { 
+                  return owner.signTypedData({  // @ts-ignore
+                    domain, types, message: messageValue, primaryType: "SafeOp"});
+              })),
+          ) as `0x{string}`; 
+        };
+    
+      return toSmartAccount({
+        client,
+        entryPoint,
+        getAddress,
+        decodeCalls,
+        encodeCalls,
+        getFactoryArgs,
+        getNonce,
+        getStubSignature,
+        signMessage,
+        signTypedData,
+        signUserOperation
+      });
+    }
 }

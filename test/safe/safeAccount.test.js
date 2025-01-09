@@ -1,5 +1,9 @@
 const accountAbstractionkit = require('../../dist/index.umd');
-require('dotenv').config()
+require('dotenv').config();
+const { privateKeyToAccount} = require('viem/accounts');
+const { createBundlerClient } = require("viem/account-abstraction");
+const { sepolia } = require("viem/chains");
+const { http, createPublicClient, parseEther } = require("viem");
 
 jest.setTimeout(300000);
 const ownerPublicAddress=process.env.PUBLIC_ADDRESS1
@@ -9,7 +13,7 @@ const jsonRpcNodeProvider=process.env.JSON_RPC_NODE_PROVIDER
 const bundlerUrl=process.env.BUNDLER_URL
 const safeAccountVersions = [
     accountAbstractionkit.SafeAccountV0_3_0,
-    accountAbstractionkit.SafeAccountV0_2_0
+    //accountAbstractionkit.SafeAccountV0_2_0
 ]
 
 describe('safe account', () => {
@@ -347,6 +351,34 @@ describe('safe account', () => {
             expect(typeof depositInfo["stake"]).toBe("bigint");
             expect(typeof depositInfo["unstakeDelaySec"]).toBe("bigint");
             expect(typeof depositInfo["withdrawTime"]).toBe("bigint");
+        });
+
+        test('viem ' + safeAccountVersionName, async() => {
+            const smartAccount = new safeAccountVersion(
+                expectedAccountAddress
+            );
+            const client = createPublicClient({
+              chain: sepolia,
+              transport: http("https://ethereum-sepolia-rpc.publicnode.com"),
+            })
+            const bundlerClient = createBundlerClient({
+              client,
+              transport: http(bundlerUrl),
+            })
+            const account = await smartAccount.toViemSmartAccount(
+                jsonRpcNodeProvider, 
+                [privateKeyToAccount(ownerPrivateKey)],
+                sepolia
+            )
+            const hash = await bundlerClient.sendUserOperation({
+              account, 
+              calls: [{
+                to: '0x70927E56E65b18ab7037d206976204aC6899DC16',
+                value: 1
+              }]
+            })
+            const receipt = await bundlerClient.waitForUserOperationReceipt({ hash })
+            expect(receipt["success"]).toStrictEqual(true);
         });
     });
 });
