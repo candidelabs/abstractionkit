@@ -10,7 +10,6 @@ import {
     WebauthnPublicKey,
     WebauthnSignatureData,
     SignerSignaturePair,
-    WebauthnDummySignerSignaturePair
 } from "abstractionkit";
 import {UserVerificationRequirement, WebAuthnCredentials, extractClientDataFields, extractPublicKey, extractSignature } from './webauthn';
 
