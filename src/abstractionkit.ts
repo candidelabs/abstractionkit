@@ -37,6 +37,7 @@ export {
 export {
 	CreateUserOperationV6Overrides,
 	CreateUserOperationV7Overrides,
+	ECDSAPublicAddress,
 	InitCodeOverrides,
 	SafeModuleExecutorFunctionSelector,
 	SafeUserOperationTypedDataDomain,
@@ -45,6 +46,7 @@ export {
 	WebauthnDummySignerSignaturePair,
 	WebauthnSignatureData,
 	SignerSignaturePair,
+	Signer,
 } from "./account/Safe/types";
 
 export {
