@@ -2423,6 +2423,70 @@ export class SafeAccount extends SmartAccount {
 
 		return decodedCalldata[0];
 	}
+    
+    /**
+	 * fetches a list of the account owners public addresses
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * @returns a promise of a list of owners public addresses and
+     * next Start of the next page
+	 */
+	public async getModules(
+        nodeRpcUrl: string, 
+        overrides: {
+			start?: string;
+            pageSize?: bigint
+		} = {}
+    ): Promise<[string[], string]> {
+        try{
+            let start = overrides.start;
+            if(start == null){
+                start = "0x0000000000000000000000000000000000000001";
+            }
+            let pageSize = overrides.pageSize;
+            if(pageSize == null){
+                pageSize = 10n;
+            }
+
+            const callData = createCallData(
+                "0xcc2f8452", //getModulesPaginated(address,uint256)
+                ["address", "uint256"],
+                [start, pageSize]
+            );
+
+            const ethCallParams = {
+                to: this.accountAddress,
+                data: callData,
+            };
+            const getModulesResult = await sendEthCallRequest(
+                nodeRpcUrl,
+                ethCallParams,
+                "latest",
+            );
+            if (getModulesResult == "0x"){
+                throw new AbstractionKitError(
+					"BAD_DATA",
+					"getModules retuned an empty result, the target account is " + 
+                    "probably not deployed yet.",
+				);
+            }
+            const abiCoder = AbiCoder.defaultAbiCoder();
+            const decodedCalldata = abiCoder.decode(
+                ["address[]", "address"],
+                getModulesResult,
+            );
+            return [decodedCalldata[0], decodedCalldata[1]];
+        }catch (err) {
+			const error = ensureError(err);
+
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"getModules failed",
+				{
+					cause: error,
+				},
+			);
+		}
+	}
 
     /**
 	 * check if a module is enabled 
