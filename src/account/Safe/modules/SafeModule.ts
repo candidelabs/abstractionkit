@@ -1,9 +1,5 @@
 import { MetaTransaction } from "../../../types";
-import {
-	createCallData,
-	getFunctionSelector,
-} from "../../../utils";
-
+import { SafeAccount } from "../SafeAccount";
 
 export abstract class SafeModule {
 	readonly moduleAddress: string;
@@ -20,19 +16,9 @@ export abstract class SafeModule {
     public createEnableModuleMetaTransaction(
         accountAddress: string,
     ):MetaTransaction{
-        const functionSignature = "enableModule(address)";
-        const functionSelector = getFunctionSelector(
-            functionSignature,
+        return SafeAccount.createEnableModuleMetaTransaction(
+            this.moduleAddress,
+            accountAddress
         );
-        const callData = createCallData(
-            functionSelector,
-            ["address"],
-            [this.moduleAddress],
-        );
-        return {
-            to:accountAddress,
-            data: callData,
-            value: 0n
-        }
     }
 }
