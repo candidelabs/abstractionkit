@@ -4,7 +4,6 @@ import {
 	getFunctionSelector,
 	createCallData,
 	MetaTransaction,
-	WebauthnDummySignerSignaturePair,
 	CandidePaymaster,
 } from "abstractionkit";
 
@@ -72,7 +71,7 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 				jsonRPCProvider,
 				bundlerUrl,
 				{
-					dummySignerSignaturePairs: [WebauthnDummySignerSignaturePair],
+					expectedSigners: [passkey.pubkeyCoordinates],
 					preVerificationGasPercentageMultiplier: 120,
 					verificationGasLimitPercentageMultiplier: 120,
 				},

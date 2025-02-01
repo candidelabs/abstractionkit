@@ -28,12 +28,16 @@ export {
 	fetchAccountNonce,
 	calculateUserOperationMaxGasCost,
 	sendJsonRpcRequest,
-    fetchGasPrice
+    fetchGasPrice,
+    DepositInfo,
+    getDepositInfo,
+    getBalanceOf
 } from "./utils";
 
 export {
 	CreateUserOperationV6Overrides,
 	CreateUserOperationV7Overrides,
+	ECDSAPublicAddress,
 	InitCodeOverrides,
 	SafeModuleExecutorFunctionSelector,
 	SafeUserOperationTypedDataDomain,
@@ -42,6 +46,7 @@ export {
 	WebauthnDummySignerSignaturePair,
 	WebauthnSignatureData,
 	SignerSignaturePair,
+	Signer,
 } from "./account/Safe/types";
 
 export {
