@@ -2690,4 +2690,108 @@ export class SafeAccount extends SmartAccount {
             "9490939192600082376000806056360183885af490503d6000803e8060c3573d6000fd5b503d6000f3fea2646970667358221220ddd9bb059ba7a6497d560ca97aadf4dbf0476f578378554a50d41c6bb654beae64736f6c63430008180033";
         return byteCode;
     }
+
+    /**
+     * create MetaTransaction to enable a module
+     * @param accountAddress - Safe account to enable the module for
+     * @returns a MetaTransaction
+     */
+    public static createEnableModuleMetaTransaction(
+        moduleAddress: string,
+        accountAddress: string,
+    ):MetaTransaction{
+        const callData = createCallData(
+            "0x610b5925", //"enableModule(address)"
+            ["address"],
+            [moduleAddress],
+        );
+        return {
+            to:accountAddress,
+            data: callData,
+            value: 0n
+        }
+    }
+    
+    /**
+     * create a standard disable a module MetaTransaction
+     * @param moduleAddress - Module to disable
+     * @param prevModuleAddress - previous module to moudle to disable 
+     * @param accountAddress - Safe account to enable the module for
+     * @returns a MetaTransaction
+     */
+    public async createDisableModuleMetaTransaction(
+		nodeRpcUrl: string,
+        moduleToDisableAddress: string,
+        accountAddress: string,
+		overrides: {
+			prevModuleAddress?: string;
+			modulesStart?: string;
+            modulesPageSize?: bigint
+		} = {},
+    ):Promise<MetaTransaction>{
+        try{
+            let prevModuleAddressT = overrides.prevModuleAddress;
+            if (prevModuleAddressT == null) {
+                const [modules, _] = await this.getModules(
+                    nodeRpcUrl,
+                    {
+                        start:overrides.modulesStart,
+                        pageSize:overrides.modulesPageSize
+                    }
+                );
+                
+                const moduleToDisableIndex = modules.indexOf(moduleToDisableAddress);
+                if (moduleToDisableIndex == -1) {
+                    throw RangeError(
+                        "moduleToDisable " + moduleToDisableAddress +
+                        " is not an enabled module."
+                    );
+                } else if (moduleToDisableIndex == 0) {
+                    prevModuleAddressT = "0x0000000000000000000000000000000000000001";
+                } else if (moduleToDisableIndex > 0) {
+                    prevModuleAddressT = modules[moduleToDisableIndex - 1];
+                } else {
+                    throw RangeError(
+                        "Invalid module index for " + moduleToDisableAddress);
+                }
+            }
+            return SafeAccount.createStandardDisableModuleMetaTransaction(
+                moduleToDisableAddress, prevModuleAddressT, accountAddress
+            );
+        } catch (err) {
+			const error = ensureError(err);
+
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"createDisableModuleMetaTransaction failed",
+				{
+					cause: error,
+				},
+			);
+		}
+    }
+
+    /**
+     * create a standard disable a module MetaTransaction
+     * @param moduleAddress - Module to disable
+     * @param prevModuleAddress - previous module to moudle to disable 
+     * @param accountAddress - Safe account to enable the module for
+     * @returns a MetaTransaction
+     */
+    public static createStandardDisableModuleMetaTransaction(
+        moduleAddress: string,
+        prevModuleAddress: string,
+        accountAddress: string,
+    ):MetaTransaction{
+        const callData = createCallData(
+            "0xe009cfde", //"disableModule(address)"
+            ["address", "address"],
+            [prevModuleAddress, moduleAddress],
+        );
+        return {
+            to:accountAddress,
+            data: callData,
+            value: 0n
+        }
+    }
 }
