@@ -10,6 +10,7 @@ import {
 
 import { UserOperationV6, MetaTransaction } from "../../types";
 import { ENTRYPOINT_V6 } from "src/constants";
+import { createCallData } from "src/utils";
 
 export class SafeAccountV0_2_0 extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V6;
@@ -336,4 +337,61 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 
 		return userOperationV6;
 	}
+    
+    /**
+	 * create a list of metatransactions to migrateaccount  from entrypoint v0.06
+     * (module version 0.2.0) to entrypoint v0.07 (module version 0.3.0)
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * @param overrides - overrides for the default values
+     * @returns a promise of a list of MetaTransactions
+	 */
+    public async createMigrateToV07ModuleMetaTransactions(
+		nodeRpcUrl: string,
+        overrides:{
+			safeV06ModuleAddress?: string;
+			safeV07ModuleAddress?: string;
+            safeV06PrevModuleAddress?: string;
+            pageSize?: bigint;
+			modulesStart?: string;
+        } = {}
+    ):Promise<MetaTransaction[]> {
+		const moduleV06Address =
+			overrides.safeV06ModuleAddress ??
+			SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+
+		const moduleV07Address =
+			overrides.safeV07ModuleAddress ??
+            "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226";
+        
+        const disableModuleMetaTransaction = 
+            await this.createDisableModuleMetaTransaction(
+                nodeRpcUrl, moduleV06Address, this.accountAddress,
+                {
+                    prevModuleAddress:overrides.safeV06ModuleAddress,
+                    modulesPageSize: overrides.pageSize,
+                    modulesStart: overrides.modulesStart
+                }
+            );
+        
+        const enableModuleMetaTransaction = 
+            SafeAccount.createEnableModuleMetaTransaction(
+                moduleV07Address, this.accountAddress);
+
+        const setFallbackHandlerCallData = createCallData(
+			"0xf08a0323", //setFallbackHandler(address)
+			["address"],
+			[moduleV07Address],
+		);
+		const setFallbackHandlerMetaTransaction: MetaTransaction = {
+			to: this.accountAddress,
+			value: 0n,
+			data: setFallbackHandlerCallData,
+		};
+        
+        return [
+            disableModuleMetaTransaction,
+            enableModuleMetaTransaction,
+            setFallbackHandlerMetaTransaction
+        ];
+    }
 }
