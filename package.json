@@ -4,7 +4,7 @@
 		"name": "Candidelabs",
 		"url": "https://candide.dev"
 	},
-	"version": "0.2.8",
+	"version": "0.2.10",
 	"description": "Account Abstraction 4337 SDK by Candidelabs",
 	"main": "dist/index.js",
 	"module": "dist/index.m.js",
