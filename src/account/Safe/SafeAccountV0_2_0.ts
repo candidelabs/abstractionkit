@@ -339,13 +339,13 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	}
     
     /**
-	 * create a list of metatransactions to migrateaccount  from entrypoint v0.06
+	 * create a list of metatransactions to migrateaccount from entrypoint v0.06
      * (module version 0.2.0) to entrypoint v0.07 (module version 0.3.0)
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
 	 * @param overrides - overrides for the default values
      * @returns a promise of a list of MetaTransactions
 	 */
-    public async createMigrateToV07ModuleMetaTransactions(
+    public async createMigrateToSafeAccountV0_3_0MetaTransactions(
 		nodeRpcUrl: string,
         overrides:{
 			safeV06ModuleAddress?: string;

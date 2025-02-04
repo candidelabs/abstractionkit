@@ -50,7 +50,7 @@ describe('safe account migration', () => {
 
         /*****************************************/
         //create the migration user operation
-        const migrateMetaTransactions = await accountToMigrate.createMigrateToV07ModuleMetaTransactions(
+        const migrateMetaTransactions = await accountToMigrate.createMigrateToSafeAccountV0_3_0MetaTransactions(
             jsonRpcNodeProvider
         );
         
