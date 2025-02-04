@@ -11,6 +11,7 @@ import {
 import { UserOperationV6, MetaTransaction } from "../../types";
 import { ENTRYPOINT_V6 } from "src/constants";
 import { createCallData } from "src/utils";
+import { SafeAccountV0_3_0 } from "./SafeAccountV0_3_0";
 
 export class SafeAccountV0_2_0 extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V6;
@@ -361,7 +362,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 
 		const moduleV07Address =
 			overrides.safeV07ModuleAddress ??
-            "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226";
+            SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
         
         const disableModuleMetaTransaction = 
             await this.createDisableModuleMetaTransaction(
