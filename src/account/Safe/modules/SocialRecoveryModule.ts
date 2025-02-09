@@ -333,13 +333,13 @@ export class SocialRecoveryModule extends SafeModule{
 
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
-            ["uint256", "uint256", "uint64", "address[]"], recoveryRequestResult);
+            ["(uint256,uint256,uint64,address[])"], recoveryRequestResult);
 
         return {
-            guardiansApprovalCount: BigInt(decodedCalldata[0]),
-            newThreshold: BigInt(decodedCalldata[1]),
-            executeAfter: BigInt(decodedCalldata[2]),
-            newOwners: decodedCalldata[3],
+            guardiansApprovalCount: BigInt(decodedCalldata[0][0]),
+            newThreshold: BigInt(decodedCalldata[0][1]),
+            executeAfter: BigInt(decodedCalldata[0][2]),
+            newOwners: decodedCalldata[0][3],
         }
     }
 
