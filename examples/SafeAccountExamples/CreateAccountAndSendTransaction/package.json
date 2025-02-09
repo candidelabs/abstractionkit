@@ -13,7 +13,7 @@
   "dependencies": {
     "dotenv": "^16.3.1",
     "typescript": "^5.1.6",
-    "abstractionkit": "^0.2.12"
+    "abstractionkit": "^0.2.13"
   },
   "devDependencies": {
     "rimraf": "^5.0.10"
