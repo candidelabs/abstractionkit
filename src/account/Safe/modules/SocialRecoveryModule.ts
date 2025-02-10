@@ -595,6 +595,6 @@ export type RecoveryRequest  = {
 }
 
 export type RecoverySignaturePair  = {
-    signer:bigint;
+    signer:string;
     signature:string;
 }
