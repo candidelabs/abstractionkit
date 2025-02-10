@@ -302,7 +302,13 @@ export class SocialRecoveryModule extends SafeModule{
             data: callData,
         };
 
-        return sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+        const recoveryHashResult = await sendEthCallRequest(
+            nodeRpcUrl, ethCallParams, "latest");
+        
+        const abiCoder = AbiCoder.defaultAbiCoder();
+	    const decodedCalldata = abiCoder.decode(
+            ["bytes32"], recoveryHashResult);
+        return decodedCalldata[0];
     }
 
     /**
