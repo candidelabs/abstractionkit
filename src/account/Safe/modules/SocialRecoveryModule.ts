@@ -305,6 +305,7 @@ export class SocialRecoveryModule extends SafeModule{
         const recoveryHashResult = await sendEthCallRequest(
             nodeRpcUrl, ethCallParams, "latest");
         
+        this.checkForEmptyResultAndRevert(recoveryHashResult, "getRecoveryHash");
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
             ["bytes32"], recoveryHashResult);
@@ -337,6 +338,7 @@ export class SocialRecoveryModule extends SafeModule{
         const recoveryRequestResult = await sendEthCallRequest(
             nodeRpcUrl, ethCallParams, "latest");
 
+        this.checkForEmptyResultAndRevert(recoveryRequestResult, "getRecoveryRequest");
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
             ["(uint256,uint256,uint64,address[])"], recoveryRequestResult);
@@ -375,11 +377,12 @@ export class SocialRecoveryModule extends SafeModule{
             to: this.moduleAddress,
             data: callData,
         };
-        const recoveryRequestResult = await sendEthCallRequest(
+        const recoveryApprovalResult = await sendEthCallRequest(
             nodeRpcUrl, ethCallParams, "latest");
 
+        this.checkForEmptyResultAndRevert(recoveryApprovalResult, "getRecoveryApprovals");
         const abiCoder = AbiCoder.defaultAbiCoder();
-	    const decodedCalldata = abiCoder.decode(["uint256"], recoveryRequestResult);
+	    const decodedCalldata = abiCoder.decode(["uint256"], recoveryApprovalResult);
 
         return BigInt(decodedCalldata[0]);
     }
@@ -412,12 +415,14 @@ export class SocialRecoveryModule extends SafeModule{
             to: this.moduleAddress,
             data: callData,
         };
-        const recoveryRequestResult = await sendEthCallRequest(
+        const hasGuardianApprovedResult = await sendEthCallRequest(
             nodeRpcUrl, ethCallParams, "latest");
 
+        this.checkForEmptyResultAndRevert(
+            hasGuardianApprovedResult, "hasGuardianApproved");
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
-            ["bool"], recoveryRequestResult);
+            ["bool"], hasGuardianApprovedResult);
 
         return Boolean(decodedCalldata[0]);
     }
@@ -447,11 +452,13 @@ export class SocialRecoveryModule extends SafeModule{
             to: this.moduleAddress,
             data: callData,
         };
-        const recoveryRequestResult = await sendEthCallRequest(
+        const isGuardianResult = await sendEthCallRequest(
             nodeRpcUrl, ethCallParams, "latest");
+
+        this.checkForEmptyResultAndRevert(isGuardianResult, "isGuardian");
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
-            ["bool"], recoveryRequestResult);
+            ["bool"], isGuardianResult);
 
         return Boolean(decodedCalldata[0]);
     }
@@ -478,12 +485,13 @@ export class SocialRecoveryModule extends SafeModule{
             to: this.moduleAddress,
             data: callData,
         };
-        const recoveryRequestResult = await sendEthCallRequest(
+        const guardiansCountResult = await sendEthCallRequest(
             nodeRpcUrl, ethCallParams, "latest");
 
+        this.checkForEmptyResultAndRevert(guardiansCountResult, "guardiansCount");
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
-            ["uint256"], recoveryRequestResult);
+            ["uint256"], guardiansCountResult);
 
         return BigInt(decodedCalldata[0]);
     }
@@ -510,12 +518,13 @@ export class SocialRecoveryModule extends SafeModule{
             to: this.moduleAddress,
             data: callData,
         };
-        const recoveryRequestResult = await sendEthCallRequest(
+        const thresholdResult = await sendEthCallRequest(
             nodeRpcUrl, ethCallParams, "latest");
 
+        this.checkForEmptyResultAndRevert(thresholdResult, "threshold");
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
-            ["uint256"], recoveryRequestResult);
+            ["uint256"], thresholdResult);
 
         return BigInt(decodedCalldata[0]);
     }
@@ -542,12 +551,13 @@ export class SocialRecoveryModule extends SafeModule{
             to: this.moduleAddress,
             data: callData,
         };
-        const recoveryRequestResult = await sendEthCallRequest(
+        const getGuardiansResult = await sendEthCallRequest(
             nodeRpcUrl, ethCallParams, "latest");
 
+        this.checkForEmptyResultAndRevert(getGuardiansResult, "threshold");
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
-            ["address[]"], recoveryRequestResult);
+            ["address[]"], getGuardiansResult);
 
         return decodedCalldata[0];
     }
@@ -574,12 +584,13 @@ export class SocialRecoveryModule extends SafeModule{
             to: this.moduleAddress,
             data: callData,
         };
-        const recoveryRequestResult = await sendEthCallRequest(
+        const nonceResult = await sendEthCallRequest(
             nodeRpcUrl, ethCallParams, "latest");
 
+        this.checkForEmptyResultAndRevert(nonceResult, "threshold");
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
-            ["uint256"], recoveryRequestResult);
+            ["uint256"], nonceResult);
 
         return BigInt(decodedCalldata[0]);
     }

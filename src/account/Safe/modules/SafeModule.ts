@@ -1,3 +1,4 @@
+import { AbstractionKitError } from "src/errors";
 import { MetaTransaction } from "../../../types";
 import { SafeAccount } from "../SafeAccount";
 
@@ -20,5 +21,18 @@ export abstract class SafeModule {
             this.moduleAddress,
             accountAddress
         );
+    }
+
+    public checkForEmptyResultAndRevert(
+        result: string, requestName: string
+    ): void {
+        if(result == "0x"){
+            throw new AbstractionKitError(
+				"BAD_DATA",
+				requestName + " returned 0x, " +
+                "module contract " + this.moduleAddress + 
+                " is probably not deployed"
+            );
+        } 
     }
 }

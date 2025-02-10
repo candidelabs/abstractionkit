@@ -291,6 +291,7 @@ export class AllowanceModule extends SafeModule{
         };
 
         const tokens = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+        this.checkForEmptyResultAndRevert(tokens, "getTokens");
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
             ["address[]"], tokens);
@@ -326,6 +327,7 @@ export class AllowanceModule extends SafeModule{
 
         const tokenAllowance = await sendEthCallRequest(
             nodeRpcUrl, ethCallParams, "latest");
+        this.checkForEmptyResultAndRevert(tokenAllowance, "getTokenAllowance");
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(["uint256[5]"], tokenAllowance);
         const allowance = decodedCalldata[0]
@@ -401,7 +403,7 @@ export class AllowanceModule extends SafeModule{
 
         const delegates = await sendEthCallRequest(
             nodeRpcUrl, ethCallParams, "latest");
-
+        this.checkForEmptyResultAndRevert(delegates, "getDelegates");
         const abiCoder = AbiCoder.defaultAbiCoder();
 	    const decodedCalldata = abiCoder.decode(
             ["address[]", "uint48"], delegates);
