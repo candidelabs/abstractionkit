@@ -1,7 +1,6 @@
 import { SafeModule } from "./SafeModule";
 import { createCallData, sendEthCallRequest } from "../../../utils";
 import { MetaTransaction } from "../../../types";
-import { AbiCoder } from "ethers";
 
 export enum SocialRecoveryModuleGracePeriodSelector {
 	After3Minutes = "0x949d01d424bE050D09C16025dd007CB59b3A8c66",

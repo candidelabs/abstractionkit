@@ -1,7 +1,6 @@
 import { SafeModule } from "./SafeModule";
 import { createCallData, sendEthCallRequest } from "../../../utils";
 import { MetaTransaction } from "../../../types";
-import { AbiCoder } from "ethers";
 
 export class AllowanceModule extends SafeModule{
     static readonly DEFAULT_ALLOWANCE_MODULE_ADDRESS =
