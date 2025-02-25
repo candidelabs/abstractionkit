@@ -1,7 +1,7 @@
 {
-  "name": "CreateAndSendTransaction",
+  "name": "NestedAccounts",
   "version": "1.0.0",
-  "description": "create a new account and send a useroperation and pay gas with erc20 token using a paymaster.",
+  "description": "An example demonstrating nested safe multisigs using 4337.",
   "main": "dist/index.js",
   "scripts": {
     "build": "rimraf dist && tsc",
