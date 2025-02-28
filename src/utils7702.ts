@@ -296,7 +296,7 @@ function bigintToBytes(bi: bigint){
 }
 
 
-function bigintToHex(value: bigint): string {
+export function bigintToHex(value: bigint): string {
     let hex = value.toString(16);
     return hex.length % 2 ? "0x0" + hex : "0x" + hex;
 }
