@@ -184,7 +184,7 @@ export function createCallData(
 	functionInputParameters: AbiInputValue[],
 ): string {
 	const abiCoder = AbiCoder.defaultAbiCoder();
-	const params: string = abiCoder.encode(
+    const params: string = abiCoder.encode(
 		functionInputAbi,
 		functionInputParameters,
 	);
@@ -629,4 +629,29 @@ export async function sendEthGetCodeRequest(
 			cause: error,
 		});
 	}
+}
+
+export async function handlefetchGasPrice(
+    providerRpc: string | undefined,
+    polygonGasStation: PolygonChain | undefined,
+    gasLevel: GasOption = GasOption.Medium,
+): Promise<[bigint, bigint]> {
+    let maxFeePerGas:bigint;
+    let maxPriorityFeePerGas:bigint;
+
+    if (polygonGasStation != null) {
+        [maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPricePolygon(
+                polygonGasStation, gasLevel);
+    }
+    else if (providerRpc != null) {
+        [maxFeePerGas, maxPriorityFeePerGas] =
+            await fetchGasPrice(providerRpc, gasLevel);
+    } else {
+        throw new AbstractionKitError(
+            "BAD_DATA",
+            "providerRpc cant't be null if maxFeePerGas and " +
+                "maxPriorityFeePerGas are not overriden",
+        );
+    }
+    return [maxFeePerGas, maxPriorityFeePerGas];
 }
