@@ -1,6 +1,6 @@
 //https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md
-//rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, destination, value, data, access_list, authorization_list, signature_y_parity, signature_r, signature_s])
-//authorization_list = [[chain_id, address, nonce, y_parity, r, s], ...]
+//rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, destination, value, data, access_list, authorization_list, yParity, r, s])
+//authorization_list = [[chain_id, address, nonce, yParity, r, s], ...]
 import {
     encodeRlp, Wallet, getBytes, toBeArray, keccak256,
 } from "ethers";
@@ -8,16 +8,25 @@ import {
 const SET_CODE_TX_TYPE = "0x04";
 
 export type Authorization7702 = {
-    chain_id: bigint,
+    chainId: bigint,
     address: string,
     nonce: bigint,
-    signature_y_parity: 0 | 1,
-    signature_r: bigint,
-    signature_s: bigint
+    yParity: 0 | 1,
+    r: bigint,
+    s: bigint
+};
+
+export type Authorization7702Hex = {
+    chainId: string,
+    address: string,
+    nonce: string,
+    yParity: string,
+    r: string,
+    s: string
 };
 
 export function createAndSignLegacyRawTransaction(
-    chain_id: bigint,
+    chainId: bigint,
     nonce: bigint,
     gas_price: bigint,
     gas_limit: bigint,
@@ -26,8 +35,8 @@ export function createAndSignLegacyRawTransaction(
     data: string,
     eoaPrivateKey: string
 ): string {
-    if (chain_id >= 2**64){
-		throw RangeError("Invalide chain_id.");
+    if (chainId >= 2**64){
+		throw RangeError("Invalide chainId.");
     }
 
     if (nonce >= 2**64){
@@ -45,7 +54,7 @@ export function createAndSignLegacyRawTransaction(
         destination,
         bigintToBytes(value),
         data,
-        bigintToBytes(chain_id),
+        bigintToBytes(chainId),
         bigintToBytes(0n),
         bigintToBytes(0n)
     ]
@@ -65,7 +74,7 @@ export function createAndSignLegacyRawTransaction(
         bigintToBytes(value),
         data,
         bigintToBytes(
-            BigInt(signature.yParity + (Number(chain_id) * 2) + 35)),
+            BigInt(signature.yParity + (Number(chainId) * 2) + 35)),
         getBytes(signature.r),
         getBytes(signature.s)
     ]
@@ -74,31 +83,31 @@ export function createAndSignLegacyRawTransaction(
 }
 
 export function createAndSignEip7702DelegationAuthorization(
-    chain_id: bigint,
+    chainId: bigint,
     address: string,
     nonce: bigint,
     eoaPrivateKey: string
-):Authorization7702 {
+):Authorization7702Hex {
     const authHash = createEip7702DelegationAuthorizationHash(
-        chain_id, address, nonce);
+        chainId, address, nonce);
     const signature = signHash(authHash, eoaPrivateKey);
     return {
-        chain_id,
+        chainId:bigintToHex(chainId),
         address,
-        nonce,
-        signature_y_parity:signature.signature_y_parity,
-        signature_r: BigInt(signature.signature_r),
-        signature_s: BigInt(signature.signature_s)
+        nonce:bigintToHex(nonce),
+        yParity:bigintToHex(BigInt(signature.yParity)),
+        r: bigintToHex(signature.r),
+        s: bigintToHex(signature.s)
     };
 }
 
 export function createEip7702DelegationAuthorizationHash(
-    chain_id: bigint,
+    chainId: bigint,
     address: string,
     nonce: bigint
 ):string {
     const auth_arr = [
-        bigintToBytes(chain_id),
+        bigintToBytes(chainId),
         address,
         bigintToBytes(nonce),
     ]
@@ -110,20 +119,20 @@ export function createEip7702DelegationAuthorizationHash(
 export function signHash(
     authHash: string,
     eoaPrivateKey: string
-): {signature_y_parity: 0 | 1, signature_r:bigint, signature_s: bigint}{
+): {yParity: 0 | 1, r:bigint, s: bigint}{
     const eoa = new Wallet(eoaPrivateKey);
     const signature = eoa.signingKey.sign(
         authHash,
     );
     return {
-        signature_y_parity: signature.yParity,
-        signature_r: BigInt(signature.r),
-        signature_s: BigInt(signature.s)
+        yParity: signature.yParity,
+        r: BigInt(signature.r),
+        s: BigInt(signature.s)
     };
 }
 
 export function createAndSignEip7702RawTransaction(
-    chain_id: bigint,
+    chainId: bigint,
     nonce: bigint,
     max_priority_fee_per_gas: bigint,
     max_fee_per_gas: bigint,
@@ -136,7 +145,7 @@ export function createAndSignEip7702RawTransaction(
     eoaPrivateKey: string
 ): string {
     const txHash = createEip7702TransactionHash(
-        chain_id,
+        chainId,
         nonce,
         max_priority_fee_per_gas,
         max_fee_per_gas,
@@ -149,7 +158,7 @@ export function createAndSignEip7702RawTransaction(
     )
 
     const basePayload = encodeEip7702TransactionBaseList(
-        chain_id,
+        chainId,
         nonce,
         max_priority_fee_per_gas,
         max_fee_per_gas,
@@ -163,9 +172,9 @@ export function createAndSignEip7702RawTransaction(
 
     const signature = signHash(txHash, eoaPrivateKey);
     const payload = basePayload.concat([
-        bigintToBytes(BigInt(signature.signature_y_parity)),
-        bigintToBytes(signature.signature_r),
-        bigintToBytes(signature.signature_s)
+        bigintToBytes(BigInt(signature.yParity)),
+        bigintToBytes(signature.r),
+        bigintToBytes(signature.s)
     ]);
     const transactionPayload = encodeRlp(payload);
 
@@ -174,7 +183,7 @@ export function createAndSignEip7702RawTransaction(
 
 
 export function createEip7702TransactionHash(
-    chain_id: bigint,
+    chainId: bigint,
     nonce: bigint,
     max_priority_fee_per_gas: bigint,
     max_fee_per_gas: bigint,
@@ -186,7 +195,7 @@ export function createEip7702TransactionHash(
     authorization_list: Authorization7702[],
 ):string {
     const payload = encodeEip7702TransactionBaseList(
-        chain_id,
+        chainId,
         nonce,
         max_priority_fee_per_gas,
         max_fee_per_gas,
@@ -202,7 +211,7 @@ export function createEip7702TransactionHash(
 }
 
 function encodeEip7702TransactionBaseList(
-    chain_id: bigint,
+    chainId: bigint,
     nonce: bigint,
     max_priority_fee_per_gas: bigint,
     max_fee_per_gas: bigint,
@@ -213,8 +222,8 @@ function encodeEip7702TransactionBaseList(
     access_list: [string, string[]][],
     authorization_list: Authorization7702[],
 ){
-    if (chain_id >= 2**64){
-		throw RangeError("Invalide chain_id.");
+    if (chainId >= 2**64){
+		throw RangeError("Invalide chainId.");
     }
 
     if (nonce >= 2**64){
@@ -229,7 +238,7 @@ function encodeEip7702TransactionBaseList(
     const encoded_access_list = encodeAccessList(access_list);
 
     const payload = [
-        bigintToBytes(chain_id),
+        bigintToBytes(chainId),
         bigintToBytes(nonce),
         bigintToBytes(max_priority_fee_per_gas),
         bigintToBytes(max_fee_per_gas),
@@ -250,12 +259,12 @@ function encodeAuthList(authorization_list: Authorization7702[]){
 			throw RangeError("Invalide authorization list address: " + auth);
         }
         const encoded_auth = [
-            bigintToBytes(auth.chain_id),
+            bigintToBytes(auth.chainId),
             auth.address,
             bigintToBytes(auth.nonce),
-            bigintToBytes(BigInt(auth.signature_y_parity)),
-            bigintToBytes(auth.signature_r),
-            bigintToBytes(auth.signature_s)
+            bigintToBytes(BigInt(auth.yParity)),
+            bigintToBytes(auth.r),
+            bigintToBytes(auth.s)
         ]
         encoded_auth_list.push(encoded_auth);
     }
@@ -284,4 +293,10 @@ function encodeAccessList(access_list: [string, string[]][]){
 
 function bigintToBytes(bi: bigint){
     return getBytes(toBeArray(bi))
+}
+
+
+function bigintToHex(value: bigint): string {
+    let hex = value.toString(16);
+    return hex.length % 2 ? "0x0" + hex : "0x" + hex;
 }

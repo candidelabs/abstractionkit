@@ -1,4 +1,5 @@
 export { SmartAccount } from "./account/SmartAccount";
+export { Simple7702Account } from "./account/simple/Simple7702Account";
 export {
 	SocialRecoveryModule,
 	RecoveryRequest,
@@ -41,7 +42,9 @@ export {
     createEip7702TransactionHash,
     createAndSignEip7702DelegationAuthorization,
     createEip7702DelegationAuthorizationHash,
-    signHash
+    signHash,
+    Authorization7702Hex,
+    Authorization7702
 } from "./utils7702";
 
 export {
