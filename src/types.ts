@@ -1,3 +1,5 @@
+import { Authorization7702Hex } from "./utils7702";
+
 /**
  * Base wrapper for a useroperation
  */
@@ -11,6 +13,7 @@ export interface BaseUserOperation {
 	maxFeePerGas: bigint;
 	maxPriorityFeePerGas: bigint;
 	signature: string;
+    eip7702auth?: Authorization7702Hex;
 }
 
 /**
