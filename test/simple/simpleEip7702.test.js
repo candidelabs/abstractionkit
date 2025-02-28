@@ -4,9 +4,9 @@ require('dotenv').config()
 jest.setTimeout(300000);
 const ownerPublicAddress=process.env.PUBLIC_ADDRESS2
 const ownerPrivateKey=process.env.PRIVATE_KEY2
-const chainId = process.env.CHAIN_ID
-const jsonRpcNodeProvider=process.env.JSON_RPC_NODE_PROVIDER
-const bundlerUrl=process.env.BUNDLER_URL
+const chainId = 17000
+const jsonRpcNodeProvider="https://ethereum-holesky-rpc.publicnode.com"
+const bundlerUrl="https://holesky.voltaire.candidewallet.com/rpc"
 
 
 const eoaDelegatorAddress=process.env.PUBLIC_ADDRESS2
@@ -77,12 +77,6 @@ describe('simple account', () => {
         )
         expect(userOperation.sender).toBe(smartAccount.accountAddress);
         
-        const accountNonce =
-            await ak.fetchAccountNonce(
-                jsonRpcNodeProvider,
-                smartAccount.entrypointAddress,
-                smartAccount.accountAddress,
-            )
         userOperation.signature = smartAccount.signUserOperation(
             userOperation,
             ownerPrivateKey,
@@ -99,6 +93,6 @@ describe('simple account', () => {
         //useroperation is included onchain
         let userOperationReceiptResult = await sendUserOperationResponse.included()
 
-        expect(accountNonce).toBe(userOperationReceiptResult.nonce);
+        expect(userOperationReceiptResult.success).toBe(true);
     });
 });
