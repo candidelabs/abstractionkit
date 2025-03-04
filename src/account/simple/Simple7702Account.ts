@@ -3,7 +3,7 @@ import { BaseUserOperationDummyValues, ENTRYPOINT_V7 } from "src/constants";
 import { createCallData, createUserOperationHash, fetchAccountNonce, handlefetchGasPrice, sendJsonRpcRequest } from "../../utils";
 import { GasOption, PolygonChain, StateOverrideSet, UserOperationV7 } from "src/types";
 import { AbstractionKitError } from "src/errors";
-import { Authorization7702Hex, bigintToHex, createAndSignEip7702DelegationAuthorization } from "src/utils7702";
+import { Authorization7702Hex, bigintToHex } from "src/utils7702";
 import { Bundler } from "src/Bundler";
 import { Wallet } from "ethers";
 import { SendUseroperationResponse } from "../SendUseroperationResponse";
@@ -52,11 +52,14 @@ export interface CreateUserOperationOverrides {
 	gasLevel?: GasOption;
 	polygonGasStation?: PolygonChain;
 
-    delegateeContractAddress?: string;
-    eoaDelegatorPrivateKey?: string;
-    eoaDelegatorSignature?: {yParity:string, r:string, s:string};
-    eoaDelegatorChainId?: bigint;
-    eoaDelegatorNonce?: bigint;
+    eip7702auth?:{
+        chainId: bigint;
+        address?: string;
+        nonce?: bigint;
+        yParity?: string;
+        r?: string;
+        s?: string;
+    };
 }
 
 
@@ -213,17 +216,71 @@ export class Simple7702Account extends SmartAccount {
             )
         }
         
-        if(gasPriceOp != null && nonceOp != null){
-            await Promise.all([nonceOp, gasPriceOp]).then((values) => {
-                nonce = values[0];
-                [maxFeePerGas, maxPriorityFeePerGas] = values[1]; 
-            });
-        }else if(gasPriceOp != null){
-            [maxFeePerGas, maxPriorityFeePerGas] = await gasPriceOp; 
-        }else if(nonceOp != null){
-            nonce = await nonceOp;
+        let eip7702AuthChainId:bigint|null = null; 
+        let eip7702AuthAddress:string|null = null; 
+        let eip7702AuthNonce:bigint|null = null; 
+
+        if(overrides.eip7702auth != null){
+            eip7702AuthChainId = overrides.eip7702auth.chainId;
+            eip7702AuthAddress = overrides.eip7702auth.address??
+                Simple7702Account.DEFAULT_DELEGATEE_ADDRESS;
+            eip7702AuthNonce = overrides.eip7702auth.nonce??null;
         }
- 
+        if(overrides.eip7702auth != null && eip7702AuthNonce == null){
+            //check for eip7702AuthNonce
+            let eip7702AuthNonceOp;
+            if (providerRpc != null) {
+                eip7702AuthNonceOp = sendJsonRpcRequest(
+                    providerRpc,
+                    "eth_getTransactionCount",
+                    [this.accountAddress, "latest"]
+                );
+            } else {
+                throw new AbstractionKitError(
+                    "BAD_DATA",
+                    "providerRpc cant't be null if eoaDelegatorNonce " +
+                    "is not overriden",
+                );
+            }
+
+            if(gasPriceOp != null && nonceOp != null){
+                await Promise.all(
+                    [eip7702AuthNonceOp, nonceOp, gasPriceOp]
+                ).then((values) => {
+                    eip7702AuthNonce = BigInt(values[0] as string);
+                    nonce = values[1];
+                    [maxFeePerGas, maxPriorityFeePerGas] = values[2]; 
+                });
+            }else if(gasPriceOp != null){
+                await Promise.all(
+                    [eip7702AuthNonceOp, gasPriceOp]
+                ).then((values) => {
+                    eip7702AuthNonce = BigInt(values[0] as string);
+                    [maxFeePerGas, maxPriorityFeePerGas] = values[1]; 
+                });
+            }else if(nonceOp != null){
+                await Promise.all(
+                    [eip7702AuthNonceOp, gasPriceOp]
+                ).then((values) => {
+                    eip7702AuthNonce = BigInt(values[0] as string);
+                    nonce = values[1];
+                });
+            }else{
+                eip7702AuthNonce = BigInt(await eip7702AuthNonceOp as string);
+            }
+        }else{
+            //don't check for eip7702AuthNonce
+            if(gasPriceOp != null && nonceOp != null){
+                await Promise.all([nonceOp, gasPriceOp]).then((values) => {
+                    nonce = values[0];
+                    [maxFeePerGas, maxPriorityFeePerGas] = values[1]; 
+                });
+            }else if(gasPriceOp != null){
+                [maxFeePerGas, maxPriorityFeePerGas] = await gasPriceOp; 
+            }else if(nonceOp != null){
+                nonce = await nonceOp;
+            }
+        }
 		maxFeePerGas =
 			overrides.maxFeePerGas ??
 			maxFeePerGas *
@@ -263,85 +320,30 @@ export class Simple7702Account extends SmartAccount {
 			callData = overrides.callData;
 		}
         
-        if(
-            overrides.eoaDelegatorSignature != null &&
-            overrides.eoaDelegatorPrivateKey != null
-        ){
-			throw RangeError(
-                "can't override both eoaDelegatorSignature and eoaDelegatorPrivateKey"
-            );
-		}else if(
-            (
-                overrides.eoaDelegatorSignature != null ||
-                overrides.eoaDelegatorPrivateKey != null
-            ) && overrides.eoaDelegatorChainId == null
-        ){
-            throw RangeError(
-                "eoaDelegatorChainId must be provided if using " +
-                "eoaDelegatorSignature or eoaDelegatorPrivateKey"
-            );
-        }
-
 		let userOperation:UserOperationV7;
-
-        if(
-            overrides.eoaDelegatorPrivateKey != null ||
-            overrides.eoaDelegatorSignature != null
-        ){
-            let delegatorNonce = overrides.eoaDelegatorNonce;
-            if(delegatorNonce == null){
-                if (providerRpc != null) {
-                    delegatorNonce = BigInt(
-                        await sendJsonRpcRequest(
-                            providerRpc,
-                            "eth_getTransactionCount",
-                            [this.accountAddress, "latest"]
-                        ) as string
-                    );
-                } else {
-                    throw new AbstractionKitError(
-                        "BAD_DATA",
-                        "providerRpc cant't be null if eoaDelegatorNonce " +
-                        "is not overriden",
-                    );
-                }
+        if(overrides.eip7702auth != null){
+            const yParity = overrides.eip7702auth.yParity?? "0x0";
+            if(
+                yParity != "0x0" && yParity != "0x00" &&
+                yParity != "0x1" && yParity != "0x01"
+            ){
+                throw new AbstractionKitError(
+                    "BAD_DATA",
+                    "invalide yParity value for eoaDelegatorSignature. " +
+                    "must be '0x0' or '0x1'"
+                );
             }
-            let authorization:Authorization7702Hex; 
-            if(overrides.eoaDelegatorPrivateKey != null){
-                authorization = createAndSignEip7702DelegationAuthorization(
-                    overrides.eoaDelegatorChainId??0n,
-                    overrides.delegateeContractAddress??
-                        Simple7702Account.DEFAULT_DELEGATEE_ADDRESS,
-                    delegatorNonce,
-                    overrides.eoaDelegatorPrivateKey
-                )
-            }else{
-                const eoaDelegatorSignature =
-                    overrides.eoaDelegatorSignature as
-                        {yParity:string, r:string, s:string};
-                if(
-                    eoaDelegatorSignature.yParity != "0x0" &&
-                    eoaDelegatorSignature.yParity != "0x00" &&
-                    eoaDelegatorSignature.yParity != "0x1" &&
-                    eoaDelegatorSignature.yParity != "0x01"
-                ){
-                    throw new AbstractionKitError(
-                        "BAD_DATA",
-                        "invalide yParity value for eoaDelegatorSignature. " +
-                        "must be '0x0' or '0x1'"
-                    );
-                }
 
-                authorization = {
-                    chainId: bigintToHex(overrides.eoaDelegatorChainId??0n),
-                    address: overrides.delegateeContractAddress??
-                        Simple7702Account.DEFAULT_DELEGATEE_ADDRESS,
-                    nonce: bigintToHex(delegatorNonce),
-                    yParity: eoaDelegatorSignature.yParity,
-                    r: eoaDelegatorSignature.r,
-                    s: eoaDelegatorSignature.s
-                } 
-            }
+            const authorization:Authorization7702Hex= {
+                chainId: bigintToHex(eip7702AuthChainId as bigint),
+                address: eip7702AuthAddress as string,
+                nonce: bigintToHex(eip7702AuthNonce as bigint),
+                yParity: yParity,
+                r: overrides.eip7702auth.r??
+                    "0x4277ba564d2c138823415df0ec8e8f97f30825056d54ec5128a8b29ec2dd81b2",
+                s: overrides.eip7702auth.s??
+                    "0x1075a1bec7f59848cca899ece93075199cd2aabceb0654b9ae00b881a30044cd",
+            } 
             userOperation = {
                 ...BaseUserOperationDummyValues,
                 sender: this.accountAddress,

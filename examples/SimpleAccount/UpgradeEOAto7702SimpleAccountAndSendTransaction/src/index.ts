@@ -4,6 +4,7 @@ import {
     getFunctionSelector,
     createCallData,
     sendJsonRpcRequest,
+    createAndSignEip7702DelegationAuthorization,
 } from "abstractionkit";
 
 async function main(): Promise<void> {
@@ -61,11 +62,18 @@ async function main(): Promise<void> {
         jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
         bundlerUrl, //the bundler rpc is used to estimate the gas limits.
         {
-            eoaDelegatorPrivateKey, // needed to comupte the r, s values of the eip7702auth
-            eoaDelegatorChainId: chainId, // chainId at which the account will be upgraded
-            // maxPriorityFeePerGas: 0x4b02333en, // uncomment to override the gas prices if holeskey is unstable  
+            eip7702auth:{
+                chainId: chainId, // chainId at which the account will be upgraded
+            }
         }
     );
+
+    userOperation.eip7702auth = createAndSignEip7702DelegationAuthorization(
+        BigInt(userOperation.eip7702auth.chainId),
+        userOperation.eip7702auth.address,
+        BigInt(userOperation.eip7702auth.nonce),
+        eoaDelegatorPrivateKey
+    )
 
     userOperation.signature = smartAccount.signUserOperation(
         userOperation,

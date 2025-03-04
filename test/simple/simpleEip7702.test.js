@@ -67,16 +67,21 @@ describe('simple account', () => {
             //uncomment the following values for polygon or any chains where
             //gas prices change rapidly
             {
-                eoaDelegatorPrivateKey:eoaDelegatorPrivateKey,
-                eoaDelegatorChainId:17000n,
+                eip7702auth:{
+                    chainId:BigInt(chainId)
+                },
             //    verificationGasLimitPercentageMultiplier:130
             //    maxFeePerGasPercentageMultiplier:130,
             //    maxPriorityFeePerGasPercentageMultiplier:130
-                maxPriorityFeePerGas:0x4b02333en
             }
         )
         expect(userOperation.sender).toBe(smartAccount.accountAddress);
-        
+        userOperation.eip7702auth = ak.createAndSignEip7702DelegationAuthorization(
+            BigInt(userOperation.eip7702auth.chainId),
+            userOperation.eip7702auth.address,
+            BigInt(userOperation.eip7702auth.nonce),
+            eoaDelegatorPrivateKey
+        )
         userOperation.signature = smartAccount.signUserOperation(
             userOperation,
             ownerPrivateKey,
