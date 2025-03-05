@@ -62,16 +62,16 @@ async function main(): Promise<void> {
         jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
         bundlerUrl, //the bundler rpc is used to estimate the gas limits.
         {
-            eip7702auth:{
+            eip7702Auth:{
                 chainId: chainId, // chainId at which the account will be upgraded
             }
         }
     );
 
-    userOperation.eip7702auth = createAndSignEip7702DelegationAuthorization(
-        BigInt(userOperation.eip7702auth.chainId),
-        userOperation.eip7702auth.address,
-        BigInt(userOperation.eip7702auth.nonce),
+    userOperation.eip7702Auth = createAndSignEip7702DelegationAuthorization(
+        BigInt(userOperation.eip7702Auth.chainId),
+        userOperation.eip7702Auth.address,
+        BigInt(userOperation.eip7702Auth.nonce),
         eoaDelegatorPrivateKey
     )
 

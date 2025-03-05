@@ -52,7 +52,7 @@ export interface CreateUserOperationOverrides {
 	gasLevel?: GasOption;
 	polygonGasStation?: PolygonChain;
 
-    eip7702auth?:{
+    eip7702Auth?:{
         chainId: bigint;
         address?: string;
         nonce?: bigint;
@@ -220,13 +220,13 @@ export class Simple7702Account extends SmartAccount {
         let eip7702AuthAddress:string|null = null; 
         let eip7702AuthNonce:bigint|null = null; 
 
-        if(overrides.eip7702auth != null){
-            eip7702AuthChainId = overrides.eip7702auth.chainId;
-            eip7702AuthAddress = overrides.eip7702auth.address??
+        if(overrides.eip7702Auth != null){
+            eip7702AuthChainId = overrides.eip7702Auth.chainId;
+            eip7702AuthAddress = overrides.eip7702Auth.address??
                 Simple7702Account.DEFAULT_DELEGATEE_ADDRESS;
-            eip7702AuthNonce = overrides.eip7702auth.nonce??null;
+            eip7702AuthNonce = overrides.eip7702Auth.nonce??null;
         }
-        if(overrides.eip7702auth != null && eip7702AuthNonce == null){
+        if(overrides.eip7702Auth != null && eip7702AuthNonce == null){
             //check for eip7702AuthNonce
             let eip7702AuthNonceOp;
             if (providerRpc != null) {
@@ -321,8 +321,8 @@ export class Simple7702Account extends SmartAccount {
 		}
         
 		let userOperation:UserOperationV7;
-        if(overrides.eip7702auth != null){
-            const yParity = overrides.eip7702auth.yParity?? "0x0";
+        if(overrides.eip7702Auth != null){
+            const yParity = overrides.eip7702Auth.yParity?? "0x0";
             if(
                 yParity != "0x0" && yParity != "0x00" &&
                 yParity != "0x1" && yParity != "0x01"
@@ -339,9 +339,9 @@ export class Simple7702Account extends SmartAccount {
                 address: eip7702AuthAddress as string,
                 nonce: bigintToHex(eip7702AuthNonce as bigint),
                 yParity: yParity,
-                r: overrides.eip7702auth.r??
+                r: overrides.eip7702Auth.r??
                     "0x4277ba564d2c138823415df0ec8e8f97f30825056d54ec5128a8b29ec2dd81b2",
-                s: overrides.eip7702auth.s??
+                s: overrides.eip7702Auth.s??
                     "0x1075a1bec7f59848cca899ece93075199cd2aabceb0654b9ae00b881a30044cd",
             } 
             userOperation = {
@@ -357,7 +357,7 @@ export class Simple7702Account extends SmartAccount {
                 paymasterVerificationGasLimit: null,
                 paymasterPostOpGasLimit: null,
                 paymasterData: null,
-                eip7702auth: authorization,
+                eip7702Auth: authorization,
             };
         }else{
             userOperation = {

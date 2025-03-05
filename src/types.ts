@@ -13,7 +13,7 @@ export interface BaseUserOperation {
 	maxFeePerGas: bigint;
 	maxPriorityFeePerGas: bigint;
 	signature: string;
-    eip7702auth?: Authorization7702Hex;
+    eip7702Auth?: Authorization7702Hex;
 }
 
 /**
