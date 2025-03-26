@@ -13,11 +13,10 @@ export interface BaseUserOperation {
 	maxFeePerGas: bigint;
 	maxPriorityFeePerGas: bigint;
 	signature: string;
-    eip7702Auth?: Authorization7702Hex;
 }
 
 /**
- * Wrapper for a useroperation for an entrypoint v0.06
+ * Wrapper for a useroperation for an entrypoint v0.6.0
  */
 export interface UserOperationV6 extends BaseUserOperation {
 	initCode: string;
@@ -25,7 +24,7 @@ export interface UserOperationV6 extends BaseUserOperation {
 }
 
 /**
- * Wrapper for a useroperation for an entrypoint v0.07
+ * Wrapper for a useroperation for an entrypoint v0.7.0
  */
 export interface UserOperationV7 extends BaseUserOperation {
 	factory: string | null;
@@ -34,6 +33,19 @@ export interface UserOperationV7 extends BaseUserOperation {
 	paymasterVerificationGasLimit: bigint | null;
 	paymasterPostOpGasLimit: bigint | null;
 	paymasterData: string | null;
+}
+
+/**
+ * Wrapper for a useroperation for an entrypoint v0.8.0
+ */
+export interface UserOperationV8 extends BaseUserOperation {
+	factory: string | null;
+	factoryData: string | null;
+	paymaster: string | null;
+	paymasterVerificationGasLimit: bigint | null;
+	paymasterPostOpGasLimit: bigint | null;
+	paymasterData: string | null;
+    eip7702Auth?: Authorization7702Hex;
 }
 
 export type AbiInputValue =

@@ -11,6 +11,7 @@ import {
 	GasOption,
 	JsonRpcResult,
 	UserOperationV7,
+	UserOperationV8,
     PolygonChain,
     PolygonGasStationJsonRpcResponse,
 } from "./types";
@@ -19,6 +20,25 @@ import {
 	BundlerErrorCodeDict,
 	ensureError,
 } from "./errors";
+import { ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8 } from "./constants";
+
+function buildDomainSeparatorV8(chainId: bigint): string{
+    // DOMAIN_NAME = "ERC4337"
+    const hashed_name = "0x364da28a5c92bcc87fe97c8813a6c6b8a3a049b0ea0a328fcb0b4f0e00337586"; 
+
+    // DOMAIN_VERSION = "1"
+    const hashed_version = "0xc89efdaa54c0f20c7adf612882df0950f5a951637e0307cdcb4c672f298b8bc6";
+
+    // TYPE_HASH = keccak("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+    const type_hash = "0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f";
+
+    const abiCoder = AbiCoder.defaultAbiCoder();
+    const encodedUserOperationHash = abiCoder.encode(
+        ["(bytes32,bytes32,bytes32,uint256,address)"],
+        [[type_hash, hashed_name, hashed_version, chainId, ENTRYPOINT_V8]],
+    );
+    return keccak256(encodedUserOperationHash);
+}
 
 /**
  * createUserOperationHash for the standard entrypointv0.6 hash
@@ -28,28 +48,39 @@ import {
  * @returns UserOperationHash
  */
 export function createUserOperationHash(
-	useroperation: UserOperationV6 | UserOperationV7,
+	useroperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
 	entrypointAddress: string,
 	chainId: bigint,
 ): string {
 	let packedUserOperationHash: string;
-	if ("initCode" in useroperation) {
+    const abiCoder = AbiCoder.defaultAbiCoder();
+	let userOperationHash;
+	if (entrypointAddress.toLowerCase() == ENTRYPOINT_V6.toLowerCase()) {
 		packedUserOperationHash = keccak256(
-			createPackedUserOperationV6(useroperation),
+			createPackedUserOperationV6(useroperation as UserOperationV6),
 		);
-	} else {
+        const encodedUserOperationHash = abiCoder.encode(
+            ["bytes32", "address", "uint256"],
+            [packedUserOperationHash, entrypointAddress, chainId],
+        );
+        userOperationHash = keccak256(encodedUserOperationHash);
+    }else if (entrypointAddress.toLowerCase() == ENTRYPOINT_V7.toLowerCase()) {
 		packedUserOperationHash = keccak256(
-			createPackedUserOperationV7(useroperation),
+			createPackedUserOperationV7(useroperation as UserOperationV7),
 		);
-	}
-
-	const abiCoder = AbiCoder.defaultAbiCoder();
-	const encodedUserOperationHash = abiCoder.encode(
-		["bytes32", "address", "uint256"],
-		[packedUserOperationHash, entrypointAddress, chainId],
-	);
-
-	const userOperationHash = keccak256(encodedUserOperationHash);
+        const encodedUserOperationHash = abiCoder.encode(
+            ["bytes32", "address", "uint256"],
+            [packedUserOperationHash, entrypointAddress, chainId],
+        );
+        userOperationHash = keccak256(encodedUserOperationHash);
+	}else{
+        packedUserOperationHash = keccak256(
+			createPackedUserOperationV8(useroperation as UserOperationV8),
+		);
+        const domainSeparator = buildDomainSeparatorV8(chainId);
+        userOperationHash = keccak256(
+            "0x1901" + domainSeparator.slice(2) + packedUserOperationHash.slice(2));
+    }
 
 	return userOperationHash;
 }
@@ -157,6 +188,91 @@ export function createPackedUserOperationV7(
 
 	const packedUserOperation = abiCoder.encode(
 		[
+			"address",
+			"uint256",
+			"bytes32",
+			"bytes32",
+			"bytes32",
+			"uint256",
+			"bytes32",
+			"bytes32",
+		],
+		useroperationValuesArrayWithHashedByteValues,
+	);
+	return packedUserOperation;
+}
+
+/**
+ * createPackedUserOperation for the standard entrypointv0.8 hash
+ * @param useroperation -useroperation to pack
+ * @returns packed UserOperation
+ */
+export function createPackedUserOperationV8(
+	useroperation: UserOperationV8,
+): string {
+	const abiCoder = AbiCoder.defaultAbiCoder();
+
+	let initCode = "0x";
+	if (useroperation.factory != null) {
+        const eip7702Auth = useroperation.eip7702Auth;
+        if (eip7702Auth != null && eip7702Auth.address != null){
+            initCode = eip7702Auth.address; 
+        }else{
+            initCode = useroperation.factory;
+        }
+        if (useroperation.factoryData != null) {
+            initCode += useroperation.factoryData.slice(2);
+        }
+	}
+
+	const accountGasLimits =
+		"0x" +
+		abiCoder
+			.encode(["uint128"], [useroperation.verificationGasLimit])
+			.slice(34) +
+		abiCoder.encode(["uint128"], [useroperation.callGasLimit]).slice(34);
+
+	const gasFees =
+		"0x" +
+		abiCoder
+			.encode(["uint128"], [useroperation.maxPriorityFeePerGas])
+			.slice(34) +
+		abiCoder.encode(["uint128"], [useroperation.maxFeePerGas]).slice(34);
+
+	let paymasterAndData = "0x";
+	if (useroperation.paymaster != null) {
+		paymasterAndData = useroperation.paymaster;
+		if (useroperation.paymasterVerificationGasLimit != null) {
+			paymasterAndData += abiCoder
+				.encode(["uint128"], [useroperation.paymasterVerificationGasLimit])
+				.slice(34);
+		}
+		if (useroperation.paymasterPostOpGasLimit != null) {
+			paymasterAndData += abiCoder
+				.encode(["uint128"], [useroperation.paymasterPostOpGasLimit])
+				.slice(34);
+		}
+		if (useroperation.paymasterData != null) {
+			paymasterAndData += useroperation.paymasterData.slice(2);
+		}
+	}
+
+	const useroperationValuesArrayWithHashedByteValues = [
+        // PACKED_USEROP_TYPEHASH
+        "0x29a0bca4af4be3421398da00295e58e6d7de38cb492214754cb6a47507dd6f8e",
+		useroperation.sender,
+		useroperation.nonce,
+		keccak256(initCode),
+		keccak256(useroperation.callData),
+		accountGasLimits,
+		useroperation.preVerificationGas,
+		gasFees,
+		keccak256(paymasterAndData),
+	];
+
+	const packedUserOperation = abiCoder.encode(
+		[
+			"bytes32",
 			"address",
 			"uint256",
 			"bytes32",
