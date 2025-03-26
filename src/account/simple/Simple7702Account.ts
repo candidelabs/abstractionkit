@@ -1,7 +1,7 @@
 import { SmartAccount } from "../SmartAccount";
-import { BaseUserOperationDummyValues, ENTRYPOINT_V7 } from "src/constants";
+import { BaseUserOperationDummyValues, ENTRYPOINT_V8 } from "src/constants";
 import { createCallData, createUserOperationHash, fetchAccountNonce, handlefetchGasPrice, sendJsonRpcRequest } from "../../utils";
-import { GasOption, PolygonChain, StateOverrideSet, UserOperationV7 } from "src/types";
+import { GasOption, PolygonChain, StateOverrideSet, UserOperationV8 } from "src/types";
 import { AbstractionKitError } from "src/errors";
 import { Authorization7702Hex, bigintToHex } from "src/utils7702";
 import { Bundler } from "src/Bundler";
@@ -65,8 +65,8 @@ export interface CreateUserOperationOverrides {
 
 export class Simple7702Account extends SmartAccount {
 	static readonly DEFAULT_DELEGATEE_ADDRESS =
-        "0x6C193e88c2C6ACB0897d162E9496156BfFF73C0F";
-	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V7;
+        "0xe6Cae83BdE06E4c305530e199D7217f42808555B";
+	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V8;
 
 	static readonly executorFunctionSelector = "0xb61d27f6"; //execute
 	static readonly executorFunctionInputAbi: string[] = [
@@ -165,7 +165,7 @@ export class Simple7702Account extends SmartAccount {
 		providerRpc?: string,
 		bundlerRpc?: string,
 		overrides: CreateUserOperationOverrides = {},
-	): Promise<UserOperationV7> {
+	): Promise<UserOperationV8> {
         if (transactions.length < 1) {
 			throw RangeError("There should be at least one transaction");
 		}
@@ -320,7 +320,7 @@ export class Simple7702Account extends SmartAccount {
 			callData = overrides.callData;
 		}
         
-		let userOperation:UserOperationV7;
+		let userOperation:UserOperationV8;
         if(overrides.eip7702Auth != null){
             const yParity = overrides.eip7702Auth.yParity?? "0x0";
             if(
@@ -351,7 +351,7 @@ export class Simple7702Account extends SmartAccount {
                 callData: callData,
                 maxFeePerGas: maxFeePerGas,
                 maxPriorityFeePerGas: maxPriorityFeePerGas,
-                factory: null,
+                factory: "0x7702",
                 factoryData: null,
                 paymaster: null,
                 paymasterVerificationGasLimit: null,
@@ -394,16 +394,8 @@ export class Simple7702Account extends SmartAccount {
 				userOperation.maxFeePerGas = 0n;
 				userOperation.maxPriorityFeePerGas = 0n;
 
-				let userOperationToEstimate: UserOperationV7;
-                userOperationToEstimate = {
-                    ...userOperation,
-                    factory: null,
-                    factoryData: null,
-                    paymaster: null,
-                    paymasterVerificationGasLimit: null,
-                    paymasterPostOpGasLimit: null,
-                    paymasterData: null,
-                };
+				let userOperationToEstimate: UserOperationV8;
+                userOperationToEstimate = { ...userOperation };
 
 				userOperation.signature = overrides.dummySignature??
                     Simple7702Account.dummySignature;;
@@ -490,7 +482,7 @@ export class Simple7702Account extends SmartAccount {
 	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
 	 */
     public async estimateUserOperationGas(
-		userOperation: UserOperationV7,
+		userOperation: UserOperationV8,
 		bundlerRpc: string,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
@@ -531,7 +523,7 @@ export class Simple7702Account extends SmartAccount {
 	 * @returns signature
 	 */
     public signUserOperation(
-		useroperation: UserOperationV7,
+		useroperation: UserOperationV8,
 		privateKey: string,
 		chainId: bigint,
     ): string {
@@ -552,7 +544,7 @@ export class Simple7702Account extends SmartAccount {
 	 * @returns promise with SendUseroperationResponse
 	 */
 	public async sendUserOperation(
-		userOperation: UserOperationV7,
+		userOperation: UserOperationV8,
 		bundlerRpc: string,
 	): Promise<SendUseroperationResponse> {
 		const bundler = new Bundler(bundlerRpc);
