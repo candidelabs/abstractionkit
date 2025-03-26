@@ -9,8 +9,8 @@ const eoaPrivateKey=process.env.PRIVATE_KEY1
 
 describe('eip7702', () => {
     test('test1' , async() => {
-        const chainId = 7078815900;
-        const nodeRpc = "https://rpc.mekong.ethpandaops.io";
+        const chainId = 11155111;
+        const nodeRpc = "https://ethereum-sepolia-rpc.publicnode.com";
         const eoaWallet = new ethers.Wallet(eoaPrivateKey);
 
         const nonce = await ak.sendJsonRpcRequest(
