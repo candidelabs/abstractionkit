@@ -43,10 +43,10 @@
   dependencies:
     undici-types "~6.19.2"
 
-abstractionkit@0.2.14:
-  version "0.2.14"
-  resolved "https://registry.yarnpkg.com/abstractionkit/-/abstractionkit-0.2.14.tgz#17e42cb5e68a88de45e0be3ad836d5223ac4a835"
-  integrity sha512-ziC/DDScch9HjJFaTkzOsau38FMFc9riTfe+tqgIZ/KqayvbQRMy3xi8zjEpFYox4+TvUR1tba+b2YVlPbegEQ==
+abstractionkit@0.2.15:
+  version "0.2.15"
+  resolved "https://registry.yarnpkg.com/abstractionkit/-/abstractionkit-0.2.15.tgz#4c126382b4f7c4a4b8f7f4a95564323dc6d08891"
+  integrity sha512-csaQ+JxfhHrTTxCPUpddl2SmPyiic7xUoTRAsNplYN17qZQxwGZYK1zSYKBc+mt1+8oeOBLQUzSSq8jK1EML4w==
   dependencies:
     ethers "^6.13.2"
     isomorphic-unfetch "^3.1.0"
@@ -132,9 +132,9 @@ emoji-regex@^9.2.2:
   integrity sha512-L18DaJsXSUk2+42pv8mLs5jJT2hqFkFE4j21wOmgbUqsZ2hL72NsUU785g9RXgo3s0ZNgVl42TiHp3ZtOv/Vyg==
 
 ethers@^6.13.2:
-  version "6.13.4"
-  resolved "https://registry.yarnpkg.com/ethers/-/ethers-6.13.4.tgz#bd3e1c3dc1e7dc8ce10f9ffb4ee40967a651b53c"
-  integrity sha512-21YtnZVg4/zKkCQPjrDj38B1r4nQvTZLopUGMLQ1ePU2zV/joCfDC3t3iKQjWRzjjjbzR+mdAIoikeBRNkdllA==
+  version "6.13.5"
+  resolved "https://registry.yarnpkg.com/ethers/-/ethers-6.13.5.tgz#8c1d6ac988ac08abc3c1d8fabbd4b8b602851ac4"
+  integrity sha512-+knKNieu5EKRThQJWwqaJ10a6HE9sSehGeqWN65//wE7j47ZpFhKAnHB/JJFibwwg61I/koxaPsXbXpD/skNOQ==
   dependencies:
     "@adraffy/ens-normalize" "1.10.1"
     "@noble/curves" "1.2.0"
