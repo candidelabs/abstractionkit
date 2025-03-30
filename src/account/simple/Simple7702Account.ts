@@ -373,6 +373,7 @@ export class Simple7702Account extends SmartAccount {
                 paymasterVerificationGasLimit: null,
                 paymasterPostOpGasLimit: null,
                 paymasterData: null,
+                eip7702Auth: null,
             };
         }
         let preVerificationGas = BaseUserOperationDummyValues.preVerificationGas;

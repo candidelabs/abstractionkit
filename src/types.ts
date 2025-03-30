@@ -45,7 +45,7 @@ export interface UserOperationV8 extends BaseUserOperation {
 	paymasterVerificationGasLimit: bigint | null;
 	paymasterPostOpGasLimit: bigint | null;
 	paymasterData: string | null;
-    eip7702Auth?: Authorization7702Hex;
+    eip7702Auth: Authorization7702Hex | null;
 }
 
 export type AbiInputValue =
