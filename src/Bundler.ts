@@ -1,6 +1,7 @@
 import type {
 	UserOperationV6,
 	UserOperationV7,
+	UserOperationV8,
 	GasEstimationResult,
 	UserOperationByHashResult,
 	UserOperationReceipt,
@@ -83,7 +84,7 @@ export class Bundler {
 	 * @returns promise with GasEstimationResult
 	 */
 	async estimateUserOperationGas(
-		useroperation: UserOperationV6 | UserOperationV7,
+		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
 		entrypointAddress: string,
 		state_override_set?: StateOverrideSet,
 	): Promise<GasEstimationResult> {
@@ -130,7 +131,7 @@ export class Bundler {
 	 * @returns promise with useroperationhash
 	 */
 	async sendUserOperation(
-		useroperation: UserOperationV6 | UserOperationV7,
+		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
 		entrypointAddress: string,
 	): Promise<string> {
 		try {
