@@ -34,4 +34,7 @@ export interface CreatePaymasterUserOperationOverrides {
 
 	/** pass some state overrides for gas estimation"*/
 	state_override_set?: StateOverrideSet;
+
+	/** set the entrypoint address intead of determining it from the useroperation structure.*/
+    entrypoint?: string;
 }

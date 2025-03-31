@@ -145,6 +145,8 @@ export type PmUserOperationV7Result = {
 	sponsorMetadata?: SponsorMetadata;
 };
 
+export type PmUserOperationV8Result = PmUserOperationV7Result;
+
 export type PmUserOperationV6Result = {
 	paymasterAndData: string;
 	callGasLimit?: bigint;
@@ -217,6 +219,8 @@ export interface PaymasterMetadataV7 extends BasePaymasterMetadata {
 	};
 }
 
+export interface PaymasterMetadataV8 extends PaymasterMetadataV7 {};
+
 export interface PaymasterMetadataV6 extends BasePaymasterMetadata {
 	/** dummyPaymasterAndData to use for gas estimation */
 	dummyPaymasterAndData: string;
@@ -229,6 +233,8 @@ export interface SupportedERC20TokensAndMetadataV7 {
 	paymasterMetadata: PaymasterMetadataV7;
 	tokens: ERC20Token[];
 }
+
+export interface SupportedERC20TokensAndMetadataV8 extends SupportedERC20TokensAndMetadataV7 {}
 
 /**
  * Paymaster metadata and supported erc20 tokens
@@ -245,6 +251,8 @@ export interface SupportedERC20TokensAndMetadataV7WithExchangeRate {
 	paymasterMetadata: PaymasterMetadataV7;
 	tokens: ERC20TokenWithExchangeRate[];
 }
+
+export interface SupportedERC20TokensAndMetadataV8WithExchangeRate extends SupportedERC20TokensAndMetadataV7WithExchangeRate {};
 
 /**
  * Paymaster metadata and supported erc20 tokens
