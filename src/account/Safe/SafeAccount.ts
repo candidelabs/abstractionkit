@@ -27,6 +27,7 @@ import {
 	UserOperationV7,
     GasOption,
     PolygonChain,
+    OnChainIdentifierParamsType,
 } from "../../types";
 import {
 	createCallData,
@@ -107,10 +108,16 @@ export class SafeAccount extends SmartAccount {
 	protected factoryAddress: string | null;
 	protected factoryData: string | null;
 
+    readonly onChainIdentifier: string | null;
+
 	constructor(
 		accountAddress: string,
 		safe4337ModuleAddress: string,
 		entrypointAddress: string,
+        overrides: {
+            onChainIdentifierParams?: OnChainIdentifierParamsType;
+            onChainIdentifier?: string;
+        } = {}
 	) {
 		super(accountAddress);
 		this.entrypointAddress = entrypointAddress;
@@ -119,6 +126,33 @@ export class SafeAccount extends SmartAccount {
 		this.factoryData = null;
 
 		this.isInitWebAuthn = false;
+        
+        if(
+            overrides.onChainIdentifierParams != null &&
+            overrides.onChainIdentifier != null
+        ){
+			throw RangeError(
+                "can't override both onChainIdentifier and onChainIdentifierParams"
+            );
+        }else if(overrides.onChainIdentifierParams != null){
+            this.onChainIdentifier = generateOnChainIdentifier(
+                overrides.onChainIdentifierParams.project,
+                overrides.onChainIdentifierParams.platform,
+                overrides.onChainIdentifierParams.tool,
+                overrides.onChainIdentifierParams.toolVersion,
+            );
+        }else if(overrides.onChainIdentifier != null){
+            let onChainIdentifier = overrides.onChainIdentifier;
+            if (onChainIdentifier.startsWith("0x")){
+                onChainIdentifier = onChainIdentifier.slice(2);
+            }
+            if(onChainIdentifier.length != 64){
+                throw RangeError("onChainIdentifier length must be 64.");
+            }
+            this.onChainIdentifier = onChainIdentifier;
+        }else{
+            this.onChainIdentifier = null;
+        }
 	}
 
 	/**
@@ -1473,6 +1507,10 @@ export class SafeAccount extends SmartAccount {
 			callData = overrides.callData;
 		}
 
+        if(this.onChainIdentifier != null){
+            callData = callData + this.onChainIdentifier;
+        }
+
 		const userOperation = {
 			...BaseUserOperationDummyValues,
 			sender: this.accountAddress,
@@ -2768,4 +2806,34 @@ export class SafeAccount extends SmartAccount {
             value: 0n
         }
     }
+}
+
+/**
+ * generate  Safe on-chain identifier as per https://docs.safe.global/sdk/onchain-tracking
+ * @param project - project name
+ * @param platform - "Web" or "Mobile" or "Safe App" or "Widget", defaults to "Web".
+ * @param tool - tool used, defaults to "abstractionkit"
+ * @param toolVersion - tool version, defaults to current abstractionkit version
+ * @returns the onchain idenetifier as a hex string (not 0x prefixed)
+ */
+function generateOnChainIdentifier(
+    project: string,
+    platform: "Web" | "Mobile" | "Safe App" | "Widget" = "Web",
+    tool: string = "abstractionkit",
+    toolVersion: string = "0.2.15"
+): string {
+    const identifierPrefix = '5afe'; // Safe identifier prefix
+    const identifierVersion = '00'; // First version
+    const projectHash = keccak256("0x" + Buffer.from(project, 'utf8').toString('hex')).slice(-20);
+    const platformHash = keccak256("0x" + Buffer.from(platform, 'utf8').toString('hex')).slice(-3);
+    const toolHash = keccak256("0x" + Buffer.from(tool, 'utf8').toString('hex')).slice(-3);
+    const toolVersionHash = keccak256("0x" + Buffer.from(toolVersion, 'utf8').toString('hex')).slice(-3);
+    
+    const projectHashEncoded = Buffer.from(projectHash, 'utf8').toString('hex');
+    const platformHashEncoded = Buffer.from(platformHash, 'utf8').toString('hex');
+    const toolHashEncoded = Buffer.from(toolHash, 'utf8').toString('hex');
+    const toolVersionHashEncoded = Buffer.from(toolVersionHash, 'utf8').toString('hex');
+
+    const res = `${identifierPrefix}${identifierVersion}${projectHashEncoded}${platformHashEncoded}${toolHashEncoded}${toolVersionHashEncoded}`;
+    return res;
 }

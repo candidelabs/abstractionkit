@@ -7,7 +7,7 @@ import {
     SafeUserOperationV7TypedMessageValue,
 } from "./types";
 
-import { UserOperationV7, MetaTransaction } from "../../types";
+import { UserOperationV7, MetaTransaction, OnChainIdentifierParamsType } from "../../types";
 import { ENTRYPOINT_V7 } from "src/constants";
 
 export class SafeAccountV0_3_0 extends SafeAccount {
@@ -22,6 +22,8 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		overrides: {
 			safe4337ModuleAddress?: string;
 			entrypointAddress?: string;
+            onChainIdentifierParams?: OnChainIdentifierParamsType;
+            onChainIdentifier?: string
 		} = {},
 	) {
 		const safe4337ModuleAddress =
@@ -30,8 +32,14 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		const entrypointAddress =
 			overrides.entrypointAddress ??
 			SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS;
-
-		super(accountAddress, safe4337ModuleAddress, entrypointAddress);
+    
+        super(
+            accountAddress, safe4337ModuleAddress, entrypointAddress,
+            {
+                onChainIdentifierParams: overrides.onChainIdentifierParams,
+                onChainIdentifier: overrides.onChainIdentifier
+            }
+        );
 	}
 
 	/**
@@ -104,6 +112,8 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		const safe = new SafeAccountV0_3_0(accountAddress, {
 			safe4337ModuleAddress: overrides.safe4337ModuleAddress,
 			entrypointAddress: overrides.entrypointAddress,
+            onChainIdentifierParams: overrides.onChainIdentifierParams,
+            onChainIdentifier: overrides.onChainIdentifier
 		});
 		safe.factoryAddress = factoryAddress;
 		safe.factoryData = factoryData;

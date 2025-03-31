@@ -316,3 +316,13 @@ export type PolygonGasStationJsonRpcResponse = {
     blockNumber:number;
 };
 
+export type OnChainIdentifierParamsType = {
+  /** Project name */
+  project: string
+  /** "Web" or "Mobile" or "Safe App" or "Widget", defaults to "Web". */
+  platform?:  "Web" | "Mobile" | "Safe App" | "Widget",
+  /** tool used, defaults to "abstractionkit" */
+  tool?: string
+  /** tool version, defaults to current abstractionkit version */
+  toolVersion?: string
+}

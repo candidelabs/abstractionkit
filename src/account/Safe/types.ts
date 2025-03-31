@@ -1,4 +1,4 @@
-import type { GasOption, StateOverrideSet, PolygonChain } from "../../types";
+import type { GasOption, StateOverrideSet, PolygonChain, OnChainIdentifierParamsType } from "../../types";
 
 /**
  * Overrides for the "createBaseUserOperationAndFactoryAddressAndFactoryData" function
@@ -103,6 +103,9 @@ export interface InitCodeOverrides {
 	webAuthnSharedSigner?: string;
 	eip7212WebAuthnPrecompileVerifierForSharedSigner?: string;
 	eip7212WebAuthnContractVerifierForSharedSigner?: string;
+
+    onChainIdentifierParams?: OnChainIdentifierParamsType;
+    onChainIdentifier?: string;
 }
 
 export interface BaseInitOverrides {

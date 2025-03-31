@@ -8,7 +8,7 @@ import {
     SafeUserOperationV6TypedMessageValue,
 } from "./types";
 
-import { UserOperationV6, MetaTransaction } from "../../types";
+import { UserOperationV6, MetaTransaction, OnChainIdentifierParamsType } from "../../types";
 import { ENTRYPOINT_V6 } from "src/constants";
 import { createCallData } from "src/utils";
 import { SafeAccountV0_3_0 } from "./SafeAccountV0_3_0";
@@ -25,6 +25,8 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		overrides: {
 			safe4337ModuleAddress?: string;
 			entrypointAddress?: string;
+            onChainIdentifierParams?: OnChainIdentifierParamsType;
+            onChainIdentifier?: string
 		} = {},
 	) {
 		const safe4337ModuleAddress =
@@ -34,7 +36,13 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			overrides.entrypointAddress ??
 			SafeAccountV0_2_0.DEFAULT_ENTRYPOINT_ADDRESS;
 
-		super(accountAddress, safe4337ModuleAddress, entrypointAddress);
+		super(
+            accountAddress, safe4337ModuleAddress, entrypointAddress,
+            {
+                onChainIdentifierParams: overrides.onChainIdentifierParams,
+                onChainIdentifier: overrides.onChainIdentifier
+            }
+        );
 	}
 
 	/**
@@ -119,6 +127,8 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		const safe = new SafeAccountV0_2_0(accountAddress, {
 			safe4337ModuleAddress: overrides.safe4337ModuleAddress,
 			entrypointAddress: overrides.entrypointAddress,
+            onChainIdentifierParams: overrides.onChainIdentifierParams,
+            onChainIdentifier: overrides.onChainIdentifier
 		});
 		safe.factoryAddress = factoryAddress;
 		safe.factoryData = factoryData;
