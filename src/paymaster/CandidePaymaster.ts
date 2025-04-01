@@ -75,7 +75,7 @@ export class CandidePaymaster extends Paymaster {
 				const supportedTokensAndMetadataResultV8 =
 					await this.getSupportedERC20TokensAndPaymasterMetadata(ENTRYPOINT_V8);
 
-				this.entrypointDataV7 =
+				this.entrypointDataV8 =
 					(supportedTokensAndMetadataResultV8 as SupportedERC20TokensAndMetadataV8) ??
 					null;
 			}
