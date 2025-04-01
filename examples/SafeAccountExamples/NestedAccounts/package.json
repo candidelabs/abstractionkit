@@ -14,7 +14,7 @@
     "dotenv": "^16.3.1",
     "ethers": "^6.6.7",
     "typescript": "^5.1.6",
-    "abstractionkit": "^0.2.15"
+    "abstractionkit": "^0.2.16"
   },
   "devDependencies": {
     "rimraf": "^5.0.10"
