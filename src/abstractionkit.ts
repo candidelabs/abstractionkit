@@ -70,6 +70,7 @@ export {
 export {
 	UserOperationV6,
 	UserOperationV7,
+	UserOperationV8,
 	AbiInputValue,
 	JsonRpcParam,
 	JsonRpcResponse,
