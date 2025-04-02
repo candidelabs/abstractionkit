@@ -3,11 +3,10 @@ import {
     Simple7702Account,
     getFunctionSelector,
     createCallData,
-    sendJsonRpcRequest,
     createAndSignEip7702DelegationAuthorization,
     CandidePaymaster,
 } from "abstractionkit";
-import { ethers } from 'ethers';
+import { Wallet } from 'ethers';
 
 async function main(): Promise<void> {
     //get values from .env
@@ -16,10 +15,10 @@ async function main(): Promise<void> {
     const bundlerUrl = process.env.BUNDLER_URL as string
     const jsonRpcNodeProvider = process.env.JSON_RPC_NODE_PROVIDER as string;
     
-    const eoaDelegator = ethers.Wallet.createRandom();
+    const eoaDelegator = Wallet.createRandom();
     const eoaDelegatorPublicAddress = eoaDelegator.address;
     const eoaDelegatorPrivateKey = eoaDelegator.privateKey;
-    const paymasterRPC = process.env.PAYMASTER_RPC as string;
+    const paymasterUrl = process.env.PAYMASTER_URL as string;
     const sponsorshipPolicyId = process.env.SPONSORSHIP_POLICY_ID as string;
 
 
@@ -70,7 +69,7 @@ async function main(): Promise<void> {
 
     
     let paymaster: CandidePaymaster = new CandidePaymaster(
-        paymasterRPC
+        paymasterUrl
     )
 
     let [paymasterUserOperation, _sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(

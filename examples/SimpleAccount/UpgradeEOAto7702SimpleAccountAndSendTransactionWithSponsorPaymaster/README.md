@@ -17,8 +17,7 @@ This examples demonstrate how to upgrade an EOA to a Smart Account with EIP-7702
 [Simple7702Account.sol](https://github.com/eth-infinitism/account-abstraction/blob/develop/contracts/accounts/Simple7702Account.sol) is a fully audited minimalist smart contract account that can be safely authorized by any EOA. It adds full support for major smart account features like batching and gas sponsorship.
 
 > [!NOTE]
-This example runs on Sepolia, a testnet that supports EIP-7702 throught the Pectra upgrade. You will need to fund the EOA Account with sepETH first as no paymaster is used in this example. 
-
+This example runs on Sepolia, a testnet that supports EIP-7702 throught the Pectra upgrade.
 
 # How to use this example
 
