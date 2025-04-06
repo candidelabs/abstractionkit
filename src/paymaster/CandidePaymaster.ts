@@ -443,13 +443,9 @@ export class CandidePaymaster extends Paymaster {
 			//only estimate gas if:
 			//1-paymaster v1 or v2(only supports entrypoint v0.06)
 			//2-token paymaster v3(supports both entrypoints)
-			//don't estimategas for sponsor paymaster v3(it will be overriden by
+			//don't estimategas for v3(it will be overriden by
 			//the paymaster anyway)
-			if (
-				this.version == "v1" ||
-				this.version == "v2" ||
-				("token" in context && context.token != null)
-			) {
+			if (this.version == "v2") {
 				let preVerificationGas = userOperation.preVerificationGas;
 				let verificationGasLimit = userOperation.verificationGasLimit;
 				let callGasLimit = userOperation.callGasLimit;
@@ -573,7 +569,7 @@ export class CandidePaymaster extends Paymaster {
 						null
 				) {
 					throw RangeError(
-						"you can't use any gas overrides for sponsor paymaster v3," +
+						"you can't use any gas overrides for paymaster v3," +
 							" as it will estimate gas and override any provided values.",
 					);
 				}
@@ -586,6 +582,7 @@ export class CandidePaymaster extends Paymaster {
 				[userOperation, entrypointAddress, context],
 			);
 			const result = jsonRpcResult as
+				| PmUserOperationV8Result
 				| PmUserOperationV7Result
 				| PmUserOperationV6Result;
 			const resultMod = {
@@ -728,36 +725,31 @@ export class CandidePaymaster extends Paymaster {
 		userOperation: UserOperationV8,
 		tokenAddress: string,
 		bundlerRpc: string,
-		overrides?: CreatePaymasterUserOperationOverrides,
 	): Promise<UserOperationV8>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV7,
 		tokenAddress: string,
 		bundlerRpc: string,
-		overrides?: CreatePaymasterUserOperationOverrides,
 	): Promise<UserOperationV7>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV6,
 		tokenAddress: string,
 		bundlerRpc: string,
-		overrides?: CreatePaymasterUserOperationOverrides,
 	): Promise<UserOperationV6>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV7 | UserOperationV6,
 		tokenAddress: string,
 		bundlerRpc: string,
-		overrides: CreatePaymasterUserOperationOverrides = {},
 	): Promise<UserOperationV8 | UserOperationV7 | UserOperationV6> {
-		const createPaymasterUserOperationOverrides = overrides;
 		try {
 			if (!this.isInitilized) {
 				await this.initialize();
 			}
 
-			let entrypoint = overrides.entrypoint;
+			let entrypoint;
             if (entrypoint == null){
                 if ("initCode" in userOperation) {
                     entrypoint = ENTRYPOINT_V6;
@@ -798,8 +790,7 @@ export class CandidePaymaster extends Paymaster {
 					bundlerRpc,
 					{
 						token: tokenAddress,
-					},
-					createPaymasterUserOperationOverrides,
+					}
 				);
 				return resultUserOp;
             } else if ("eip7702Auth" in userOperation) {
@@ -808,8 +799,7 @@ export class CandidePaymaster extends Paymaster {
 					bundlerRpc,
 					{
 						token: tokenAddress,
-					},
-					createPaymasterUserOperationOverrides,
+					}
 				);
 				return resultUserOp;
 			} else {
@@ -818,8 +808,7 @@ export class CandidePaymaster extends Paymaster {
 					bundlerRpc,
 					{
 						token: tokenAddress,
-					},
-					createPaymasterUserOperationOverrides,
+					}
 				);
 				return resultUserOp;
 			}
