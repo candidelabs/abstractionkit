@@ -14,24 +14,24 @@ async function main(): Promise<void> {
     const bundlerUrl = process.env.BUNDLER_URL as string
     const jsonRpcNodeProvider = process.env.JSON_RPC_NODE_PROVIDER as string;
 
-    const eoaDelegatorPublicKey = process.env.PUBLIC_ADDRESS as string;
+    const eoaDelegatorPublicAddress = process.env.PUBLIC_ADDRESS as string;
     const eoaDelegatorPrivateKey = process.env.PRIVATE_KEY as string;
 
     // check balance of EOA before executing the upgrade userOp
     const balance = await sendJsonRpcRequest(
         jsonRpcNodeProvider,
         "eth_getBalance",
-        [eoaDelegatorPublicKey, "latest",]
+        [eoaDelegatorPublicAddress, "latest",]
     ) as string; 
 
     if (BigInt(balance) === 0n) {
         console.log("Please fund the EOA Address with a sufficient balance of the native token to proceed");
-        console.log("Address: ", eoaDelegatorPublicKey);
+        console.log("Address: ", eoaDelegatorPublicAddress);
         return;
     }
 
     // initiate the smart account
-    const smartAccount = new Simple7702Account(eoaDelegatorPublicKey);
+    const smartAccount = new Simple7702Account(eoaDelegatorPublicAddress);
 
     // We will be mitting two random NFTs in a single txs
     const nftContractAddress = "0x9a7af758aE5d7B6aAE84fe4C5Ba67c041dFE5336";
