@@ -34,7 +34,7 @@ export class CandidePaymaster extends Paymaster {
 	private entrypointDataV8: SupportedERC20TokensAndMetadataV8 | undefined;
 	private entrypointDataV7: SupportedERC20TokensAndMetadataV7 | undefined;
 	private entrypointDataV6: SupportedERC20TokensAndMetadataV6 | undefined;
-	private isInitilized = false;
+	private initialized = false;
 
 	constructor(rpcUrl: string) {
 		super();
@@ -62,13 +62,13 @@ export class CandidePaymaster extends Paymaster {
 				this.version = "v1";
 			} else {
 				throw RangeError(
-					"Invalide paymaster version received from paymaster rpc",
+					"Invalid paymaster version received from paymaster rpc",
 				);
 			}
 
-			const entrypointsAddresses = await this.getSupportedEntrypointsLive();
+			const supportedEntrypoints = await this.getSupportedEntrypointsLive();
 			if (
-				entrypointsAddresses.some(
+				supportedEntrypoints.some(
 					(x) => x.toLowerCase() === ENTRYPOINT_V8.toLowerCase(),
 				)
 			) {
@@ -81,7 +81,7 @@ export class CandidePaymaster extends Paymaster {
 			}
             
             if (
-				entrypointsAddresses.some(
+				supportedEntrypoints.some(
 					(x) => x.toLowerCase() === ENTRYPOINT_V7.toLowerCase(),
 				)
 			) {
@@ -94,7 +94,7 @@ export class CandidePaymaster extends Paymaster {
 			}
 
 			if (
-				entrypointsAddresses.some(
+				supportedEntrypoints.some(
 					(x) => x.toLowerCase() === ENTRYPOINT_V6.toLowerCase(),
 				)
 			) {
@@ -111,9 +111,9 @@ export class CandidePaymaster extends Paymaster {
                 this.entrypointDataV7 == null &&
                 this.entrypointDataV6 == null
             ) {
-				throw RangeError("Invalide data received during initilization.");
+				throw RangeError("Invalid data received during initialization.");
 			}
-			this.isInitilized = true;
+			this.initialized = true;
 			return null;
 		} catch (err) {
 			const error = ensureError(err);
@@ -136,7 +136,7 @@ export class CandidePaymaster extends Paymaster {
         SupportedERC20TokensAndMetadataV6 |
         null
 	> {
-		if (!this.isInitilized) {
+		if (!this.initialized) {
 			try {
 				let jsonRpcResult;
 				if (this.version == "v3") {
@@ -251,26 +251,26 @@ export class CandidePaymaster extends Paymaster {
 	 * @returns a promise of a list of entrypoints addresses
 	 */
 	async getSupportedEntrypoints(): Promise<string[]> {
-		if (!this.isInitilized) {
+		if (!this.initialized) {
 			await this.initialize();
 		}
-		const suppotedEntrypoints = [];
+		const supportedEntrypoints = [];
         if (this.entrypointDataV8 != null) {
-			suppotedEntrypoints.push(ENTRYPOINT_V8);
+			supportedEntrypoints.push(ENTRYPOINT_V8);
 		}
 		if (this.entrypointDataV7 != null) {
-			suppotedEntrypoints.push(ENTRYPOINT_V7);
+			supportedEntrypoints.push(ENTRYPOINT_V7);
 		}
 		if (this.entrypointDataV6 != null) {
-			suppotedEntrypoints.push(ENTRYPOINT_V6);
+			supportedEntrypoints.push(ENTRYPOINT_V6);
 		}
-		return suppotedEntrypoints;
+		return supportedEntrypoints;
 	}
 
 	async getPaymasterMetaData(
 		entrypoint: string,
 	): Promise<PaymasterMetadataV8 | PaymasterMetadataV7 | PaymasterMetadataV6 | null> {
-		if (!this.isInitilized) {
+		if (!this.initialized) {
 			await this.initialize();
 		}
 
@@ -316,7 +316,7 @@ export class CandidePaymaster extends Paymaster {
 		erc20TokenAddress: string,
 		entrypoint: string = ENTRYPOINT_V7,
 	): Promise<ERC20Token | null> {
-		if (!this.isInitilized) {
+		if (!this.initialized) {
 			await this.initialize();
 		}
 		let supportedTokens: ERC20Token[];
@@ -353,32 +353,32 @@ export class CandidePaymaster extends Paymaster {
 	 * gas limits will only change if the estimated gas limits returned by
 	 * the bundler is more than the input gas limits, then gas overrides
 	 * and multipliers will be applied
-	 * @param useroperation - useroperation to add paymaster support for
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param context - paymaster context data
-	 * @param overrides - overrides for the default values
-	 * @returns promise of UserOperation and SponsorMetadata
+	 * @param userOperation - User operation that requests the paymaster sponsorship
+	 * @param bundlerRpc - Bundler endpoint rpc url
+	 * @param context - Paymaster context data
+	 * @param overrides - Overrides for the default values
+	 * @returns a promise of [UserOperationV8 | UserOperationV7 | UserOperationV6, SponsorMetadata | undefined]
 	 */
     async createPaymasterUserOperation(
-		userOperationInput: UserOperationV8,
+		userOperation: UserOperationV8,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
 		overrides?: CreatePaymasterUserOperationOverrides,
 	): Promise<[UserOperationV8, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
-		userOperationInput: UserOperationV7,
+		userOperation: UserOperationV7,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
 		overrides?: CreatePaymasterUserOperationOverrides,
 	): Promise<[UserOperationV7, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
-		userOperationInput: UserOperationV6,
+		userOperation: UserOperationV6,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
 		overrides?: CreatePaymasterUserOperationOverrides,
 	): Promise<[UserOperationV6, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
-		userOperationInput: UserOperationV8 | UserOperationV7 | UserOperationV6,
+		userOperation: UserOperationV8 | UserOperationV7 | UserOperationV6,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
 		overrides?: CreatePaymasterUserOperationOverrides,
@@ -393,8 +393,8 @@ export class CandidePaymaster extends Paymaster {
 		if (createPaymasterUserOperationOverrides == null) {
 			createPaymasterUserOperationOverrides = {};
 		}
-		const userOperation = { ...userOperationInput };
-		if (!this.isInitilized) {
+		userOperation = { ...userOperation };
+		if (!this.initialized) {
 			await this.initialize();
 		}
 		let sponsorMetadata = undefined;
@@ -403,7 +403,7 @@ export class CandidePaymaster extends Paymaster {
             if(entrypointAddress == null){
                 if ("initCode" in userOperation) {
                     if (this.entrypointDataV6 == null) {
-                        throw RangeError("useroperation v0.06 is not supported");
+                        throw RangeError("UserOperation v0.06 is not supported");
                     }
                     entrypointAddress = ENTRYPOINT_V6;
 
@@ -412,7 +412,7 @@ export class CandidePaymaster extends Paymaster {
                         paymasterMetadata.dummyPaymasterAndData;
                 } else if ("eip7702Auth" in userOperation) {
                     if (this.entrypointDataV8 == null) {
-                        throw RangeError("useroperation v0.08 is not supported");
+                        throw RangeError("UserOperation v0.08 is not supported");
                     }
                     entrypointAddress = ENTRYPOINT_V8;
 
@@ -426,7 +426,7 @@ export class CandidePaymaster extends Paymaster {
                     userOperation.paymasterData = paymasterAndData.paymasterData;
                 } else {
                     if (this.entrypointDataV7 == null) {
-                        throw RangeError("useroperation v0.07 is not supported");
+                        throw RangeError("UserOperation v0.07 is not supported");
                     }
                     entrypointAddress = ENTRYPOINT_V7;
 
@@ -443,7 +443,7 @@ export class CandidePaymaster extends Paymaster {
 			//only estimate gas if:
 			//1-paymaster v1 or v2(only supports entrypoint v0.06)
 			//2-token paymaster v3(supports both entrypoints)
-			//don't estimategas for v3(it will be overriden by
+			//don't estimate gas for v3 (it will be overridden by
 			//the paymaster anyway)
 			if (this.version == "v2") {
 				let preVerificationGas = userOperation.preVerificationGas;
@@ -474,7 +474,7 @@ export class CandidePaymaster extends Paymaster {
 							createPaymasterUserOperationOverrides.state_override_set,
 						);
 
-						// only change gas limits if the esitmated limits is higher than
+						// only change gas limits if the estimated limits is higher than
 						// the supplied
 						if (preVerificationGas < estimation.preVerificationGas) {
 							preVerificationGas = estimation.preVerificationGas;
@@ -491,7 +491,7 @@ export class CandidePaymaster extends Paymaster {
 					} else {
 						throw new AbstractionKitError(
 							"BAD_DATA",
-							"bundlerRpc cant't be null if preVerificationGas,verificationGasLimit and callGasLimit are not overriden",
+							"bundlerRpc can't be null if preVerificationGas,verificationGasLimit and callGasLimit are not overridden",
 						);
 					}
 				}
@@ -502,7 +502,7 @@ export class CandidePaymaster extends Paymaster {
 						"bigint" &&
 					createPaymasterUserOperationOverrides.preVerificationGas < 0n
 				) {
-					throw RangeError("preVerificationGas overrid can't be negative");
+					throw RangeError("preVerificationGas override can't be negative");
 				}
 
 				if (
@@ -510,7 +510,7 @@ export class CandidePaymaster extends Paymaster {
 						"bigint" &&
 					createPaymasterUserOperationOverrides.verificationGasLimit < 0n
 				) {
-					throw RangeError("verificationGasLimit overrid can't be negative");
+					throw RangeError("verificationGasLimit override can't be negative");
 				}
 
 				if (
@@ -518,7 +518,7 @@ export class CandidePaymaster extends Paymaster {
 						"bigint" &&
 					createPaymasterUserOperationOverrides.callGasLimit < 0n
 				) {
-					throw RangeError("callGasLimit overrid can't be negative");
+					throw RangeError("callGasLimit override can't be negative");
 				}
 
 				//apply gas overrides
@@ -575,7 +575,7 @@ export class CandidePaymaster extends Paymaster {
 				}
 			}
 
-			//call the paymaster rpc to sponsor the useroperation
+			// call the paymaster rpc to sponsor the UserOperation
 			const jsonRpcResult = await sendJsonRpcRequest(
 				this.rpcUrl,
 				"pm_sponsorUserOperation",
@@ -609,7 +609,7 @@ export class CandidePaymaster extends Paymaster {
 			};
 
 			//override gas limits and gas prices if the paymaster modified them
-			//needed in case the paymaster modifies the useroperation before
+			//needed in case the paymaster modifies the UserOperation before
 			//generating the paymasterAndData
 			userOperation.callGasLimit =
 				resultMod.callGasLimit ?? userOperation.callGasLimit;
@@ -655,12 +655,12 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * createSponsorPaymasterUserOperation will estimate gas and set
-	 * paymasterAndData for a sponsor paymaster operation
-	 * @param useroperation - useroperation to add paymaster support for
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param overrides - overrides for the default values
-	 * @returns promise with [UserOperationV7, SponsorMetadata | undefined]
+	 * createSponsorPaymasterUserOperation will request sponsorship from the paymaster and fill
+	 * all paymaster fields and gas fields for the UserOperation
+	 * @param userOperation - User operation that requests the paymaster sponsorship
+	 * @param bundlerRpc - Bundler endpoint rpc url
+	 * @param sponsorshipPolicyId - Sponsorship policy ID
+	 * @returns promise with [UserOperationV6 | UserOperationV7 | UserOperationV8, SponsorMetadata | undefined]
 	 */
     async createSponsorPaymasterUserOperation(
 		userOperation: UserOperationV8,
@@ -711,14 +711,13 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * createPaymasterUserOperation will estimate gas and set
-	 * paymasterAndData
-	 * @param smartAccount - the SmartAccount object that created the target useroperation
-	 * @param useroperation - useroperation to add paymaster support for
-	 * @param tokenAddress - target token to pay gas with
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param overrides - overrides for the default values
-	 * @returns promise with UserOperation
+	 * createPaymasterUserOperation will request sponsorship from the paymaster using the token provided and fill
+	 * all paymaster fields and gas fields for the UserOperation
+	 * @param smartAccount - Smart Account object that created the userOperation
+	 * @param userOperation - User operation that requests the paymaster token sponsorship
+	 * @param tokenAddress - Target token to pay gas with
+	 * @param bundlerRpc - Bundler endpoint rpc url
+	 * @returns a promise with UserOperationV8 | UserOperationV7 | UserOperationV6
 	 */
     async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
@@ -740,12 +739,12 @@ export class CandidePaymaster extends Paymaster {
 	): Promise<UserOperationV6>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
-		userOperation: UserOperationV7 | UserOperationV6,
+		userOperation: UserOperationV8 | UserOperationV7 | UserOperationV6,
 		tokenAddress: string,
 		bundlerRpc: string,
 	): Promise<UserOperationV8 | UserOperationV7 | UserOperationV6> {
 		try {
-			if (!this.isInitilized) {
+			if (!this.initialized) {
 				await this.initialize();
 			}
 
@@ -831,7 +830,7 @@ export class CandidePaymaster extends Paymaster {
         overrides: {entrypoint?: string| null} = {},
 	): Promise<bigint> {
 		try {
-			if (!this.isInitilized) {
+			if (!this.initialized) {
 				await this.initialize();
 			}
             let entrypoint = overrides.entrypoint;
@@ -868,7 +867,7 @@ export class CandidePaymaster extends Paymaster {
         entrypoint: string = ENTRYPOINT_V7,
 	): Promise<bigint> {
         try {
-            if (!this.isInitilized) {
+            if (!this.initialized) {
                 await this.initialize();
             }
 
@@ -951,7 +950,7 @@ export class CandidePaymaster extends Paymaster {
         SupportedERC20TokensAndMetadataV6WithExchangeRate
     > {
         try{
-            if (!this.isInitilized) {
+            if (!this.initialized) {
                 await this.initialize();
             }
 
