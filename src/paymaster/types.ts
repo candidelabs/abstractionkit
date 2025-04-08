@@ -17,7 +17,15 @@ export interface PrependTokenPaymasterApproveAccount {
 /**
  * Overrides for the "createUserOperation" function
  */
-export interface CreatePaymasterUserOperationOverrides {
+export interface BasePaymasterUserOperationOverrides {
+	/** set the entrypoint address intead of determining it from the useroperation structure.*/
+	entrypoint?: string;
+}
+
+/**
+ * Overrides for the "createUserOperation" function
+ */
+export interface GasPaymasterUserOperationOverrides extends BasePaymasterUserOperationOverrides{
 	/** set the callGasLimit instead of estimating gas using the bundler*/
 	callGasLimit?: bigint;
 	/** set the verificationGasLimit instead of estimating gas using the bundler*/
@@ -34,7 +42,4 @@ export interface CreatePaymasterUserOperationOverrides {
 
 	/** pass some state overrides for gas estimation"*/
 	state_override_set?: StateOverrideSet;
-
-	/** set the entrypoint address intead of determining it from the useroperation structure.*/
-    entrypoint?: string;
 }

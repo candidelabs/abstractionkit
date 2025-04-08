@@ -22,7 +22,7 @@ import {
 import {
 	CandidePaymasterContext,
 	PrependTokenPaymasterApproveAccount,
-	CreatePaymasterUserOperationOverrides,
+	GasPaymasterUserOperationOverrides, BasePaymasterUserOperationOverrides
 } from "./types";
 import { Bundler } from "src/Bundler";
 import { AbstractionKitError, ensureError } from "src/errors";
@@ -363,25 +363,25 @@ export class CandidePaymaster extends Paymaster {
 		userOperation: UserOperationV8,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
-		overrides?: CreatePaymasterUserOperationOverrides,
+		overrides?: BasePaymasterUserOperationOverrides | GasPaymasterUserOperationOverrides,
 	): Promise<[UserOperationV8, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
 		userOperation: UserOperationV7,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
-		overrides?: CreatePaymasterUserOperationOverrides,
+		overrides?: BasePaymasterUserOperationOverrides | GasPaymasterUserOperationOverrides,
 	): Promise<[UserOperationV7, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
 		userOperation: UserOperationV6,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
-		overrides?: CreatePaymasterUserOperationOverrides,
+		overrides?: BasePaymasterUserOperationOverrides | GasPaymasterUserOperationOverrides,
 	): Promise<[UserOperationV6, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
 		userOperation: UserOperationV8 | UserOperationV7 | UserOperationV6,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
-		overrides?: CreatePaymasterUserOperationOverrides,
+		overrides?: BasePaymasterUserOperationOverrides | GasPaymasterUserOperationOverrides,
 	): Promise<[
         UserOperationV8 | UserOperationV7 | UserOperationV6,
         SponsorMetadata | undefined
@@ -389,9 +389,9 @@ export class CandidePaymaster extends Paymaster {
 		if (context == null) {
 			context = {};
 		}
-		let createPaymasterUserOperationOverrides = overrides;
-		if (createPaymasterUserOperationOverrides == null) {
-			createPaymasterUserOperationOverrides = {};
+		let gasUserOperationOverrides = overrides as GasPaymasterUserOperationOverrides;
+		if (gasUserOperationOverrides == null) {
+			gasUserOperationOverrides = {};
 		}
 		userOperation = { ...userOperation };
 		if (!this.initialized) {
@@ -399,7 +399,7 @@ export class CandidePaymaster extends Paymaster {
 		}
 		let sponsorMetadata = undefined;
 		try {
-			let entrypointAddress = createPaymasterUserOperationOverrides.entrypoint;
+			let entrypointAddress = gasUserOperationOverrides.entrypoint;
             if(entrypointAddress == null){
                 if ("initCode" in userOperation) {
                     if (this.entrypointDataV6 == null) {
@@ -453,9 +453,9 @@ export class CandidePaymaster extends Paymaster {
 				//call the bundler to estimate gas if one of the gas overrides
 				//is not provided
 				if (
-					createPaymasterUserOperationOverrides.preVerificationGas == null ||
-					createPaymasterUserOperationOverrides.verificationGasLimit == null ||
-					createPaymasterUserOperationOverrides.callGasLimit == null
+					gasUserOperationOverrides.preVerificationGas == null ||
+					gasUserOperationOverrides.verificationGasLimit == null ||
+					gasUserOperationOverrides.callGasLimit == null
 				) {
 					if (bundlerRpc != null) {
 						const bundler = new Bundler(bundlerRpc);
@@ -471,7 +471,7 @@ export class CandidePaymaster extends Paymaster {
 						const estimation = await bundler.estimateUserOperationGas(
 							userOperation,
 							entrypointAddress as string,
-							createPaymasterUserOperationOverrides.state_override_set,
+							gasUserOperationOverrides.state_override_set,
 						);
 
 						// only change gas limits if the estimated limits is higher than
@@ -498,53 +498,53 @@ export class CandidePaymaster extends Paymaster {
 
 				//check gas overrides type and range
 				if (
-					typeof createPaymasterUserOperationOverrides.preVerificationGas ===
+					typeof gasUserOperationOverrides.preVerificationGas ===
 						"bigint" &&
-					createPaymasterUserOperationOverrides.preVerificationGas < 0n
+					gasUserOperationOverrides.preVerificationGas < 0n
 				) {
 					throw RangeError("preVerificationGas override can't be negative");
 				}
 
 				if (
-					typeof createPaymasterUserOperationOverrides.verificationGasLimit ===
+					typeof gasUserOperationOverrides.verificationGasLimit ===
 						"bigint" &&
-					createPaymasterUserOperationOverrides.verificationGasLimit < 0n
+					gasUserOperationOverrides.verificationGasLimit < 0n
 				) {
 					throw RangeError("verificationGasLimit override can't be negative");
 				}
 
 				if (
-					typeof createPaymasterUserOperationOverrides.callGasLimit ===
+					typeof gasUserOperationOverrides.callGasLimit ===
 						"bigint" &&
-					createPaymasterUserOperationOverrides.callGasLimit < 0n
+					gasUserOperationOverrides.callGasLimit < 0n
 				) {
 					throw RangeError("callGasLimit override can't be negative");
 				}
 
 				//apply gas overrides
 				userOperation.preVerificationGas =
-					createPaymasterUserOperationOverrides.preVerificationGas ??
+					gasUserOperationOverrides.preVerificationGas ??
 					(preVerificationGas *
 						BigInt(
-							(createPaymasterUserOperationOverrides.preVerificationGasPercentageMultiplier ??
+							(gasUserOperationOverrides.preVerificationGasPercentageMultiplier ??
 								0) + 100,
 						)) /
 						100n;
 
 				userOperation.verificationGasLimit =
-					createPaymasterUserOperationOverrides.verificationGasLimit ??
+					gasUserOperationOverrides.verificationGasLimit ??
 					(verificationGasLimit *
 						BigInt(
-							(createPaymasterUserOperationOverrides.verificationGasLimitPercentageMultiplier ??
+							(gasUserOperationOverrides.verificationGasLimitPercentageMultiplier ??
 								0) + 100,
 						)) /
 						100n;
 
 				userOperation.callGasLimit =
-					createPaymasterUserOperationOverrides.callGasLimit ??
+					gasUserOperationOverrides.callGasLimit ??
 					(callGasLimit *
 						BigInt(
-							(createPaymasterUserOperationOverrides.callGasLimitPercentageMultiplier ??
+							(gasUserOperationOverrides.callGasLimitPercentageMultiplier ??
 								0) + 100,
 						)) /
 						100n;
@@ -558,14 +558,14 @@ export class CandidePaymaster extends Paymaster {
 			} else {
 				//gas limits overrides are useless with the sponsor paymaster v3
 				if (
-					createPaymasterUserOperationOverrides.preVerificationGas != null ||
-					createPaymasterUserOperationOverrides.verificationGasLimit != null ||
-					createPaymasterUserOperationOverrides.callGasLimit != null ||
-					createPaymasterUserOperationOverrides.preVerificationGasPercentageMultiplier !=
+					gasUserOperationOverrides.preVerificationGas != null ||
+					gasUserOperationOverrides.verificationGasLimit != null ||
+					gasUserOperationOverrides.callGasLimit != null ||
+					gasUserOperationOverrides.preVerificationGasPercentageMultiplier !=
 						null ||
-					createPaymasterUserOperationOverrides.verificationGasLimitPercentageMultiplier !=
+					gasUserOperationOverrides.verificationGasLimitPercentageMultiplier !=
 						null ||
-					createPaymasterUserOperationOverrides.callGasLimitPercentageMultiplier !=
+					gasUserOperationOverrides.callGasLimitPercentageMultiplier !=
 						null
 				) {
 					throw RangeError(
@@ -660,27 +660,32 @@ export class CandidePaymaster extends Paymaster {
 	 * @param userOperation - User operation that requests the paymaster sponsorship
 	 * @param bundlerRpc - Bundler endpoint rpc url
 	 * @param sponsorshipPolicyId - Sponsorship policy ID
+	 * @param overrides - Overrides for the paymaster operation
 	 * @returns promise with [UserOperationV6 | UserOperationV7 | UserOperationV8, SponsorMetadata | undefined]
 	 */
     async createSponsorPaymasterUserOperation(
 		userOperation: UserOperationV8,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
+		overrides?: BasePaymasterUserOperationOverrides,
 	): Promise<[UserOperationV8, SponsorMetadata | undefined]>;
 	async createSponsorPaymasterUserOperation(
 		userOperation: UserOperationV7,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
+		overrides?: BasePaymasterUserOperationOverrides,
 	): Promise<[UserOperationV7, SponsorMetadata | undefined]>;
 	async createSponsorPaymasterUserOperation(
 		userOperation: UserOperationV6,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
+		overrides?: BasePaymasterUserOperationOverrides,
 	): Promise<[UserOperationV6, SponsorMetadata | undefined]>;
 	async createSponsorPaymasterUserOperation(
 		userOperation: UserOperationV7 | UserOperationV6,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
+		overrides?: BasePaymasterUserOperationOverrides,
 	): Promise<[
         UserOperationV8 | UserOperationV7 | UserOperationV6,
         SponsorMetadata | undefined
@@ -693,19 +698,22 @@ export class CandidePaymaster extends Paymaster {
 			return await this.createPaymasterUserOperation(
 				userOperation as UserOperationV6,
 				bundlerRpc,
-				context
+				context,
+				overrides
 			);
         } else if ("eip7702Auth" in userOperation) {
             return await this.createPaymasterUserOperation(
 				userOperation as UserOperationV8,
 				bundlerRpc,
-				context
+				context,
+        overrides
 			);
 		} else {
 			return await this.createPaymasterUserOperation(
 				userOperation as UserOperationV7,
 				bundlerRpc,
-				context
+				context,
+				overrides
 			);
 		}
 	}
@@ -717,38 +725,42 @@ export class CandidePaymaster extends Paymaster {
 	 * @param userOperation - User operation that requests the paymaster token sponsorship
 	 * @param tokenAddress - Target token to pay gas with
 	 * @param bundlerRpc - Bundler endpoint rpc url
+	 * @param overrides - Overrides for the paymaster operation
 	 * @returns a promise with UserOperationV8 | UserOperationV7 | UserOperationV6
 	 */
-    async createTokenPaymasterUserOperation(
+  async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV8,
 		tokenAddress: string,
 		bundlerRpc: string,
+		overrides?: BasePaymasterUserOperationOverrides,
 	): Promise<UserOperationV8>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV7,
 		tokenAddress: string,
 		bundlerRpc: string,
+		overrides?: BasePaymasterUserOperationOverrides,
 	): Promise<UserOperationV7>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV6,
 		tokenAddress: string,
 		bundlerRpc: string,
+		overrides?: BasePaymasterUserOperationOverrides,
 	): Promise<UserOperationV6>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV8 | UserOperationV7 | UserOperationV6,
 		tokenAddress: string,
 		bundlerRpc: string,
+		overrides?: BasePaymasterUserOperationOverrides,
 	): Promise<UserOperationV8 | UserOperationV7 | UserOperationV6> {
 		try {
 			if (!this.initialized) {
 				await this.initialize();
 			}
-
-			let entrypoint;
+			let entrypoint = overrides?.entrypoint;
             if (entrypoint == null){
                 if ("initCode" in userOperation) {
                     entrypoint = ENTRYPOINT_V6;
@@ -789,7 +801,8 @@ export class CandidePaymaster extends Paymaster {
 					bundlerRpc,
 					{
 						token: tokenAddress,
-					}
+					},
+					overrides,
 				);
 				return resultUserOp;
             } else if ("eip7702Auth" in userOperation) {
@@ -798,7 +811,8 @@ export class CandidePaymaster extends Paymaster {
 					bundlerRpc,
 					{
 						token: tokenAddress,
-					}
+					},
+          overrides,
 				);
 				return resultUserOp;
 			} else {
@@ -807,7 +821,8 @@ export class CandidePaymaster extends Paymaster {
 					bundlerRpc,
 					{
 						token: tokenAddress,
-					}
+					},
+					overrides,
 				);
 				return resultUserOp;
 			}
