@@ -6,7 +6,7 @@ import type {
 import {
 	BasePaymasterUserOperationOverrides,
 	CandidePaymasterContext,
-	GasPaymasterUserOperationOverrides
+	GasPaymasterUserOperationOverrides,
 } from "./types";
 
 export abstract class Paymaster {
@@ -14,6 +14,8 @@ export abstract class Paymaster {
 		userOperation: UserOperationV7 | UserOperationV6,
 		bundlerRpc: string,
 		context: CandidePaymasterContext,
-		createPaymasterUserOperationOverrides: BasePaymasterUserOperationOverrides | GasPaymasterUserOperationOverrides,
+		createPaymasterUserOperationOverrides:
+			| BasePaymasterUserOperationOverrides
+			| GasPaymasterUserOperationOverrides,
 	): Promise<[UserOperationV7 | UserOperationV6, SponsorMetadata | undefined]>;
 }
