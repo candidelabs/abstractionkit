@@ -25,7 +25,7 @@ export interface BasePaymasterUserOperationOverrides {
 /**
  * Overrides for the "createUserOperation" function
  */
-export interface GasPaymasterUserOperationOverrides extends BasePaymasterUserOperationOverrides{
+export interface GasPaymasterUserOperationOverrides extends BasePaymasterUserOperationOverrides {
 	/** set the callGasLimit instead of estimating gas using the bundler*/
 	callGasLimit?: bigint;
 	/** set the verificationGasLimit instead of estimating gas using the bundler*/
