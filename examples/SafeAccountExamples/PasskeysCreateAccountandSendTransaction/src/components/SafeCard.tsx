@@ -146,7 +146,7 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 					Track your operation on{" "}
 					<a
 						target="_blank"
-						href={`https://eth-${chainName.toLowerCase()}.blockscout.com/op/${userOpHash}`}
+						href={`https://${chainName.toLowerCase()}.blockscout.com/op/${userOpHash}`}
 					>
 						the block explorer
 					</a>
@@ -161,7 +161,7 @@ function SafeCard({ passkey }: { passkey: PasskeyLocalStorageFormat }) {
 					View more on{" "}
 					<a
 						target="_blank"
-						href={`https://eth-${chainName}.blockscout.com/tx/${txHash}`}
+						href={`https://${chainName}.blockscout.com/tx/${txHash}`}
 					>
 						the block explorer
 					</a>
