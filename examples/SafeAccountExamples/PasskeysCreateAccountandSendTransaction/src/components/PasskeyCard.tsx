@@ -21,7 +21,7 @@ function PasskeyCard({ passkey, handleCreatePasskeyClick }: { passkey?: PasskeyL
 		<p>Account Address: {" "}
       <a
         target="_blank"
-        href={`https://eth-${chainName}.blockscout.com/address/${getAccountAddress}`}
+        href={`https://${chainName}.blockscout.com/address/${getAccountAddress}`}
       >
         {getAccountAddress}
       </a>
