@@ -1,11 +1,14 @@
 import { SmartAccount } from "../SmartAccount";
 import { BaseUserOperationDummyValues, ENTRYPOINT_V8 } from "src/constants";
-import { createCallData, createUserOperationHash, fetchAccountNonce, handlefetchGasPrice, sendJsonRpcRequest } from "../../utils";
+import { 
+    createCallData, createUserOperationHash, fetchAccountNonce,
+    getFunctionSelector, handlefetchGasPrice, sendJsonRpcRequest
+} from "../../utils";
 import { GasOption, PolygonChain, StateOverrideSet, UserOperationV8 } from "src/types";
 import { AbstractionKitError } from "src/errors";
 import { Authorization7702Hex, bigintToHex } from "src/utils7702";
 import { Bundler } from "src/Bundler";
-import { Wallet } from "ethers";
+import { Wallet, AbiCoder } from "ethers";
 import { SendUseroperationResponse } from "../SendUseroperationResponse";
 
 /**
@@ -560,4 +563,102 @@ export class Simple7702Account extends SmartAccount {
 			this.entrypointAddress,
 		);
 	}
+
+    /**
+	 * a non static wrapper function for  prependTokenPaymasterApproveToCallDataStatic
+	 * which adds a token approve call to the call data for a token paymaster
+	 * @param callData - calldata to be added to, if after decoding it is not
+	 * a multisend transaction, it will be encoded as a batch transaction
+	 * @param tokenAddress - token to add approve for
+	 * @param paymasterAddress - paymaster to add approve for
+	 * @param approveAmount - amount to add approve for
+	 * @returns callData
+	 */
+	public prependTokenPaymasterApproveToCallData(
+		callData: string,
+		tokenAddress: string,
+		paymasterAddress: string,
+		approveAmount: bigint,
+	): string {
+		return Simple7702Account.prependTokenPaymasterApproveToCallDataStatic(
+			callData,
+			tokenAddress,
+			paymasterAddress,
+			approveAmount,
+		);
+	}
+
+    /**
+	 * adds a token approve call to the call data for a token paymaster
+	 * @param callData - calldata to be added to, if after decoding it is not
+	 * a multisend transaction, it will be encoded as a batch transaction
+	 * @param tokenAddress - token to add approve for
+	 * @param paymasterAddress - paymaster to add approve for
+	 * @param approveAmount - amount to add approve for
+	 * @returns callData
+	 */
+	public static prependTokenPaymasterApproveToCallDataStatic(
+		callData: string,
+		tokenAddress: string,
+		paymasterAddress: string,
+		approveAmount: bigint,
+	): string {
+		const approveFunctionSignature = "approve(address,uint256)";
+		const approveFunctionSelector = getFunctionSelector(
+			approveFunctionSignature,
+		);
+		const approveCallData = createCallData(
+			approveFunctionSelector,
+			["address", "uint256"],
+			[paymasterAddress, approveAmount],
+		);
+		const approveMetatransaction: SimpleMetaTransaction = {
+			to: tokenAddress,
+			value: 0n,
+			data: approveCallData,
+		};
+
+        const abiCoder = AbiCoder.defaultAbiCoder();
+        let decodedMetaTransactions:SimpleMetaTransaction[];
+		if (callData.startsWith(Simple7702Account.batchExecutorFunctionSelector)) {
+            const decodedParamsArray = abiCoder.decode(
+                Simple7702Account.batchExecutorFunctionInputAbi,
+                "0x" + callData.slice(10)
+            )[0] as [];
+            decodedMetaTransactions = decodedParamsArray.map(decodedParams =>({
+                to: decodedParams[0] as string,
+                value: BigInt(decodedParams[1] as string),
+                data: typeof decodedParams[2] !== "string"?
+                    new TextDecoder().decode(decodedParams[2]):decodedParams[2]
+            }));
+        } else if(callData.startsWith(Simple7702Account.executorFunctionSelector)) {
+            const decodedParams = abiCoder.decode(
+                Simple7702Account.executorFunctionInputAbi,
+                "0x" + callData.slice(10)
+            );
+            decodedMetaTransactions = [{
+                to: decodedParams[0] as string,
+                value: BigInt(decodedParams[1] as string),
+                data: typeof decodedParams[2] !== "string"?
+                    new TextDecoder().decode(decodedParams[2]):decodedParams[2]
+            }];
+        }else{
+            throw new AbstractionKitError(
+				"BAD_DATA",
+				"Invalid calldata, should start with " +
+					Simple7702Account.batchExecutorFunctionSelector +
+					" or " +
+					Simple7702Account.executorFunctionSelector,
+				{
+					context: {
+						callData: callData,
+					},
+				},
+			);
+        }
+        decodedMetaTransactions.unshift(approveMetatransaction);
+        return Simple7702Account.createAccountCallDataBatchTransactions(
+            decodedMetaTransactions
+        )
+    }
 }
