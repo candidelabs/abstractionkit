@@ -69,23 +69,32 @@ async function main(): Promise<void> {
         paymasterUrl
     )
 
-    userOperation = await paymaster.createTokenPaymasterUserOperation(
-        smartAccount,
-        userOperation,
-        paymasterTokenAddress,
-        bundlerUrl,
-    )
+    const tokensSupported = await paymaster.fetchSupportedERC20TokensAndPaymasterMetadata();
+    const tokenSelected = tokensSupported.tokens.find(token => token.address.toLocaleLowerCase() === paymasterTokenAddress.toLowerCase());
+
+    console.log("This example uses Candide Token Paymaster");
+    console.log("Please visit https://dashboard.candide.dev/ to get a Paymaster URL");
+    console.log("Visit our Discord to get some CTT token for testing");
+
+    if (tokenSelected) {
+        userOperation = await paymaster.createTokenPaymasterUserOperation(
+            smartAccount,
+            userOperation,
+            tokenSelected.address,
+            bundlerUrl,
+        )
+        const cost = await paymaster.calculateUserOperationErc20TokenMaxGasCost(
+            userOperation,
+            tokenSelected.address,
+        )
+        console.log("This useroperation may cost upto : " + cost + " wei in " + tokenSelected.symbol + " token")
+        console.log(
+            "Please fund the sender account : " +
+            userOperation.sender +
+            " with more than " + cost + " wei CTT token"
+        )
+    }
     
-    const cost = await paymaster.calculateUserOperationErc20TokenMaxGasCost(
-        userOperation,
-        paymasterTokenAddress
-    )
-    console.log("This useroperation may cost upto : " + cost + " wei in CTT token")
-    console.log(
-        "Please fund the sender account : " + 
-        userOperation.sender +
-        " with more than "+ cost + " wei CTT token"
-    )
     console.log("This example uses a Candide token paymaster.")
     console.log("Please visit https://dashboard.candide.dev/ to get a token paymaster url.")
     console.log("Please visit our Discord to get some CTT token for testing")
