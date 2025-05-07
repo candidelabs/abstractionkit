@@ -4,7 +4,7 @@
 		"name": "Candidelabs",
 		"url": "https://candide.dev"
 	},
-	"version": "0.2.18",
+	"version": "0.2.19",
 	"description": "Account Abstraction 4337 SDK by Candidelabs",
 	"main": "dist/index.js",
 	"module": "dist/index.m.js",
@@ -47,7 +47,7 @@
 		"@typescript-eslint/parser": "^6.2.0",
 		"dotenv": "^16.4.5",
 		"eslint": "^8.46.0",
-		"eslint-plugin-tsdoc": "^0.2.18",
+		"eslint-plugin-tsdoc": "^0.2.19",
 		"jest": "^29.7.0",
 		"lint-staged": ">=10",
 		"microbundle": "^0.15.1",
