@@ -14,7 +14,9 @@
     "dotenv": "^16.3.1",
     "ethers": "^6.6.7",
     "typescript": "^5.1.6",
-    "abstractionkit": "^0.2.19"
+    "abstractionkit": "^0.2.19",
+    "viem": "^2.23.10",
+    "bignumber.js": "^9.1.2"
   },
   "devDependencies": {
     "rimraf": "^5.0.10"

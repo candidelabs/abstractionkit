@@ -1,117 +1,146 @@
 import * as dotenv from 'dotenv'
-
 import {
     SafeAccountV0_3_0 as SafeAccount,
     MetaTransaction,
-    calculateUserOperationMaxGasCost,
     CandidePaymaster,
-    getFunctionSelector,
     createCallData,
 } from "abstractionkit";
+import { parseSignature, toFunctionSelector } from "viem";
+import BigNumber from "bignumber.js";
 
 async function main(): Promise<void> {
-    //get values from .env
+    // Load environment variables
     dotenv.config()
-    const chainId = BigInt(process.env.CHAIN_ID as string)
-    const bundlerUrl = process.env.BUNDLER_URL as string
+    
+    // Configuration - Replace these values with your own
+    const chainId = BigInt(8453) // Base network
+    const bundlerUrl = process.env.BUNDLER_URL as string 
     const jsonRpcNodeProvider = process.env.JSON_RPC_NODE_PROVIDER as string
+    const paymasterRPC = process.env.PAYMASTER_RPC as string
     const ownerPublicAddress = process.env.PUBLIC_ADDRESS as string
     const ownerPrivateKey = process.env.PRIVATE_KEY as string
-    const paymasterRPC = process.env.PAYMASTER_RPC as string;
-    const sponsorshipPolicyId = process.env.SPONSORSHIP_POLICY_ID as string;
+    const sponsorshipPolicyId = process.env.SPONSORSHIP_POLICY_ID as string
 
-    //initializeNewAccount only needed when the smart account
-    //have not been deployed yet for its first useroperation.
-    //You can store the accountAddress to use it to initialize 
-    //the SafeAccount object for the following useroperations
-    let smartAccount = SafeAccount.initializeNewAccount(
-        [ownerPublicAddress],
-    )
+    // Hardcoded addresses for example
+    const usdcTokenAddress = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" // USDC on Base
+    const merchantAddress = "0xYourMerchantAddress" // Replace with actual merchant address
+    const spcFeeAddress = "0xAf1DD0F5dBebEc8c9c1c2a48aa79fB1D8E2DdA32" // Fee collector address
 
-    //After the account contract is deployed, no need to call initializeNewAccount
-    //let smartAccount = new SafeAccount(accountAddress)
+    // Initialize smart account
+    let smartAccount = SafeAccount.initializeNewAccount([ownerPublicAddress])
+    console.log("Smart Account address: " + smartAccount.accountAddress)
 
-    console.log("Account address(sender) : " + smartAccount.accountAddress)
+    // Set up permit parameters
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600) // 1 hour from now
+    const amount = BigInt(1000000) // 1 USDC (6 decimals)
+    const nonce = BigInt(0) // Should be fetched from the token contract
 
-    //create two meta transaction to mint two NFTs
-    //you can use favorite method (like ethers.js) to construct the call data 
-    const nftContractAddress = "0x9a7af758aE5d7B6aAE84fe4C5Ba67c041dFE5336";
-    const mintFunctionSignature =  'mint(address)';
-    const mintFunctionSelector =  getFunctionSelector(mintFunctionSignature);
-    const mintTransactionCallData = createCallData(
-        mintFunctionSelector, 
-        ["address"],
-        [smartAccount.accountAddress]
-    );
-    const transaction1 :MetaTransaction ={
-        to: nftContractAddress,
-        value: 0n,
-        data: mintTransactionCallData,
+    // TODO: This value should be calculated using fetchGasPrice function and proper conversions
+    // For now using a hardcoded value that represents typical gas cost in USDC
+    const gasCostInSelectedToken = new BigNumber('15000') // 0.015 USDC in base units (6 decimals)
+
+    // Calculate amounts with BigNumber for precise arithmetic
+    const orderAmount = new BigNumber('1000000') // 1 USDC in base units (6 decimals)
+    const percentage = new BigNumber('50') // 0.5% fee
+    const spcFee = orderAmount.multipliedBy(percentage).dividedBy(10000) // Calculate 0.5% fee
+    const merchantAmount = orderAmount.minus(spcFee) // Amount minus fee
+
+    // Create permit metatransaction
+    const permitMetaTx: MetaTransaction = {
+        to: usdcTokenAddress,
+        value: BigInt(0),
+        data: createCallData(
+            toFunctionSelector("permit(address,address,uint256,uint256,uint8,bytes32,bytes32)"),
+            [
+                "address",
+                "address",
+                "uint256",
+                "uint256",
+                "uint8",
+                "bytes32",
+                "bytes32",
+            ],
+            [
+                ownerPublicAddress,
+                smartAccount.accountAddress,
+                amount,
+                deadline,
+                0, // v
+                "0x0000000000000000000000000000000000000000000000000000000000000000", // r
+                "0x0000000000000000000000000000000000000000000000000000000000000000"  // s
+            ]
+        ),
     }
 
-    //createUserOperation will determine the nonce, fetch the gas prices,
-    //estimate gas limits and return a useroperation to be signed.
-    //you can override all these values using the overrides parameter.
+    // Create transfer to merchant metatransaction (amount minus fee minus gas cost)
+    const transferToMerchantMetaTx: MetaTransaction = {
+        to: usdcTokenAddress,
+        value: BigInt(0),
+        data: createCallData(
+            toFunctionSelector("transferFrom(address,address,uint256)"),
+            ["address", "address", "uint256"],
+            [ownerPublicAddress, merchantAddress, merchantAmount.minus(gasCostInSelectedToken).toNumber()]
+        ),
+    }
+
+    // Create transfer fee metatransaction (fee plus gas cost)
+    const transferToSpcFeeMetaTx: MetaTransaction = {
+        to: usdcTokenAddress,
+        value: BigInt(0),
+        data: createCallData(
+            toFunctionSelector("transferFrom(address,address,uint256)"),
+            ["address", "address", "uint256"],
+            [ownerPublicAddress, spcFeeAddress, spcFee.plus(gasCostInSelectedToken).toNumber()]
+        ),
+    }
+
+    // Create user operation with all metatransactions
     let userOperation = await smartAccount.createUserOperation(
-		[
-            //You can batch multiple transactions to be executed in one useroperation.
-            transaction1, //transaction2,
+        [
+            permitMetaTx,
+            transferToMerchantMetaTx,
+            transferToSpcFeeMetaTx
         ],
-        jsonRpcNodeProvider, //the node rpc is used to fetch the current nonce and fetch gas prices.
-        bundlerUrl, //the bundler rpc is used to estimate the gas limits.
-        //uncomment the following values for polygon or any chains where
-        //gas prices change rapidly
-        //{
-        //    maxFeePerGasPercentageMultiplier:130,
-        //    maxPriorityFeePerGasPercentageMultiplier:130
-        //}
-	)
-
-  
-
-    let paymaster: CandidePaymaster = new CandidePaymaster(
-        paymasterRPC
+        jsonRpcNodeProvider,
+        bundlerUrl
     )
 
+    // Set up paymaster
+    let paymaster = new CandidePaymaster(paymasterRPC)
+
+    // Get sponsored user operation
     let [paymasterUserOperation, _sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
-        userOperation, bundlerUrl, sponsorshipPolicyId) // sponsorshipPolicyId will have no effect if empty
-    userOperation = paymasterUserOperation; 
+        userOperation,
+        bundlerUrl,
+        sponsorshipPolicyId
+    )
+    userOperation = paymasterUserOperation
 
-
-    const cost = calculateUserOperationMaxGasCost(userOperation)
-    console.log("This useroperation may cost upto : " + cost + " wei")
-    console.log("This example uses a Candide paymaster to sponsor the useroperation, so there is not need to fund the sender account.")
-    console.log("Get early access to Candide's sponsor paymaster by visiting our discord https://discord.gg/KJSzy2Rqtg")
-
-    //Safe is a multisig that can have multiple owners/signers
-    //signUserOperation will create a signature for the provided
-    //privateKeys
+    // Sign the user operation
     userOperation.signature = smartAccount.signUserOperation(
-		userOperation,
+        userOperation,
         [ownerPrivateKey],
-        chainId,
-	)
-    console.log(userOperation)
-
-    //use the bundler rpc to send a userOperation
-    //sendUserOperation will return a SendUseroperationResponse object
-    //that can be awaited for the useroperation to be included onchain
-    const sendUserOperationResponse = await smartAccount.sendUserOperation(
-        userOperation, bundlerUrl
+        chainId
     )
 
-    console.log("Useroperation sent. Waiting to be included ......")
-    //included will return a UserOperationReceiptResult when 
-    //useroperation is included onchain
-    let userOperationReceiptResult = await sendUserOperationResponse.included()
+    // Send the user operation
+    console.log("Sending user operation...")
+    const sendUserOperationResponse = await smartAccount.sendUserOperation(
+        userOperation,
+        bundlerUrl
+    )
 
-    console.log("Useroperation receipt received.")
-    console.log(userOperationReceiptResult)
-    if(userOperationReceiptResult.success){
-        console.log("Two Nfts were minted. The transaction hash is : " + userOperationReceiptResult.receipt.transactionHash)
-    }else{
-        console.log("Useroperation execution failed")
+    console.log("Waiting for user operation to be included...")
+    const userOperationReceiptResult = await sendUserOperationResponse.included()
+
+    if (userOperationReceiptResult.success) {
+        console.log("Success! Transaction hash: " + userOperationReceiptResult.receipt.transactionHash)
+    } else {
+        console.log("User operation execution failed")
     }
 }
 
-main()
+main().catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+})
