@@ -11,7 +11,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "abstractionkit": "0.2.19",
+    "abstractionkit": "0.2.20",
     "dotenv": "^16.3.1",
     "typescript": "^5.1.6"
   },
