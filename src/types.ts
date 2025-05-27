@@ -61,11 +61,19 @@ export type JsonRpcResponse = {
 	id: number | null;
 	jsonrpc: string;
 	result?: JsonRpcResult;
+    simulation_results?: JsonRpcResult;
 	error?: JsonRpcError;
 };
 
 export type ChainIdResult = string;
 export type SupportedEntryPointsResult = string[];
+
+export type SingleTransactionTenderlySimulationResult = {
+    transaction: any
+    simulation: any
+}
+
+export type TenderlySimulationResult = SingleTransactionTenderlySimulationResult[]
 
 export type JsonRpcResult =
 	| ChainIdResult
@@ -77,7 +85,8 @@ export type JsonRpcResult =
 	| SupportedERC20TokensAndMetadataV7
 	| SupportedERC20TokensAndMetadataV6
 	| PmUserOperationV7Result
-	| PmUserOperationV6Result;
+	| PmUserOperationV6Result
+    | TenderlySimulationResult;
 
 export type JsonRpcError = {
 	code: number;

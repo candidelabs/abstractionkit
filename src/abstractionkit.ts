@@ -32,8 +32,18 @@ export {
     fetchGasPrice,
     DepositInfo,
     getDepositInfo,
-    getBalanceOf
+    getBalanceOf,
 } from "./utils";
+
+export {
+    shareTenderlySimulationAndCreateLink,
+    simulateUserOperationWithTenderlyAndCreateShareLink,
+    simulateUserOperationWithTenderly,
+    simulateUserOperationCallDataWithTenderly,
+    simulateSenderCallDataWithTenderlyAndCreateShareLink,
+    simulateSenderCallDataWithTenderly,
+    callTenderlySimulateBundle
+} from "./utilsTenderly";
 
 
 export {

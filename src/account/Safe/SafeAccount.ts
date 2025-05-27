@@ -28,6 +28,7 @@ import {
     GasOption,
     PolygonChain,
     OnChainIdentifierParamsType,
+    TenderlySimulationResult,
 } from "../../types";
 import {
 	createCallData,
@@ -35,8 +36,13 @@ import {
 	fetchAccountNonce,
 	sendEthCallRequest,
 	sendEthGetCodeRequest,
-    handlefetchGasPrice
+    handlefetchGasPrice,
 } from "../../utils";
+
+import {
+    simulateSenderCallDataWithTenderly,
+    simulateSenderCallDataWithTenderlyAndCreateShareLink
+} from "../../utilsTenderly";
 
 import {
 	CreateBaseUserOperationOverrides,
@@ -2804,6 +2810,99 @@ export class SafeAccount extends SmartAccount {
             to:accountAddress,
             data: callData,
             value: 0n
+        }
+    }
+
+    async simulateCallDataWithTenderlyAndCreateShareLink(
+        tenderlyAccountSlug:string,
+        tenderlyProjectSlug:string,
+        tenderlyAccessKey: string,
+		nodeRpcUrl: string | null = null,
+        chainId: bigint,
+		metaTransactions: MetaTransaction[],
+        blockNumber: bigint | null = null,
+        overrides: {
+			safeModuleExecutorFunctionSelector?: SafeModuleExecutorFunctionSelector;
+			multisendContractAddress?: string;
+            callData?: string;
+            createShareLink?: boolean;
+            isInit?: boolean,
+		} = {},
+    ): Promise<{
+        simulation:TenderlySimulationResult,
+        callDataSimulationShareLink?: string,
+        accountDeploymentSimulationShareLink?: string,
+    }> {
+        let isInit:boolean = false;
+        if(nodeRpcUrl == null && overrides.isInit == null){
+            throw RangeError(
+                "nodeRpcUrl and overrides.isInit can't both be null"
+            );
+        }else if(overrides.isInit == null){
+            const accountNonce =
+                await fetchAccountNonce(
+                    nodeRpcUrl as string,
+                    this.entrypointAddress,
+                    this.accountAddress,
+                )
+            isInit = accountNonce == 0n;
+        }else{
+            isInit = overrides.isInit;
+        }
+
+        let callData = "0x" as string;
+		if (overrides.callData == null) {
+			if (metaTransactions.length == 1) {
+				callData = SafeAccount.createAccountCallDataSingleTransaction(
+					metaTransactions[0],
+					{
+						safeModuleExecutorFunctionSelector:overrides.safeModuleExecutorFunctionSelector,
+					},
+				);
+			} else {
+				callData = SafeAccount.createAccountCallDataBatchTransactions(
+					metaTransactions,
+					{
+						safeModuleExecutorFunctionSelector:
+							overrides.safeModuleExecutorFunctionSelector,
+						multisendContractAddress: overrides.multisendContractAddress,
+					},
+				);
+			}
+		} else {
+			callData = overrides.callData;
+		}
+        
+        const createShareLink = overrides.createShareLink?? true;
+        if(createShareLink){
+            return await simulateSenderCallDataWithTenderlyAndCreateShareLink(
+                tenderlyAccountSlug,
+                tenderlyProjectSlug,
+                tenderlyAccessKey,
+                chainId,
+                this.entrypointAddress,
+                this.accountAddress,
+                callData,
+                isInit,
+                this.factoryAddress,
+                this.factoryData,
+                blockNumber
+            )
+        }else{
+            const simulation = await simulateSenderCallDataWithTenderly(
+                tenderlyAccountSlug,
+                tenderlyProjectSlug,
+                tenderlyAccessKey,
+                chainId,
+                this.entrypointAddress,
+                this.accountAddress,
+                callData,
+                isInit,
+                this.factoryAddress,
+                this.factoryData,
+                blockNumber
+            )
+            return {simulation};
         }
     }
 }

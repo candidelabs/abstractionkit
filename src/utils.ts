@@ -313,13 +313,14 @@ export async function sendJsonRpcRequest(
 	rpcUrl: string,
 	method: string,
 	params: JsonRpcParam,
+    headers: Record<string, string> = { "Content-Type": "application/json" },
+    paramsKeyName: string = "params",
 ): Promise<JsonRpcResult> {
 	const fetch = fetchImport.default || fetchImport;
-
 	const raw = JSON.stringify(
 		{
 			method: method,
-			params: params,
+			[paramsKeyName]: params,
 			id: new Date().getTime(), //semi unique id
 			jsonrpc: "2.0",
 		},
@@ -330,7 +331,7 @@ export async function sendJsonRpcRequest(
 	);
 	const requestOptions: RequestInit = {
 		method: "POST",
-		headers: { "Content-Type": "application/json" },
+		headers, 
 		body: raw,
 		redirect: "follow",
 	};
@@ -339,6 +340,8 @@ export async function sendJsonRpcRequest(
 
 	if ("result" in response) {
 		return response.result as JsonRpcResult;
+	} else if ("simulation_results" in response) {
+		return response.simulation_results as JsonRpcResult;
 	} else {
 		const err = response.error as JsonRpcError;
 		const codeString = String(err.code);
