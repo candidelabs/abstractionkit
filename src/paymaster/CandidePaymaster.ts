@@ -454,7 +454,7 @@ export class CandidePaymaster extends Paymaster {
 			//1- paymaster v2 (only supports entrypoint v0.06)
 			//2- token paymaster v3 (supports both entrypoints)
 			//don't estimate gas for v3 (it will be overridden by the paymaster anyway)
-			if (this.version == "v2") {
+			if (this.version == "v2" || context.token !== undefined) {
 				let preVerificationGas = userOperation.preVerificationGas;
 				let verificationGasLimit = userOperation.verificationGasLimit;
 				let callGasLimit = userOperation.callGasLimit;
@@ -528,32 +528,14 @@ export class CandidePaymaster extends Paymaster {
 				}
 
 				//apply gas overrides
-				userOperation.preVerificationGas =
-					gasUserOperationOverrides.preVerificationGas ??
-					(preVerificationGas *
-						BigInt(
-							(gasUserOperationOverrides.preVerificationGasPercentageMultiplier ??
-								0) + 100,
-						)) /
-						100n;
+				userOperation.preVerificationGas = gasUserOperationOverrides.preVerificationGas ??
+					preVerificationGas * BigInt(gasUserOperationOverrides.preVerificationGasPercentageMultiplier ?? 100) / 100n;
 
-				userOperation.verificationGasLimit =
-					gasUserOperationOverrides.verificationGasLimit ??
-					(verificationGasLimit *
-						BigInt(
-							(gasUserOperationOverrides.verificationGasLimitPercentageMultiplier ??
-								0) + 100,
-						)) /
-						100n;
+				userOperation.verificationGasLimit = gasUserOperationOverrides.verificationGasLimit ??
+					verificationGasLimit * BigInt(gasUserOperationOverrides.verificationGasLimitPercentageMultiplier ?? 100) / 100n;
 
-				userOperation.callGasLimit =
-					gasUserOperationOverrides.callGasLimit ??
-					(callGasLimit *
-						BigInt(
-							(gasUserOperationOverrides.callGasLimitPercentageMultiplier ??
-								0) + 100,
-						)) /
-						100n;
+				userOperation.callGasLimit = gasUserOperationOverrides.callGasLimit ??
+					callGasLimit * BigInt(gasUserOperationOverrides.callGasLimitPercentageMultiplier ?? 100) / 100n;
 
 				//add small buffer to preVerification gas
 				userOperation.preVerificationGas =
@@ -742,32 +724,36 @@ export class CandidePaymaster extends Paymaster {
 		userOperation: UserOperationV8,
 		tokenAddress: string,
 		bundlerRpc: string,
-		overrides?: BasePaymasterUserOperationOverrides,
+		overrides?: GasPaymasterUserOperationOverrides,
 	): Promise<UserOperationV8>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV7,
 		tokenAddress: string,
 		bundlerRpc: string,
-		overrides?: BasePaymasterUserOperationOverrides,
+		overrides?: GasPaymasterUserOperationOverrides,
 	): Promise<UserOperationV7>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV6,
 		tokenAddress: string,
 		bundlerRpc: string,
-		overrides?: BasePaymasterUserOperationOverrides,
+		overrides?: GasPaymasterUserOperationOverrides,
 	): Promise<UserOperationV6>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV8 | UserOperationV7 | UserOperationV6,
 		tokenAddress: string,
 		bundlerRpc: string,
-		overrides?: BasePaymasterUserOperationOverrides,
+		overrides?: GasPaymasterUserOperationOverrides,
 	): Promise<UserOperationV8 | UserOperationV7 | UserOperationV6> {
 		try {
 			if (!this.initialized) {
 				await this.initialize();
+			}
+			const _overrides = overrides || {};
+			if (_overrides?.callGasLimitPercentageMultiplier == undefined){
+				_overrides.callGasLimitPercentageMultiplier = 105;
 			}
 			let entrypoint = overrides?.entrypoint;
 			if (entrypoint == null) {
@@ -811,7 +797,7 @@ export class CandidePaymaster extends Paymaster {
 					{
 						token: tokenAddress,
 					},
-					overrides,
+					_overrides,
 				);
 				return resultUserOp;
 			} else if ("eip7702Auth" in userOperation) {
@@ -821,7 +807,7 @@ export class CandidePaymaster extends Paymaster {
 					{
 						token: tokenAddress,
 					},
-					overrides,
+					_overrides,
 				);
 				return resultUserOp;
 			} else {
@@ -831,7 +817,7 @@ export class CandidePaymaster extends Paymaster {
 					{
 						token: tokenAddress,
 					},
-					overrides,
+					_overrides,
 				);
 				return resultUserOp;
 			}
