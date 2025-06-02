@@ -1,7 +1,6 @@
 import { SafeModule } from "./SafeModule";
 import { createCallData, sendEthCallRequest } from "../../../utils";
 import { MetaTransaction } from "../../../types";
-import { AbiCoder } from "ethers";
 
 export class AllowanceModule extends SafeModule{
     static readonly DEFAULT_ALLOWANCE_MODULE_ADDRESS =
@@ -291,8 +290,8 @@ export class AllowanceModule extends SafeModule{
         };
 
         const tokens = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
-        const abiCoder = AbiCoder.defaultAbiCoder();
-	    const decodedCalldata = abiCoder.decode(
+        this.checkForEmptyResultAndRevert(tokens, "getTokens");
+	    const decodedCalldata = this.abiCoder.decode(
             ["address[]"], tokens);
         return decodedCalldata[0];
     }
@@ -326,8 +325,8 @@ export class AllowanceModule extends SafeModule{
 
         const tokenAllowance = await sendEthCallRequest(
             nodeRpcUrl, ethCallParams, "latest");
-        const abiCoder = AbiCoder.defaultAbiCoder();
-	    const decodedCalldata = abiCoder.decode(["uint256[5]"], tokenAllowance);
+        this.checkForEmptyResultAndRevert(tokenAllowance, "getTokenAllowance");
+	    const decodedCalldata = this.abiCoder.decode(["uint256[5]"], tokenAllowance);
         const allowance = decodedCalldata[0]
         return {
             amount: BigInt(allowance[0]),
@@ -401,9 +400,8 @@ export class AllowanceModule extends SafeModule{
 
         const delegates = await sendEthCallRequest(
             nodeRpcUrl, ethCallParams, "latest");
-
-        const abiCoder = AbiCoder.defaultAbiCoder();
-	    const decodedCalldata = abiCoder.decode(
+        this.checkForEmptyResultAndRevert(delegates, "getDelegates");
+	    const decodedCalldata = this.abiCoder.decode(
             ["address[]", "uint48"], delegates);
 
         return {
