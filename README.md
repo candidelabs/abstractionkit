@@ -11,6 +11,10 @@ AbstractionKit is agnostic of:
 - **Paymasters**: Candide Paymaster is supported , but you can use any 3rd party paymaster to sponsor gas
 - **Accounts**: The Safe Account is first class supported, but you can use use Bundlers and Paymasters with any account
 
+## Examples
+<a href="https://github.com/candidelabs/abstractionkit-examples">Abstractionkit Example Projects</a>
+
+
 ## Features
 ### Safe Accounts
 - Built on ERC-4337 account abstraction
