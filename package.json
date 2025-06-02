@@ -47,7 +47,7 @@
 		"@typescript-eslint/parser": "^6.2.0",
 		"dotenv": "^16.4.5",
 		"eslint": "^8.46.0",
-		"eslint-plugin-tsdoc": "^0.2.19",
+		"eslint-plugin-tsdoc": "^0.4.0",
 		"jest": "^29.7.0",
 		"lint-staged": ">=10",
 		"microbundle": "^0.15.1",
