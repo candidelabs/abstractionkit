@@ -252,7 +252,6 @@ export async function simulateUserOperationCallDataWithTenderly(
         entrypointAddress,
         userOperation.sender,
         userOperation.callData,
-        userOperation.nonce == 0n, // isInit
         factory,
         factoryData,
         blockNumber
@@ -267,7 +266,6 @@ export async function simulateSenderCallDataWithTenderlyAndCreateShareLink(
 	entrypointAddress: string,
     sender: string,
     callData: string,
-    isInit: boolean,
     factory: string | null = null,
 	factoryData: string | null = null,
     blockNumber: bigint | null = null,
@@ -284,7 +282,6 @@ export async function simulateSenderCallDataWithTenderlyAndCreateShareLink(
         entrypointAddress,
         sender,
         callData,
-        isInit,
         factory,
         factoryData,
         blockNumber
@@ -335,7 +332,6 @@ export async function simulateSenderCallDataWithTenderly(
 	entrypointAddress: string,
     sender: string,
     callData: string,
-    isInit: boolean,
     factory: string | null = null,
 	factoryData: string | null = null,
     blockNumber: bigint | null = null,
@@ -358,8 +354,14 @@ export async function simulateSenderCallDataWithTenderly(
     }else{
         throw RangeError(`Invalid entrypoint: ${entrypointAddress}`);
     }
-
-    if(factory != null && factoryData != null && isInit){ 
+    
+    if(
+        factory == null && factoryData != null ||
+        factory != null && factoryData == null
+    ){ 
+        throw RangeError(`Invalid factory and factoryData`);
+    }
+    if(factory != null && factoryData != null){ 
         transactions.push({
             chainId,
             blockNumber,

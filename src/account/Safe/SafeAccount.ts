@@ -2872,7 +2872,7 @@ export class SafeAccount extends SmartAccount {
 		} else {
 			callData = overrides.callData;
 		}
-        
+
         const createShareLink = overrides.createShareLink?? true;
         if(createShareLink){
             return await simulateSenderCallDataWithTenderlyAndCreateShareLink(
@@ -2883,9 +2883,8 @@ export class SafeAccount extends SmartAccount {
                 this.entrypointAddress,
                 this.accountAddress,
                 callData,
-                isInit,
-                this.factoryAddress,
-                this.factoryData,
+                isInit?this.factoryAddress:null,
+                isInit?this.factoryData:null,
                 blockNumber
             )
         }else{
@@ -2897,9 +2896,8 @@ export class SafeAccount extends SmartAccount {
                 this.entrypointAddress,
                 this.accountAddress,
                 callData,
-                isInit,
-                this.factoryAddress,
-                this.factoryData,
+                isInit?this.factoryAddress:null,
+                isInit?this.factoryData:null,
                 blockNumber
             )
             return {simulation};
