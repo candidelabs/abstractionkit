@@ -13,8 +13,6 @@
 	"scripts": {
 		"build": "rimraf dist && microbundle --tsconfig tsconfig.json --no-sourcemap",
 		"clean": "rimraf dist",
-		"format": "prettier --write src/*.ts src/**/*.ts src/**/**/*.ts",
-		"lint": "eslint -f unix \"src/**/*.{ts,tsx}\"",
 		"test": "jest --verbose"
 	},
 	"repository": {
@@ -43,21 +41,11 @@
 		"isomorphic-unfetch": "^3.1.0"
 	},
 	"devDependencies": {
-		"@typescript-eslint/eslint-plugin": "^6.2.0",
-		"@typescript-eslint/parser": "^6.2.0",
-		"dotenv": "^16.4.5",
-		"eslint": "^8.46.0",
-		"eslint-plugin-tsdoc": "^0.4.0",
 		"jest": "^29.7.0",
-		"lint-staged": ">=10",
+		"dotenv": "^16.4.5",
 		"microbundle": "^0.15.1",
-		"prettier": "3.0.0",
 		"typescript": "^5.1.6",
 		"rimraf": "^5.0.10"
-	},
-	"lint-staged": {
-		"*.js": "eslint --cache --fix",
-		"*.--write": "prettier --ignore-unknown --write"
 	},
 	"packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }
