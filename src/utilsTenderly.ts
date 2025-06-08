@@ -223,19 +223,127 @@ export async function simulateUserOperationWithTenderly(
     return simulation[0];
 }
 
+/**
+ * Base wrapper for a useroperation
+ */
+export interface BaseUserOperationToSimulate {
+	sender: string;
+	callData: string;
+	nonce: any;
+	callGasLimit: any;
+	verificationGasLimit: any;
+	preVerificationGas: any;
+	maxFeePerGas: any;
+	maxPriorityFeePerGas: any;
+	signature: any;
+}
+
+/**
+ * Wrapper for a useroperation to simulate for an entrypoint v0.6.0
+ */
+export interface UserOperationV6ToSimulate extends BaseUserOperationToSimulate {
+	initCode: string | null;
+	paymasterAndData: any;
+}
+
+/**
+ * Wrapper for a useroperation to simulate for an entrypoint v0.7.0
+ */
+export interface UserOperationV7ToSimulate extends BaseUserOperationToSimulate {
+	factory: string | null;
+	factoryData: string | null;
+	paymaster: any;
+	paymasterVerificationGasLimit: any;
+	paymasterPostOpGasLimit: any;
+	paymasterData: any;
+}
+
+/**
+ * Wrapper for a useroperation to simulate for an entrypoint v0.8.0
+ */
+export interface UserOperationV8ToSimulate extends BaseUserOperationToSimulate {
+	factory: string | null;
+	factoryData: string | null;
+	paymaster: any;
+	paymasterVerificationGasLimit: any;
+	paymasterPostOpGasLimit: any;
+	paymasterData: any;
+    eip7702Auth: any;
+}
+
+export async function simulateUserOperationCallDataWithTenderlyAndCreateShareLink(
+    tenderlyAccountSlug:string,
+    tenderlyProjectSlug:string,
+    tenderlyAccessKey: string,
+    chainId: bigint,
+	entrypointAddress: string,
+	userOperation: UserOperationV6ToSimulate | UserOperationV7ToSimulate | UserOperationV8ToSimulate,
+    blockNumber: bigint | null = null,
+): Promise<{
+        simulation:TenderlySimulationResult,
+        callDataSimulationShareLink: string,
+        accountDeploymentSimulationShareLink?: string,
+}> {
+    const simulation = await simulateUserOperationCallDataWithTenderly(
+        tenderlyAccountSlug,
+        tenderlyProjectSlug,
+        tenderlyAccessKey,
+        chainId,
+        entrypointAddress,
+        userOperation,
+        blockNumber
+    );
+    const simulationIds = simulation.map(s => s.simulation.id) as string[];
+    simulationIds.map(simulationId => 
+        shareTenderlySimulationAndCreateLink(
+            tenderlyAccountSlug,
+            tenderlyProjectSlug,
+            tenderlyAccessKey,
+            simulationId,
+        )
+    );
+   
+    const simulationLinks = simulationIds.map(
+        s => 'https://dashboard.tenderly.co/shared/simulation/' + s );
+    if (simulationLinks.length == 1){
+        return {
+            simulation,
+            callDataSimulationShareLink: simulationLinks[0]
+        };
+    }else if (simulationLinks.length == 2){
+        return {
+            simulation,
+            accountDeploymentSimulationShareLink: simulationLinks[0],
+            callDataSimulationShareLink: simulationLinks[1]
+        };
+    }else{
+        throw new AbstractionKitError(
+            "BAD_DATA",
+            "invalid number of simulations retuned",
+            {
+                context: JSON.stringify(
+                    simulation,
+                    (_key, value) =>
+                        typeof value === "bigint" ? "0x" + value.toString(16) : value,
+                ),
+            },
+        );
+    } 
+}
+
 export async function simulateUserOperationCallDataWithTenderly(
     tenderlyAccountSlug:string,
     tenderlyProjectSlug:string,
     tenderlyAccessKey: string,
     chainId: bigint,
 	entrypointAddress: string,
-	userOperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
+	userOperation: UserOperationV6ToSimulate | UserOperationV7ToSimulate | UserOperationV8ToSimulate,
     blockNumber: bigint | null = null,
 ) : Promise<TenderlySimulationResult> {
     let factory = null;
     let factoryData = null;
 	if ("initCode" in userOperation) {
-        if(userOperation.initCode.length > 2){
+        if(userOperation.initCode != null && userOperation.initCode.length > 2){
             factory = userOperation.initCode.slice(0,22);
             factoryData = userOperation.initCode.slice(22);
         }

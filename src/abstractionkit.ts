@@ -41,6 +41,7 @@ export {
     simulateUserOperationWithTenderly,
     simulateUserOperationCallDataWithTenderly,
     simulateSenderCallDataWithTenderlyAndCreateShareLink,
+    simulateUserOperationCallDataWithTenderlyAndCreateShareLink,
     simulateSenderCallDataWithTenderly,
     callTenderlySimulateBundle
 } from "./utilsTenderly";
