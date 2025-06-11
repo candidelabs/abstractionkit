@@ -28,7 +28,8 @@ export type JsonRpcErrorCode =
 	| "METHOD_NOT_FOUND"
 	| "INVALID_PARAMS"
 	| "INTERNAL_ERROR"
-	| "SERVER_ERROR";
+	| "SERVER_ERROR"
+    | "TENDERLY_SIMULATION_ERROR";
 
 export const BundlerErrorCodeDict: Dictionary<BundlerErrorCode> = {
 	"-32602": "INVALID_FIELDS",

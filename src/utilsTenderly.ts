@@ -485,8 +485,25 @@ export async function simulateSenderCallDataWithTenderly(
         to: sender,
         data: callData,
     })
-    return await callTenderlySimulateBundle(
+    const simulationsResult = await callTenderlySimulateBundle(
         tenderlyAccountSlug, tenderlyProjectSlug, tenderlyAccessKey, transactions);
+    
+    for (const simulationResult of simulationsResult) {
+        if(simulationResult.simulation.id == ""){
+            throw new AbstractionKitError(
+                "TENDERLY_SIMULATION_ERROR",
+                "tenderly simulation failed",
+                {
+                    context: JSON.stringify(
+                        simulationsResult,
+                        (_key, value) =>
+                            typeof value === "bigint" ? "0x" + value.toString(16) : value,
+                    ),
+                },
+            );
+        }
+    }
+    return simulationsResult;
 }
 
 
