@@ -63,7 +63,7 @@ export async function simulateUserOperationWithTenderlyAndCreateShareLink(
     chainId: bigint,
 	entrypointAddress: string,
 	userOperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
-    blockNumber: bigint | null = null,
+    blockNumber: number | null = null,
 ): Promise<{
     simulation:SingleTransactionTenderlySimulationResult,
     simulationShareLink: string,
@@ -99,7 +99,7 @@ export async function simulateUserOperationWithTenderly(
     chainId: bigint,
 	entrypointAddress: string,
 	userOperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
-    blockNumber: bigint | null = null,
+    blockNumber: number | null = null,
 ): Promise<SingleTransactionTenderlySimulationResult> {
     const entrypointAddressLowerCase = entrypointAddress.toLowerCase();
     let callData: string | null = null;
@@ -278,7 +278,7 @@ export async function simulateUserOperationCallDataWithTenderlyAndCreateShareLin
     chainId: bigint,
 	entrypointAddress: string,
 	userOperation: UserOperationV6ToSimulate | UserOperationV7ToSimulate | UserOperationV8ToSimulate,
-    blockNumber: bigint | null = null,
+    blockNumber: number | null = null,
 ): Promise<{
         simulation:TenderlySimulationResult,
         callDataSimulationShareLink: string,
@@ -338,7 +338,7 @@ export async function simulateUserOperationCallDataWithTenderly(
     chainId: bigint,
 	entrypointAddress: string,
 	userOperation: UserOperationV6ToSimulate | UserOperationV7ToSimulate | UserOperationV8ToSimulate,
-    blockNumber: bigint | null = null,
+    blockNumber: number | null = null,
 ) : Promise<TenderlySimulationResult> {
     let factory = null;
     let factoryData = null;
@@ -376,7 +376,7 @@ export async function simulateSenderCallDataWithTenderlyAndCreateShareLink(
     callData: string,
     factory: string | null = null,
 	factoryData: string | null = null,
-    blockNumber: bigint | null = null,
+    blockNumber: number | null = null,
 ): Promise<{
         simulation:TenderlySimulationResult,
         callDataSimulationShareLink: string,
@@ -442,7 +442,7 @@ export async function simulateSenderCallDataWithTenderly(
     callData: string,
     factory: string | null = null,
 	factoryData: string | null = null,
-    blockNumber: bigint | null = null,
+    blockNumber: number | null = null,
 ): Promise<TenderlySimulationResult> {
     const transactions = [];
     const entrypointAddressLowerCase = entrypointAddress.toLowerCase();
@@ -516,13 +516,13 @@ export async function callTenderlySimulateBundle(
         from: string,
         to: string,
         data: string,
-        gas?: bigint | null,
-        gasPrice?: bigint | null,
-        value?: bigint | null,
-        blockNumber?: bigint | null,
+        gas?: number | null,
+        gasPrice?: number | null,
+        value?: number | null,
+        blockNumber?: number | null,
         simulationType?: 'full' | 'quick' | 'abi'
         stateOverride?: any | null,
-        transactionIndex?: bigint,
+        transactionIndex?: number,
         save?: boolean,
         saveIfFails?: boolean,
         estimateGas?: boolean,
@@ -536,7 +536,7 @@ export async function callTenderlySimulateBundle(
     const simulations =
       transactions.map(transaction=>{
             const transactionObject: Record<
-                string, string | bigint | boolean | {address: string}[]
+                string, string | number | boolean | {address: string}[]
             > = {
                 network_id: transaction.chainId.toString(),
                 save: transaction.save?? true,

@@ -2820,7 +2820,7 @@ export class SafeAccount extends SmartAccount {
 		nodeRpcUrl: string | null = null,
         chainId: bigint,
 		metaTransactions: MetaTransaction[],
-        blockNumber: bigint | null = null,
+        blockNumber: number | null = null,
         overrides: {
 			safeModuleExecutorFunctionSelector?: SafeModuleExecutorFunctionSelector;
 			multisendContractAddress?: string;
