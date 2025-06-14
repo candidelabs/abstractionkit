@@ -14,6 +14,13 @@ import {
 } from "./errors";
 import { sendJsonRpcRequest } from "./utils";
 
+export type OverrideType = Record<
+    string, 
+    Record<
+        string,
+        string | Record<string,string>
+    >
+>;
 
 export async function shareTenderlySimulationAndCreateLink(
     tenderlyAccountSlug:string,
@@ -64,6 +71,7 @@ export async function simulateUserOperationWithTenderlyAndCreateShareLink(
 	entrypointAddress: string,
 	userOperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
     blockNumber: number | null = null,
+    stateOverrides?: OverrideType | null
 ): Promise<{
     simulation:SingleTransactionTenderlySimulationResult,
     simulationShareLink: string,
@@ -75,7 +83,8 @@ export async function simulateUserOperationWithTenderlyAndCreateShareLink(
         chainId,
         entrypointAddress,
         userOperation,
-        blockNumber
+        blockNumber,
+        stateOverrides
     );
 
     await shareTenderlySimulationAndCreateLink(
@@ -100,6 +109,7 @@ export async function simulateUserOperationWithTenderly(
 	entrypointAddress: string,
 	userOperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
     blockNumber: number | null = null,
+    stateOverrides?: OverrideType | null
 ): Promise<SingleTransactionTenderlySimulationResult> {
     const entrypointAddressLowerCase = entrypointAddress.toLowerCase();
     let callData: string | null = null;
@@ -218,6 +228,7 @@ export async function simulateUserOperationWithTenderly(
             from: "0x1000000000000000000000000000000000000000",
             to: entrypointAddress,
             data: callData,
+            stateOverrides
         }]
     );
     return simulation[0];
@@ -279,6 +290,7 @@ export async function simulateUserOperationCallDataWithTenderlyAndCreateShareLin
 	entrypointAddress: string,
 	userOperation: UserOperationV6ToSimulate | UserOperationV7ToSimulate | UserOperationV8ToSimulate,
     blockNumber: number | null = null,
+    stateOverrides?: OverrideType | null,
 ): Promise<{
         simulation:TenderlySimulationResult,
         callDataSimulationShareLink: string,
@@ -291,7 +303,8 @@ export async function simulateUserOperationCallDataWithTenderlyAndCreateShareLin
         chainId,
         entrypointAddress,
         userOperation,
-        blockNumber
+        blockNumber,
+        stateOverrides
     );
     const simulationIds = simulation.map(s => s.simulation.id) as string[];
     simulationIds.map(simulationId => 
@@ -339,6 +352,7 @@ export async function simulateUserOperationCallDataWithTenderly(
 	entrypointAddress: string,
 	userOperation: UserOperationV6ToSimulate | UserOperationV7ToSimulate | UserOperationV8ToSimulate,
     blockNumber: number | null = null,
+    stateOverrides?: OverrideType | null,
 ) : Promise<TenderlySimulationResult> {
     let factory = null;
     let factoryData = null;
@@ -362,7 +376,8 @@ export async function simulateUserOperationCallDataWithTenderly(
         userOperation.callData,
         factory,
         factoryData,
-        blockNumber
+        blockNumber,
+        stateOverrides
     )
 }
 
@@ -377,6 +392,7 @@ export async function simulateSenderCallDataWithTenderlyAndCreateShareLink(
     factory: string | null = null,
 	factoryData: string | null = null,
     blockNumber: number | null = null,
+    stateOverrides?: OverrideType | null
 ): Promise<{
         simulation:TenderlySimulationResult,
         callDataSimulationShareLink: string,
@@ -392,7 +408,8 @@ export async function simulateSenderCallDataWithTenderlyAndCreateShareLink(
         callData,
         factory,
         factoryData,
-        blockNumber
+        blockNumber,
+        stateOverrides
     );
     const simulationIds = simulation.map(s => s.simulation.id) as string[];
     simulationIds.map(simulationId => 
@@ -443,6 +460,7 @@ export async function simulateSenderCallDataWithTenderly(
     factory: string | null = null,
 	factoryData: string | null = null,
     blockNumber: number | null = null,
+    stateOverrides?: OverrideType | null
 ): Promise<TenderlySimulationResult> {
     const transactions = [];
     const entrypointAddressLowerCase = entrypointAddress.toLowerCase();
@@ -476,6 +494,7 @@ export async function simulateSenderCallDataWithTenderly(
             from: senderCreator,
             to: factory,
             data: factoryData,
+            stateOverrides
         })
     }
     transactions.push({
@@ -484,6 +503,7 @@ export async function simulateSenderCallDataWithTenderly(
         from: entrypointAddress,
         to: sender,
         data: callData,
+        stateOverrides
     })
     const simulationsResult = await callTenderlySimulateBundle(
         tenderlyAccountSlug, tenderlyProjectSlug, tenderlyAccessKey, transactions);
@@ -521,7 +541,7 @@ export async function callTenderlySimulateBundle(
         value?: number | null,
         blockNumber?: number | null,
         simulationType?: 'full' | 'quick' | 'abi'
-        stateOverride?: any | null,
+        stateOverrides?: OverrideType | null,
         transactionIndex?: number,
         save?: boolean,
         saveIfFails?: boolean,
@@ -535,8 +555,10 @@ export async function callTenderlySimulateBundle(
         '/project/' + tenderlyProjectSlug + '/simulate-bundle';
     const simulations =
       transactions.map(transaction=>{
-            const transactionObject: Record<
-                string, string | number | boolean | {address: string}[]
+            const transactionObject: Record<string,
+                string | number | boolean |
+                OverrideType |
+                {address: string}[]
             > = {
                 network_id: transaction.chainId.toString(),
                 save: transaction.save?? true,
@@ -559,8 +581,28 @@ export async function callTenderlySimulateBundle(
             if (transaction.value != null){
                 transactionObject["value"] = transaction.value;
             }
-            if (transaction.stateOverride != null){
-                transactionObject["state_objects"] = transaction.stateOverride;
+            if (transaction.stateOverrides != null){
+                const stateOverrides = transaction.stateOverrides;
+                for (const address in stateOverrides) {
+                    for (const key in stateOverrides[address]) {
+                       if(key != 'balance' && key != 'storage' && key != 'stateDiff'){
+                            throw RangeError(
+                                `Invalide stateOverrides key: ${key}.`
+                            );
+                       }else if(
+                            'storage' in stateOverrides[address] &&
+                            'stateDiff' in stateOverrides[address]
+                        ){
+                            throw RangeError(
+                                "can't set both storage and stateDiff for stateOverrides"
+                            );
+                        }else if('stateDiff' in stateOverrides[address]){
+                            stateOverrides[address]["storage"] = stateOverrides[address]["stateDiff"];
+                            delete stateOverrides[address]["stateDiff"];
+                        }
+                    }
+                }
+                transactionObject["state_objects"] = stateOverrides;
             }
             
             if (transaction.transactionIndex != null){
@@ -576,7 +618,6 @@ export async function callTenderlySimulateBundle(
             if (transaction.accessList != null){
                 transactionObject["access_list"] = transaction.accessList;
             }
-
             return transactionObject;
         }
       ) 
