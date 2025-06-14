@@ -544,7 +544,7 @@ export async function callTenderlySimulateBundle(
                 from: transaction.from,
                 to: transaction.to,
                 input: transaction.data,
-                simulation_type: transaction.simulationType??'quick',
+                simulation_type: transaction.simulationType??'full',
               }
             if (transaction.blockNumber != null){
                 transactionObject["block_number"] = transaction.blockNumber;
