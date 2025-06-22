@@ -22,6 +22,10 @@ export { Bundler } from "./Bundler";
 
 export { CandidePaymaster } from "./paymaster/CandidePaymaster";
 
+export { 
+    WorldIdPermissionlessPaymaster 
+} from "./paymaster/WorldIdPermissionlessPaymaster";
+
 export {
 	createUserOperationHash,
 	createCallData,
