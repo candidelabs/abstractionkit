@@ -23,7 +23,7 @@ export { Bundler } from "./Bundler";
 export { CandidePaymaster } from "./paymaster/CandidePaymaster";
 
 export { 
-    WorldIdPermissionlessPaymaster 
+    WorldIdPermissionlessPaymaster, createWorldIdSignal 
 } from "./paymaster/WorldIdPermissionlessPaymaster";
 
 export {
