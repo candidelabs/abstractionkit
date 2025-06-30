@@ -1,6 +1,8 @@
 import { Paymaster } from "./Paymaster";
-import { UserOperationV6, UserOperationV7, UserOperationV8 } from "../types";
+import { StateOverrideSet, UserOperationV6, UserOperationV7, UserOperationV8 } from "../types";
 import { AbiCoder, keccak256, solidityPacked } from "ethers";
+import { ENTRYPOINT_V7, ENTRYPOINT_V8 } from "src/constants";
+import { Bundler } from "src/Bundler";
 
 export class WorldIdPermissionlessPaymaster extends Paymaster {
 	readonly address: string;
@@ -13,35 +15,54 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 	/**
 	 * createPaymasterUserOperation will estimate gas and set the paymaster fields.
 	 * @param userOperation - User operation to be sponsored
+	 * @param bundlerRpc - Bundler endpoint rpc url
      * @param nullifierHash - nullifier hash
 	 * @param root - Worldid Merkle tree root
 	 * @param proof - Worldid zk proof
-	 * @returns UserOperationV8 | UserOperationV7 | UserOperationV6
+	 * @param overrides - Overrides for the default values
+	 * @returns a promise of UserOperationV8 | UserOperationV7
 	 */
-	createPaymasterUserOperation(
+	async createPaymasterUserOperation(
 		userOperation: UserOperationV8,
+        bundlerRpc: string,
         nullifierHash: bigint,
         root:bigint,
         proof: string,
-	):UserOperationV8;
-	createPaymasterUserOperation(
+		overrides?:{
+            /** set the entrypoint address intead of determining it from the useroperation structure.*/
+            entrypoint?: string;
+
+            /** pass some state overrides for gas estimation"*/
+            state_override_set?: StateOverrideSet;
+        }
+	):Promise<UserOperationV8>;
+	async createPaymasterUserOperation(
 		userOperation: UserOperationV7,
+        bundlerRpc: string,
         nullifierHash: bigint,
         root:bigint,
         proof: string,
-	):UserOperationV7;
-	createPaymasterUserOperation(
-		userOperation: UserOperationV6,
+		overrides?:{
+            /** set the entrypoint address intead of determining it from the useroperation structure.*/
+            entrypoint?: string;
+
+            /** pass some state overrides for gas estimation"*/
+            state_override_set?: StateOverrideSet;
+        }
+	):Promise<UserOperationV7>;
+	async createPaymasterUserOperation(
+		userOperation: UserOperationV8 | UserOperationV7,
+        bundlerRpc: string,
         nullifierHash: bigint,
         root:bigint,
         proof: string,
-	):UserOperationV6;
-	createPaymasterUserOperation(
-		userOperation: UserOperationV8 | UserOperationV7 | UserOperationV6,
-        nullifierHash: bigint,
-        root:bigint,
-        proof: string,
-	):UserOperationV8 | UserOperationV7 | UserOperationV6 {
+		overrides?:{
+            /** set the entrypoint address intead of determining it from the useroperation structure.*/
+            entrypoint?: string;
+            /** pass some state overrides for gas estimation"*/
+            state_override_set?: StateOverrideSet;
+        }
+	):Promise<UserOperationV8 | UserOperationV7> {
         //256 bytes for proof
         if(proof.slice(0,2) != "0x" || proof.length != 514){
             throw RangeError("Invalid proof.");
