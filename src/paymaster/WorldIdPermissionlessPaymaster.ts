@@ -86,14 +86,54 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
             abiCoder.encode(['uint256'],[nullifierHash]).slice(2) + 
             abiCoder.encode(['uint256[8]'],[proofArr]).slice(2);
 
-		if ("initCode" in userOperation) {
-            userOperation.paymasterAndData = this.address + paymasterData.slice(2);
-        }else{
-            userOperation.paymaster = this.address;
-            userOperation.paymasterData = paymasterData;
-            userOperation.paymasterPostOpGasLimit = 45_000n;
-            userOperation.paymasterVerificationGasLimit = 350_000n;
+        userOperation.paymaster = this.address;
+        userOperation.paymasterData = paymasterData;
+        userOperation.paymasterPostOpGasLimit = 45_000n;
+        userOperation.paymasterVerificationGasLimit = 350_000n;
+        
+        if(overrides == null){
+            overrides = {}
         }
+        let entrypointAddress = overrides.entrypoint;
+
+		if (entrypointAddress == null) {
+		    if ("eip7702Auth" in userOperation) {
+                entrypointAddress = ENTRYPOINT_V8;
+            }else{
+                entrypointAddress = ENTRYPOINT_V7;
+            }
+        }
+        
+        let preVerificationGas = userOperation.preVerificationGas;
+        let verificationGasLimit = userOperation.verificationGasLimit;
+        let callGasLimit = userOperation.callGasLimit;
+
+        // set preVerificationGas to zero to force restimation
+        userOperation.preVerificationGas = 0n;
+
+        const bundler = new Bundler(bundlerRpc);
+        const estimation = await bundler.estimateUserOperationGas(
+            userOperation,
+            entrypointAddress as string,
+            overrides.state_override_set,
+        );
+
+        // only change gas limits if the estimated limits is higher than
+        // the supplied
+        if (preVerificationGas < estimation.preVerificationGas) {
+            preVerificationGas = estimation.preVerificationGas;
+        }
+        if (verificationGasLimit < estimation.verificationGasLimit) {
+            verificationGasLimit = estimation.verificationGasLimit;
+        }
+        if (callGasLimit < estimation.callGasLimit) {
+            callGasLimit = estimation.callGasLimit;
+        }
+
+        userOperation.preVerificationGas = preVerificationGas;
+        userOperation.verificationGasLimit = verificationGasLimit;
+        userOperation.callGasLimit = callGasLimit;
+
         return userOperation;
 	}
 }
