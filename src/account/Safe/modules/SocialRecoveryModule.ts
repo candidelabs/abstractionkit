@@ -584,6 +584,60 @@ export class SocialRecoveryModule extends SafeModule{
 
         return BigInt(decodedCalldata[0]);
     }
+
+    /**
+	 * create recovery request eip712 data
+	 * @param rpcNode - node to fetch the recovery nonce
+	 * @param accountAddress - address of account to recover
+	 * @param newOwners - new owners to recover to
+	 * @param newThreshold - new threshold
+	 * @param overrides.recoveryNonce - manually set the recovery nonce
+	 * @returns an object containing the typed data domain, type and typed data vales
+     * object needed for hashing and signing
+	 */
+	async getRecoveryRequestEip712Data(
+        rpcNode: string,
+        chainId: bigint,
+        accountAddress: string,
+        newOwners: string[],
+        newThreshold: bigint,
+        overrides: {
+            recoveryNonce?: bigint,
+        } = {}
+	): Promise<{
+        domain: RecoveryRequestTypedDataDomain,
+        types:Record<string, {name: string;type: string;}[]>,
+        messageValue: RecoveryRequestTypedMessageValue
+    }> {
+        let recoveryNonce;
+        if(overrides.recoveryNonce == null){
+            const socialRecoveryModule = new SocialRecoveryModule(
+                this.moduleAddress
+            );
+            recoveryNonce = await socialRecoveryModule.nonce(rpcNode, accountAddress);
+        }else{
+            recoveryNonce = overrides.recoveryNonce;
+        }
+
+        const messageValue: RecoveryRequestTypedMessageValue = {
+            wallet: accountAddress,
+            newOwners,
+            newThreshold,
+            nonce: recoveryNonce
+        };
+        const domain: RecoveryRequestTypedDataDomain = {
+            name: "Social Recovery Module",
+            version: "0.0.1",
+            chainId: Number(chainId),
+            verifyingContract: this.moduleAddress
+        };
+
+        return {
+            domain,
+            types: EIP712_RECOVERY_MODULE_TYPE,
+            messageValue,
+        };
+	}
 }
 
 export type RecoveryRequest  = {
@@ -597,3 +651,28 @@ export type RecoverySignaturePair  = {
     signer:string;
     signature:string;
 }
+
+export const EXECUTE_RECOVERY_PRIMARY_TYPE = "ExecuteRecovery";
+
+export type RecoveryRequestTypedDataDomain = {
+    name: string;
+    version: string;
+	chainId: number;
+	verifyingContract: string;
+}
+
+export type RecoveryRequestTypedMessageValue = {
+	wallet: string;
+	newOwners: string[];
+	newThreshold: bigint;
+	nonce: bigint;
+}
+
+export const EIP712_RECOVERY_MODULE_TYPE = {
+    ExecuteRecovery: [
+      { type: "address", name: "wallet" },
+      { type: "address[]", name: "newOwners" },
+      { type: "uint256", name: "newThreshold" },
+      { type: "uint256", name: "nonce" },
+    ],
+};

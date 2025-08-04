@@ -5,6 +5,10 @@ export {
 	RecoveryRequest,
 	SocialRecoveryModuleGracePeriodSelector,
 	RecoverySignaturePair,
+    RecoveryRequestTypedDataDomain,
+    RecoveryRequestTypedMessageValue,
+    EXECUTE_RECOVERY_PRIMARY_TYPE,
+    EIP712_RECOVERY_MODULE_TYPE
 } from "./account/Safe/modules/SocialRecoveryModule";
 export {
 	AllowanceModule,
