@@ -115,4 +115,6 @@ export {
     DEFAULT_SECP256R1_PRECOMPILE_ADDRESS
 } from "./constants";
 
+export * from "./account/Safe/safeMessage";
+
 export { AbstractionKitError } from "./errors";

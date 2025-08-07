@@ -64,6 +64,7 @@ import { AbstractionKitError, ensureError } from "src/errors";
 import { Bundler } from "src/Bundler";
 import { SendUseroperationResponse } from "../SendUseroperationResponse";
 import { SafeAccountFactory } from "src/factory/SafeAccountFactory";
+import { getSafeMessageEip712Data, SafeMessageTypedDataDomain, SafeMessageTypedMessageValue } from "./safeMessage";
 
 export class SafeAccount extends SmartAccount {
 	static readonly DEFAULT_SAFE_SINGLETON = Safe_L2_V1_4_1;
@@ -2902,6 +2903,29 @@ export class SafeAccount extends SmartAccount {
             )
             return {simulation};
         }
+    }
+
+    /**
+	 * create eip712 signing data for a safe message
+	 * @param useroperation - useroperation to hash
+	 * @param chainId - target chain id
+	 * @param message - message to hash
+	 * @returns an object containing the typed data domain, type and typed data vales
+     * object needed for hashing and signing a sae message
+	 */
+    getSafeMessageEip712Data(
+        chainId: bigint,
+        message: string
+    ): {
+        domain: SafeMessageTypedDataDomain,
+        types:Record<string, {name: string;type: string;}[]>,
+        messageValue: SafeMessageTypedMessageValue
+    } {
+        return getSafeMessageEip712Data(
+            this.accountAddress,
+            chainId,
+            message
+        );
     }
 }
 
