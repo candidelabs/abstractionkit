@@ -2369,6 +2369,48 @@ export class SafeAccount extends SmartAccount {
 		};
 	}
 
+    /**
+	 * create a change threshold metatransaction 
+	 * @param threshold - new threshold
+	 * @returns a metaTransactions
+	 */
+	public createChangeThresholdMetaTransaction(threshold: number): MetaTransaction {
+        if(threshold < 1){
+            throw RangeError("threshold can't be less than 1.");
+        }
+
+		const changeThresholdCallData = createCallData(
+			"0x694e80c3", //changeThreshold
+			["uint256"],
+			[threshold],
+		);
+
+		return {
+			to: this.accountAddress,
+			data: changeThresholdCallData,
+			value: 0n,
+		};
+	}
+
+    /**
+	 * create an approve hash metatransaction 
+	 * @param hashToApprove - hash to approve
+	 * @returns a metaTransactions
+	 */
+	public createApproveHashMetaTransaction(hashToApprove: string): MetaTransaction {
+		const approveHashCallData = createCallData(
+			"0xd4d9bdcd", //approveHash
+			["bytes32"],
+			[hashToApprove],
+		);
+
+		return {
+			to: this.accountAddress,
+			data: approveHashCallData,
+			value: 0n,
+		};
+	}
+
 	/**
 	 * create a deploy webauthn verifier metatransaction
 	 * @param x - webauthn public key x parameter
@@ -2441,6 +2483,34 @@ export class SafeAccount extends SmartAccount {
 		);
 
 		return decodedCalldata[0];
+	}
+
+	/**
+	 * fetches the current threshold
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * @returns a promise with the current threshold
+	 */
+	public async getThreshold(nodeRpcUrl: string): Promise<number> {
+		const functionSelector = "0xe75235b8"; //getThreshold
+		const callData = createCallData(functionSelector, [], []);
+
+		const ethCallParams = {
+			to: this.accountAddress,
+			data: callData,
+		};
+		const getThresholdResult = await sendEthCallRequest(
+			nodeRpcUrl,
+			ethCallParams,
+			"latest",
+		);
+
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		const decodedCalldata = abiCoder.decode(
+			["uint256"],
+			getThresholdResult,
+		);
+
+		return Number(decodedCalldata[0]);
 	}
     
     /**
