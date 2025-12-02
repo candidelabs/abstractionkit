@@ -58,6 +58,7 @@ import {
 	BaseInitOverrides,
     WebauthnDummySignerSignaturePair,
     WebauthnPublicKey,
+    SafeAccountSingleton,
 } from "./types";
 import { decodeMultiSendCallData, encodeMultiSendCallData } from "./multisend";
 import { AbstractionKitError, ensureError } from "src/errors";
@@ -67,8 +68,6 @@ import { SafeAccountFactory } from "src/factory/SafeAccountFactory";
 import { getSafeMessageEip712Data, SafeMessageTypedDataDomain, SafeMessageTypedMessageValue } from "./safeMessage";
 
 export class SafeAccount extends SmartAccount {
-	static readonly DEFAULT_SAFE_SINGLETON = Safe_L2_V1_4_1;
-
 	static readonly DEFAULT_WEB_AUTHN_SHARED_SIGNER: string =
 		"0xfD90FAd33ee8b58f32c00aceEad1358e4AFC23f9";
 	static readonly DEFAULT_WEB_AUTHN_SIGNER_SINGLETON: string =
@@ -110,6 +109,7 @@ export class SafeAccount extends SmartAccount {
 	protected x: bigint | null = null;
 	protected y: bigint | null = null;
 
+	readonly safeAccountSingleton:SafeAccountSingleton;
 	readonly entrypointAddress: string;
 	readonly safe4337ModuleAddress: string;
 	protected factoryAddress: string | null;
@@ -124,6 +124,7 @@ export class SafeAccount extends SmartAccount {
         overrides: {
             onChainIdentifierParams?: OnChainIdentifierParamsType;
             onChainIdentifier?: string;
+            safeAccountSingleton?: SafeAccountSingleton;
         } = {}
 	) {
 		super(accountAddress);
@@ -160,6 +161,7 @@ export class SafeAccount extends SmartAccount {
         }else{
             this.onChainIdentifier = null;
         }
+        this.safeAccountSingleton = overrides.safeAccountSingleton?? Safe_L2_V1_4_1;
 	}
 
 	/**
@@ -172,7 +174,7 @@ export class SafeAccount extends SmartAccount {
 	 * SafeAccountFactory.DEFAULT_FACTORY_ADDRESS
 	 * @param overrides.singletonInitHash - a hash that includes the singleton address and thr proxy bytecode
 	 * keccak256(solidityPacked(["bytes", "bytes"], [proxyByteCode, abiCoder.encode(["uint256"], [singletonAddress])]))
-	 * defaults to SafeAccount.DEFAULT_SAFE_SINGLETON.singletonInitHash
+	 * defaults to SafeAccount.safeAccountSingleton.singletonInitHash
 	 * @returns proxy/account address
 	 */
 	public static createProxyAddress(
@@ -191,8 +193,7 @@ export class SafeAccount extends SmartAccount {
 			overrides.safeFactoryAddress ??
 			SafeAccountFactory.DEFAULT_FACTORY_ADDRESS;
 		const singletonInitHash =
-			overrides.singletonInitHash ??
-			SafeAccount.DEFAULT_SAFE_SINGLETON.singletonInitHash;
+			overrides.singletonInitHash ?? Safe_L2_V1_4_1.singletonInitHash;
 		const salt = keccak256(
 			solidityPacked(
 				["bytes32", "uint256"],
@@ -914,9 +915,8 @@ export class SafeAccount extends SmartAccount {
 		} else {
 			safeAccountFactory = new SafeAccountFactory();
 		}
-
 		const safeSingleton =
-			overrides.safeAccountSingleton ?? SafeAccount.DEFAULT_SAFE_SINGLETON;
+			overrides.safeAccountSingleton ?? Safe_L2_V1_4_1;
 		const sender = this.createProxyAddress(initializerCallData, {
 			c2Nonce: overrides.c2Nonce ?? 0n,
 			safeFactoryAddress: safeAccountFactory.address,
@@ -1118,7 +1118,7 @@ export class SafeAccount extends SmartAccount {
 		}
 
 		const safeSingleton =
-			overrides.safeAccountSingleton ?? SafeAccount.DEFAULT_SAFE_SINGLETON;
+			overrides.safeAccountSingleton ?? Safe_L2_V1_4_1;
 
 		const generatorFunctionInputParameters = [
 			safeSingleton.singletonAddress,

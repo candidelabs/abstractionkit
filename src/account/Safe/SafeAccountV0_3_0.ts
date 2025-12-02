@@ -5,10 +5,11 @@ import {
 	CreateUserOperationV7Overrides,
     SafeUserOperationTypedDataDomain,
     SafeUserOperationV7TypedMessageValue,
+    SafeAccountSingleton,
 } from "./types";
 
 import { UserOperationV7, MetaTransaction, OnChainIdentifierParamsType } from "../../types";
-import { ENTRYPOINT_V7 } from "src/constants";
+import { ENTRYPOINT_V7, Safe_L2_V1_4_1 } from "src/constants";
 
 export class SafeAccountV0_3_0 extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V7;
@@ -24,6 +25,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			entrypointAddress?: string;
             onChainIdentifierParams?: OnChainIdentifierParamsType;
             onChainIdentifier?: string
+            safeAccountSingleton?: SafeAccountSingleton;
 		} = {},
 	) {
 		const safe4337ModuleAddress =
@@ -37,7 +39,8 @@ export class SafeAccountV0_3_0 extends SafeAccount {
             accountAddress, safe4337ModuleAddress, entrypointAddress,
             {
                 onChainIdentifierParams: overrides.onChainIdentifierParams,
-                onChainIdentifier: overrides.onChainIdentifier
+                onChainIdentifier: overrides.onChainIdentifier,
+                safeAccountSingleton: overrides.safeAccountSingleton
             }
         );
 	}
@@ -100,7 +103,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			}
 		}
 		const [accountAddress, factoryAddress, factoryData] =
-			SafeAccountV0_3_0.createAccountAddressAndFactoryAddressAndData(
+			SafeAccount.createAccountAddressAndFactoryAddressAndData(
 				owners,
 				overrides,
 				overrides.safe4337ModuleAddress ??
@@ -297,4 +300,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 
 		return userOperationV7;
 	}
+}
+
+export class SafeAccountV1_4_1_M_0_3_0 extends SafeAccountV0_3_0 {
 }

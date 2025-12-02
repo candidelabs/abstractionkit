@@ -16,6 +16,7 @@ export {
 } from "./account/Safe/modules/AllowanceModule";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
 export { SafeAccountV0_3_0 } from "./account/Safe/SafeAccountV0_3_0";
+export { SafeAccountV1_5_0_M_0_3_0 } from "./account/Safe/SafeAccountV1_5_0_M_0_3_0";
 
 export { SendUseroperationResponse } from "./account/SendUseroperationResponse";
 

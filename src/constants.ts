@@ -6,6 +6,12 @@ export const ENTRYPOINT_V8 = "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108";
 export const ENTRYPOINT_V7 = "0x0000000071727De22E5E9d8BAf0edAc6f37da032";
 export const ENTRYPOINT_V6 = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
 
+export const Safe_L2_V1_5_0: SafeAccountSingleton = {
+	singletonAddress: "0xEdd160fEBBD92E350D4D398fb636302fccd67C7e",
+	singletonInitHash:
+		"0x1b94aebb5a7df6dff11d93589204a6bbc99b4b8c9014bf1d386d006c2c17a881",
+};
+
 export const Safe_L2_V1_4_1: SafeAccountSingleton = {
 	singletonAddress: "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
 	singletonInitHash:
