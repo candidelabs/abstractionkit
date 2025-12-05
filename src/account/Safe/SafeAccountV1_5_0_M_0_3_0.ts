@@ -2,8 +2,6 @@ import { OnChainIdentifierParamsType } from "src/types";
 import { SafeAccountV0_3_0 } from "./SafeAccountV0_3_0";
 import { Signer, InitCodeOverrides } from "./types";
 import { Safe_L2_V1_5_0 } from "src/constants";
-import { AbiCoder, keccak256, solidityPacked } from "ethers";
-import { SafeAccount } from "./SafeAccount";
 
 export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 	constructor(

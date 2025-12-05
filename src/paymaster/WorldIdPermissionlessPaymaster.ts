@@ -1,5 +1,5 @@
 import { Paymaster } from "./Paymaster";
-import { StateOverrideSet, UserOperationV6, UserOperationV7, UserOperationV8 } from "../types";
+import { StateOverrideSet, UserOperationV7, UserOperationV8 } from "../types";
 import { AbiCoder, keccak256, solidityPacked } from "ethers";
 import { ENTRYPOINT_V7, ENTRYPOINT_V8 } from "src/constants";
 import { Bundler } from "src/Bundler";
