@@ -48,6 +48,12 @@ export interface UserOperationV8 extends BaseUserOperation {
     eip7702Auth: Authorization7702Hex | null;
 }
 
+/**
+ * Wrapper for a useroperation for an entrypoint v0.8.0
+ */
+export interface UserOperationV9 extends UserOperationV8 {
+}
+
 export type AbiInputValue =
 	| string
 	| bigint

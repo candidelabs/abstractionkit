@@ -1,6 +1,6 @@
 import * as fetchImport from "isomorphic-unfetch";
 
-import { id, AbiCoder, keccak256, JsonRpcProvider } from "ethers";
+import { id, AbiCoder, keccak256, JsonRpcProvider, solidityPacked } from "ethers";
 
 import {
 	AbiInputValue,
@@ -14,15 +14,16 @@ import {
 	UserOperationV8,
     PolygonChain,
     PolygonGasStationJsonRpcResponse,
+    UserOperationV9,
 } from "./types";
 import {
 	AbstractionKitError,
 	BundlerErrorCodeDict,
 	ensureError,
 } from "./errors";
-import { ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8 } from "./constants";
+import { ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8, ENTRYPOINT_V9 } from "./constants";
 
-function buildDomainSeparatorV8(chainId: bigint): string{
+function buildDomainSeparator(chainId: bigint, entrypoint: string): string{
     // DOMAIN_NAME = "ERC4337"
     const hashed_name = "0x364da28a5c92bcc87fe97c8813a6c6b8a3a049b0ea0a328fcb0b4f0e00337586"; 
 
@@ -35,7 +36,7 @@ function buildDomainSeparatorV8(chainId: bigint): string{
     const abiCoder = AbiCoder.defaultAbiCoder();
     const encodedUserOperationHash = abiCoder.encode(
         ["(bytes32,bytes32,bytes32,uint256,address)"],
-        [[type_hash, hashed_name, hashed_version, chainId, ENTRYPOINT_V8]],
+        [[type_hash, hashed_name, hashed_version, chainId, entrypoint]],
     );
     return keccak256(encodedUserOperationHash);
 }
@@ -73,13 +74,21 @@ export function createUserOperationHash(
             [packedUserOperationHash, entrypointAddress, chainId],
         );
         userOperationHash = keccak256(encodedUserOperationHash);
-	}else{
+    }else if (entrypointAddress.toLowerCase() == ENTRYPOINT_V8.toLowerCase()) {
         packedUserOperationHash = keccak256(
 			createPackedUserOperationV8(useroperation as UserOperationV8),
 		);
-        const domainSeparator = buildDomainSeparatorV8(chainId);
+        const domainSeparator = buildDomainSeparator(chainId, ENTRYPOINT_V8);
         userOperationHash = keccak256(
             "0x1901" + domainSeparator.slice(2) + packedUserOperationHash.slice(2));
+    }else{
+        packedUserOperationHash = keccak256(
+			createPackedUserOperationV9(useroperation as UserOperationV8),
+		);
+        const domainSeparator = buildDomainSeparator(chainId, ENTRYPOINT_V9);
+        userOperationHash = keccak256(
+            "0x1901" + domainSeparator.slice(2) + packedUserOperationHash.slice(2));
+
     }
 
 	return userOperationHash;
@@ -202,6 +211,28 @@ export function createPackedUserOperationV7(
 	return packedUserOperation;
 }
 
+export function paymasterDataKeccak(paymasterAndData: string): string{
+    const PAYMASTER_SIG_MAGIC = '22e325a297439656';
+    const parts = paymasterAndData.split(PAYMASTER_SIG_MAGIC);
+    if(parts.length > 1){
+        return keccak256(solidityPacked(
+            ["bytes", "bytes"], [parts[0], "0x" + PAYMASTER_SIG_MAGIC]));
+    }else{
+        return keccak256(paymasterAndData);
+    }
+}
+
+/**
+ * createPackedUserOperation for the standard entrypointv0.9 hash
+ * @param useroperation -useroperation to pack
+ * @returns packed UserOperation
+ */
+export function createPackedUserOperationV9(
+	useroperation: UserOperationV8,
+): string {
+    return baseCreatePackedUserOperationV8V9(useroperation, true);
+}
+
 /**
  * createPackedUserOperation for the standard entrypointv0.8 hash
  * @param useroperation -useroperation to pack
@@ -209,6 +240,17 @@ export function createPackedUserOperationV7(
  */
 export function createPackedUserOperationV8(
 	useroperation: UserOperationV8,
+): string {
+    return baseCreatePackedUserOperationV8V9(useroperation, false);
+}
+
+/**
+ * createPackedUserOperation for the standard entrypointv0.8 hash
+ * @param useroperation -useroperation to pack
+ * @returns packed UserOperation
+ */
+function baseCreatePackedUserOperationV8V9(
+	useroperation: UserOperationV8 | UserOperationV9, is_v9: boolean
 ): string {
 	const abiCoder = AbiCoder.defaultAbiCoder();
 
@@ -267,7 +309,7 @@ export function createPackedUserOperationV8(
 		accountGasLimits,
 		useroperation.preVerificationGas,
 		gasFees,
-		keccak256(paymasterAndData),
+		is_v9?paymasterDataKeccak(paymasterAndData):keccak256(paymasterAndData),
 	];
 
 	const packedUserOperation = abiCoder.encode(

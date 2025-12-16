@@ -4,7 +4,7 @@ import {
     createCallData, createUserOperationHash, fetchAccountNonce,
     getFunctionSelector, handlefetchGasPrice, sendJsonRpcRequest
 } from "../../utils";
-import { GasOption, PolygonChain, StateOverrideSet, UserOperationV8 } from "src/types";
+import { GasOption, PolygonChain, StateOverrideSet, UserOperationV8, UserOperationV9 } from "src/types";
 import { AbstractionKitError } from "src/errors";
 import { Authorization7702Hex, bigintToHex } from "src/utils7702";
 import { Bundler } from "src/Bundler";
@@ -65,12 +65,7 @@ export interface CreateUserOperationOverrides {
     };
 }
 
-
-export class Simple7702Account extends SmartAccount {
-	static readonly DEFAULT_DELEGATEE_ADDRESS =
-        "0xe6Cae83BdE06E4c305530e199D7217f42808555B";
-	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V8;
-
+export class BaseSimple7702Account extends SmartAccount {
 	static readonly executorFunctionSelector = "0xb61d27f6"; //execute
 	static readonly executorFunctionInputAbi: string[] = [
         "address", //dest
@@ -83,16 +78,16 @@ export class Simple7702Account extends SmartAccount {
         "0xd2614025fc173b86704caf37b2fb447f7618101a0d31f5f304c777024cef38a060a29ee43fcf0c46f9107d4f670b8a85c2c017a1fe9e4af891f24f0be6ba5d671c";
 
 	readonly entrypointAddress: string;
+	readonly delegateeAddress: string;
 
 	constructor(
 		accountAddress: string,
-        overrides: {
-			entrypointAddress?: string;
-		} = {},
+        entrypointAddress: string,
+        delegateeAddress:string,
 	) {
 		super(accountAddress);
-        this.entrypointAddress = overrides.entrypointAddress ??
-			Simple7702Account.DEFAULT_ENTRYPOINT_ADDRESS;
+        this.entrypointAddress = entrypointAddress;
+        this.delegateeAddress = delegateeAddress;
 	}
     
     /**
@@ -109,8 +104,8 @@ export class Simple7702Account extends SmartAccount {
 	): string {
 		const executorFunctionInputParameters = [to, value, data];
 		const callData = createCallData(
-			Simple7702Account.executorFunctionSelector,
-			Simple7702Account.executorFunctionInputAbi,
+			BaseSimple7702Account.executorFunctionSelector,
+			BaseSimple7702Account.executorFunctionInputAbi,
 			executorFunctionInputParameters,
 		);
 		return callData;
@@ -126,7 +121,7 @@ export class Simple7702Account extends SmartAccount {
 	): string {
 		const value = metaTransaction.value ?? 0;
 		const data = metaTransaction.data ?? "0x";
-		const executorFunctionCallData = Simple7702Account.createAccountCallData(
+		const executorFunctionCallData = BaseSimple7702Account.createAccountCallData(
 			metaTransaction.to,
 			value,
 			data,
@@ -146,15 +141,15 @@ export class Simple7702Account extends SmartAccount {
             transaction => [transaction.to, transaction.value, transaction.data]
         )];
         const callData = createCallData(
-			Simple7702Account.batchExecutorFunctionSelector,
-			Simple7702Account.batchExecutorFunctionInputAbi,
+			BaseSimple7702Account.batchExecutorFunctionSelector,
+			BaseSimple7702Account.batchExecutorFunctionInputAbi,
 			encodedTransactions,
 		);
 		return callData;
 	}
     
     /**
-	 * createUserOperation will determine the nonce, fetch the gas prices,
+	 * baseCreateUserOperation will determine the nonce, fetch the gas prices,
 	 * estimate gas limits and return a useroperation to be signed.
 	 * you can override all these values using the overrides parameter.
 	 * @param transactions - metatransaction list to be encoded
@@ -163,12 +158,12 @@ export class Simple7702Account extends SmartAccount {
 	 * @param overrides - overrides for the default values
 	 * @returns promise with useroperation
 	 */
-    public async createUserOperation(
+    protected async baseCreateUserOperation(
 		transactions: SimpleMetaTransaction[],
 		providerRpc?: string,
 		bundlerRpc?: string,
 		overrides: CreateUserOperationOverrides = {},
-	): Promise<UserOperationV8> {
+	): Promise<UserOperationV8 | UserOperationV9> {
         if (transactions.length < 1) {
 			throw RangeError("There should be at least one transaction");
 		}
@@ -226,7 +221,7 @@ export class Simple7702Account extends SmartAccount {
         if(overrides.eip7702Auth != null){
             eip7702AuthChainId = overrides.eip7702Auth.chainId;
             eip7702AuthAddress = overrides.eip7702Auth.address??
-                Simple7702Account.DEFAULT_DELEGATEE_ADDRESS;
+                this.delegateeAddress;
             eip7702AuthNonce = overrides.eip7702Auth.nonce??null;
         }
         if(overrides.eip7702Auth != null && eip7702AuthNonce == null){
@@ -311,11 +306,11 @@ export class Simple7702Account extends SmartAccount {
         let callData = "0x" as string;
 		if (overrides.callData == null) {
 			if (transactions.length == 1) {
-				callData = Simple7702Account.createAccountCallDataSingleTransaction(
+				callData = BaseSimple7702Account.createAccountCallDataSingleTransaction(
 					transactions[0],
 				);
 			} else {
-				callData = Simple7702Account.createAccountCallDataBatchTransactions(
+				callData = BaseSimple7702Account.createAccountCallDataBatchTransactions(
 					transactions,
 				);
 			}
@@ -323,7 +318,7 @@ export class Simple7702Account extends SmartAccount {
 			callData = overrides.callData;
 		}
         
-		let userOperation:UserOperationV8;
+		let userOperation:UserOperationV8 | UserOperationV9;
         if(overrides.eip7702Auth != null){
             const yParity = overrides.eip7702Auth.yParity?? "0x0";
             if(
@@ -398,13 +393,13 @@ export class Simple7702Account extends SmartAccount {
 				userOperation.maxFeePerGas = 0n;
 				userOperation.maxPriorityFeePerGas = 0n;
 
-				let userOperationToEstimate: UserOperationV8;
+				let userOperationToEstimate: UserOperationV8 | UserOperationV9;
                 userOperationToEstimate = { ...userOperation };
 
 				userOperation.signature = overrides.dummySignature??
-                    Simple7702Account.dummySignature;;
+                    BaseSimple7702Account.dummySignature;;
 				[preVerificationGas, verificationGasLimit, callGasLimit] =
-					await this.estimateUserOperationGas(
+					await this.baseEstimateUserOperationGas(
 						userOperationToEstimate,
 						bundlerRpc,
 						{
@@ -485,8 +480,8 @@ export class Simple7702Account extends SmartAccount {
 	 * @param overrides.dummySignature - a single eoa dummy signature
 	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
 	 */
-    public async estimateUserOperationGas(
-		userOperation: UserOperationV8,
+    protected async baseEstimateUserOperationGas(
+		userOperation: UserOperationV8 | UserOperationV9,
 		bundlerRpc: string,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
@@ -494,7 +489,7 @@ export class Simple7702Account extends SmartAccount {
 		} = {},
 	): Promise<[bigint, bigint, bigint]> {
 		userOperation.signature = overrides.dummySignature??
-                    Simple7702Account.dummySignature;
+                    BaseSimple7702Account.dummySignature;
 		        
 		const bundler = new Bundler(bundlerRpc);
 
@@ -526,8 +521,8 @@ export class Simple7702Account extends SmartAccount {
 	 * @param chainId - target chain id
 	 * @returns signature
 	 */
-    public signUserOperation(
-		useroperation: UserOperationV8,
+    protected baseSignUserOperation(
+		useroperation: UserOperationV8 | UserOperationV9,
 		privateKey: string,
 		chainId: bigint,
     ): string {
@@ -547,8 +542,8 @@ export class Simple7702Account extends SmartAccount {
 	 * @param bundlerRpc - bundler rpc to send useroperation
 	 * @returns promise with SendUseroperationResponse
 	 */
-	public async sendUserOperation(
-		userOperation: UserOperationV8,
+	protected async baseSendUserOperation(
+		userOperation: UserOperationV8 | UserOperationV9,
 		bundlerRpc: string,
 	): Promise<SendUseroperationResponse> {
 		const bundler = new Bundler(bundlerRpc);
@@ -580,7 +575,7 @@ export class Simple7702Account extends SmartAccount {
 		paymasterAddress: string,
 		approveAmount: bigint,
 	): string {
-		return Simple7702Account.prependTokenPaymasterApproveToCallDataStatic(
+		return BaseSimple7702Account.prependTokenPaymasterApproveToCallDataStatic(
 			callData,
 			tokenAddress,
 			paymasterAddress,
@@ -620,9 +615,9 @@ export class Simple7702Account extends SmartAccount {
 
         const abiCoder = AbiCoder.defaultAbiCoder();
         let decodedMetaTransactions:SimpleMetaTransaction[];
-		if (callData.startsWith(Simple7702Account.batchExecutorFunctionSelector)) {
+		if (callData.startsWith(BaseSimple7702Account.batchExecutorFunctionSelector)) {
             const decodedParamsArray = abiCoder.decode(
-                Simple7702Account.batchExecutorFunctionInputAbi,
+                BaseSimple7702Account.batchExecutorFunctionInputAbi,
                 "0x" + callData.slice(10)
             )[0] as [];
             decodedMetaTransactions = decodedParamsArray.map(decodedParams =>({
@@ -631,9 +626,9 @@ export class Simple7702Account extends SmartAccount {
                 data: typeof decodedParams[2] !== "string"?
                     new TextDecoder().decode(decodedParams[2]):decodedParams[2]
             }));
-        } else if(callData.startsWith(Simple7702Account.executorFunctionSelector)) {
+        } else if(callData.startsWith(BaseSimple7702Account.executorFunctionSelector)) {
             const decodedParams = abiCoder.decode(
-                Simple7702Account.executorFunctionInputAbi,
+                BaseSimple7702Account.executorFunctionInputAbi,
                 "0x" + callData.slice(10)
             );
             decodedMetaTransactions = [{
@@ -646,9 +641,9 @@ export class Simple7702Account extends SmartAccount {
             throw new AbstractionKitError(
 				"BAD_DATA",
 				"Invalid calldata, should start with " +
-					Simple7702Account.batchExecutorFunctionSelector +
+					BaseSimple7702Account.batchExecutorFunctionSelector +
 					" or " +
-					Simple7702Account.executorFunctionSelector,
+					BaseSimple7702Account.executorFunctionSelector,
 				{
 					context: {
 						callData: callData,
@@ -657,8 +652,103 @@ export class Simple7702Account extends SmartAccount {
 			);
         }
         decodedMetaTransactions.unshift(approveMetatransaction);
-        return Simple7702Account.createAccountCallDataBatchTransactions(
+        return BaseSimple7702Account.createAccountCallDataBatchTransactions(
             decodedMetaTransactions
         )
+    }
+}
+
+/**
+ * Simple7702Account with entrypoint v0.08
+ */
+export class Simple7702Account extends BaseSimple7702Account {
+	constructor(
+		accountAddress: string,
+        overrides: {
+			entrypointAddress?: string;
+            delegateeAddress?:string;
+		} = {},
+	) {
+		super(
+            accountAddress,
+            overrides.entrypointAddress ?? ENTRYPOINT_V8,
+            overrides.delegateeAddress ?? "0xe6Cae83BdE06E4c305530e199D7217f42808555B"
+        );
+	}
+
+    /**
+	 * baseCreateUserOperation will determine the nonce, fetch the gas prices,
+	 * estimate gas limits and return a useroperation to be signed.
+	 * you can override all these values using the overrides parameter.
+	 * @param transactions - metatransaction list to be encoded
+	 * @param providerRpc - node rpc to fetch account nonce and gas prices
+	 * @param bundlerRpc - bundler rpc for gas estimation
+	 * @param overrides - overrides for the default values
+	 * @returns promise with useroperation
+	 */
+    public async createUserOperation(
+		transactions: SimpleMetaTransaction[],
+		providerRpc?: string,
+		bundlerRpc?: string,
+		overrides: CreateUserOperationOverrides = {},
+	): Promise<UserOperationV8> {
+        return this.baseCreateUserOperation(
+            transactions,
+            providerRpc,
+            bundlerRpc,
+            overrides,
+        );
+    }
+
+    /**
+	 * estimate gas limits for a useroperation
+	 * @param userOperation - useroperation to estimate gas for
+	 * @param bundlerRpc - bundler rpc for gas estimation
+	 * @param overrides - overrides for the default values
+	 * @param overrides.stateOverrideSet - state override values to set during gs estimation
+	 * @param overrides.dummySignature - a single eoa dummy signature
+	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
+	 */
+    public async estimateUserOperationGas(
+		userOperation: UserOperationV8,
+		bundlerRpc: string,
+		overrides: {
+			stateOverrideSet?: StateOverrideSet;
+	        dummySignature?: string;
+		} = {},
+	): Promise<[bigint, bigint, bigint]> {
+        return this.baseEstimateUserOperationGas(
+            userOperation,
+            bundlerRpc,
+            overrides
+        );
+    }
+
+    /**
+	 * create a useroperation signature
+	 * @param useroperation - useroperation to sign
+	 * @param privateKeys - for the signers
+	 * @param chainId - target chain id
+	 * @returns signature
+	 */
+    public signUserOperation(
+		useroperation: UserOperationV8,
+		privateKey: string,
+		chainId: bigint,
+    ): string {
+        return this.baseSignUserOperation(useroperation, privateKey, chainId);
+    }
+
+    /**
+	 * sends a useroperation to a bundler rpc
+	 * @param userOperation - useroperation to send
+	 * @param bundlerRpc - bundler rpc to send useroperation
+	 * @returns promise with SendUseroperationResponse
+	 */
+	public async sendUserOperation(
+		userOperation: UserOperationV8,
+		bundlerRpc: string,
+	): Promise<SendUseroperationResponse> {
+        return this.baseSendUserOperation(userOperation, bundlerRpc);
     }
 }
