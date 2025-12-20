@@ -47,7 +47,8 @@ export interface CreateBaseUserOperationOverrides {
 	gasLevel?: GasOption;
 	polygonGasStation?: PolygonChain;
 
-    expectedSigners?: Signer[]
+    expectedSigners?: Signer[];
+	isEil?: boolean;
 }
 
 /**
@@ -139,6 +140,8 @@ export interface WebAuthnSignatureOverrides {
 	webAuthnSignerSingleton?: string;
 	validAfter?: bigint;
 	validUntil?: bigint;
+	isEil?: boolean;
+	eilProof?: string;
 }
 
 /**
