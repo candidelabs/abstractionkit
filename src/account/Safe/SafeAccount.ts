@@ -493,30 +493,20 @@ export class SafeAccount extends SmartAccount {
 				"signersAddresses and signatures arrays should be the same length",
 			);
 		}
-		const validAfter = overrides.validAfter ?? 0n;
-		const validUntil = overrides.validUntil ?? 0n;
 
-		const signersSignatures: Map<string, string> = new Map();
+		const signersSignatures: SignerSignaturePair[] = [];
 
 		signersAddresses.forEach((signer, index) => {
-			signersSignatures.set(signer.toLocaleLowerCase(), signatures[index]);
-		});
-		const sortedSignersSignatures = new Map(
-			Array.from(signersSignatures).sort(),
-		);
-		const formatedSignature =
-			"0x" +
-			Array.from(sortedSignersSignatures.values()).reduce(
-				(accumulator, currentValue) => accumulator + currentValue.slice(2),
-				"",
+			signersSignatures.push(
+				{
+					signer: signer.toLocaleLowerCase(),
+					signature: signatures[index]
+				}
 			);
+		});
 
-		return SafeAccount.formatEip712SingleSignatureToUseroperationSignature(
-			formatedSignature,
-			{
-				validAfter,
-				validUntil,
-			},
+		return SafeAccount.formatSignaturesToUseroperationSignature(
+			signersSignatures, overrides
 		);
 	}
     
