@@ -71,6 +71,8 @@ export interface CreateUserOperationV7Overrides
 	factoryData?: string;
 }
 
+export interface CreateUserOperationV9Overrides extends CreateUserOperationV7Overrides{}
+
 export interface SafeAccountSingleton {
 	singletonAddress: string;
 	singletonInitHash: string;
@@ -186,6 +188,9 @@ export interface SafeUserOperationV7TypedMessageValue {
 	validAfter: bigint;
 	validUntil: bigint;
 	entryPoint: string;
+}
+
+export interface SafeUserOperationV9TypedMessageValue extends SafeUserOperationV7TypedMessageValue{
 }
 
 export type ECDSAPublicAddress = string;

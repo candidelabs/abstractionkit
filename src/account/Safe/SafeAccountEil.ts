@@ -2,21 +2,19 @@ import { SafeAccount } from "./SafeAccount";
 import {
 	InitCodeOverrides,
 	Signer,
-	CreateUserOperationV7Overrides,
+	CreateUserOperationV9Overrides,
     SafeUserOperationTypedDataDomain,
-    SafeUserOperationV7TypedMessageValue,
+    SafeUserOperationV9TypedMessageValue,
     SafeAccountSingleton,
-	SignerSignaturePair,
 } from "./types";
 
-import { UserOperationV7, MetaTransaction, OnChainIdentifierParamsType } from "../../types";
-import { ENTRYPOINT_V7 } from "src/constants";
-import { solidityPacked } from "ethers";
+import { UserOperationV9, MetaTransaction, OnChainIdentifierParamsType } from "../../types";
+import { ENTRYPOINT_V9 } from "src/constants";
 
 export class SafeAccountEil extends SafeAccount {
-	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V7;
+	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V9;
 	static readonly DEFAULT_SAFE_4337_MODULE_ADDRESS =
-		"0x5EaF5aF36c1110a2C36238338B7a4368e72d76eF";
+		"0x2a4f2F52eEA4fA24985DcaCc6eC1fc4DaE33E809";
 	static readonly DEFAULT_SAFE_MODULE_SETUP_ADDRESS =
 		"0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47";
 
@@ -139,12 +137,12 @@ export class SafeAccountEil extends SafeAccount {
 	 * @param overrides.validAfter - timestamp the signature will be valid after
 	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @param overrides.entrypoint - target entrypoint
-	 * defaults to ENTRYPOINT_V7
+	 * defaults to ENTRYPOINT_V9
 	 * @param overrides.safe4337ModuleAddress - defaults to DEFAULT_SAFE_4337_MODULE_ADDRESS
 	 * @returns useroperation hash
 	 */
 	public static getUserOperationEip712Hash(
-		useroperation: UserOperationV7,
+		useroperation: UserOperationV9,
 		chainId: bigint,
 		overrides: {
 			validAfter?: bigint;
@@ -183,7 +181,7 @@ export class SafeAccountEil extends SafeAccount {
      * object needed for hashing and signing
 	 */
 	public static getUserOperationEip712Data(
-		useroperation: UserOperationV7,
+		useroperation: UserOperationV9,
 		chainId: bigint,
 		overrides: {
 			validAfter?: bigint;
@@ -194,7 +192,7 @@ export class SafeAccountEil extends SafeAccount {
 	): {
         domain: SafeUserOperationTypedDataDomain,
         types:Record<string, {name: string;type: string;}[]>,
-        messageValue: SafeUserOperationV7TypedMessageValue
+        messageValue: SafeUserOperationV9TypedMessageValue
     } 
      {
 		const validAfter = overrides.validAfter ?? 0n;
@@ -279,8 +277,8 @@ export class SafeAccountEil extends SafeAccount {
 		transactions: MetaTransaction[],
 		providerRpc?: string,
 		bundlerRpc?: string,
-		overrides: CreateUserOperationV7Overrides = {},
-	): Promise<UserOperationV7> {
+		overrides: CreateUserOperationV9Overrides = {},
+	): Promise<UserOperationV9> {
 		const [userOperation, factoryAddress, factoryData] =
 			await this.createBaseUserOperationAndFactoryAddressAndFactoryData(
 				transactions,
@@ -293,7 +291,7 @@ export class SafeAccountEil extends SafeAccount {
 				}
 			);
 
-		const userOperationV7: UserOperationV7 = {
+		const userOperationV9: UserOperationV9 = {
 			...userOperation,
 			factory: factoryAddress,
 			factoryData,
@@ -301,9 +299,10 @@ export class SafeAccountEil extends SafeAccount {
 			paymasterVerificationGasLimit: null,
 			paymasterPostOpGasLimit: null,
 			paymasterData: null,
+            eip7702Auth: null
 		};
 
-		return userOperationV7;
+		return userOperationV9;
 	}
 
 	/**
@@ -317,7 +316,7 @@ export class SafeAccountEil extends SafeAccount {
 	 * @returns signature
 	 */
 	public signUserOperation(
-		useroperation: UserOperationV7,
+		useroperation: UserOperationV9,
 		privateKeys: string[],
 		chainId: bigint,
 		overrides: {
