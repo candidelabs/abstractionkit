@@ -486,6 +486,8 @@ export class SafeAccount extends SmartAccount {
 		overrides: {
 			validAfter?: bigint;
 			validUntil?: bigint;
+            isEil?: boolean;
+			eilProof?: string;
 		} = {},
 	): string {
 		if (signersAddresses.length != signatures.length) {
@@ -826,21 +828,15 @@ export class SafeAccount extends SmartAccount {
 		overrides: {
 			validAfter?: bigint;
 			validUntil?: bigint;
+            isEil?: boolean;
 		} = {},
 	): string {
-		const validAfter = overrides.validAfter ?? 0n;
-		const validUntil = overrides.validUntil ?? 0n;
-
-		if (validAfter < 0n) {
-			throw RangeError("validAfter can't be negative");
-		}
-		if (validUntil < 0n) {
-			throw RangeError("validUntil can't be negative");
-		}
-
-		return solidityPacked(
-			["uint48", "uint48", "bytes"],
-			[validAfter, validUntil, signature],
+		return SafeAccount.formatSignaturesToUseroperationSignature(
+			[{
+				signer: "0x0000000000000000000000000000000000000000", // any random address
+				signature
+			}],
+			overrides
 		);
 	}
 
@@ -1170,7 +1166,7 @@ export class SafeAccount extends SmartAccount {
 	 * defaults to a single eoa signature
 	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
 	 */
-	public async estimateUserOperationGas(
+	public async baseEstimateUserOperationGas(
 		userOperation: UserOperationV6 | UserOperationV7,
 		bundlerRpc: string,
 		overrides: {
@@ -1182,6 +1178,7 @@ export class SafeAccount extends SmartAccount {
             webAuthnSignerSingleton?: string;
             eip7212WebAuthnPrecompileVerifier?: string;
             eip7212WebAuthnContractVerifier?: string;
+            isEil?: boolean;
 		} = {},
 	): Promise<[bigint, bigint, bigint]> {
         const validAfter = 0xffffffffffffn;
@@ -1204,6 +1201,7 @@ export class SafeAccount extends SmartAccount {
 					{
 						validAfter,
 						validUntil,
+                        isEil: overrides.isEil
 					},
 				);
 		} else if (overrides.expectedSigners != null) {
@@ -1235,6 +1233,7 @@ export class SafeAccount extends SmartAccount {
                     {
                         validAfter,
                         validUntil,
+                        isEil: overrides.isEil
                     },
                 );
 		} else if (userOperation.signature.length < 3) {
@@ -1244,6 +1243,7 @@ export class SafeAccount extends SmartAccount {
                     {
                         validAfter,
                         validUntil,
+                        isEil: overrides.isEil
                     },
                 );
         }
@@ -1605,15 +1605,17 @@ export class SafeAccount extends SmartAccount {
 							validAfter,
 							validUntil,
 							webAuthnSharedSigner,
+                            isEil: overrides.isEil
 						},
 					);
 
 				[preVerificationGas, verificationGasLimit, callGasLimit] =
-					await this.estimateUserOperationGas(
+					await this.baseEstimateUserOperationGas(
 						userOperationToEstimate,
 						bundlerRpc,
 						{
 							stateOverrideSet: overrides.state_override_set,
+							isEil:overrides.isEil
 						},
 					);
 				verificationGasLimit +=
@@ -1692,13 +1694,16 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @returns signature
 	 */
-	public signUserOperation(
+	public static baseSignSingleUserOperation(
 		useroperation: UserOperationV6 | UserOperationV7,
 		privateKeys: string[],
 		chainId: bigint,
+		entrypointAddress: string,
+		safe4337ModuleAddress: string,
 		overrides: {
 			validAfter?: bigint;
 			validUntil?: bigint;
+			isEil?: boolean;
 		} = {},
 	): string {
 		const validAfter = overrides.validAfter ?? 0n;
@@ -1723,8 +1728,8 @@ export class SafeAccount extends SmartAccount {
 			{
 				validAfter,
 				validUntil,
-				entrypointAddress: this.entrypointAddress,
-				safe4337ModuleAddress: this.safe4337ModuleAddress,
+				entrypointAddress,
+				safe4337ModuleAddress,
 			},
 		);
 
@@ -1745,6 +1750,7 @@ export class SafeAccount extends SmartAccount {
 			{
 				validAfter,
 				validUntil,
+                isEil:overrides.isEil
 			},
 		);
 	}
@@ -1830,15 +1836,39 @@ export class SafeAccount extends SmartAccount {
 		const validAfter = overrides.validAfter ?? 0n;
 		const validUntil = overrides.validUntil ?? 0n;
 
-		const formatedSignature = this.buildSignaturesFromSingerSignaturePairs(
+		const signature = this.buildSignaturesFromSingerSignaturePairs(
 			signerSignaturePairs,
 			overrides,
 		);
 
-		return solidityPacked(
-			["uint48", "uint48", "bytes"],
-			[validAfter, validUntil, formatedSignature],
-		);
+		if(overrides.isEil){
+			if(overrides.eilProof != null){
+				if(
+					overrides.eilProof.slice(2).length < 40 ||
+					overrides.eilProof.slice(2).length % 2 != 0
+				){
+					throw RangeError("invalid eilProof length.");
+				}
+				const eilProofLength = overrides.eilProof.slice(2).length;
+				const eilMerkleTreeDepth = eilProofLength % 2;
+				const eilMerkleTreeDepthHex = eilMerkleTreeDepth.toString(16);
+
+				return solidityPacked(
+					["bytes1", "uint48", "uint48", "bytes"],
+					["0x" + eilMerkleTreeDepthHex, validAfter, validUntil, overrides.eilProof + signature.slice(2)],
+				);
+			}else{
+				return solidityPacked(
+					["bytes1", "uint48", "uint48", "bytes"],
+					["0x01", validAfter, validUntil, signature],
+				);
+			}
+		}else{
+			return solidityPacked(
+				["uint48", "uint48", "bytes"],
+				[validAfter, validUntil, signature],
+			);
+		}
 	}
 
 	/**

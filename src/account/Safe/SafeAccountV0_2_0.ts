@@ -6,9 +6,10 @@ import {
 	SafeAccountSingleton,
     SafeUserOperationTypedDataDomain,
     SafeUserOperationV6TypedMessageValue,
+	SignerSignaturePair,
 } from "./types";
 
-import { UserOperationV6, MetaTransaction, OnChainIdentifierParamsType } from "../../types";
+import { UserOperationV6, MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet } from "../../types";
 import { ENTRYPOINT_V6 } from "src/constants";
 import { createCallData } from "src/utils";
 import { SafeAccountV0_3_0 } from "./SafeAccountV0_3_0";
@@ -405,4 +406,64 @@ export class SafeAccountV0_2_0 extends SafeAccount {
             setFallbackHandlerMetaTransaction
         ];
     }
+
+	/**
+	 * estimate gas limits for a useroperation
+	 * @param userOperation - useroperation to estimate gas for
+	 * @param bundlerRpc - bundler rpc for gas estimation
+	 * @param overrides - overrides for the default values
+	 * @param overrides.stateOverrideSet - state override values to set during gs estimation
+	 * @param overrides.dummySignerSignaturePairs - list of dummy signers signature pairs
+	 * defaults to a single eoa signature
+	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
+	 */
+	public async estimateUserOperationGas(
+		userOperation: UserOperationV6,
+		bundlerRpc: string,
+		overrides: {
+			stateOverrideSet?: StateOverrideSet;
+			dummySignerSignaturePairs?: SignerSignaturePair[];
+            expectedSigners?: Signer[];
+            webAuthnSharedSigner?: string;
+            webAuthnSignerFactory?: string;
+            webAuthnSignerSingleton?: string;
+            eip7212WebAuthnPrecompileVerifier?: string;
+            eip7212WebAuthnContractVerifier?: string;
+		} = {},
+	): Promise<[bigint, bigint, bigint]> {
+		return this.baseEstimateUserOperationGas(
+			userOperation,
+			bundlerRpc,
+			overrides
+		);
+	}
+
+	/**
+	 * create a useroperation signature
+	 * @param useroperation - useroperation to sign
+	 * @param privateKeys - for the signers
+	 * @param chainId - target chain id
+	 * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @returns signature
+	 */
+	public signUserOperation(
+		useroperation: UserOperationV6,
+		privateKeys: string[],
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+		} = {},
+	): string {
+		return SafeAccount.baseSignSingleUserOperation(
+			useroperation,
+			privateKeys,
+			chainId,
+			this.entrypointAddress,
+			this.safe4337ModuleAddress,
+			overrides
+		)
+	}
 }

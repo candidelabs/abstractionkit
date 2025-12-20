@@ -9,13 +9,14 @@ import {
 	SignerSignaturePair,
 } from "./types";
 
-import { UserOperationV7, MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet } from "../../types";
-import { ENTRYPOINT_V7, Safe_L2_V1_4_1 } from "src/constants";
+import { UserOperationV7, MetaTransaction, OnChainIdentifierParamsType } from "../../types";
+import { ENTRYPOINT_V7 } from "src/constants";
+import { solidityPacked } from "ethers";
 
-export class SafeAccountV0_3_0 extends SafeAccount {
+export class SafeAccountEil extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V7;
 	static readonly DEFAULT_SAFE_4337_MODULE_ADDRESS =
-		"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226";
+		"0x5EaF5aF36c1110a2C36238338B7a4368e72d76eF";
 	static readonly DEFAULT_SAFE_MODULE_SETUP_ADDRESS =
 		"0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47";
 
@@ -31,10 +32,10 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 	) {
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
-			SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+			SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 		const entrypointAddress =
 			overrides.entrypointAddress ??
-			SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS;
+			SafeAccountEil.DEFAULT_ENTRYPOINT_ADDRESS;
     
         super(
             accountAddress, safe4337ModuleAddress, entrypointAddress,
@@ -61,9 +62,9 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 				owners,
 				overrides,
 				overrides.safe4337ModuleAddress ??
-					SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+					SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 				overrides.safeModuleSetupddress ??
-					SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
+					SafeAccountEil.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
 		return accountAddress;
@@ -82,7 +83,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 	public static initializeNewAccount(
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
-	): SafeAccountV0_3_0 {
+	): SafeAccountEil {
 		let isInitWebAuthn = false;
 		let x = 0n;
 		let y = 0n;
@@ -108,12 +109,12 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 				owners,
 				overrides,
 				overrides.safe4337ModuleAddress ??
-					SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+					SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 				overrides.safeModuleSetupddress ??
-					SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
+					SafeAccountEil.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
-		const safe = new SafeAccountV0_3_0(accountAddress, {
+		const safe = new SafeAccountEil(accountAddress, {
 			safe4337ModuleAddress: overrides.safe4337ModuleAddress,
 			entrypointAddress: overrides.entrypointAddress,
             onChainIdentifierParams: overrides.onChainIdentifierParams,
@@ -156,10 +157,10 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		const validUntil = overrides.validUntil ?? 0n;
 		const entrypointAddress =
 			overrides.entrypointAddress ??
-			SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS;
+			SafeAccountEil.DEFAULT_ENTRYPOINT_ADDRESS;
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
-			SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+			SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 
 		return SafeAccount.getUserOperationEip712Hash(useroperation, chainId, {
 			validAfter,
@@ -200,10 +201,10 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		const validUntil = overrides.validUntil ?? 0n;
 		const entrypointAddress =
 			overrides.entrypointAddress ??
-			SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS;
+			SafeAccountEil.DEFAULT_ENTRYPOINT_ADDRESS;
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
-			SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+			SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 
 		return SafeAccount.getUserOperationEip712Data(useroperation, chainId, {
 			validAfter,
@@ -227,10 +228,10 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 	): string {
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
-			SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+			SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 		const safeModuleSetupddress =
 			overrides.safeModuleSetupddress ??
-			SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS;
+			SafeAccountEil.DEFAULT_SAFE_MODULE_SETUP_ADDRESS;
 
 		return SafeAccount.createBaseInitializerCallData(
 			owners,
@@ -258,9 +259,9 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			owners,
 			overrides,
 			overrides.safe4337ModuleAddress ??
-				SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+				SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 			overrides.safeModuleSetupddress ??
-				SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
+				SafeAccountEil.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 		);
 	}
 
@@ -286,7 +287,10 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 				false,
 				providerRpc,
 				bundlerRpc,
-				overrides,
+				{
+					...overrides,
+					isEil: true
+				}
 			);
 
 		const userOperationV7: UserOperationV7 = {
@@ -300,37 +304,6 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		};
 
 		return userOperationV7;
-	}
-
-	/**
-	 * estimate gas limits for a useroperation
-	 * @param userOperation - useroperation to estimate gas for
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param overrides - overrides for the default values
-	 * @param overrides.stateOverrideSet - state override values to set during gs estimation
-	 * @param overrides.dummySignerSignaturePairs - list of dummy signers signature pairs
-	 * defaults to a single eoa signature
-	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
-	 */
-	public async estimateUserOperationGas(
-		userOperation: UserOperationV7,
-		bundlerRpc: string,
-		overrides: {
-			stateOverrideSet?: StateOverrideSet;
-			dummySignerSignaturePairs?: SignerSignaturePair[];
-			expectedSigners?: Signer[];
-			webAuthnSharedSigner?: string;
-			webAuthnSignerFactory?: string;
-			webAuthnSignerSingleton?: string;
-			eip7212WebAuthnPrecompileVerifier?: string;
-			eip7212WebAuthnContractVerifier?: string;
-		} = {},
-	): Promise<[bigint, bigint, bigint]> {
-		return this.baseEstimateUserOperationGas(
-			userOperation,
-			bundlerRpc,
-			overrides
-		);
 	}
 
 	/**
@@ -358,10 +331,10 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			chainId,
 			this.entrypointAddress,
 			this.safe4337ModuleAddress,
-			overrides
+			{
+				...overrides,
+				isEil: true
+			}
 		)
 	}
-}
-
-export class SafeAccountV1_4_1_M_0_3_0 extends SafeAccountV0_3_0 {
 }
