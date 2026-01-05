@@ -102,7 +102,7 @@ export interface InitCodeOverrides {
 	 */
 	c2Nonce?: bigint;
 	safe4337ModuleAddress?: string;
-	safeModuleSetupddress?: string;
+	safeModuleSetupAddress?: string;
 
 	entrypointAddress?: string;
 	/** Safe contract singleton address

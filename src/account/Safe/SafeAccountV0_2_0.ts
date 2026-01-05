@@ -58,7 +58,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			threshold?: number;
 			c2Nonce?: bigint;
 			safe4337ModuleAddress?: string;
-			safeModuleSetupddress?: string;
+			safeModuleSetupAddress?: string;
 			safeAccountSingleton?: SafeAccountSingleton;
 			safeAccountFactoryAddress?: string;
 			multisendContractAddress?: string;
@@ -73,7 +73,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 				overrides,
 				overrides.safe4337ModuleAddress ??
 					SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
-				overrides.safeModuleSetupddress ??
+				overrides.safeModuleSetupAddress ??
 					SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
@@ -100,12 +100,12 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		for (const owner of owners) {
 			if (typeof owner != "string") {
 				if (isInitWebAuthn) {
-					throw RangeError(
+					throw new RangeError(
 						"Only one Webauthn signer is allowed during initialization",
 					);
 				}
                 if(owners.indexOf(owner) != 0){
-                    throw RangeError(
+                    throw new RangeError(
 						"Webauthn owner has to be the first owner for an init transaction.",
 					);
                 }
@@ -121,7 +121,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 				overrides,
 				overrides.safe4337ModuleAddress ??
 					SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
-				overrides.safeModuleSetupddress ??
+				overrides.safeModuleSetupAddress ??
 					SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
@@ -241,7 +241,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 				overrides,
 				overrides.safe4337ModuleAddress ??
 					SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
-				overrides.safeModuleSetupddress ??
+				overrides.safeModuleSetupAddress ??
 					SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
@@ -254,7 +254,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		threshold: number,
 		overrides: {
 			safe4337ModuleAddress?: string;
-			safeModuleSetupddress?: string;
+			safeModuleSetupAddress?: string;
 			multisendContractAddress?: string;
 			webAuthnSharedSigner?: string;
 			eip7212WebAuthnPrecompileVerifierForSharedSigner?: string;
@@ -264,15 +264,15 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
 			SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
-		const safeModuleSetupddress =
-			overrides.safeModuleSetupddress ??
+		const safeModuleSetupAddress =
+			overrides.safeModuleSetupAddress ??
 			SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS;
 
 		return SafeAccount.createBaseInitializerCallData(
 			owners,
 			threshold,
 			safe4337ModuleAddress,
-			safeModuleSetupddress,
+			safeModuleSetupAddress,
 			overrides.multisendContractAddress,
 			overrides.webAuthnSharedSigner,
 			overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner,
@@ -296,7 +296,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 				overrides,
 				overrides.safe4337ModuleAddress ??
 					SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
-				overrides.safeModuleSetupddress ??
+				overrides.safeModuleSetupAddress ??
 					SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 		return safeAccountFactoryAddress + factoryData.slice(2);

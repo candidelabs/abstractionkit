@@ -36,15 +36,15 @@ export function createAndSignLegacyRawTransaction(
     eoaPrivateKey: string
 ): string {
     if (chainId >= 2**64){
-		throw RangeError("Invalide chainId.");
+		throw new RangeError("Invalid chainId.");
     }
 
     if (nonce >= 2**64){
-		throw RangeError("Invalide nonce.");
+		throw new RangeError("Invalid nonce.");
     }
 
     if (destination.length != 42){
-		throw RangeError("Invalide destination.");
+		throw new RangeError("Invalid destination.");
     }
 
     let payload = [
@@ -223,15 +223,15 @@ function encodeEip7702TransactionBaseList(
     authorization_list: Authorization7702[],
 ){
     if (chainId >= 2**64){
-		throw RangeError("Invalide chainId.");
+		throw new RangeError("Invalid chainId.");
     }
 
     if (nonce >= 2**64){
-		throw RangeError("Invalide nonce.");
+		throw new RangeError("Invalid nonce.");
     }
 
     if (destination.length != 42){
-		throw RangeError("Invalide destination.");
+		throw new RangeError("Invalid destination.");
     }
 
     const encoded_auth_list = encodeAuthList(authorization_list); 
@@ -256,7 +256,7 @@ function encodeAuthList(authorization_list: Authorization7702[]){
     let encoded_auth_list = [];
     for (const auth of authorization_list){
         if (auth.address.length != 42){
-			throw RangeError("Invalide authorization list address: " + auth);
+			throw new RangeError("Invalid authorization list address: " + auth);
         }
         const encoded_auth = [
             bigintToBytes(auth.chainId),
@@ -275,12 +275,12 @@ function encodeAccessList(access_list: [string, string[]][]){
     let encoded_access_list = [];
     for (const [access_add, storage_arr] of access_list){
         if (access_add.length != 42){
-			throw RangeError("Invalide access list address: " + access_add);
+			throw new RangeError("Invalid access list address: " + access_add);
         }
         let encoded_storage_list = [];
         for (const storage of storage_arr){
             if (storage.length != 66){
-			    throw RangeError("Invalide access list storage: " + storage);
+			    throw new RangeError("Invalid access list storage: " + storage);
             }
             encoded_storage_list.push(getBytes(storage));
         }

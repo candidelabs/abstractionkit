@@ -65,7 +65,7 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 	):Promise<UserOperationV8 | UserOperationV7> {
         //256 bytes for proof
         if(proof.slice(0,2) != "0x" || proof.length != 514){
-            throw RangeError("Invalid proof.");
+            throw new RangeError("Invalid proof.");
         }
 
         proof = proof.slice(2);

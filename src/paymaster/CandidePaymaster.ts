@@ -60,7 +60,7 @@ export class CandidePaymaster extends Paymaster {
 			} else if (paymasterVersionJsonRpcResult.startsWith("Candide/v2")) {
 				this.version = "v2";
 			} else {
-				throw RangeError(
+				throw new RangeError(
 					"Invalid paymaster version received from paymaster rpc",
 				);
 			}
@@ -110,7 +110,7 @@ export class CandidePaymaster extends Paymaster {
 				this.entrypointDataV7 == null &&
 				this.entrypointDataV6 == null
 			) {
-				throw RangeError("Invalid data received during initialization.");
+				throw new RangeError("Invalid data received during initialization.");
 			}
 			this.initialized = true;
 			return null;
@@ -188,7 +188,7 @@ export class CandidePaymaster extends Paymaster {
 						paymasterMetadata: jsonRpcResult.paymasterMetadata,
 					};
 				} else {
-					throw RangeError("unsupported entrypoint.");
+					throw new RangeError("unsupported entrypoint.");
 				}
 			} catch (err) {
 				const error = ensureError(err);
@@ -280,7 +280,7 @@ export class CandidePaymaster extends Paymaster {
 		} else if (entrypoint == ENTRYPOINT_V6 && this.entrypointDataV6 != null) {
 			return this.entrypointDataV6.paymasterMetadata;
 		} else {
-			throw RangeError("unsupported entrypoint.");
+			throw new RangeError("unsupported entrypoint.");
 		}
 	}
 
@@ -326,7 +326,7 @@ export class CandidePaymaster extends Paymaster {
 		} else if (entrypoint == ENTRYPOINT_V6 && this.entrypointDataV6 != null) {
 			supportedTokens = this.entrypointDataV6.tokens;
 		} else {
-			throw RangeError("unsupported entrypoint.");
+			throw new RangeError("unsupported entrypoint.");
 		}
 
 		const gasToken = supportedTokens.find(
@@ -413,7 +413,7 @@ export class CandidePaymaster extends Paymaster {
 			if (entrypointAddress == null) {
 				if ("initCode" in userOperation) {
 					if (this.entrypointDataV6 == null) {
-						throw RangeError("UserOperation v0.06 is not supported");
+						throw new RangeError("UserOperation v0.06 is not supported");
 					}
 					entrypointAddress = ENTRYPOINT_V6;
 
@@ -422,7 +422,7 @@ export class CandidePaymaster extends Paymaster {
 						paymasterMetadata.dummyPaymasterAndData;
 				} else if ("eip7702Auth" in userOperation) {
 					if (this.entrypointDataV8 == null) {
-						throw RangeError("UserOperation v0.08 is not supported");
+						throw new RangeError("UserOperation v0.08 is not supported");
 					}
 					entrypointAddress = ENTRYPOINT_V8;
 
@@ -436,7 +436,7 @@ export class CandidePaymaster extends Paymaster {
 					userOperation.paymasterData = paymasterAndData.paymasterData;
 				} else {
 					if (this.entrypointDataV7 == null) {
-						throw RangeError("UserOperation v0.07 is not supported");
+						throw new RangeError("UserOperation v0.07 is not supported");
 					}
 					entrypointAddress = ENTRYPOINT_V7;
 
@@ -510,21 +510,21 @@ export class CandidePaymaster extends Paymaster {
 					typeof gasUserOperationOverrides.preVerificationGas === "bigint" &&
 					gasUserOperationOverrides.preVerificationGas < 0n
 				) {
-					throw RangeError("preVerificationGas override can't be negative");
+					throw new RangeError("preVerificationGas override can't be negative");
 				}
 
 				if (
 					typeof gasUserOperationOverrides.verificationGasLimit === "bigint" &&
 					gasUserOperationOverrides.verificationGasLimit < 0n
 				) {
-					throw RangeError("verificationGasLimit override can't be negative");
+					throw new RangeError("verificationGasLimit override can't be negative");
 				}
 
 				if (
 					typeof gasUserOperationOverrides.callGasLimit === "bigint" &&
 					gasUserOperationOverrides.callGasLimit < 0n
 				) {
-					throw RangeError("callGasLimit override can't be negative");
+					throw new RangeError("callGasLimit override can't be negative");
 				}
 
 				//apply gas overrides
@@ -555,7 +555,7 @@ export class CandidePaymaster extends Paymaster {
 						null ||
 					gasUserOperationOverrides.callGasLimitPercentageMultiplier != null
 				) {
-					throw RangeError(
+					throw new RangeError(
 						"you can't use any gas overrides for paymaster v3," +
 							" as it will estimate gas and override any provided values.",
 					);
@@ -776,7 +776,7 @@ export class CandidePaymaster extends Paymaster {
 			const metadata = await this.getPaymasterMetaData(entrypoint);
 
 			if (metadata == null) {
-				throw RangeError("unsupported entrypoint.");
+				throw new RangeError("unsupported entrypoint.");
 			}
 
 			const paymasterAddress = metadata.address;
@@ -1001,7 +1001,7 @@ export class CandidePaymaster extends Paymaster {
 					paymasterMetadata: jsonRpcResult.paymasterMetadata,
 				};
 			} else {
-				throw RangeError("unsupported entrypoint.");
+				throw new RangeError("unsupported entrypoint.");
 			}
 		} catch (err) {
 			const error = ensureError(err);

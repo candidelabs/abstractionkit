@@ -165,7 +165,7 @@ export class BaseSimple7702Account extends SmartAccount {
 		overrides: CreateUserOperationOverrides = {},
 	): Promise<UserOperationV8 | UserOperationV9> {
         if (transactions.length < 1) {
-			throw RangeError("There should be at least one transaction");
+			throw new RangeError("There should be at least one transaction");
 		}
         let nonce:bigint | null = null;
 		let nonceOp:Promise<bigint> | null = null;
@@ -191,14 +191,14 @@ export class BaseSimple7702Account extends SmartAccount {
 			typeof overrides.maxFeePerGas === "bigint" &&
 			overrides.maxFeePerGas < 0n
 		) {
-			throw RangeError("maxFeePerGas overrid can't be negative");
+			throw new RangeError("maxFeePerGas override can't be negative");
 		}
 
 		if (
 			typeof overrides.maxPriorityFeePerGas === "bigint" &&
 			overrides.maxPriorityFeePerGas < 0n
 		) {
-			throw RangeError("maxPriorityFeePerGas overrid can't be negative");
+			throw new RangeError("maxPriorityFeePerGas override can't be negative");
 		}
         let maxFeePerGas = BaseUserOperationDummyValues.maxFeePerGas;
 		let maxPriorityFeePerGas =
@@ -258,7 +258,7 @@ export class BaseSimple7702Account extends SmartAccount {
                 });
             }else if(nonceOp != null){
                 await Promise.all(
-                    [eip7702AuthNonceOp, gasPriceOp]
+                    [eip7702AuthNonceOp, nonceOp]
                 ).then((values) => {
                     eip7702AuthNonce = BigInt(values[0] as string);
                     nonce = values[1];
@@ -297,10 +297,10 @@ export class BaseSimple7702Account extends SmartAccount {
 					),
 				);
         if(nonce == null){
-			throw RangeError("failed to determine nonce");
+			throw new RangeError("failed to determine nonce");
         }
         else if (nonce < 0n) {
-			throw RangeError("nonce can't be negative");
+			throw new RangeError("nonce can't be negative");
 		}
         
         let callData = "0x" as string;
@@ -422,21 +422,21 @@ export class BaseSimple7702Account extends SmartAccount {
 			typeof overrides.preVerificationGas === "bigint" &&
 			overrides.preVerificationGas < 0n
 		) {
-			throw RangeError("preVerificationGas overrid can't be negative");
+			throw new RangeError("preVerificationGas override can't be negative");
 		}
 
 		if (
 			typeof overrides.verificationGasLimit === "bigint" &&
 			overrides.verificationGasLimit < 0n
 		) {
-			throw RangeError("verificationGasLimit overrid can't be negative");
+			throw new RangeError("verificationGasLimit override can't be negative");
 		}
 
 		if (
 			typeof overrides.callGasLimit === "bigint" &&
 			overrides.callGasLimit < 0n
 		) {
-			throw RangeError("callGasLimit overrid can't be negative");
+			throw new RangeError("callGasLimit override can't be negative");
 		}
 
 		userOperation.preVerificationGas =

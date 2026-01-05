@@ -203,7 +203,7 @@ export class SocialRecoveryModule extends SafeModule{
 			const guardians = await this.getGuardians(nodeRpcUrl, accountAddress);
 			const guardianToDeleteIndex = guardians.indexOf(guardianAddress);
 			if (guardianToDeleteIndex == -1) {
-				throw RangeError(
+				throw new RangeError(
                     guardianAddress + 
                     " is not a current guardian for account : " +
                     accountAddress
@@ -214,7 +214,7 @@ export class SocialRecoveryModule extends SafeModule{
 			} else if (guardianToDeleteIndex > 0) {
 				prevGuardianAddressT = guardians[guardianToDeleteIndex - 1];
 			} else {
-				throw RangeError("Invalid guardian index");
+				throw new RangeError("Invalid guardian index");
 			}
 		}
 		return this.createStandardRevokeGuardianWithThresholdMetaTransaction(

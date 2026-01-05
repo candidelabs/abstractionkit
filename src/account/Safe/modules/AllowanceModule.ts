@@ -139,7 +139,7 @@ export class AllowanceModule extends SafeModule{
         if(overrides.paymentToken != null){
             paymentToken = overrides.paymentToken;
             if(overrides.paymentAmount == null){
-                throw RangeError("must specify paymentAmount if paymentToken is set")
+                throw new RangeError("must specify paymentAmount if paymentToken is set")
             }
             paymentAmount = overrides.paymentAmount;
         }

@@ -215,7 +215,7 @@ export async function simulateUserOperationWithTenderly(
         ){
             callData = '0x765e827f' + encodedUserOperation.slice(2);
         }else{
-            throw RangeError("Invalid entrypoint.");
+            throw new RangeError("Invalid entrypoint.");
         }
     }
     const simulation = await callTenderlySimulateBundle(
@@ -478,14 +478,14 @@ export async function simulateSenderCallDataWithTenderly(
     ){
         senderCreator = "0x449ed7c3e6fee6a97311d4b55475df59c44add33";
     }else{
-        throw RangeError(`Invalid entrypoint: ${entrypointAddress}`);
+        throw new RangeError(`Invalid entrypoint: ${entrypointAddress}`);
     }
     
     if(
         (factory == null && factoryData != null) ||
         (factory != null && factoryData == null)
     ){
-        throw RangeError(`Invalid factory and factoryData`);
+        throw new RangeError(`Invalid factory and factoryData`);
     }
     if(factory != null && factoryData != null){ 
         transactions.push({
@@ -586,14 +586,14 @@ export async function callTenderlySimulateBundle(
                 for (const address in stateOverrides) {
                     for (const key in stateOverrides[address]) {
                        if(key != 'balance' && key != 'storage' && key != 'stateDiff'){
-                            throw RangeError(
+                            throw new RangeError(
                                 `Invalide stateOverrides key: ${key}.`
                             );
                        }else if(
                             'storage' in stateOverrides[address] &&
                             'stateDiff' in stateOverrides[address]
                         ){
-                            throw RangeError(
+                            throw new RangeError(
                                 "can't set both storage and stateDiff for stateOverrides"
                             );
                         }else if('stateDiff' in stateOverrides[address]){

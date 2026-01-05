@@ -33,12 +33,12 @@ export class SendUseroperationResponse {
 		requestIntervalInSeconds: number = 2,
 	): Promise<UserOperationReceiptResult> {
 		if (timeoutInSeconds <= 0 || requestIntervalInSeconds <= 0) {
-			throw RangeError(
+			throw new RangeError(
 				"timeoutInSeconds and requestIntervalInSeconds should be bigger than zero",
 			);
 		}
 		if (timeoutInSeconds < requestIntervalInSeconds) {
-			throw RangeError(
+			throw new RangeError(
 				"timeoutInSeconds can't be less than requestIntervalInSeconds",
 			);
 		}

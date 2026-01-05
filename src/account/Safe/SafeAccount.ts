@@ -141,7 +141,7 @@ export class SafeAccount extends SmartAccount {
             overrides.onChainIdentifierParams != null &&
             overrides.onChainIdentifier != null
         ){
-			throw RangeError(
+			throw new RangeError(
                 "can't override both onChainIdentifier and onChainIdentifierParams"
             );
         }else if(overrides.onChainIdentifierParams != null){
@@ -157,7 +157,7 @@ export class SafeAccount extends SmartAccount {
                 onChainIdentifier = onChainIdentifier.slice(2);
             }
             if(onChainIdentifier.length != 64){
-                throw RangeError("onChainIdentifier length must be 64.");
+                throw new RangeError("onChainIdentifier length must be 64.");
             }
             this.onChainIdentifier = onChainIdentifier;
         }else{
@@ -189,7 +189,7 @@ export class SafeAccount extends SmartAccount {
 	): string {
 		const c2Nonce = overrides.c2Nonce ?? 0n;
 		if (c2Nonce < 0n) {
-			throw RangeError("c2Nonce can't be negative");
+			throw new RangeError("c2Nonce can't be negative");
 		}
 		const safeFactoryAddress =
 			overrides.safeFactoryAddress ??
@@ -263,7 +263,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): string {
 		if (metaTransactions.length < 1) {
-			throw RangeError("There should be at least one metaTransaction");
+			throw new RangeError("There should be at least one metaTransaction");
 		}
 		const safeModuleExecutorFunctionSelector =
 			overrides.safeModuleExecutorFunctionSelector ??
@@ -494,7 +494,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): string {
 		if (signersAddresses.length != signatures.length) {
-			throw RangeError(
+			throw new RangeError(
 				"signersAddresses and signatures arrays should be the same length",
 			);
 		}
@@ -1012,16 +1012,16 @@ export class SafeAccount extends SmartAccount {
 		owners: Signer[],
 		overrides: BaseInitOverrides,
 		safe4337ModuleAddress: string,
-		safeModuleSetupddress: string,
+		safeModuleSetupAddress: string,
 	): [string, string, string] {
 		if (owners.length < 1) {
-			throw RangeError("There should be at least one owner");
+			throw new RangeError("There should be at least one owner");
 		}
 		const initializerCallData = SafeAccount.createBaseInitializerCallData(
 			owners,
 			overrides.threshold ?? 1,
 			safe4337ModuleAddress,
-			safeModuleSetupddress,
+			safeModuleSetupAddress,
 			overrides.multisendContractAddress ??
 				SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
 			overrides.webAuthnSharedSigner ??
@@ -1070,22 +1070,22 @@ export class SafeAccount extends SmartAccount {
 		owners: Signer[],
 		threshold: number,
 		safe4337ModuleAddress: string,
-		safeModuleSetupddress: string,
+		safeModuleSetupAddress: string,
 		multisendContractAddress: string = SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
 		webAuthnSharedSigner = SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
 		eip7212WebAuthnPrecompileVerifierForSharedSigner: string = SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 		eip7212WebAuthnContractVerifierForSharedSigner: string = SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER,
 	): string {
 		if (owners.length < 1) {
-			throw RangeError("There should be at least one owner");
+			throw new RangeError("There should be at least one owner");
 		}
 
 		if (threshold < 1) {
-			throw RangeError("threshold should be at least one");
+			throw new RangeError("threshold should be at least one");
 		}
 
 		if (threshold > owners.length) {
-			throw RangeError("threshold can't be larger than number of owners");
+			throw new RangeError("threshold can't be larger than number of owners");
 		}
 
 		const enable4337ModuleCallData = createCallData(
@@ -1107,7 +1107,7 @@ export class SafeAccount extends SmartAccount {
 
 		if (isInitWebAuthn) {
 			const safeModuleSetupCallData: MetaTransaction = {
-				to: safeModuleSetupddress,
+				to: safeModuleSetupAddress,
 				value: 0n,
 				data: enable4337ModuleCallData,
 				operation: Operation.Delegate,
@@ -1120,7 +1120,7 @@ export class SafeAccount extends SmartAccount {
 			for (const owner of owners) {
 				if (typeof owner != "string") {
 					if (numOfWebAuthnOwners > 0) {
-						throw RangeError(
+						throw new RangeError(
 							"Only one WebAuthn owner can be set during initialization",
 						);
 					}
@@ -1173,7 +1173,7 @@ export class SafeAccount extends SmartAccount {
 			initializerFunctionInputParameters = [
 				owners_str, //_owners
 				threshold, //_threshold
-				safeModuleSetupddress, //to Contract address for optional delegate call during initialization
+				safeModuleSetupAddress, //to Contract address for optional delegate call during initialization
 				enable4337ModuleCallData, //Data payload for optional delegate call during initialization
 				safe4337ModuleAddress, //fallbackHandler Handler for fallback calls to this contract
 				ZeroAddress, //paymentToken (Safe specific, can be ignored)
@@ -1199,30 +1199,30 @@ export class SafeAccount extends SmartAccount {
 		owners: Signer[],
 		overrides: BaseInitOverrides = {},
 		safe4337ModuleAddress: string,
-		safeModuleSetupddress: string,
+		safeModuleSetupAddress: string,
 	): [string, string] {
 		if (owners.length < 1) {
-			throw RangeError("There should be at least one owner");
+			throw new RangeError("There should be at least one owner");
 		}
 		const threshold = overrides.threshold ?? 1;
 		const c2Nonce = overrides.c2Nonce ?? 0;
 		if (threshold < 1) {
-			throw RangeError("threshold should be at least one");
+			throw new RangeError("threshold should be at least one");
 		}
 
 		if (threshold > owners.length) {
-			throw RangeError("threshold can't be larger than number of owners");
+			throw new RangeError("threshold can't be larger than number of owners");
 		}
 
 		if (c2Nonce < 0n) {
-			throw RangeError("c2Nonce can't be negative");
+			throw new RangeError("c2Nonce can't be negative");
 		}
 
 		const initializerCallData = SafeAccount.createBaseInitializerCallData(
 			owners,
 			overrides.threshold ?? 1,
 			safe4337ModuleAddress,
-			safeModuleSetupddress,
+			safeModuleSetupAddress,
 			overrides.multisendContractAddress ??
 				SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
 			overrides.webAuthnSharedSigner ??
@@ -1325,12 +1325,12 @@ export class SafeAccount extends SmartAccount {
 
 		if (overrides.dummySignerSignaturePairs != null) {
             if(overrides.expectedSigners != null){
-                throw RangeError(
+                throw new RangeError(
                     "Can't use both dummySignerSignaturePairs and expectedSigners overrides.",
                 );
             }
 			if (overrides.dummySignerSignaturePairs.length < 1) {
-				throw RangeError(
+				throw new RangeError(
 					"Number of dummy signers signature pairs can't be less than 1",
 				);
 			}
@@ -1436,7 +1436,7 @@ export class SafeAccount extends SmartAccount {
 		overrides: CreateBaseUserOperationOverrides = {},
 	): Promise<[BaseUserOperation, string | null, string | null]> {
 		if (transactions.length < 1) {
-			throw RangeError("There should be at least one transaction");
+			throw new RangeError("There should be at least one transaction");
 		}
 		const webAuthnSharedSigner =
 			overrides.webAuthnSharedSigner ??
@@ -1472,14 +1472,14 @@ export class SafeAccount extends SmartAccount {
 			typeof overrides.maxFeePerGas === "bigint" &&
 			overrides.maxFeePerGas < 0n
 		) {
-			throw RangeError("maxFeePerGas overrid can't be negative");
+			throw new RangeError("maxFeePerGas overrid can't be negative");
 		}
 
 		if (
 			typeof overrides.maxPriorityFeePerGas === "bigint" &&
 			overrides.maxPriorityFeePerGas < 0n
 		) {
-			throw RangeError("maxPriorityFeePerGas overrid can't be negative");
+			throw new RangeError("maxPriorityFeePerGas overrid can't be negative");
 		}
         let maxFeePerGas = BaseUserOperationDummyValues.maxFeePerGas;
 		let maxPriorityFeePerGas =
@@ -1541,10 +1541,10 @@ export class SafeAccount extends SmartAccount {
 		let factoryData: string | null = this.factoryData;
         
         if(nonce == null){
-			throw RangeError("failed to determine nonce");
+			throw new RangeError("failed to determine nonce");
         }
         else if (nonce < 0n) {
-			throw RangeError("nonce can't be negative");
+			throw new RangeError("nonce can't be negative");
 		}
         else if (nonce > 0n) {
 			factoryAddress = null;
@@ -1552,7 +1552,7 @@ export class SafeAccount extends SmartAccount {
 		} 
         else if (this.isInitWebAuthn) { //nonce = 0
 			if (this.x == null || this.y == null) {
-				throw RangeError(
+				throw new RangeError(
 					"Invalide account initialization with Webauthnn signer." +
 						"Webauthnn signer publickey can be null!!",
 				);
@@ -1707,12 +1707,12 @@ export class SafeAccount extends SmartAccount {
 				let dummySignerSignaturePairs;
 				if (overrides.dummySignerSignaturePairs != null) {
                     if(overrides.expectedSigners != null){
-                        throw RangeError(
+                        throw new RangeError(
 							"Can't use both dummySignerSignaturePairs and expectedSigners overrides.",
 						);
                     }
 					if (overrides.dummySignerSignaturePairs.length < 1) {
-						throw RangeError(
+						throw new RangeError(
 							"Number of dummySignerSignaturePairs can't be less than 1",
 						);
 					}
@@ -1774,21 +1774,21 @@ export class SafeAccount extends SmartAccount {
 			typeof overrides.preVerificationGas === "bigint" &&
 			overrides.preVerificationGas < 0n
 		) {
-			throw RangeError("preVerificationGas overrid can't be negative");
+			throw new RangeError("preVerificationGas overrid can't be negative");
 		}
 
 		if (
 			typeof overrides.verificationGasLimit === "bigint" &&
 			overrides.verificationGasLimit < 0n
 		) {
-			throw RangeError("verificationGasLimit overrid can't be negative");
+			throw new RangeError("verificationGasLimit overrid can't be negative");
 		}
 
 		if (
 			typeof overrides.callGasLimit === "bigint" &&
 			overrides.callGasLimit < 0n
 		) {
-			throw RangeError("callGasLimit overrid can't be negative");
+			throw new RangeError("callGasLimit overrid can't be negative");
 		}
 
 		userOperation.preVerificationGas =
@@ -1849,16 +1849,16 @@ export class SafeAccount extends SmartAccount {
 		const validUntil = overrides.validUntil ?? 0n;
 
 		if (privateKeys.length < 1) {
-			throw RangeError("There should be at least one privateKey");
+			throw new RangeError("There should be at least one privateKey");
 		}
 		if (chainId < 0n) {
-			throw RangeError("chainId can't be negative");
+			throw new RangeError("chainId can't be negative");
 		}
 		if (validAfter < 0n) {
-			throw RangeError("validAfter can't be negative");
+			throw new RangeError("validAfter can't be negative");
 		}
 		if (validUntil < 0n) {
-			throw RangeError("validUntil can't be negative");
+			throw new RangeError("validUntil can't be negative");
 		}
 
 		const userOperationEip712Hash = SafeAccount.getUserOperationEip712Hash(
@@ -1929,7 +1929,7 @@ export class SafeAccount extends SmartAccount {
 			eip7212WebAuthnPrecompileVerifier.length != 42 ||
 			eip7212WebAuthnPrecompileVerifier.slice(0, 38) != ZeroAddress.slice(0, 38)
 		) {
-			throw RangeError(
+			throw new RangeError(
 				"Invalide precompile address. " +
 					"It should have the format 0x000000000000000000000000000000000000____",
 			);
@@ -1991,7 +1991,7 @@ export class SafeAccount extends SmartAccount {
                     // a valid proof length should be a multiple of 2 * 32 = 64
 					merkleProofLength % 64 != 0
 				){
-					throw RangeError("invalid crossChainMerkleProof length.");
+					throw new RangeError("invalid crossChainMerkleProof length.");
 				}
 				const merkleTreeDepth = (merkleProofLength / 64) - 1;
 				let merkleTreeDepthHex = merkleTreeDepth.toString(16);
@@ -2116,7 +2116,7 @@ export class SafeAccount extends SmartAccount {
                         //the signer address with the shared signer address
                         //if init
 						if (webAuthnSignatureOverrides.isInit == null) {
-							throw RangeError(
+							throw new RangeError(
 								"Must define isInit parameter when using WebAuthn",
 							);
 						}
@@ -2297,7 +2297,7 @@ export class SafeAccount extends SmartAccount {
 			const owners = await this.getOwners(nodeRpcUrl);
 			const oldOwnerIndex = owners.indexOf(oldOwnerT);
 			if (oldOwnerIndex == -1) {
-				throw RangeError("oldOwner is not a current owner.");
+				throw new RangeError("oldOwner is not a current owner.");
 			} else if (oldOwnerIndex == 0) {
 				prevOwnerT = "0x0000000000000000000000000000000000000001";
 			} else {
@@ -2364,7 +2364,7 @@ export class SafeAccount extends SmartAccount {
 			const owners = await this.getOwners(nodeRpcUrl);
 			const ownerToDeleteIndex = owners.indexOf(ownerToDeleteT);
 			if (ownerToDeleteIndex == -1) {
-				throw RangeError("ownerToDelete is not a current owner.");
+				throw new RangeError("ownerToDelete is not a current owner.");
 			} else if (ownerToDeleteIndex == 0) {
 				prevOwnerT = "0x0000000000000000000000000000000000000001";
 			} else {
@@ -2416,7 +2416,7 @@ export class SafeAccount extends SmartAccount {
 				},
 			);
             if(overrides.nodeRpcUrl == null){
-				throw RangeError(
+				throw new RangeError(
                     "overrides.nodeRpcUrl can't be null if adding a webauthn owner");
             }
 			const newOwnerCode = await sendEthGetCodeRequest(
@@ -2553,7 +2553,7 @@ export class SafeAccount extends SmartAccount {
 	 */
 	public createChangeThresholdMetaTransaction(threshold: number): MetaTransaction {
         if(threshold < 1){
-            throw RangeError("threshold can't be less than 1.");
+            throw new RangeError("threshold can't be less than 1.");
         }
 
 		const changeThresholdCallData = createCallData(
@@ -2805,7 +2805,7 @@ export class SafeAccount extends SmartAccount {
                 signerSignaturePair = EOADummySignerSignaturePair;
             }else{
                 if (webAuthnSignatureOverrides.isInit == null) {
-                    throw RangeError(
+                    throw new RangeError(
                         "Must define isInit parameter when using WebAuthn",
                     );
                 }
@@ -2872,7 +2872,7 @@ export class SafeAccount extends SmartAccount {
         } = {}
     ):Promise<boolean> {
         if (messageHash.length != 66 || messageHash.slice(0, 2) != "0x") {
-			throw RangeError(
+			throw new RangeError(
 			    "Invalide messageHash ,must be a 0x prefixed keccak256 hash.",
 			);
 		}
@@ -2891,7 +2891,7 @@ export class SafeAccount extends SmartAccount {
 			eip7212WebAuthnPrecompileVerifier.length != 42 ||
 			eip7212WebAuthnPrecompileVerifier.slice(0, 38) != ZeroAddress.slice(0, 38)
 		) {
-			throw RangeError(
+			throw new RangeError(
 				"Invalide precompile address. " +
                 "It should have the format 0x000000000000000000000000000000000000____",
 			);
@@ -3008,7 +3008,7 @@ export class SafeAccount extends SmartAccount {
                 
                 const moduleToDisableIndex = modules.indexOf(moduleToDisableAddress);
                 if (moduleToDisableIndex == -1) {
-                    throw RangeError(
+                    throw new RangeError(
                         "moduleToDisable " + moduleToDisableAddress +
                         " is not an enabled module."
                     );
@@ -3017,7 +3017,7 @@ export class SafeAccount extends SmartAccount {
                 } else if (moduleToDisableIndex > 0) {
                     prevModuleAddressT = modules[moduleToDisableIndex - 1];
                 } else {
-                    throw RangeError(
+                    throw new RangeError(
                         "Invalid module index for " + moduleToDisableAddress);
                 }
             }
@@ -3083,7 +3083,7 @@ export class SafeAccount extends SmartAccount {
     }> {
         let isInit:boolean = false;
         if(nodeRpcUrl == null && overrides.isInit == null){
-            throw RangeError(
+            throw new RangeError(
                 "nodeRpcUrl and overrides.isInit can't both be null"
             );
         }else if(overrides.isInit == null){
