@@ -587,8 +587,8 @@ export function calculateUserOperationMaxGasCost(
 ): bigint {
 	if ("initCode" in useroperation) {
 		const isPaymasterAndData =
-			useroperation.paymasterAndData == "0x" ||
-			useroperation.paymasterAndData == null;
+			useroperation.paymasterAndData != "0x" &&
+			useroperation.paymasterAndData != null;
 		const mul = isPaymasterAndData ? 3n : 0n;
 		const requiredGas =
 			useroperation.callGasLimit +

@@ -482,9 +482,9 @@ export async function simulateSenderCallDataWithTenderly(
     }
     
     if(
-        factory == null && factoryData != null ||
-        factory != null && factoryData == null
-    ){ 
+        (factory == null && factoryData != null) ||
+        (factory != null && factoryData == null)
+    ){
         throw RangeError(`Invalid factory and factoryData`);
     }
     if(factory != null && factoryData != null){ 

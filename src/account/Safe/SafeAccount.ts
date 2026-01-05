@@ -504,7 +504,7 @@ export class SafeAccount extends SmartAccount {
 		signersAddresses.forEach((signer, index) => {
 			signersSignatures.push(
 				{
-					signer: signer.toLocaleLowerCase(),
+					signer: signer.toLowerCase(),
 					signature: signatures[index]
 				}
 			);
@@ -544,7 +544,7 @@ export class SafeAccount extends SmartAccount {
 			);
 		} else {
             if(overrides.entrypointAddress){
-                if(overrides.entrypointAddress.startsWith("0x433709")){
+                if(overrides.entrypointAddress.toLowerCase() === ENTRYPOINT_V9.toLowerCase()){
                     return SafeAccount.getUserOperationEip712Hash_V9(
                         useroperation as UserOperationV9,
                         chainId,
@@ -607,7 +607,7 @@ export class SafeAccount extends SmartAccount {
 		} else {
             let data;
             if(overrides?.entrypointAddress){
-                if(overrides.entrypointAddress.startsWith("0x433709")){
+                if(overrides.entrypointAddress.toLowerCase() === ENTRYPOINT_V9.toLowerCase()){
                     data = SafeAccount.getUserOperationEip712Data_V9(
                         useroperation as UserOperationV9,
                         chainId,
@@ -2300,10 +2300,8 @@ export class SafeAccount extends SmartAccount {
 				throw RangeError("oldOwner is not a current owner.");
 			} else if (oldOwnerIndex == 0) {
 				prevOwnerT = "0x0000000000000000000000000000000000000001";
-			} else if (oldOwnerIndex > 0) {
-				prevOwnerT = owners[oldOwnerIndex - 1];
 			} else {
-				throw RangeError("Invalid owner index");
+				prevOwnerT = owners[oldOwnerIndex - 1];
 			}
 		}
 		const swapMetaTransaction = this.createStandardSwapOwnerMetaTransaction(
@@ -2369,10 +2367,8 @@ export class SafeAccount extends SmartAccount {
 				throw RangeError("ownerToDelete is not a current owner.");
 			} else if (ownerToDeleteIndex == 0) {
 				prevOwnerT = "0x0000000000000000000000000000000000000001";
-			} else if (ownerToDeleteIndex > 0) {
-				prevOwnerT = owners[ownerToDeleteIndex - 1];
 			} else {
-				throw RangeError("Invalid owner index");
+				prevOwnerT = owners[ownerToDeleteIndex - 1];
 			}
 		}
 		return this.createStandardRemoveOwnerMetaTransaction(
