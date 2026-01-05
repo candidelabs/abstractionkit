@@ -211,7 +211,7 @@ export function createPackedUserOperationV7(
 	return packedUserOperation;
 }
 
-export function paymasterDataKeccak(paymasterAndData: string): string{
+export function paymasterDataKeccakV9(paymasterAndData: string): string{
     const PAYMASTER_SIG_MAGIC = '22e325a297439656';
     const parts = paymasterAndData.split(PAYMASTER_SIG_MAGIC);
     if(parts.length > 1){
@@ -309,7 +309,7 @@ function baseCreatePackedUserOperationV8V9(
 		accountGasLimits,
 		useroperation.preVerificationGas,
 		gasFees,
-		is_v9?paymasterDataKeccak(paymasterAndData):keccak256(paymasterAndData),
+		is_v9?paymasterDataKeccakV9(paymasterAndData):keccak256(paymasterAndData),
 	];
 
 	const packedUserOperation = abiCoder.encode(
