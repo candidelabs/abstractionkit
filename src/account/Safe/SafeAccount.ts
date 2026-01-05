@@ -17,6 +17,7 @@ import {
 	ENTRYPOINT_V7,
 	EIP712_SAFE_OPERATION_V7_TYPE,
 	EIP712_SAFE_OPERATION_V6_TYPE,
+    ENTRYPOINT_V9,
 } from "../../constants";
 import {
 	MetaTransaction,
@@ -29,6 +30,7 @@ import {
     PolygonChain,
     OnChainIdentifierParamsType,
     TenderlySimulationResult,
+    UserOperationV9,
 } from "../../types";
 import {
 	createCallData,
@@ -472,6 +474,7 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
+     * @deprecated 
 	 * formate a list of eip712 signatures to a useroperation signature
 	 * @param signersAddresses - signers public addresses
 	 * @param signatures - list of eip712 signatures
@@ -486,8 +489,8 @@ export class SafeAccount extends SmartAccount {
 		overrides: {
 			validAfter?: bigint;
 			validUntil?: bigint;
-            isEil?: boolean;
-			eilProof?: string;
+            isCrossChainSignature?: boolean;
+			merkleProof?: string;
 		} = {},
 	): string {
 		if (signersAddresses.length != signatures.length) {
@@ -524,7 +527,7 @@ export class SafeAccount extends SmartAccount {
 	 * @returns useroperation hash
 	 */
 	protected static getUserOperationEip712Hash(
-		useroperation: UserOperationV6 | UserOperationV7,
+		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV9,
 		chainId: bigint,
 		overrides: {
 			validAfter?: bigint;
@@ -540,11 +543,27 @@ export class SafeAccount extends SmartAccount {
 				overrides,
 			);
 		} else {
-			return SafeAccount.getUserOperationEip712Hash_V7(
-				useroperation,
-				chainId,
-				overrides,
-			);
+            if(overrides.entrypointAddress){
+                if(overrides.entrypointAddress.startsWith("0x433709")){
+                    return SafeAccount.getUserOperationEip712Hash_V9(
+                        useroperation as UserOperationV9,
+                        chainId,
+                        overrides,
+                    );
+                }else{
+                    return SafeAccount.getUserOperationEip712Hash_V7(
+                        useroperation,
+                        chainId,
+                        overrides,
+                    );
+                }
+            }else{
+                return SafeAccount.getUserOperationEip712Hash_V7(
+                    useroperation,
+                    chainId,
+                    overrides,
+                );
+            }
 		}
 	}
     
@@ -561,7 +580,7 @@ export class SafeAccount extends SmartAccount {
      * object needed for hashing and signing
 	 */
     protected static getUserOperationEip712Data(
-		useroperation: UserOperationV6 | UserOperationV7,
+		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV9,
 		chainId: bigint,
 		overrides?: {
 			validAfter?: bigint;
@@ -586,11 +605,28 @@ export class SafeAccount extends SmartAccount {
                 messageValue: data.messageValue
             }
 		} else {
-			const data = SafeAccount.getUserOperationEip712Data_V7(
-				useroperation,
-				chainId,
-				overrides,
-			);
+            let data;
+            if(overrides?.entrypointAddress){
+                if(overrides.entrypointAddress.startsWith("0x433709")){
+                    data = SafeAccount.getUserOperationEip712Data_V9(
+                        useroperation as UserOperationV9,
+                        chainId,
+                        overrides,
+                    );
+                }else{
+                    data = SafeAccount.getUserOperationEip712Data_V7(
+                        useroperation,
+                        chainId,
+                        overrides,
+                    );
+                }
+            }else{
+                data = SafeAccount.getUserOperationEip712Data_V7(
+                    useroperation,
+                    chainId,
+                    overrides,
+                );
+            }
             return {
                 domain: data.domain,
                 types: data.types,
@@ -693,28 +729,16 @@ export class SafeAccount extends SmartAccount {
 			data.messageValue,
 		);
 	}
-    
-    /**
-	 * create a v0.07 useroperation eip712 hash
-	 * @param useroperation - useroperation to hash
-	 * @param chainId - target chain id
-	 * @param overrides - overrides for the default values
-	 * @param overrides.validAfter - timestamp the signature will be valid after
-	 * @param overrides.validUntil - timestamp the signature will be valid until
-	 * @param overrides.entrypoint - target entrypoint
-	 * defaults to ENTRYPOINT_V7
-	 * @param overrides.safe4337ModuleAddress - defaults to "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226"
-     * @returns an object containing the typed data domain, type and typed data vales
-     * object needed for hashing and signing
-	 */
-	public static getUserOperationEip712Data_V7(
+
+    private static baseGetUserOperationEip712DataV7V8V9(
 		useroperation: UserOperationV7,
 		chainId: bigint,
+		entrypointAddress: string,
 		overrides: {
 			validAfter?: bigint;
 			validUntil?: bigint;
-			entrypointAddress?: string;
 			safe4337ModuleAddress?: string;
+            is_v9?: boolean
 		} = {},
     ): {
         domain: SafeUserOperationTypedDataDomain,
@@ -724,7 +748,6 @@ export class SafeAccount extends SmartAccount {
 		const validAfter = overrides.validAfter ?? 0n;
 		const validUntil = overrides.validUntil ?? 0n;
 
-		const entrypointAddress = overrides.entrypointAddress ?? ENTRYPOINT_V7;
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
 			"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226";
@@ -753,7 +776,15 @@ export class SafeAccount extends SmartAccount {
 					.slice(34);
 			}
 			if (useroperation.paymasterData != null) {
-				paymasterAndData += useroperation.paymasterData.slice(2);
+                const PAYMASTER_SIG_MAGIC = '22e325a297439656';
+                if(
+                    overrides.is_v9 &&
+                    useroperation.paymasterData.endsWith(PAYMASTER_SIG_MAGIC)
+                ){
+                    paymasterAndData += PAYMASTER_SIG_MAGIC;
+                }else{
+				    paymasterAndData += useroperation.paymasterData.slice(2);
+                }
 			}
 		}
 		const messageValue: SafeUserOperationV7TypedMessageValue = {
@@ -766,22 +797,55 @@ export class SafeAccount extends SmartAccount {
 			preVerificationGas: useroperation.preVerificationGas,
 			maxPriorityFeePerGas: useroperation.maxPriorityFeePerGas,
 			maxFeePerGas: useroperation.maxFeePerGas,
-			paymasterAndData: paymasterAndData,
+			paymasterAndData, 
 			validAfter: validAfter,
 			validUntil: validUntil,
 			entryPoint: entrypointAddress,
 		};
-
 		const domain: SafeUserOperationTypedDataDomain = {
 			chainId: Number(chainId),
 			verifyingContract: safe4337ModuleAddress,
 		};
-        
         return {
 			domain,
 			types: EIP712_SAFE_OPERATION_V7_TYPE,
 			messageValue,
         };
+    }
+
+    /**
+	 * create a v0.07 useroperation eip712 hash
+	 * @param useroperation - useroperation to hash
+	 * @param chainId - target chain id
+	 * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @param overrides.entrypoint - target entrypoint
+	 * defaults to ENTRYPOINT_V7
+	 * @param overrides.safe4337ModuleAddress - defaults to "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226"
+     * @returns an object containing the typed data domain, type and typed data vales
+     * object needed for hashing and signing
+	 */
+	public static getUserOperationEip712Data_V7(
+		useroperation: UserOperationV7,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		} = {},
+    ): {
+        domain: SafeUserOperationTypedDataDomain,
+        types:Record<string, {name: string;type: string;}[]>,
+        messageValue: SafeUserOperationV6TypedMessageValue
+    } {
+        return SafeAccount.baseGetUserOperationEip712DataV7V8V9(
+            useroperation,
+            chainId,
+            overrides.entrypointAddress??ENTRYPOINT_V7,
+            overrides
+        );
     }
 
 	/**
@@ -815,7 +879,82 @@ export class SafeAccount extends SmartAccount {
 		);
 	}
 
+    /**
+	 * create a v0.09 useroperation eip712 hash
+	 * @param useroperation - useroperation to hash
+	 * @param chainId - target chain id
+	 * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @param overrides.entrypoint - target entrypoint
+	 * defaults to ENTRYPOINT_V9
+	 * @param overrides.safe4337ModuleAddress - defaults to "0xf998536d89f3e483087da37eabb016faa694b641"
+     * @returns an object containing the typed data domain, type and typed data vales
+     * object needed for hashing and signing
+	 */
+	public static getUserOperationEip712Data_V9(
+		useroperation: UserOperationV9,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		} = {},
+    ): {
+        domain: SafeUserOperationTypedDataDomain,
+        types:Record<string, {name: string;type: string;}[]>,
+        messageValue: SafeUserOperationV6TypedMessageValue
+    } {
+		const safe4337ModuleAddress =
+			overrides.safe4337ModuleAddress ??
+			"0xf998536d89f3e483087da37eabb016faa694b641";
+
+        return SafeAccount.baseGetUserOperationEip712DataV7V8V9(
+            useroperation,
+            chainId,
+            overrides.entrypointAddress??ENTRYPOINT_V9,
+            {
+                ...overrides,
+                safe4337ModuleAddress,
+                is_v9: true
+            }
+        );
+    }
+
 	/**
+	 * create a v0.09 useroperation eip712 hash
+	 * @param useroperation - useroperation to hash
+	 * @param chainId - target chain id
+	 * @param overrides - overrides for the default values
+	 * @param overrides.validAfter - timestamp the signature will be valid after
+	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @param overrides.entrypoint - target entrypoint
+	 * defaults to ENTRYPOINT_V9
+	 * @param overrides.safe4337ModuleAddress - defaults to "0xE0049883864b20728b76B5cf265765B45162516D"
+	 * @returns useroperation hash
+	 */
+	public static getUserOperationEip712Hash_V9(
+		useroperation: UserOperationV9,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		} = {},
+	): string {
+        const data = SafeAccount.getUserOperationEip712Data_V9(
+            useroperation, chainId, overrides)	
+		return TypedDataEncoder.hash(
+			data.domain,
+			data.types,
+			data.messageValue,
+		);
+	}
+
+	/**
+     * @deprecated
 	 * formate an eip712 signature to a useroperation signature
 	 * @param signature - an eip712 signature
 	 * @param overrides - overrides for the default values
@@ -828,7 +967,7 @@ export class SafeAccount extends SmartAccount {
 		overrides: {
 			validAfter?: bigint;
 			validUntil?: bigint;
-            isEil?: boolean;
+            isCrossChainSignature?: boolean;
 		} = {},
 	): string {
 		return SafeAccount.formatSignaturesToUseroperationSignature(
@@ -1178,7 +1317,7 @@ export class SafeAccount extends SmartAccount {
             webAuthnSignerSingleton?: string;
             eip7212WebAuthnPrecompileVerifier?: string;
             eip7212WebAuthnContractVerifier?: string;
-            isEil?: boolean;
+            isCrossChainSignature?: boolean;
 		} = {},
 	): Promise<[bigint, bigint, bigint]> {
         const validAfter = 0xffffffffffffn;
@@ -1201,7 +1340,7 @@ export class SafeAccount extends SmartAccount {
 					{
 						validAfter,
 						validUntil,
-                        isEil: overrides.isEil
+                        isCrossChainSignature: overrides.isCrossChainSignature
 					},
 				);
 		} else if (overrides.expectedSigners != null) {
@@ -1233,7 +1372,7 @@ export class SafeAccount extends SmartAccount {
                     {
                         validAfter,
                         validUntil,
-                        isEil: overrides.isEil
+                        isCrossChainSignature: overrides.isCrossChainSignature
                     },
                 );
 		} else if (userOperation.signature.length < 3) {
@@ -1243,7 +1382,7 @@ export class SafeAccount extends SmartAccount {
                     {
                         validAfter,
                         validUntil,
-                        isEil: overrides.isEil
+                        isCrossChainSignature: overrides.isCrossChainSignature
                     },
                 );
         }
@@ -1556,10 +1695,10 @@ export class SafeAccount extends SmartAccount {
 						...userOperation,
 						factory: factoryAddress,
 						factoryData: factoryData,
-						paymaster: null,
-						paymasterVerificationGasLimit: null,
-						paymasterPostOpGasLimit: null,
-						paymasterData: null,
+						paymaster: overrides.paymaster??null,
+						paymasterVerificationGasLimit: overrides.paymasterVerificationGasLimit??null,
+						paymasterPostOpGasLimit: overrides.paymasterPostOpGasLimit??null,
+						paymasterData: overrides.paymasterData??null,
 					};
 				}
                 const validAfter = 0xffffffffffffn;
@@ -1605,7 +1744,7 @@ export class SafeAccount extends SmartAccount {
 							validAfter,
 							validUntil,
 							webAuthnSharedSigner,
-                            isEil: overrides.isEil
+                            isCrossChainSignature: overrides.isCrossChainSignature
 						},
 					);
 
@@ -1615,7 +1754,7 @@ export class SafeAccount extends SmartAccount {
 						bundlerRpc,
 						{
 							stateOverrideSet: overrides.state_override_set,
-							isEil:overrides.isEil
+							isCrossChainSignature:overrides.isCrossChainSignature
 						},
 					);
 				verificationGasLimit +=
@@ -1703,7 +1842,7 @@ export class SafeAccount extends SmartAccount {
 		overrides: {
 			validAfter?: bigint;
 			validUntil?: bigint;
-			isEil?: boolean;
+			isCrossChainSignature?: boolean;
 		} = {},
 	): string {
 		const validAfter = overrides.validAfter ?? 0n;
@@ -1733,24 +1872,24 @@ export class SafeAccount extends SmartAccount {
 			},
 		);
 
-		const signersAddresses = [];
-		const signatures = [];
+        const signerSignaturePairs: SignerSignaturePair[] = [];
 		for (const privateKey of privateKeys) {
 			const wallet = new Wallet(privateKey);
-			const SignerSignaturePair = wallet.signingKey.sign(
+			const signature = wallet.signingKey.sign(
 				userOperationEip712Hash,
 			).serialized;
-			signersAddresses.push(wallet.address);
-			signatures.push(SignerSignaturePair);
+            signerSignaturePairs.push({
+                signer: wallet.address,
+                signature
+            });
 		}
 
-		return SafeAccount.formatEip712SignaturesToUseroperationSignature(
-			signersAddresses,
-			signatures,
+		return SafeAccount.formatSignaturesToUseroperationSignature(
+            signerSignaturePairs,
 			{
 				validAfter,
 				validUntil,
-                isEil:overrides.isEil
+                isCrossChainSignature:overrides.isCrossChainSignature
 			},
 		);
 	}
@@ -1841,26 +1980,48 @@ export class SafeAccount extends SmartAccount {
 			overrides,
 		);
 
-		if(overrides.isEil){
-			if(overrides.eilProof != null){
+		if(overrides.isCrossChainSignature){
+			if(overrides.crossChainMerkleProof != null){
+                const merkleProofLength =
+                    overrides.crossChainMerkleProof.slice(2).length; // wihout 0x prefix
 				if(
-					overrides.eilProof.slice(2).length < 40 ||
-					overrides.eilProof.slice(2).length % 2 != 0
+                    // 1 byte has a length of 2 hex chars
+                    // minimum proof consist of at least two hashes, 2 * 2 * 32 = 128
+					merkleProofLength < 128 ||
+                    // a valid proof length should be a multiple of 2 * 32 = 64
+					merkleProofLength % 64 != 0
 				){
-					throw RangeError("invalid eilProof length.");
+					throw RangeError("invalid crossChainMerkleProof length.");
 				}
-				const eilProofLength = overrides.eilProof.slice(2).length;
-				const eilMerkleTreeDepth = eilProofLength % 2;
-				const eilMerkleTreeDepthHex = eilMerkleTreeDepth.toString(16);
+				const merkleTreeDepth = (merkleProofLength / 64) - 1;
+				let merkleTreeDepthHex = merkleTreeDepth.toString(16);
+
+                // create a 0x prefixed hex with an even length of chars
+                if(merkleTreeDepthHex.length % 2 == 0){
+                    merkleTreeDepthHex = "0x" + merkleTreeDepthHex;
+                }else{
+                    merkleTreeDepthHex = "0x0" + merkleTreeDepthHex;
+                }
 
 				return solidityPacked(
 					["bytes1", "uint48", "uint48", "bytes"],
-					["0x" + eilMerkleTreeDepthHex, validAfter, validUntil, overrides.eilProof + signature.slice(2)],
+					[
+                        merkleTreeDepthHex,
+                        validAfter,
+                        validUntil,
+                        overrides.crossChainMerkleProof + signature.slice(2)
+                    ],
 				);
 			}else{
+                //no proof means a single useroperation
 				return solidityPacked(
 					["bytes1", "uint48", "uint48", "bytes"],
-					["0x01", validAfter, validUntil, signature],
+					[
+                        "0x00", // single useroperation - merkle depth is 0
+                        validAfter,
+                        validUntil,
+                        signature
+                    ],
 				);
 			}
 		}else{

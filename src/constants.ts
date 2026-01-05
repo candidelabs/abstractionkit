@@ -68,4 +68,10 @@ export const EIP712_SAFE_OPERATION_V7_TYPE = {
 	],
 };
 
+export const EIP712_MULTI_SAFE_OPERATIONS_TYPE = {
+	MerkleTreeRoot: [
+		{ type: "bytes32", name: "merkleTreeRoot" },
+	],
+};
+
 export const DEFAULT_SECP256R1_PRECOMPILE_ADDRESS = "0x0000000000000000000000000000000000000100";

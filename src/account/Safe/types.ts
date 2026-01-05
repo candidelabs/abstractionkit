@@ -1,9 +1,9 @@
-import type { GasOption, StateOverrideSet, PolygonChain, OnChainIdentifierParamsType } from "../../types";
+import type { GasOption, StateOverrideSet, PolygonChain, OnChainIdentifierParamsType, MetaTransaction, UserOperationV9, PaymasterFieldsInitValues } from "../../types";
 
 /**
- * Overrides for the "createBaseUserOperationAndFactoryAddressAndFactoryData" function
+ * Overrides for the "createPaymasterUserOperation" function
  */
-export interface CreateBaseUserOperationOverrides {
+export interface CreatePaymasterUserOperationOverrides {
 	/** set the nonce instead of quering the current nonce from the rpc node */
 	nonce?: bigint;
 	/** set the callData instead of using the encoding of the provided Metatransactions*/
@@ -48,7 +48,18 @@ export interface CreateBaseUserOperationOverrides {
 	polygonGasStation?: PolygonChain;
 
     expectedSigners?: Signer[];
-	isEil?: boolean;
+	isCrossChainSignature?: boolean;
+}
+
+/**
+ * Overrides for the "createBaseUserOperationAndFactoryAddressAndFactoryData" function
+ */
+export interface CreateBaseUserOperationOverrides
+    extends CreatePaymasterUserOperationOverrides{
+	paymaster?: string;
+	paymasterVerificationGasLimit?: bigint;
+	paymasterPostOpGasLimit?: bigint;
+	paymasterData?: string;
 }
 
 /**
@@ -142,8 +153,8 @@ export interface WebAuthnSignatureOverrides {
 	webAuthnSignerSingleton?: string;
 	validAfter?: bigint;
 	validUntil?: bigint;
-	isEil?: boolean;
-	eilProof?: string;
+	isCrossChainSignature?: boolean;
+	crossChainMerkleProof?: string;
 }
 
 /**
@@ -229,3 +240,35 @@ export const WebauthnDummySignerSignaturePair: SignerSignaturePair = {
 		"0x000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000e06c92f0ac5c4ef9e74721c23d80a9fc12f259ca84afb160f0890483539b9e6080d824c0e6c795157ad5d1ee5eff1ceeb3031009a595f9360919b83dd411c5a78d0000000000000000000000000000000000000000000000000000000000000025a24f744b28d73f066bf3203d145765a7bc735e6328168c8b03e476da3ad0d8fe0400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e226f726967696e223a2268747470733a2f2f736166652e676c6f62616c220000",
 	isContractSignature: true,
 };
+
+export interface PerChainBatchTransaction {
+    chainId: bigint,
+	metaTransactions: MetaTransaction[],
+	providerRpc?: string,
+	bundlerRpc?: string,
+	overrides?: CreateUserOperationV9Overrides,
+}
+
+export interface UserOperationToSign {
+    chainId: bigint,
+    useroperation: UserOperationV9,
+    validAfter?: bigint;
+    validUntil?: bigint;
+}
+
+export interface PerChainBatchTransactionWithPaymaster {
+    chainId: bigint,
+	metaTransactions: MetaTransaction[],
+	paymasterFieldsInitValues: PaymasterFieldsInitValues,
+	providerRpc?: string,
+	bundlerRpc?: string,
+	overrides?: CreateUserOperationV9Overrides,
+}
+
+export interface CrossChainSignatureMerkleTreeRootTypedDataDomain {
+	verifyingContract: string;
+}
+
+export interface CrossChainSignatureMerkleTreeRootTypedMessageValue {
+	merkleTreeRoot: string;
+}
