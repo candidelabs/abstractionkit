@@ -4,12 +4,14 @@ import { PaymasterFieldsInitValues, UserOperationV9 } from "../types";
 export class AllowAllPaymaster extends Paymaster {
 	readonly address: string;
 
-	constructor(address: string = "0x3eebbf9cC5F40eF5F9E54466F9b81677bBd99476") {
+	constructor(address: string = "0x36A337b8b4cE5CF6ca1dDaeef73Da4928d714DF2") {
 		super();
 		this.address = address;
 	}
 
-	async getPaymasterFieldsInitValues(chainId: bigint):Promise<PaymasterFieldsInitValues>{
+	async getPaymasterFieldsInitValues(
+        chainId: bigint
+    ):Promise<PaymasterFieldsInitValues>{
         return {
             paymaster: this.address,
             paymasterVerificationGasLimit: 45_000n,
@@ -25,10 +27,9 @@ export class AllowAllPaymaster extends Paymaster {
 	 * @param userOperation - User operation to be sponsored
 	 * @returns a promise of string
 	 */
-	async getApprovedPaymasterData(
-		userOperation: UserOperationV9,
-	):Promise<string>{
-       return "0x7603fbcd3c6cebdb7193b716f62fe7e9d4afd859df4bf7fcdb2e9d486f57a1ca" // the allow all paymaster only checks for this fixed signature
+	async getApprovedPaymasterData(userOperation: UserOperationV9):Promise<string>{
+        // the allow all paymaster only checks for this fixed signature
+        return "0x7603fbcd3c6cebdb7193b716f62fe7e9d4afd859df4bf7fcdb2e9d486f57a1ca"
             + "0020" // signature length
             + "22e325a297439656"; // PAYMASTER_SIG_MAGIC
     }
