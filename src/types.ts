@@ -341,3 +341,10 @@ export type OnChainIdentifierParamsType = {
   /** tool version, defaults to current abstractionkit version */
   toolVersion?: string
 }
+
+export interface PaymasterFieldsInitValues {
+	paymaster?: string;
+	paymasterVerificationGasLimit?: bigint;
+	paymasterPostOpGasLimit?: bigint;
+	paymasterData?: string;
+}

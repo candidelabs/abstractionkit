@@ -28,6 +28,7 @@ export { SafeAccountFactory } from "./factory/SafeAccountFactory";
 export { Bundler } from "./Bundler";
 
 export { CandidePaymaster } from "./paymaster/CandidePaymaster";
+export { AllowAllPaymaster } from "./paymaster/AllowAllPaymaster";
 
 export { 
     WorldIdPermissionlessPaymaster, createWorldIdSignal 
@@ -107,7 +108,8 @@ export {
 	MetaTransaction,
     GasOption,
     SponsorMetadata,
-    PolygonChain
+    PolygonChain,
+    PaymasterFieldsInitValues
 } from "./types";
 
 export {
