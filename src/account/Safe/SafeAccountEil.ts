@@ -274,37 +274,6 @@ export class SafeAccountEil extends SafeAccount {
 		);
 	}
 
-	/**
-	 * createPaymasterUserOperation will determine the nonce, fetch the gas prices,
-	 * estimate gas limits, set paymaster fields and return a useroperation to be signed.
-	 * you can override all these values using the overrides parameter.
-	 * @param transactions - metatransaction list to be encoded
-	 * @param paymasterFieldsInitValues -paymaster fields init values
-	 * @param providerRpc - node rpc to fetch account nonce and gas prices
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param overrides - overrides for the default values
-	 * @returns promise with useroperation
-	 */
-	public async createPaymasterUserOperation(
-		transactions: MetaTransaction[],
-		paymasterFieldsInitValues: PaymasterFieldsInitValues,
-		providerRpc?: string,
-		bundlerRpc?: string,
-		overrides: CreatePaymasterUserOperationOverrides = {},
-	): Promise<UserOperationV9> {
-        return await this.createUserOperation(
-            transactions,
-            providerRpc,
-            bundlerRpc,
-            {
-                ...overrides,
-                paymaster: paymasterFieldsInitValues.paymaster,
-                paymasterVerificationGasLimit: paymasterFieldsInitValues.paymasterVerificationGasLimit,
-                paymasterPostOpGasLimit: paymasterFieldsInitValues.paymasterPostOpGasLimit,
-                paymasterData: paymasterFieldsInitValues.paymasterData,
-            }
-        )
-    }
 
 	/**
 	 * createUserOperation will determine the nonce, fetch the gas prices,
