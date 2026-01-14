@@ -6,21 +6,17 @@ import {
     SafeUserOperationTypedDataDomain,
     SafeUserOperationV9TypedMessageValue,
     SafeAccountSingleton,
-    PerChainBatchTransaction,
     UserOperationToSign,
-    CreatePaymasterUserOperationOverrides,
     CrossChainSignatureMerkleTreeRootTypedDataDomain,
     CrossChainSignatureMerkleTreeRootTypedMessageValue,
     SignerSignaturePair,
     WebAuthnSignatureOverrides,
-    PerChainBatchTransactionWithPaymaster,
 } from "./types";
 
 import { UserOperationV9, MetaTransaction, OnChainIdentifierParamsType, PaymasterFieldsInitValues } from "../../types";
 import { EIP712_MULTI_SAFE_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants";
 import { generateMerkleProofs } from "./MerkleTree";
 import { TypedDataEncoder, Wallet } from "ethers";
-import { SendUseroperationResponse } from "../SendUseroperationResponse";
 
 export class SafeAccountEil extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V9;
@@ -274,7 +270,6 @@ export class SafeAccountEil extends SafeAccount {
 		);
 	}
 
-
 	/**
 	 * createUserOperation will determine the nonce, fetch the gas prices,
 	 * estimate gas limits and return a useroperation to be signed.
@@ -318,94 +313,6 @@ export class SafeAccountEil extends SafeAccount {
 	}
 
 	/**
-	 * createUserOperations will determine the nonce, fetch the gas prices,
-	 * estimate gas limits and return a list of useroperations to be signed.
-	 * you can override all these values using the overrides parameter.
-	 * @param perChainBatchTransactions - list of batch transactions per chain
-	 * @returns promise with useroperation
-	 */
-	public async createUserOperations(
-		perChainBatchTransactions: PerChainBatchTransaction[],
-	): Promise<{results: UserOperationV9[], errors: Error[]}> {
-        const perChainBatchTransactionsWithPaymaster:PerChainBatchTransactionWithPaymaster[] = [];
-        perChainBatchTransactions.forEach(
-            (batch, _index) => {
-                perChainBatchTransactionsWithPaymaster.push(
-                    {
-                        ...batch,
-                        paymasterFieldsInitValues: {
-                            paymaster:undefined,
-                            paymasterVerificationGasLimit:undefined,
-                            paymasterPostOpGasLimit:undefined,
-                            paymasterData:undefined,
-                        },
-                    }
-                );
-            }
-        );
-
-        return this.createPaymasterUserOperations(perChainBatchTransactionsWithPaymaster);
-    }
-
-	/**
-	 * createPaymasterUserOperations will determine the nonce, fetch the gas prices,
-	 * estimate gas limits, set paymaster fields and return a list of useroperations to be signed.
-	 * you can override all these values using the overrides parameter.
-	 * @param perChainBatchTransactionsWithPaymaster - list of batch transactions per chain
-	 * @returns promise with useroperation
-	 */
-	public async createPaymasterUserOperations(
-		perChainBatchTransactionsWithPaymaster: PerChainBatchTransactionWithPaymaster[],
-	): Promise<{results: UserOperationV9[], errors: Error[]}> {
-        const userOperationsPromises: Promise<UserOperationV9>[] = [];
-        
-        let chainIdMap = new Map<bigint, boolean>();
-        
-		perChainBatchTransactionsWithPaymaster.forEach(
-            (batch, _index) => {
-                if(chainIdMap.get(batch.chainId)){
-				    throw new RangeError(
-                        "Only one useroperation per chainid is allowed for createUserOperations."
-                    );
-                }
-                userOperationsPromises.push(
-                    this.createUserOperation(
-                        batch.metaTransactions,
-                        batch.providerRpc,
-                        batch.bundlerRpc,
-                        {
-                            ...batch.overrides,
-                            paymaster: batch.paymasterFieldsInitValues.paymaster,
-                            paymasterVerificationGasLimit:
-                                batch.paymasterFieldsInitValues.paymasterVerificationGasLimit,
-                            paymasterPostOpGasLimit:
-                                batch.paymasterFieldsInitValues.paymasterPostOpGasLimit,
-                            paymasterData: batch.paymasterFieldsInitValues.paymasterData,
-                        }
-                    )
-                );
-                chainIdMap.set(batch.chainId, true);
-		    }
-        );
-
-        let userOperations: UserOperationV9[] = [];
-        let userOperationsErrors:Error[] = [];
-        await Promise.allSettled(userOperationsPromises).then((results) => {
-            results.forEach((result, index) => {
-              if (result.status === 'fulfilled') {
-                userOperations.push(result.value);
-              } else {
-                  result.reason.message =
-                      `userOp no-${(index+1).toString()}: ${result.reason.message}`;
-                  userOperationsErrors.push(result.reason);
-              }
-            });
-          });
-
-		return {results: userOperations, errors: userOperationsErrors};
-	}
-
-	/**
 	 * create a useroperation signature
 	 * @param useroperation - useroperation to sign
 	 * @param privateKeys - for the signers
@@ -416,7 +323,7 @@ export class SafeAccountEil extends SafeAccount {
 	 * @returns signature
 	 */
 	public signUserOperation(
-		useroperation: UserOperationV9,
+		userOperation: UserOperationV9,
 		privateKeys: string[],
 		chainId: bigint,
 		overrides: {
@@ -425,7 +332,7 @@ export class SafeAccountEil extends SafeAccount {
 		} = {},
 	): string {
 		return SafeAccount.baseSignSingleUserOperation(
-			useroperation,
+			userOperation,
 			privateKeys,
 			chainId,
 			this.entrypointAddress,
@@ -452,7 +359,7 @@ export class SafeAccountEil extends SafeAccount {
 		privateKeys: string[],
 	): string[] {
 		if (userOperationsToSign.length < 1) {
-			throw new RangeError("There should be at least one userOperationsToSignsToSign");
+			throw new RangeError("There should be at least one userOperationsToSigns");
 		}
 		if (privateKeys.length < 1) {
 			throw new RangeError("There should be at least one privateKey");
@@ -462,7 +369,7 @@ export class SafeAccountEil extends SafeAccount {
             userOperationsToSign.forEach(
                 (userOperationsToSignToSign, _index) => {
                     const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
-                        userOperationsToSignToSign.useroperation,
+                        userOperationsToSignToSign.userOperation,
                         userOperationsToSignToSign.chainId,
                     );
                     userOperationsHashes.push(userOperationHash);
@@ -505,7 +412,7 @@ export class SafeAccountEil extends SafeAccount {
             return userOpSignatures;
         }else{
             return [this.signUserOperation(
-                userOperationsToSign[0].useroperation,
+                userOperationsToSign[0].userOperation,
                 privateKeys,
                 userOperationsToSign[0].chainId,
                 {
@@ -514,45 +421,6 @@ export class SafeAccountEil extends SafeAccount {
                 }
             )];
         }
-	}
-
-	/**
-	 * sends useroperations to bundlers RPCs concurrently with no order
-	 * @param userOperation - useroperation to send
-	 * @param bundlerRpc - bundler rpc to send useroperation
-	 * @returns promise with SendUseroperationResponse
-	 */
-	public async sendUserOperationsNoOrder(
-        userOperationBundlerPair: {
-            userOperation: UserOperationV9,
-            bundlerRpc: string,
-        }[]
-	): Promise<{results: SendUseroperationResponse[], errors: Error[]}> {
-        const sendUserOperationsPromises: Promise<SendUseroperationResponse>[] = [];
-        
-		userOperationBundlerPair.forEach(
-            (pair, _index) => {
-                sendUserOperationsPromises.push(
-                    this.sendUserOperation(pair.userOperation, pair.bundlerRpc
-                    )
-                );
-		    }
-        );
-
-        let sendUserOperationsResonses: SendUseroperationResponse[] = [];
-        let sendUserOperationsErrors:Error[] = [];
-        await Promise.allSettled(sendUserOperationsPromises).then((results) => {
-            results.forEach((result, index) => {
-              if (result.status === 'fulfilled') {
-                sendUserOperationsResonses.push(result.value);
-              } else {
-                  result.reason.message =
-                      `userOp no-${(index+1).toString()}: ${result.reason.message}`;
-                  sendUserOperationsErrors.push(result.reason);
-              }
-            });
-          });
-        return {results:sendUserOperationsResonses, errors:sendUserOperationsErrors};
 	}
 
 	public static getCrossChainSingleSignatureUserOperationsEip712Hash(
@@ -589,7 +457,7 @@ export class SafeAccountEil extends SafeAccount {
         userOperationsToSignsToSign.forEach(
             (userOperationsToSignToSign, _index) => {
                 const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
-                    userOperationsToSignToSign.useroperation,
+                    userOperationsToSignToSign.userOperation,
                     userOperationsToSignToSign.chainId,
                 );
                 userOperationsHashes.push(userOperationHash);
@@ -617,7 +485,7 @@ export class SafeAccountEil extends SafeAccount {
         userOperationsToSignsToSign.forEach(
             (userOperationsToSignToSign, _index) => {
                 const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
-                    userOperationsToSignToSign.useroperation,
+                    userOperationsToSignToSign.userOperation,
                     userOperationsToSignToSign.chainId,
                 );
                 userOperationsHashes.push(userOperationHash);

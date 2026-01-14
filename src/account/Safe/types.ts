@@ -241,22 +241,14 @@ export const WebauthnDummySignerSignaturePair: SignerSignaturePair = {
 	isContractSignature: true,
 };
 
-export interface PerChainBatchTransaction {
-    chainId: bigint,
-	metaTransactions: MetaTransaction[],
-	providerRpc?: string,
-	bundlerRpc?: string,
-	overrides?: CreateUserOperationV9Overrides,
-}
-
 export interface UserOperationToSign {
     chainId: bigint,
-    useroperation: UserOperationV9,
+    userOperation: UserOperationV9,
     validAfter?: bigint;
     validUntil?: bigint;
 }
 
-export interface PerChainBatchTransactionWithPaymaster {
+export interface PerChainBatchTransaction {
     chainId: bigint,
 	metaTransactions: MetaTransaction[],
 	paymasterFieldsInitValues: PaymasterFieldsInitValues,

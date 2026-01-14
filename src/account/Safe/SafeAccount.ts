@@ -986,7 +986,7 @@ export class SafeAccount extends SmartAccount {
 	 * @returns promise with SendUseroperationResponse
 	 */
 	public async sendUserOperation(
-		userOperation: UserOperationV6 | UserOperationV7,
+		userOperation: UserOperationV6 | UserOperationV7 | UserOperationV9,
 		bundlerRpc: string,
 	): Promise<SendUseroperationResponse> {
 		const bundler = new Bundler(bundlerRpc);
