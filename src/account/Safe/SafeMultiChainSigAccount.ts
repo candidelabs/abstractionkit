@@ -18,7 +18,7 @@ import { EIP712_MULTI_SAFE_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants"
 import { generateMerkleProofs } from "./MerkleTree";
 import { TypedDataEncoder, Wallet } from "ethers";
 
-export class SafeAccountEil extends SafeAccount {
+export class SafeMultiChainSigAccount extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V9;
 	static readonly DEFAULT_SAFE_4337_MODULE_ADDRESS =
         "0xf998536d89f3e483087da37eabb016faa694b641";
@@ -37,10 +37,10 @@ export class SafeAccountEil extends SafeAccount {
 	) {
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
-			SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+			SafeMultiChainSigAccount.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 		const entrypointAddress =
 			overrides.entrypointAddress ??
-			SafeAccountEil.DEFAULT_ENTRYPOINT_ADDRESS;
+			SafeMultiChainSigAccount.DEFAULT_ENTRYPOINT_ADDRESS;
     
         super(
             accountAddress, safe4337ModuleAddress, entrypointAddress,
@@ -67,9 +67,9 @@ export class SafeAccountEil extends SafeAccount {
 				owners,
 				overrides,
 				overrides.safe4337ModuleAddress ??
-					SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+					SafeMultiChainSigAccount.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 				overrides.safeModuleSetupAddress ??
-					SafeAccountEil.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
+					SafeMultiChainSigAccount.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
 		return accountAddress;
@@ -88,7 +88,7 @@ export class SafeAccountEil extends SafeAccount {
 	public static initializeNewAccount(
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
-	): SafeAccountEil {
+	): SafeMultiChainSigAccount {
 		let isInitWebAuthn = false;
 		let x = 0n;
 		let y = 0n;
@@ -114,12 +114,12 @@ export class SafeAccountEil extends SafeAccount {
 				owners,
 				overrides,
 				overrides.safe4337ModuleAddress ??
-					SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+					SafeMultiChainSigAccount.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 				overrides.safeModuleSetupAddress ??
-					SafeAccountEil.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
+					SafeMultiChainSigAccount.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
-		const safe = new SafeAccountEil(accountAddress, {
+		const safe = new SafeMultiChainSigAccount(accountAddress, {
 			safe4337ModuleAddress: overrides.safe4337ModuleAddress,
 			entrypointAddress: overrides.entrypointAddress,
             onChainIdentifierParams: overrides.onChainIdentifierParams,
@@ -162,10 +162,10 @@ export class SafeAccountEil extends SafeAccount {
 		const validUntil = overrides.validUntil ?? 0n;
 		const entrypointAddress =
 			overrides.entrypointAddress ??
-			SafeAccountEil.DEFAULT_ENTRYPOINT_ADDRESS;
+			SafeMultiChainSigAccount.DEFAULT_ENTRYPOINT_ADDRESS;
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
-			SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+			SafeMultiChainSigAccount.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 
 		return SafeAccount.getUserOperationEip712Hash(useroperation, chainId, {
 			validAfter,
@@ -206,10 +206,10 @@ export class SafeAccountEil extends SafeAccount {
 		const validUntil = overrides.validUntil ?? 0n;
 		const entrypointAddress =
 			overrides.entrypointAddress ??
-			SafeAccountEil.DEFAULT_ENTRYPOINT_ADDRESS;
+			SafeMultiChainSigAccount.DEFAULT_ENTRYPOINT_ADDRESS;
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
-			SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+			SafeMultiChainSigAccount.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 
 		return SafeAccount.getUserOperationEip712Data(useroperation, chainId, {
 			validAfter,
@@ -233,10 +233,10 @@ export class SafeAccountEil extends SafeAccount {
 	): string {
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
-			SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+			SafeMultiChainSigAccount.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 		const safeModuleSetupAddress =
 			overrides.safeModuleSetupAddress ??
-			SafeAccountEil.DEFAULT_SAFE_MODULE_SETUP_ADDRESS;
+			SafeMultiChainSigAccount.DEFAULT_SAFE_MODULE_SETUP_ADDRESS;
 
 		return SafeAccount.createBaseInitializerCallData(
 			owners,
@@ -264,9 +264,9 @@ export class SafeAccountEil extends SafeAccount {
 			owners,
 			overrides,
 			overrides.safe4337ModuleAddress ??
-				SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+				SafeMultiChainSigAccount.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 			overrides.safeModuleSetupAddress ??
-				SafeAccountEil.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
+				SafeMultiChainSigAccount.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 		);
 	}
 
@@ -429,7 +429,7 @@ export class SafeAccountEil extends SafeAccount {
 			safe4337ModuleAddress?: string;
 		} = {},
     ): string{
-        const data = SafeAccountEil.getCrossChainSingleSignatureUserOperationsEip712Data(
+        const data = SafeMultiChainSigAccount.getCrossChainSingleSignatureUserOperationsEip712Data(
             userOperationsToSignsToSign, overrides)	;
 		return TypedDataEncoder.hash(
 			data.domain,
@@ -450,7 +450,7 @@ export class SafeAccountEil extends SafeAccount {
     } {
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
-            SafeAccountEil.DEFAULT_SAFE_4337_MODULE_ADDRESS;	
+            SafeMultiChainSigAccount.DEFAULT_SAFE_4337_MODULE_ADDRESS;	
 
         const userOperationsHashes: string[] = [];
 
