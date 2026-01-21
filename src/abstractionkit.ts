@@ -73,6 +73,7 @@ export {
 export {
 	CreateUserOperationV6Overrides,
 	CreateUserOperationV7Overrides,
+	CreateUserOperationV9Overrides,
 	ECDSAPublicAddress,
 	InitCodeOverrides,
 	SafeModuleExecutorFunctionSelector,
@@ -94,6 +95,7 @@ export {
 	UserOperationV6,
 	UserOperationV7,
 	UserOperationV8,
+	UserOperationV9,
 	AbiInputValue,
 	JsonRpcParam,
 	JsonRpcResponse,
@@ -115,6 +117,7 @@ export {
 export {
 	ZeroAddress,
 	BaseUserOperationDummyValues,
+	EIP712_MULTI_SAFE_OPERATIONS_TYPE,
 	EIP712_SAFE_OPERATION_V7_TYPE,
 	EIP712_SAFE_OPERATION_V6_TYPE,
     DEFAULT_SECP256R1_PRECOMPILE_ADDRESS
