@@ -48,7 +48,7 @@ export interface CreatePaymasterUserOperationOverrides {
 	polygonGasStation?: PolygonChain;
 
     expectedSigners?: Signer[];
-	isCrossChainSignature?: boolean;
+	isMultiChainSignature?: boolean;
 }
 
 /**
@@ -153,8 +153,8 @@ export interface WebAuthnSignatureOverrides {
 	webAuthnSignerSingleton?: string;
 	validAfter?: bigint;
 	validUntil?: bigint;
-	isCrossChainSignature?: boolean;
-	crossChainMerkleProof?: string;
+	isMultiChainSignature?: boolean;
+	multiChainMerkleProof?: string;
 }
 
 /**
@@ -257,10 +257,10 @@ export interface PerChainBatchTransaction {
 	overrides?: CreateUserOperationV9Overrides,
 }
 
-export interface CrossChainSignatureMerkleTreeRootTypedDataDomain {
+export interface MultiChainSignatureMerkleTreeRootTypedDataDomain {
 	verifyingContract: string;
 }
 
-export interface CrossChainSignatureMerkleTreeRootTypedMessageValue {
+export interface MultiChainSignatureMerkleTreeRootTypedMessageValue {
 	merkleTreeRoot: string;
 }

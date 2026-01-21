@@ -7,8 +7,8 @@ import {
     SafeUserOperationV9TypedMessageValue,
     SafeAccountSingleton,
     UserOperationToSign,
-    CrossChainSignatureMerkleTreeRootTypedDataDomain,
-    CrossChainSignatureMerkleTreeRootTypedMessageValue,
+    MultiChainSignatureMerkleTreeRootTypedDataDomain,
+    MultiChainSignatureMerkleTreeRootTypedMessageValue,
     SignerSignaturePair,
     WebAuthnSignatureOverrides,
 } from "./types";
@@ -294,7 +294,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 				bundlerRpc,
 				{
 					...overrides,
-					isCrossChainSignature: true
+					isMultiChainSignature: true
 				}
 			);
 
@@ -339,13 +339,13 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 			this.safe4337ModuleAddress,
 			{
 				...overrides,
-				isCrossChainSignature: true
+				isMultiChainSignature: true
 			}
 		)
 	}
 
 	/**
-	 * sign a list of useroperations - cross chain signature
+	 * sign a list of useroperations - multi chain signature
 	 * @param useroperation - useroperation to sign
 	 * @param privateKeys - for the signers
 	 * @param chainId - target chain id
@@ -403,8 +403,8 @@ export class SafeMultiChainSigAccount extends SafeAccount {
                             {
                                 validAfter: userOperationsToSignToSign.validAfter,
                                 validUntil: userOperationsToSignToSign.validUntil,
-                                isCrossChainSignature:true,
-                                crossChainMerkleProof: proofs[index]
+                                isMultiChainSignature:true,
+                                multiChainMerkleProof: proofs[index]
                             },
                         )
                     );
@@ -423,13 +423,13 @@ export class SafeMultiChainSigAccount extends SafeAccount {
         }
 	}
 
-	public static getCrossChainSingleSignatureUserOperationsEip712Hash(
+	public static getMultiChainSingleSignatureUserOperationsEip712Hash(
 		userOperationsToSignsToSign: UserOperationToSign[],
 		overrides: {
 			safe4337ModuleAddress?: string;
 		} = {},
     ): string{
-        const data = SafeMultiChainSigAccount.getCrossChainSingleSignatureUserOperationsEip712Data(
+        const data = SafeMultiChainSigAccount.getMultiChainSingleSignatureUserOperationsEip712Data(
             userOperationsToSignsToSign, overrides)	;
 		return TypedDataEncoder.hash(
 			data.domain,
@@ -438,15 +438,15 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 		);
     }
 
-	public static getCrossChainSingleSignatureUserOperationsEip712Data(
+	public static getMultiChainSingleSignatureUserOperationsEip712Data(
 		userOperationsToSignsToSign: UserOperationToSign[],
 		overrides: {
 			safe4337ModuleAddress?: string;
 		} = {},
     ): {
-        domain: CrossChainSignatureMerkleTreeRootTypedDataDomain,
+        domain: MultiChainSignatureMerkleTreeRootTypedDataDomain,
         types:Record<string, {name: string;type: string;}[]>,
-        messageValue: CrossChainSignatureMerkleTreeRootTypedMessageValue
+        messageValue: MultiChainSignatureMerkleTreeRootTypedMessageValue
     } {
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
@@ -471,7 +471,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
     }
 
 	/**
-	 * formate a list of eip712 signatures to a list of cross chain useroperations signatures
+	 * formate a list of eip712 signatures to a list of multi chain useroperations signatures
 	 * @param signerSignaturePairs - a list of a pair of a signer and it's signature
 	 * @param overrides - overrides for the default values
 	 * @returns signature
@@ -500,8 +500,8 @@ export class SafeMultiChainSigAccount extends SafeAccount {
                         {
                             validAfter: overrides.validAfter,
                             validUntil: overrides.validUntil,
-                            isCrossChainSignature:true,
-                            crossChainMerkleProof: proofs[index]
+                            isMultiChainSignature:true,
+                            multiChainMerkleProof: proofs[index]
                         },
                     )
                 );

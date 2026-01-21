@@ -489,7 +489,7 @@ export class SafeAccount extends SmartAccount {
 		overrides: {
 			validAfter?: bigint;
 			validUntil?: bigint;
-            isCrossChainSignature?: boolean;
+            isMultiChainSignature?: boolean;
 			merkleProof?: string;
 		} = {},
 	): string {
@@ -967,7 +967,7 @@ export class SafeAccount extends SmartAccount {
 		overrides: {
 			validAfter?: bigint;
 			validUntil?: bigint;
-            isCrossChainSignature?: boolean;
+            isMultiChainSignature?: boolean;
 		} = {},
 	): string {
 		return SafeAccount.formatSignaturesToUseroperationSignature(
@@ -1317,7 +1317,7 @@ export class SafeAccount extends SmartAccount {
             webAuthnSignerSingleton?: string;
             eip7212WebAuthnPrecompileVerifier?: string;
             eip7212WebAuthnContractVerifier?: string;
-            isCrossChainSignature?: boolean;
+            isMultiChainSignature?: boolean;
 		} = {},
 	): Promise<[bigint, bigint, bigint]> {
         const validAfter = 0xffffffffffffn;
@@ -1340,7 +1340,7 @@ export class SafeAccount extends SmartAccount {
 					{
 						validAfter,
 						validUntil,
-                        isCrossChainSignature: overrides.isCrossChainSignature
+                        isMultiChainSignature: overrides.isMultiChainSignature
 					},
 				);
 		} else if (overrides.expectedSigners != null) {
@@ -1372,7 +1372,7 @@ export class SafeAccount extends SmartAccount {
                     {
                         validAfter,
                         validUntil,
-                        isCrossChainSignature: overrides.isCrossChainSignature
+                        isMultiChainSignature: overrides.isMultiChainSignature
                     },
                 );
 		} else if (userOperation.signature.length < 3) {
@@ -1382,7 +1382,7 @@ export class SafeAccount extends SmartAccount {
                     {
                         validAfter,
                         validUntil,
-                        isCrossChainSignature: overrides.isCrossChainSignature
+                        isMultiChainSignature: overrides.isMultiChainSignature
                     },
                 );
         }
@@ -1744,7 +1744,7 @@ export class SafeAccount extends SmartAccount {
 							validAfter,
 							validUntil,
 							webAuthnSharedSigner,
-                            isCrossChainSignature: overrides.isCrossChainSignature
+                            isMultiChainSignature: overrides.isMultiChainSignature
 						},
 					);
 
@@ -1754,7 +1754,7 @@ export class SafeAccount extends SmartAccount {
 						bundlerRpc,
 						{
 							stateOverrideSet: overrides.state_override_set,
-							isCrossChainSignature:overrides.isCrossChainSignature
+							isMultiChainSignature:overrides.isMultiChainSignature
 						},
 					);
 				verificationGasLimit +=
@@ -1842,7 +1842,7 @@ export class SafeAccount extends SmartAccount {
 		overrides: {
 			validAfter?: bigint;
 			validUntil?: bigint;
-			isCrossChainSignature?: boolean;
+			isMultiChainSignature?: boolean;
 		} = {},
 	): string {
 		const validAfter = overrides.validAfter ?? 0n;
@@ -1889,7 +1889,7 @@ export class SafeAccount extends SmartAccount {
 			{
 				validAfter,
 				validUntil,
-                isCrossChainSignature:overrides.isCrossChainSignature
+                isMultiChainSignature:overrides.isMultiChainSignature
 			},
 		);
 	}
@@ -1980,10 +1980,10 @@ export class SafeAccount extends SmartAccount {
 			overrides,
 		);
 
-		if(overrides.isCrossChainSignature){
-			if(overrides.crossChainMerkleProof != null){
+		if(overrides.isMultiChainSignature){
+			if(overrides.multiChainMerkleProof != null){
                 const merkleProofLength =
-                    overrides.crossChainMerkleProof.slice(2).length; // wihout 0x prefix
+                    overrides.multiChainMerkleProof.slice(2).length; // wihout 0x prefix
 				if(
                     // 1 byte has a length of 2 hex chars
                     // minimum proof consist of at least two hashes, 2 * 2 * 32 = 128
@@ -1991,7 +1991,7 @@ export class SafeAccount extends SmartAccount {
                     // a valid proof length should be a multiple of 2 * 32 = 64
 					merkleProofLength % 64 != 0
 				){
-					throw new RangeError("invalid crossChainMerkleProof length.");
+					throw new RangeError("invalid multiChainMerkleProof length.");
 				}
 				const merkleTreeDepth = (merkleProofLength / 64) - 1;
 				let merkleTreeDepthHex = merkleTreeDepth.toString(16);
@@ -2009,7 +2009,7 @@ export class SafeAccount extends SmartAccount {
                         merkleTreeDepthHex,
                         validAfter,
                         validUntil,
-                        overrides.crossChainMerkleProof + signature.slice(2)
+                        overrides.multiChainMerkleProof + signature.slice(2)
                     ],
 				);
 			}else{
