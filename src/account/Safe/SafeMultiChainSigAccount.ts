@@ -479,7 +479,16 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 	public static formatSignaturesToUseroperationsSignatures(
 		userOperationsToSignsToSign: UserOperationToSign[],
 		signerSignaturePairs: SignerSignaturePair[],
-		overrides: WebAuthnSignatureOverrides = {},
+		overrides: {
+            isInit?: boolean;
+            webAuthnSharedSigner?: string;
+            eip7212WebAuthnPrecompileVerifier?: string;
+            eip7212WebAuthnContractVerifier?: string;
+            webAuthnSignerFactory?: string;
+            webAuthnSignerSingleton?: string;
+            validAfter?: bigint;
+            validUntil?: bigint;
+        } = {},
 	): string[] {
         const userOperationsHashes: string[] = [];
         userOperationsToSignsToSign.forEach(
@@ -498,10 +507,9 @@ export class SafeMultiChainSigAccount extends SafeAccount {
                     SafeAccount.formatSignaturesToUseroperationSignature(
                         signerSignaturePairs,
                         {
-                            validAfter: overrides.validAfter,
-                            validUntil: overrides.validUntil,
                             isMultiChainSignature:true,
-                            multiChainMerkleProof: proofs[index]
+                            multiChainMerkleProof: proofs[index],
+                            ...overrides
                         },
                     )
                 );
