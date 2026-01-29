@@ -482,6 +482,9 @@ export class SafeMultiChainSigAccount extends SafeAccount {
         types:Record<string, {name: string;type: string;}[]>,
         messageValue: MultiChainSignatureMerkleTreeRootTypedMessageValue
     } {
+		if (userOperationsToSign.length < 1) {
+			throw new RangeError("There should be at least one userOperationsToSign");
+		}
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
             SafeMultiChainSigAccount.DEFAULT_SAFE_4337_MODULE_ADDRESS;	
@@ -524,6 +527,9 @@ export class SafeMultiChainSigAccount extends SafeAccount {
             validUntil?: bigint;
         } = {},
 	): string[] {
+		if (userOperationsToSign.length < 1) {
+			throw new RangeError("There should be at least one userOperationsToSign");
+		}
         const userOperationsHashes: string[] = [];
         userOperationsToSign.forEach(
             (userOperationsToSign, _index) => {
