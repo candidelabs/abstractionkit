@@ -379,7 +379,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 		privateKeys: string[],
 	): string[] {
 		if (userOperationsToSign.length < 1) {
-			throw new RangeError("There should be at least one userOperationsToSigns");
+			throw new RangeError("There should be at least one userOperationsToSign");
 		}
 		if (privateKeys.length < 1) {
 			throw new RangeError("There should be at least one privateKey");
@@ -473,7 +473,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 	 * @returns an object with domain, types, and messageValue for EIP-712 signing
 	 */
 	public static getMultiChainSingleSignatureUserOperationsEip712Data(
-		userOperationsToSignsToSign: UserOperationToSign[],
+		userOperationsToSign: UserOperationToSign[],
 		overrides: {
 			safe4337ModuleAddress?: string;
 		} = {},
@@ -488,7 +488,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 
         const userOperationsHashes: string[] = [];
 
-        userOperationsToSignsToSign.forEach(
+        userOperationsToSign.forEach(
             (userOperationsToSign, _index) => {
                 const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
                     userOperationsToSign.userOperation,
@@ -511,7 +511,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 	 * @returns signature
 	 */
 	public static formatSignaturesToUseroperationsSignatures(
-		userOperationsToSignsToSign: UserOperationToSign[],
+		userOperationsToSign: UserOperationToSign[],
 		signerSignaturePairs: SignerSignaturePair[],
 		overrides: {
             isInit?: boolean;
@@ -525,7 +525,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
         } = {},
 	): string[] {
         const userOperationsHashes: string[] = [];
-        userOperationsToSignsToSign.forEach(
+        userOperationsToSign.forEach(
             (userOperationsToSign, _index) => {
                 const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
                     userOperationsToSign.userOperation,
@@ -535,7 +535,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
         });
         const [_root, proofs] = generateMerkleProofs(userOperationsHashes);
         const userOpSignatures: string[] = [];
-        userOperationsToSignsToSign.forEach(
+        userOperationsToSign.forEach(
             (_userOperationsToSign, index) => {
                 userOpSignatures.push(
                     SafeAccount.formatSignaturesToUseroperationSignature(
