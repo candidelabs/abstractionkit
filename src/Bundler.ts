@@ -10,16 +10,31 @@ import type {
 import { sendJsonRpcRequest } from "./utils";
 import { AbstractionKitError, ensureError } from "./errors";
 
+/**
+ * Client for communicating with an ERC-4337 bundler via JSON-RPC.
+ * Provides methods for gas estimation, UserOperation submission, and receipt retrieval.
+ *
+ * @example
+ * const bundler = new Bundler("https://bundler.example.com/rpc");
+ * const chainId = await bundler.chainId();
+ * const receipt = await bundler.getUserOperationReceipt(userOpHash);
+ */
 export class Bundler {
+	/** The bundler JSON-RPC endpoint URL */
 	readonly rpcUrl: string;
 
+	/**
+	 * @param rpcUrl - The bundler JSON-RPC endpoint URL
+	 */
 	constructor(rpcUrl: string) {
 		this.rpcUrl = rpcUrl;
 	}
 
 	/**
-	 * call eth_chainId bundler rpc method
-	 * @returns promise with chainid
+	 * Get the chain ID from the bundler.
+	 *
+	 * @returns The chain ID as a hex string (e.g., "0x1" for Ethereum mainnet)
+	 * @throws AbstractionKitError with code "BUNDLER_ERROR" if the RPC call fails
 	 */
 	async chainId(): Promise<string> {
 		try {
@@ -50,8 +65,10 @@ export class Bundler {
 	}
 
 	/**
-	 * call eth_supportedEntryPoints bundler rpc method
-	 * @returns promise with supportedEntryPoints
+	 * Get the list of EntryPoint addresses supported by this bundler.
+	 *
+	 * @returns Array of supported EntryPoint contract addresses
+	 * @throws AbstractionKitError with code "BUNDLER_ERROR" if the RPC call fails
 	 */
 	async supportedEntryPoints(): Promise<string[]> {
 		try {
@@ -75,11 +92,13 @@ export class Bundler {
 	}
 
 	/**
-	 * call eth_estimateUserOperationGas bundler rpc method
-	 * @param useroperation - useroperation to estimate gas for
-	 * @param entrypointAddress - supported entrypoint
-	 * @param state_override_set - state override values to set during gs estimation
-	 * @returns promise with GasEstimationResult
+	 * Estimate gas limits for a UserOperation.
+	 *
+	 * @param useroperation - The UserOperation to estimate gas for
+	 * @param entrypointAddress - The EntryPoint contract address
+	 * @param state_override_set - Optional state overrides for gas estimation (useful for undeployed accounts)
+	 * @returns Gas estimation with callGasLimit, preVerificationGas, and verificationGasLimit
+	 * @throws AbstractionKitError with code "BUNDLER_ERROR" if the RPC call fails
 	 */
 	async estimateUserOperationGas(
 		useroperation: UserOperation,
@@ -123,10 +142,12 @@ export class Bundler {
 	}
 
 	/**
-	 * call eth_sendUserOperation bundler rpc method
-	 * @param useroperation - useroperation to estimate gas for
-	 * @param entrypointAddress - supported entrypoint
-	 * @returns promise with useroperationhash
+	 * Submit a signed UserOperation to the bundler for inclusion.
+	 *
+	 * @param useroperation - The signed UserOperation to send
+	 * @param entrypointAddress - The EntryPoint contract address
+	 * @returns The UserOperation hash (used to track the operation)
+	 * @throws AbstractionKitError with code "BUNDLER_ERROR" if the RPC call fails
 	 */
 	async sendUserOperation(
 		useroperation: UserOperation,
@@ -153,9 +174,12 @@ export class Bundler {
 	}
 
 	/**
-	 * call eth_getUserOperationReceipt bundler rpc method
-	 * @param useroperationhash - useroperation hash
-	 * @returns promise with UserOperationReceiptResult
+	 * Get the receipt for a submitted UserOperation.
+	 * Returns null if the operation has not been included in a block yet.
+	 *
+	 * @param useroperationhash - The UserOperation hash returned by sendUserOperation
+	 * @returns The receipt result, or null if the operation is still pending
+	 * @throws AbstractionKitError with code "BUNDLER_ERROR" if the RPC call fails
 	 */
 	async getUserOperationReceipt(
 		useroperationhash: string,
@@ -212,9 +236,12 @@ export class Bundler {
 	}
 
 	/**
-	 * call eth_getUserOperationByHash bundler rpc method
-	 * @param useroperationhash - useroperation hash
-	 * @returns promise with UserOperationByHashResult
+	 * Look up a UserOperation by its hash.
+	 * Returns null if the operation is not found.
+	 *
+	 * @param useroperationhash - The UserOperation hash to look up
+	 * @returns The UserOperation with block context, or null if not found
+	 * @throws AbstractionKitError with code "BUNDLER_ERROR" if the RPC call fails
 	 */
 	async getUserOperationByHash(
 		useroperationhash: string,

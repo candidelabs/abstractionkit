@@ -78,23 +78,46 @@ export enum SafeModuleExecutorFunctionSelector {
 	executeUserOp = "0x7bb37428",
 }
 
+/**
+ * EIP-712 domain for Safe UserOperation signing.
+ * Used to scope signatures to a specific chain and Safe 4337 module.
+ */
 export interface SafeUserOperationTypedDataDomain {
+	/** Target chain ID to prevent cross-chain replay */
 	chainId: bigint;
+	/** Address of the Safe 4337 module contract that verifies the signature */
 	verifyingContract: string;
 }
 
+/**
+ * EIP-712 typed data values for a Safe UserOperation.
+ * Mirrors the UserOperation fields with additional Safe-specific validity parameters.
+ */
 export interface SafeUserOperationTypedDataValues {
+	/** The Safe account address */
 	safe: string;
+	/** Anti-replay nonce from the EntryPoint */
 	nonce: bigint;
+	/** Factory + factory data for account deployment (empty "0x" if already deployed) */
 	initCode: string;
+	/** Encoded call to execute on the Safe */
 	callData: string;
+	/** Gas limit for the inner execution */
 	callGasLimit: bigint;
+	/** Gas limit for the verification step */
 	verificationGasLimit: bigint;
+	/** Extra gas to compensate the bundler */
 	preVerificationGas: bigint;
+	/** Maximum fee per gas unit */
 	maxFeePerGas: bigint;
+	/** Maximum priority fee per gas unit */
 	maxPriorityFeePerGas: bigint;
+	/** Paymaster address + paymaster-specific data (empty "0x" if self-funded) */
 	paymasterAndData: string;
+	/** Unix timestamp after which the signature becomes valid (0 for no restriction) */
 	validAfter: bigint;
+	/** Unix timestamp after which the signature expires (0 for no restriction) */
 	validUntil: bigint;
+	/** EntryPoint contract address */
 	entryPoint: string;
 }

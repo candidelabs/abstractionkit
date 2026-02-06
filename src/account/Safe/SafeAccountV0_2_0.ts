@@ -33,6 +33,18 @@ import { Bundler } from "src/Bundler";
 import { SendUseroperationResponse } from "../SendUseroperationResponse";
 import { AbstractionKitError } from "src/errors";
 
+/**
+ * Safe smart account implementation for EntryPoint v0.6.
+ * Provides methods to create, sign, and send ERC-4337 UserOperations
+ * using Safe's modular smart account architecture.
+ *
+ * @example
+ * // Create a new account (not yet deployed on-chain)
+ * const smartAccount = SafeAccountV0_2_0.initializeNewAccount([ownerAddress]);
+ *
+ * // Or connect to an existing deployed account
+ * const smartAccount = new SafeAccountV0_2_0(existingAccountAddress);
+ */
 export class SafeAccountV0_2_0 extends SmartAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS =
 		"0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
@@ -86,10 +98,23 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		],
 	};
 
+	/** The EntryPoint contract address this account targets */
 	readonly entrypointAddress: string;
+	/** The Safe 4337 module address used for signature verification */
 	readonly safe4337ModuleAddress: string;
 	private initCode: string | null;
 
+	/**
+	 * Create a SafeAccountV0_2_0 instance for an existing deployed account.
+	 * For new (undeployed) accounts, use the static `initializeNewAccount` method instead.
+	 *
+	 * @param accountAddress - The on-chain address of the Safe account
+	 * @param safe4337ModuleAddress - The Safe 4337 module address (defaults to the canonical address)
+	 * @param entrypointAddress - The EntryPoint v0.6 contract address (defaults to the canonical address)
+	 *
+	 * @example
+	 * const account = new SafeAccountV0_2_0("0xYourSafeAddress");
+	 */
 	constructor(
 		accountAddress: string,
 		safe4337ModuleAddress: string = SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
@@ -101,14 +126,17 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		this.initCode = null;
 	}
 	/**
-	 * To create and initialize a SafeAccountV0_2_0 object from its
-	 * initial owners
-	 * @remarks
-	 * initializeNewAccount only needed when the smart account
-	 * have not been deployed yet and the account address is unknown.
-	 * @param owners - list of account owners addresses
-	 * @param overrides - override values to change the initialization default values
-	 * @returns a SafeAccountV0_2_0 object
+	 * Create and initialize a new SafeAccountV0_2_0 from its initial owner addresses.
+	 * The account address is deterministically computed but the account is not yet deployed on-chain.
+	 * The first UserOperation sent from this account will deploy it automatically via initCode.
+	 *
+	 * @param owners - Array of owner addresses (at least one required)
+	 * @param overrides - Override default initialization values (threshold, factory address, etc.)
+	 * @returns A SafeAccountV0_2_0 instance with initCode set for deployment
+	 *
+	 * @example
+	 * const smartAccount = SafeAccountV0_2_0.initializeNewAccount(["0xOwnerAddress"]);
+	 * console.log("Account address:", smartAccount.accountAddress);
 	 */
 	public static initializeNewAccount(
 		owners: string[],
@@ -122,10 +150,15 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * calculate account addressfrom initial owners
-	 * @param owners - list of account owners addresses
-	 * @param overrides - override values to change the initialization default values
-	 * @returns account address
+	 * Calculate the counterfactual account address from the initial owner addresses.
+	 * Does not deploy the account; use `initializeNewAccount` to get a deployable instance.
+	 *
+	 * @param owners - Array of owner addresses (at least one required)
+	 * @param overrides - Override default initialization values (threshold, factory address, etc.)
+	 * @returns The deterministic account address
+	 *
+	 * @example
+	 * const address = SafeAccountV0_2_0.createAccountAddress(["0xOwnerAddress"]);
 	 */
 	public static createAccountAddress(
 		owners: string[],
@@ -139,10 +172,13 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * calculate account address and initcode from owners
-	 * @param owners - list of account owners addresses
-	 * @param overrides - override values to change the initialization default values
-	 * @returns account address and initcode
+	 * Calculate both the counterfactual account address and the initCode from owner addresses.
+	 * The initCode is the factory address + calldata needed to deploy the account on first use.
+	 *
+	 * @param owners - Array of owner addresses (at least one required)
+	 * @param overrides - Override default initialization values (threshold, factory address, etc.)
+	 * @returns A tuple of [accountAddress, initCode]
+	 * @throws RangeError if owners array is empty
 	 */
 	public static createAccountAddressAndInitCode(
 		owners: string[],
@@ -240,15 +276,17 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * create account initcode
-	 * @param owners - list of account owners addresses
-	 * @param threshold - for owners signatures
-	 * @param c2Nonce - create2 nonce
-	 * @param singletonAddress - Safe singleton address
-	 * @param safeAccountFactory - SafeAccountFactory object
+	 * Create the initCode for deploying a new Safe account via the factory.
+	 *
+	 * @param owners - Array of owner addresses (at least one required)
+	 * @param threshold - Number of owner signatures required (default: 1)
+	 * @param c2Nonce - CREATE2 salt nonce for generating different addresses from the same owners (default: 0n)
+	 * @param singletonAddress - Safe singleton contract address
+	 * @param safeAccountFactory - SafeAccountFactory instance
 	 * @param safe4337ModuleAddress - Safe 4337 module address
-	 * @param addModuleLibAddress - addModuleLib Address
-	 * @returns initcode
+	 * @param addModuleLibAddress - AddModuleLib address
+	 * @returns The initCode string (factory address + encoded calldata)
+	 * @throws RangeError if owners is empty, threshold < 1, threshold > owners.length, or c2Nonce < 0
 	 */
 	public static createInitCode(
 		owners: string[],
@@ -296,6 +334,17 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		return factoryGeneratorFunctionCallData;
 	}
 
+	/**
+	 * Compute the deterministic proxy (account) address from the initializer calldata,
+	 * CREATE2 nonce, factory address, and singleton address.
+	 *
+	 * @param initializerCallData - ABI-encoded initializer calldata
+	 * @param c2Nonce - CREATE2 salt nonce
+	 * @param safeFactoryAddress - Safe proxy factory address
+	 * @param singletonAddress - Safe singleton contract address
+	 * @returns The deterministic proxy address
+	 * @throws RangeError if c2Nonce is negative
+	 */
 	public static createProxyAddress(
 		initializerCallData: string,
 		c2Nonce: bigint,
@@ -327,7 +376,10 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * encode calldata for a single MetaTransaction to be executed by Safe account
+	 * Encode calldata for a single MetaTransaction to be executed by the Safe account.
+	 *
+	 * @param metaTransaction - The transaction to encode
+	 * @returns ABI-encoded calldata for the Safe executor function
 	 */
 	public static createAccountCallDataSingleTransaction(
 		metaTransaction: MetaTransaction,
@@ -345,7 +397,12 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * encode calldata for a list of MetaTransactions to be executed by Safe account
+	 * Encode calldata for a batch of MetaTransactions using the MultiSend contract.
+	 *
+	 * @param metaTransactions - Array of transactions to batch (at least one required)
+	 * @param multisendContractAddress - MultiSend contract address (defaults to canonical address)
+	 * @returns ABI-encoded calldata that delegatecalls MultiSend
+	 * @throws RangeError if metaTransactions array is empty
 	 */
 	public static createAccountCallDataBatchTransactions(
 		metaTransactions: MetaTransaction[],
@@ -375,7 +432,14 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * encode calldata to be executed by Safe account
+	 * Encode calldata for the Safe executor function (executeUserOpWithErrorString or executeUserOp).
+	 *
+	 * @param to - Target address
+	 * @param value - Native token value in wei
+	 * @param data - ABI-encoded calldata for the target
+	 * @param operation - Call (0) or Delegate (1)
+	 * @param safeModuleExecutorFunctionSelector - Executor function selector (defaults to executeUserOpWithErrorString)
+	 * @returns ABI-encoded calldata for the executor function
 	 */
 	public static createAccountCallData(
 		to: string,
@@ -394,8 +458,11 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * decode calldata to [to, value, data, operation]
-	 * @returns to, value, data, operation
+	 * Decode Safe executor calldata back into its components.
+	 *
+	 * @param callData - The ABI-encoded executor calldata to decode
+	 * @returns A tuple of [to, value, data, operation]
+	 * @throws AbstractionKitError with code "BAD_DATA" if calldata does not start with a valid executor selector
 	 */
 	public static decodeAccountCallData(
 		callData: string,
@@ -440,9 +507,15 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * a non static wrapper function for  prependTokenPaymasterApproveToCallDataStatic
-	 * which adds a token approve call to the call data for a token paymaster
-	 * @returns callData
+	 * Prepend a token approval call to existing calldata for use with a token paymaster.
+	 * Instance method wrapper around the static `prependTokenPaymasterApproveToCallDataStatic`.
+	 *
+	 * @param callData - The existing executor calldata to prepend the approval to
+	 * @param tokenAddress - The ERC-20 token contract address to approve
+	 * @param paymasterAddress - The paymaster contract address to approve spending for
+	 * @param approveAmount - The amount of tokens to approve
+	 * @param multisendContractAddress - MultiSend contract address (defaults to canonical address)
+	 * @returns New calldata with the token approval prepended via MultiSend
 	 */
 	public prependTokenPaymasterApproveToCallData(
 		callData: string,
@@ -461,8 +534,16 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * adds a token approve call to the call data for a token paymaster
-	 * @returns callData
+	 * Prepend a token approval call to existing calldata for use with a token paymaster.
+	 * If the existing calldata is already a MultiSend batch, the approval is added to the batch.
+	 * If it's a single transaction, both are wrapped in a new MultiSend batch.
+	 *
+	 * @param callData - The existing executor calldata to prepend the approval to
+	 * @param tokenAddress - The ERC-20 token contract address to approve
+	 * @param paymasterAddress - The paymaster contract address to approve spending for
+	 * @param approveAmount - The amount of tokens to approve
+	 * @param multisendContractAddress - MultiSend contract address (defaults to canonical address)
+	 * @returns New calldata with the token approval prepended via MultiSend
 	 */
 	public static prependTokenPaymasterApproveToCallDataStatic(
 		callData: string,
@@ -536,12 +617,15 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * estimate gas limits for a useroperation
-	 * @param userOperation - useroperation to estimate gas for
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param state_override_set - state override values to set during gs estimation
-	 * @param numberOfSigners - number of sigers
-	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
+	 * Estimate gas limits for a UserOperation using the bundler.
+	 * Adds a dummy signature for accurate estimation and accounts for per-signer overhead.
+	 *
+	 * @param userOperation - The UserOperation to estimate gas for
+	 * @param bundlerRpc - Bundler RPC URL
+	 * @param state_override_set - Optional state overrides for gas estimation
+	 * @param numberOfSigners - Number of signers (affects dummy signature size and verification gas)
+	 * @returns A tuple of [preVerificationGas, verificationGasLimit, callGasLimit]
+	 * @throws RangeError if numberOfSigners < 1
 	 */
 	public async estimateUserOperationGas(
 		userOperation: UserOperation,
@@ -585,20 +669,30 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * createUserOperation will determine the nonce, fetch the gas prices,
-	 * estimate gas limits and return a useroperation to be signed.
-	 * you can override all these values using the overrides parameter.
-	 * @param transactions - metatransaction list to be encoded
-	 * @param providerRpc - node rpc to fetch account nonce and gas prices
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param overrids - overrides values to change default values
-	 * @returns promise with useroperation
+	 * Create a complete UserOperation ready for signing.
+	 * Automatically determines the nonce, fetches gas prices, estimates gas limits,
+	 * and encodes the transactions into calldata. All values can be overridden.
+	 *
+	 * @param transactions - Array of MetaTransactions to execute (at least one required)
+	 * @param providerRpc - Ethereum JSON-RPC node URL (required unless nonce and gas prices are overridden)
+	 * @param bundlerRpc - Bundler RPC URL (required unless all gas limits are overridden)
+	 * @param overrides - Override any auto-determined values (nonce, gas limits, gas prices, calldata, etc.)
+	 * @returns The unsigned UserOperation ready to be signed
+	 * @throws RangeError if transactions is empty or overridden values are negative
+	 * @throws AbstractionKitError with code "BAD_DATA" if required RPC URLs are null when needed
+	 *
+	 * @example
+	 * const userOp = await smartAccount.createUserOperation(
+	 *   [{ to: recipientAddress, value: 1000000000000000n, data: "0x" }],
+	 *   nodeRpcUrl,
+	 *   bundlerRpcUrl,
+	 * );
 	 */
 	public async createUserOperation(
 		transactions: MetaTransaction[],
 		providerRpc?: string,
 		bundlerRpc?: string,
-		overrids: CreateUserOperationOverrides = {},
+		overrides: CreateUserOperationOverrides = {},
 	): Promise<UserOperation> {
 		if (transactions.length < 1) {
 			throw RangeError("There should be at least one transaction");
@@ -606,7 +700,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 
 		let nonce = 0n as bigint;
 
-		if (overrids.nonce == null) {
+		if (overrides.nonce == null) {
 			if (providerRpc != null) {
 				nonce = await fetchAccountNonce(
 					providerRpc,
@@ -620,10 +714,10 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 				);
 			}
 		} else {
-			nonce = overrids.nonce;
+			nonce = overrides.nonce;
 		}
 
-		let initCode = overrids.initCode ?? this.initCode;
+		let initCode = overrides.initCode ?? this.initCode;
 
 		if (initCode == null || nonce > 0n) {
 			initCode = "0x";
@@ -634,7 +728,7 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		}
 
 		let callData = "0x" as string;
-		if (overrids.callData == null) {
+		if (overrides.callData == null) {
 			if (transactions.length == 1) {
 				callData = SafeAccountV0_2_0.createAccountCallDataSingleTransaction(
 					transactions[0],
@@ -646,14 +740,14 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 					);
 			}
 		} else {
-			callData = overrids.callData;
+			callData = overrides.callData;
 		}
 
 		let maxFeePerGas = UserOperationDummyValues.maxFeePerGas;
 		let maxPriorityFeePerGas = UserOperationDummyValues.maxPriorityFeePerGas;
 		if (
-			overrids.maxFeePerGas == null ||
-			overrids.maxPriorityFeePerGas == null
+			overrides.maxFeePerGas == null ||
+			overrides.maxPriorityFeePerGas == null
 		) {
 			if (providerRpc != null) {
 				[maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPrice(providerRpc);
@@ -671,33 +765,33 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			}
 		}
 		if (
-			typeof overrids.maxFeePerGas === "bigint" &&
-			overrids.maxFeePerGas < 0n
+			typeof overrides.maxFeePerGas === "bigint" &&
+			overrides.maxFeePerGas < 0n
 		) {
 			throw RangeError("maxFeePerGas overrid can't be negative");
 		}
 
 		if (
-			typeof overrids.maxPriorityFeePerGas === "bigint" &&
-			overrids.maxPriorityFeePerGas < 0n
+			typeof overrides.maxPriorityFeePerGas === "bigint" &&
+			overrides.maxPriorityFeePerGas < 0n
 		) {
 			throw RangeError("maxPriorityFeePerGas overrid can't be negative");
 		}
 
 		maxFeePerGas =
-			overrids.maxFeePerGas ??
+			overrides.maxFeePerGas ??
 			maxFeePerGas *
 				BigInt(
 					Math.floor(
-						((overrids.maxFeePerGasPercentageMultiplier ?? 0) + 100) / 100,
+						((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100) / 100,
 					),
 				);
 		maxPriorityFeePerGas =
-			overrids.maxPriorityFeePerGas ??
+			overrides.maxPriorityFeePerGas ??
 			maxPriorityFeePerGas *
 				BigInt(
 					Math.floor(
-						((overrids.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100) /
+						((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100) /
 							100,
 					),
 				);
@@ -716,9 +810,9 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 		let verificationGasLimit = UserOperationDummyValues.verificationGasLimit;
 		let callGasLimit = UserOperationDummyValues.callGasLimit;
 		if (
-			overrids.preVerificationGas == null ||
-			overrids.verificationGasLimit == null ||
-			overrids.callGasLimit == null
+			overrides.preVerificationGas == null ||
+			overrides.verificationGasLimit == null ||
+			overrides.callGasLimit == null
 		) {
 			if (bundlerRpc != null) {
 				userOperation.callGasLimit = 0n;
@@ -733,8 +827,8 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 					await this.estimateUserOperationGas(
 						userOperation,
 						bundlerRpc,
-						overrids.state_override_set,
-						overrids.numberOfSigners,
+						overrides.state_override_set,
+						overrides.numberOfSigners,
 					);
 
 				userOperation.maxFeePerGas = inputMaxFeePerGas
@@ -747,51 +841,51 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 			}
 		}
 		if (
-			typeof overrids.preVerificationGas === "bigint" &&
-			overrids.preVerificationGas < 0n
+			typeof overrides.preVerificationGas === "bigint" &&
+			overrides.preVerificationGas < 0n
 		) {
 			throw RangeError("preVerificationGas overrid can't be negative");
 		}
 
 		if (
-			typeof overrids.verificationGasLimit === "bigint" &&
-			overrids.verificationGasLimit < 0n
+			typeof overrides.verificationGasLimit === "bigint" &&
+			overrides.verificationGasLimit < 0n
 		) {
 			throw RangeError("verificationGasLimit overrid can't be negative");
 		}
 
 		if (
-			typeof overrids.callGasLimit === "bigint" &&
-			overrids.callGasLimit < 0n
+			typeof overrides.callGasLimit === "bigint" &&
+			overrides.callGasLimit < 0n
 		) {
 			throw RangeError("callGasLimit overrid can't be negative");
 		}
 		userOperation.preVerificationGas =
-			overrids.preVerificationGas ??
+			overrides.preVerificationGas ??
 			preVerificationGas *
 				BigInt(
 					Math.floor(
-						((overrids.preVerificationGasPercentageMultiplier ?? 0) + 100) /
+						((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100) /
 							100,
 					),
 				);
 
 		userOperation.verificationGasLimit =
-			overrids.verificationGasLimit ??
+			overrides.verificationGasLimit ??
 			verificationGasLimit *
 				BigInt(
 					Math.floor(
-						((overrids.verificationGasLimitPercentageMultiplier ?? 0) + 100) /
+						((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100) /
 							100,
 					),
 				);
 
 		userOperation.callGasLimit =
-			overrids.callGasLimit ??
+			overrides.callGasLimit ??
 			callGasLimit *
 				BigInt(
 					Math.floor(
-						((overrids.callGasLimitPercentageMultiplier ?? 0) + 100) / 100,
+						((overrides.callGasLimitPercentageMultiplier ?? 0) + 100) / 100,
 					),
 				);
 
@@ -799,13 +893,19 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * create a useroperation signature
-	 * @param useroperation - useroperation to sign
-	 * @param privateKeys - for the signers
-	 * @param chainId - target chain id
-	 * @param validAfter - timestamp the signature will be valid after
-	 * @param validUntil - timestamp the signature will be valid until
-	 * @returns signature
+	 * Sign a UserOperation using one or more private keys via EIP-712 typed data signing.
+	 * Signatures are sorted by signer address and concatenated.
+	 *
+	 * @param useroperation - The UserOperation to sign
+	 * @param privateKeys - Array of private keys for the signers
+	 * @param chainId - The target chain ID
+	 * @param validAfter - Unix timestamp after which the signature is valid (0 = no restriction)
+	 * @param validUntil - Unix timestamp after which the signature expires (0 = no restriction)
+	 * @returns The formatted signature string ready to set on the UserOperation
+	 *
+	 * @example
+	 * const signature = smartAccount.signUserOperation(userOp, [privateKey], 11155111n);
+	 * userOp.signature = signature;
 	 */
 	public signUserOperation(
 		useroperation: UserOperation,
@@ -872,12 +972,23 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * formate a list of eip712 signatures to a useroperation signature
-	 * @param signersAddresses - signers public addresses
-	 * @param signatures - list of eip712 signatures
-	 * @param validAfter - timestamp the signature will be valid after
-	 * @param validUntil - timestamp the signature will be valid until
-	 * @returns signature
+	 * Format multiple EIP-712 signatures into a single UserOperation signature.
+	 * Signatures are sorted by signer address (ascending) and concatenated,
+	 * then wrapped with validAfter/validUntil timestamps.
+	 *
+	 * @param signersAddresses - Array of signer public addresses (must match signatures array length)
+	 * @param signatures - Array of EIP-712 signatures (hex strings)
+	 * @param validAfter - Unix timestamp after which the signature is valid (0 = no restriction)
+	 * @param validUntil - Unix timestamp after which the signature expires (0 = no restriction)
+	 * @returns The formatted UserOperation signature string
+	 * @throws RangeError if signersAddresses and signatures arrays have different lengths
+	 *
+	 * @example
+	 * const signature = SafeAccountV0_2_0.formatEip712SignaturesToUseroperationSignature(
+	 *   [signerAddress],
+	 *   [eip712Signature],
+	 * );
+	 * userOp.signature = signature;
 	 */
 	public static formatEip712SignaturesToUseroperationSignature(
 		signersAddresses: string[],
@@ -913,11 +1024,14 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * formate an eip712 signature to a useroperation signature
-	 * @param signature - an eip712 signature
-	 * @param validAfter - timestamp the signature will be valid after
-	 * @param validUntil - timestamp the signature will be valid until
-	 * @returns signature
+	 * Format a single EIP-712 signature into a UserOperation signature
+	 * by prepending validAfter and validUntil timestamps.
+	 *
+	 * @param signature - A single EIP-712 signature (hex string)
+	 * @param validAfter - Unix timestamp after which the signature is valid (0 = no restriction)
+	 * @param validUntil - Unix timestamp after which the signature expires (0 = no restriction)
+	 * @returns The formatted UserOperation signature string
+	 * @throws RangeError if validAfter or validUntil are negative
 	 */
 	public static formatEip712SingleSignatureToUseroperationSignature(
 		signature: string,
@@ -938,10 +1052,16 @@ export class SafeAccountV0_2_0 extends SmartAccount {
 	}
 
 	/**
-	 * sends a useroperation to a bundler rpc
-	 * @param userOperation - useroperation to send
-	 * @param bundlerRpc - bundler rpc to send useroperation
-	 * @returns promise with SendUseroperationResponse
+	 * Submit a signed UserOperation to a bundler for on-chain inclusion.
+	 *
+	 * @param userOperation - The signed UserOperation to send
+	 * @param bundlerRpc - Bundler RPC URL
+	 * @returns A SendUseroperationResponse that can be used to poll for the receipt
+	 * @throws AbstractionKitError with code "BUNDLER_ERROR" if the submission fails
+	 *
+	 * @example
+	 * const response = await smartAccount.sendUserOperation(userOp, bundlerRpcUrl);
+	 * const receipt = await response.included();
 	 */
 	public async sendUserOperation(
 		userOperation: UserOperation,

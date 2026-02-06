@@ -18,11 +18,16 @@ import {
 } from "./errors";
 
 /**
- * createUserOperationHash for the standard entrypointv0.6 hash
- * @param useroperation - useroperation to create hash for
- * @param entrypointAddress - supported entrypoint
- * @param chainId - target chain id
- * @returns UserOperationHash
+ * Compute the UserOperation hash for EntryPoint v0.6.
+ * This hash is what gets signed by the account owner(s).
+ *
+ * @param useroperation - UserOperation to create the hash for
+ * @param entrypointAddress - EntryPoint contract address
+ * @param chainId - Target chain ID
+ * @returns The UserOperation hash as a hex string
+ *
+ * @example
+ * const hash = createUserOperationHash(userOp, "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789", 1n);
  */
 export function createUserOperationHash(
 	useroperation: UserOperation,
@@ -45,9 +50,11 @@ export function createUserOperationHash(
 }
 
 /**
- * createPackedUserOperation for the standard entrypointv0.6 hash
- * @param useroperation -useroperation to pack
- * @returns packed UserOperation
+ * ABI-encode and pack a UserOperation for hashing (EntryPoint v0.6 format).
+ * Bytes fields (initCode, callData, paymasterAndData) are keccak256-hashed before packing.
+ *
+ * @param useroperation - UserOperation to pack
+ * @returns ABI-encoded packed UserOperation as a hex string
  */
 export function createPackedUserOperation(
 	useroperation: UserOperation,
@@ -85,11 +92,19 @@ export function createPackedUserOperation(
 }
 
 /**
- * creates calldata from the function selector, abi and parameters
- * @param functionSelector- hexstring representation of the first four bytes of the hash of the signature of the function
- * @param functionInputAbi - list of input api types
- * @param functionInputParameters - list of input parameters values
- * @returns calldata
+ * Encode a function call into ABI-encoded calldata.
+ *
+ * @param functionSelector - 4-byte hex function selector (e.g., "0xa9059cbb" for ERC-20 transfer)
+ * @param functionInputAbi - Array of ABI type strings (e.g., ["address", "uint256"])
+ * @param functionInputParameters - Array of parameter values matching the ABI types
+ * @returns ABI-encoded calldata as a hex string (selector + encoded parameters)
+ *
+ * @example
+ * const transferCallData = createCallData(
+ *   "0xa9059cbb",
+ *   ["address", "uint256"],
+ *   ["0xRecipientAddress", 1000000n],
+ * );
  */
 export function createCallData(
 	functionSelector: string,
@@ -106,6 +121,16 @@ export function createCallData(
 	return callData;
 }
 
+/**
+ * Send a JSON-RPC request to the specified endpoint.
+ * Automatically converts bigint values to hex strings in the request body.
+ *
+ * @param rpcUrl - The JSON-RPC endpoint URL (bundler, node, or paymaster)
+ * @param method - The JSON-RPC method name (e.g., "eth_call", "eth_sendUserOperation")
+ * @param params - The JSON-RPC parameters
+ * @returns The result field from the JSON-RPC response
+ * @throws AbstractionKitError if the RPC returns an error
+ */
 export async function sendJsonRpcRequest(
 	rpcUrl: string,
 	method: string,
@@ -164,25 +189,28 @@ export async function sendJsonRpcRequest(
 }
 
 /**
- * get function selector from the function signature
- * @param functionSignature - example of a function signature "mint(address)"
- * @returns fucntion selector - hexstring representation of the first four bytes of the hash of the signature of the function
+ * Get the 4-byte function selector from a function signature string.
+ *
+ * @param functionSignature - Solidity function signature (e.g., "transfer(address,uint256)")
+ * @returns 4-byte hex function selector (e.g., "0xa9059cbb")
  *
  * @example
- * const getNonceFunctionSignature =  'getNonce(address,uint192)';
- * const getNonceFunctionSelector =  getFunctionSelector(getNonceFunctionSignature);
+ * const selector = getFunctionSelector("transfer(address,uint256)");
+ * // returns "0xa9059cbb"
  */
 export function getFunctionSelector(functionSignature: string): string {
 	return id(functionSignature).slice(0, 10);
 }
 
 /**
- * fetch account nonce by calling the entrypoint's "getNonce"
- * @param rpcUrl -node rpc to fetch account nonce and gas prices
- * @param entryPoint - target entrypoint
- * @param account - target ccount
- * @param key - nonce key
- * @returns promise with nonce
+ * Fetch the account's nonce from the EntryPoint contract by calling getNonce(address,uint192).
+ *
+ * @param rpcUrl - Ethereum JSON-RPC node URL
+ * @param entryPoint - EntryPoint contract address
+ * @param account - Smart account address to query
+ * @param key - Nonce key (default 0). Different keys allow parallel nonce channels.
+ * @returns The current nonce as a bigint
+ * @throws AbstractionKitError with code "BAD_DATA" if the nonce call fails or returns malformed data
  */
 export async function fetchAccountNonce(
 	rpcUrl: string,
@@ -244,6 +272,17 @@ export async function fetchAccountNonce(
 	}
 }
 
+/**
+ * Fetch current gas prices (maxFeePerGas and maxPriorityFeePerGas) from a JSON-RPC node.
+ * Applies a gas level multiplier to adjust for faster or cheaper inclusion.
+ *
+ * @param provideRpc - Ethereum JSON-RPC node URL
+ * @param gasLevel - Gas price multiplier (default: GasOption.Medium = 1.2x)
+ * @returns A tuple of [maxFeePerGas, maxPriorityFeePerGas] as bigints
+ *
+ * @example
+ * const [maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPrice(nodeRpcUrl, GasOption.Fast);
+ */
 export async function fetchGasPrice(
 	provideRpc: string,
 	gasLevel: GasOption = GasOption.Medium,
@@ -260,6 +299,16 @@ export async function fetchGasPrice(
 	return [maxFeePerGas, maxPriorityFeePerGas];
 }
 
+/**
+ * Calculate the maximum gas cost (in wei) that a UserOperation could consume.
+ * Accounts for the paymaster verification overhead multiplier (3x when no paymaster).
+ *
+ * @param useroperation - The UserOperation to calculate the max gas cost for
+ * @returns Maximum possible gas cost in wei as a bigint
+ *
+ * @example
+ * const maxCost = calculateUserOperationMaxGasCost(userOp);
+ */
 export function calculateUserOperationMaxGasCost(
 	useroperation: UserOperation,
 ): bigint {

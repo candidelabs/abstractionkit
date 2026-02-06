@@ -18,21 +18,39 @@ import {
 import { Bundler } from "src/Bundler";
 import { AbstractionKitError, ensureError } from "src/errors";
 
+/**
+ * Client for the Candide Paymaster service.
+ * Supports both gas sponsorship (sponsor paymaster) and ERC-20 token payment for gas (token paymaster).
+ * Auto-initializes on first use by fetching supported tokens and metadata from the paymaster RPC.
+ *
+ * @example
+ * const paymaster = new CandidePaymaster("https://paymaster.example.com/rpc");
+ * // Sponsor gas:
+ * const sponsoredOp = await paymaster.createSponsorPaymasterUserOperation(userOp, bundlerRpcUrl);
+ * // Pay gas with ERC-20:
+ * const tokenOp = await paymaster.createTokenPaymasterUserOperation(smartAccount, userOp, tokenAddress, bundlerRpcUrl);
+ */
 export class CandidePaymaster extends Paymaster {
+	/** The paymaster JSON-RPC endpoint URL */
 	readonly rpcUrl: string;
 	private entrypointAddress: string | undefined;
 	private supportedTokens: ERC20Token[] | undefined;
 	private paymasterMetadata: PaymasterMetadata | undefined;
 
+	/**
+	 * @param rpcUrl - The Candide paymaster JSON-RPC endpoint URL
+	 */
 	constructor(rpcUrl: string) {
 		super();
 		this.rpcUrl = rpcUrl;
 	}
 
 	/**
-	 * initialize the paymaster object the paymaster supported tokens,
-	 * entrypoint and metadata from the bundler url
+	 * Fetch and cache the paymaster's supported tokens, EntryPoint address, and metadata.
+	 * Called automatically on first use of other methods, but can be called explicitly to pre-warm.
+	 *
 	 * @returns null
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if initialization fails
 	 */
 	async initialize(): Promise<null> {
 		try {
@@ -58,6 +76,12 @@ export class CandidePaymaster extends Paymaster {
 		}
 	}
 
+	/**
+	 * Get the paymaster contract metadata (name, address, icons, etc.).
+	 * Auto-initializes if not yet initialized.
+	 *
+	 * @returns The paymaster metadata
+	 */
 	async getPaymasterMetaData(): Promise<PaymasterMetadata> {
 		if (this.paymasterMetadata == null) {
 			await this.initialize();
@@ -65,6 +89,13 @@ export class CandidePaymaster extends Paymaster {
 		return this.paymasterMetadata as PaymasterMetadata;
 	}
 
+	/**
+	 * Get the list of supported ERC-20 tokens and paymaster metadata.
+	 * Returns cached data after first call.
+	 *
+	 * @returns Object containing paymaster metadata and array of supported ERC-20 tokens
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the RPC call fails
+	 */
 	async getSupportedERC20TokensAndPaymasterMetadata(): Promise<SupportedERC20TokensAndMetadata> {
 		if (this.supportedTokens == null || this.paymasterMetadata == null) {
 			try {
@@ -103,6 +134,13 @@ export class CandidePaymaster extends Paymaster {
 		}
 	}
 
+	/**
+	 * Get the EntryPoint address supported by this paymaster.
+	 * Returns cached data after first call.
+	 *
+	 * @returns The supported EntryPoint contract address
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the RPC call fails
+	 */
 	async getSupportedEntrypoint(): Promise<string> {
 		if (this.entrypointAddress == null) {
 			try {
@@ -130,8 +168,10 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * check if the token paymaster accepts an erc20 token
-	 * @param erc20TokenAddress - token address to check if supported
+	 * Check if the token paymaster supports a given ERC-20 token for gas payment.
+	 *
+	 * @param erc20TokenAddress - The ERC-20 token contract address to check
+	 * @returns true if the token is supported, false otherwise
 	 */
 	async isSupportedERC20Token(erc20TokenAddress: string): Promise<boolean> {
 		if (
@@ -155,9 +195,10 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * get the paymaster token data
-	 * @param erc20TokenAddress - token to get data for
-	 * @returns ERC20Token or null
+	 * Get the paymaster's data for a specific ERC-20 token (symbol, exchange rate, fee, etc.).
+	 *
+	 * @param erc20TokenAddress - The ERC-20 token contract address
+	 * @returns The token data, or null if the token is not supported
 	 */
 	async getSupportedERC20TokenData(
 		erc20TokenAddress: string,
@@ -189,16 +230,16 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * createPaymasterUserOperation will estimate gas and set
-	 * paymasterAndData
-     * gas limits will only change if the estimated gas limits returned by 
-     * the bundler is more than the input gas limits, then gas overrides
-     * and multipliers will be applied
-	 * @param useroperation - useroperation to add paymaster support for
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param context - paymaster context data
-	 * @param createPaymasterUserOperationOverrides - createPaymasterUserOperationOverrides values to change default values
-	 * @returns promise with UserOperation
+	 * Estimate gas, set paymasterAndData, and return a paymaster-ready UserOperation.
+	 * Gas limits will only increase if the bundler estimation exceeds the input values.
+	 * Gas overrides and multipliers are applied after estimation.
+	 *
+	 * @param userOperation - The UserOperation to sponsor
+	 * @param bundlerRpc - Bundler RPC URL for gas estimation
+	 * @param context - Paymaster context (e.g., `{ token: "0x..." }` for token paymaster)
+	 * @param createPaymasterUserOperationOverrides - Override gas limits and multipliers
+	 * @returns The UserOperation with paymasterAndData and gas limits set
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
 	 */
 	async createPaymasterUserOperation(
 		userOperation: UserOperation,
@@ -247,7 +288,7 @@ export class CandidePaymaster extends Paymaster {
                             createPaymasterUserOperationOverrides.state_override_set,
                         );
 
-                    // only change gas limits if the esitmated limits is higher than 
+                    // only change gas limits if the esitmated limits is higher than
                     // the supplied
                     if(preVerificationGas < estimation.preVerificationGas){
                         preVerificationGas = estimation.preVerificationGas;
@@ -296,7 +337,7 @@ export class CandidePaymaster extends Paymaster {
                 createPaymasterUserOperationOverrides.preVerificationGas ??
                 (
 					preVerificationGas *
-                    BigInt(                       
+                    BigInt(
                             ((createPaymasterUserOperationOverrides.preVerificationGasPercentageMultiplier ?? 0) + 100)
                     )
 				)/100n;
@@ -305,7 +346,7 @@ export class CandidePaymaster extends Paymaster {
                 createPaymasterUserOperationOverrides.verificationGasLimit ??
                 (
 					verificationGasLimit *
-                    BigInt(                       
+                    BigInt(
                             ((createPaymasterUserOperationOverrides.verificationGasLimitPercentageMultiplier ?? 0) + 100)
                     )
 				)/100n;
@@ -314,11 +355,11 @@ export class CandidePaymaster extends Paymaster {
                 createPaymasterUserOperationOverrides.callGasLimit ??
                 (
                     callGasLimit *
-					BigInt(                       
+					BigInt(
 							((createPaymasterUserOperationOverrides.callGasLimitPercentageMultiplier ?? 0) + 100)
 					)
                 )/100n;
-            
+
             //add small buffer to preVerification gas
 			userOperation.preVerificationGas = userOperation.preVerificationGas + 100n;
             //add gas to compensate for paymasterAndData verification overhead
@@ -353,10 +394,10 @@ export class CandidePaymaster extends Paymaster {
 						? undefined
 						: BigInt(result.maxPriorityFeePerGas),
 			};
-    
+
             //override gas limits and gas prices if the paymaster modified them
             //needed in case the paymaster modifies the useroperation before
-            //generating the paymasterAndData 
+            //generating the paymasterAndData
 			userOperation.paymasterAndData = resultMod.paymasterAndData;
 			userOperation.callGasLimit =
 				resultMod.callGasLimit ?? userOperation.callGasLimit;
@@ -384,12 +425,18 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * createSponsorPaymasterUserOperation will estimate gas and set
-	 * paymasterAndData for a sponsor paymaster operation
-	 * @param useroperation - useroperation to add paymaster support for
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param createPaymasterUserOperationOverrides - createPaymasterUserOperationOverrides values to change default values
-	 * @returns promise with UserOperation
+	 * Create a gas-sponsored UserOperation (no token payment required).
+	 * Convenience wrapper around createPaymasterUserOperation with an empty context.
+	 *
+	 * @param userOperation - The UserOperation to sponsor
+	 * @param bundlerRpc - Bundler RPC URL for gas estimation
+	 * @param createPaymasterUserOperationOverrides - Override gas limits and multipliers
+	 * @returns The UserOperation with paymasterAndData and gas limits set
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
+	 *
+	 * @example
+	 * const paymaster = new CandidePaymaster(paymasterRpcUrl);
+	 * const sponsoredOp = await paymaster.createSponsorPaymasterUserOperation(userOp, bundlerRpcUrl);
 	 */
 	async createSponsorPaymasterUserOperation(
 		userOperation: UserOperation,
@@ -405,14 +452,22 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * createPaymasterUserOperation will estimate gas and set
-	 * paymasterAndData
-	 * @param smartAccount - the SmartAccount object that created the target useroperation
-	 * @param useroperation - useroperation to add paymaster support for
-	 * @param tokenAddress - target token to pay gas with
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param createPaymasterUserOperationOverrides - createPaymasterUserOperationOverrides values to change default values
-	 * @returns promise with UserOperation
+	 * Create a UserOperation that pays for gas with an ERC-20 token.
+	 * Automatically prepends a token approval to the calldata and sets paymasterAndData.
+	 *
+	 * @param smartAccount - The smart account instance (must implement prependTokenPaymasterApproveToCallData)
+	 * @param userOperation - The UserOperation to modify for token payment
+	 * @param tokenAddress - The ERC-20 token contract address to pay gas with
+	 * @param bundlerRpc - Bundler RPC URL for gas estimation
+	 * @param createPaymasterUserOperationOverrides - Override gas limits and multipliers
+	 * @returns The UserOperation with token approval prepended and paymasterAndData set
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the token is not supported or the operation fails
+	 *
+	 * @example
+	 * const paymaster = new CandidePaymaster(paymasterRpcUrl);
+	 * const tokenOp = await paymaster.createTokenPaymasterUserOperation(
+	 *   smartAccount, userOp, "0xTokenAddress", bundlerRpcUrl,
+	 * );
 	 */
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
@@ -465,6 +520,15 @@ export class CandidePaymaster extends Paymaster {
 		}
 	}
 
+	/**
+	 * Calculate the maximum ERC-20 token cost for a UserOperation's gas.
+	 * Uses the token's exchange rate from the paymaster to convert from wei.
+	 *
+	 * @param userOperation - The UserOperation to calculate the cost for
+	 * @param erc20TokenAddress - The ERC-20 token contract address
+	 * @returns Maximum token cost as a bigint (in token's smallest unit)
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the token is not supported
+	 */
 	async calculateUserOperationErc20TokenMaxGasCost(
 		userOperation: UserOperation,
 		erc20TokenAddress: string,
