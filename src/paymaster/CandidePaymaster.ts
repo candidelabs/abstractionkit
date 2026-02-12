@@ -529,13 +529,28 @@ export class CandidePaymaster extends Paymaster {
 
 				//apply gas overrides
 				userOperation.preVerificationGas = gasUserOperationOverrides.preVerificationGas ??
-					preVerificationGas * BigInt(gasUserOperationOverrides.preVerificationGasPercentageMultiplier ?? 100) / 100n;
+                    BigInt(
+                        Math.floor(
+                            Number(preVerificationGas) *
+                            (((gasUserOperationOverrides.preVerificationGasPercentageMultiplier ?? 0) + 100) / 100)
+                        )
+                    );
 
 				userOperation.verificationGasLimit = gasUserOperationOverrides.verificationGasLimit ??
-					verificationGasLimit * BigInt(gasUserOperationOverrides.verificationGasLimitPercentageMultiplier ?? 100) / 100n;
+                   BigInt(
+                        Math.floor(
+                            Number(verificationGasLimit) *
+                            (((gasUserOperationOverrides.verificationGasLimitPercentageMultiplier ?? 0) + 100) / 100)
+                        )
+                    );
 
 				userOperation.callGasLimit = gasUserOperationOverrides.callGasLimit ??
-					callGasLimit * BigInt(gasUserOperationOverrides.callGasLimitPercentageMultiplier ?? 100) / 100n;
+                    BigInt(
+                        Math.floor(
+                            Number(callGasLimit) *
+                            (((gasUserOperationOverrides.callGasLimitPercentageMultiplier ?? 0) + 100) / 100)
+                        )
+                    );
 
 				//add small buffer to preVerification gas
 				userOperation.preVerificationGas =

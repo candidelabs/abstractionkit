@@ -279,23 +279,20 @@ export class BaseSimple7702Account extends SmartAccount {
                 nonce = await nonceOp;
             }
         }
-		maxFeePerGas =
-			overrides.maxFeePerGas ??
-			maxFeePerGas *
-				BigInt(
-					Math.floor(
-						((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100) / 100,
-					),
-				);
-		maxPriorityFeePerGas =
-			overrides.maxPriorityFeePerGas ??
-			maxPriorityFeePerGas *
-				BigInt(
-					Math.floor(
-						((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100) /
-							100,
-					),
-				);
+		maxFeePerGas = overrides.maxFeePerGas ??
+            BigInt(
+                Math.floor(
+                    Number(maxFeePerGas) *
+                    (((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100) / 100)
+				)
+            );
+		maxPriorityFeePerGas = overrides.maxPriorityFeePerGas ??
+			BigInt(
+				Math.floor(
+					Number(maxPriorityFeePerGas) *
+					(((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100) / 100)
+				)
+			);
         if(nonce == null){
 			throw new RangeError("failed to determine nonce");
         }
@@ -439,34 +436,29 @@ export class BaseSimple7702Account extends SmartAccount {
 			throw new RangeError("callGasLimit override can't be negative");
 		}
 
-		userOperation.preVerificationGas =
-			overrides.preVerificationGas ??
-			preVerificationGas *
-				BigInt(
-					Math.floor(
-						((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100) /
-							100,
-					),
-				);
+		userOperation.preVerificationGas = overrides.preVerificationGas ??
+            BigInt(
+                Math.floor(
+                    Number(preVerificationGas) *
+                    (((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100) / 100)
+                ),
+            );
 
-		userOperation.verificationGasLimit =
-			overrides.verificationGasLimit ??
-			verificationGasLimit *
-				BigInt(
-					Math.floor(
-						((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100) /
-							100,
-					),
-				);
+		userOperation.verificationGasLimit = overrides.verificationGasLimit ??
+            BigInt(
+                Math.floor(
+                    Number(verificationGasLimit) *
+                    (((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100) / 100)
+                ),
+            );
 
-		userOperation.callGasLimit =
-			overrides.callGasLimit ??
-			callGasLimit *
-				BigInt(
-					Math.floor(
-						((overrides.callGasLimitPercentageMultiplier ?? 0) + 100) / 100,
-					),
-				);
+		userOperation.callGasLimit = overrides.callGasLimit ??
+            BigInt(
+                Math.floor(
+                    Number(callGasLimit) *
+                    (((overrides.callGasLimitPercentageMultiplier ?? 0) + 100) / 100)
+                ),
+            );
 
 		return userOperation;
     }
