@@ -60,6 +60,7 @@ export interface CreateBaseUserOperationOverrides
 	paymasterVerificationGasLimit?: bigint;
 	paymasterPostOpGasLimit?: bigint;
 	paymasterData?: string;
+	webAuthnSignerProxyCreationCode?: string;
 }
 
 /**
@@ -151,6 +152,7 @@ export interface WebAuthnSignatureOverrides {
 	eip7212WebAuthnContractVerifier?: string;
 	webAuthnSignerFactory?: string;
 	webAuthnSignerSingleton?: string;
+	webAuthnSignerProxyCreationCode?: string;
 	validAfter?: bigint;
 	validUntil?: bigint;
 	isMultiChainSignature?: boolean;

@@ -1533,6 +1533,9 @@ export class SafeAccount extends SmartAccount {
         const webAuthnSignerSingleton =
             overrides.webAuthnSignerSingleton ??
             SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+        const webAuthnSignerProxyCreationCode =
+            overrides.webAuthnSignerProxyCreationCode ??
+            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
 		let factoryAddress: string | null = this.factoryAddress;
 		let factoryData: string | null = this.factoryData;
@@ -1572,6 +1575,7 @@ export class SafeAccount extends SmartAccount {
 					eip7212WebAuthnContractVerifier,
 					webAuthnSignerFactory,
 					webAuthnSignerSingleton,
+                    webAuthnSignerProxyCreationCode
 				});
 
 			const swapSingletonWithDeterministicWebAuthnVerifierOwnerCallData =
@@ -1902,6 +1906,7 @@ export class SafeAccount extends SmartAccount {
 			eip7212WebAuthnContractVerifier?: string;
 			webAuthnSignerFactory?: string;
 			webAuthnSignerSingleton?: string;
+			webAuthnSignerProxyCreationCode?: string;
 		} = {},
 	): string {
 		const eip7212WebAuthnPrecompileVerifier =
@@ -1930,7 +1935,8 @@ export class SafeAccount extends SmartAccount {
 			solidityPacked(
 				["bytes", "uint256", "uint256", "uint256", "uint256"],
 				[
-					SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
+					overrides.webAuthnSignerProxyCreationCode??
+                        SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
 					webAuthnSignerSingleton,
 					x,
 					y,
@@ -2049,6 +2055,9 @@ export class SafeAccount extends SmartAccount {
 			const webAuthnSignerSingleton =
 				overrides.webAuthnSignerSingleton ??
 				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+            const webAuthnSignerProxyCreationCode =
+                overrides.webAuthnSignerProxyCreationCode ??
+                SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
 			return SafeAccount.createWebAuthnSignerVerifierAddress(
 				signer.x,
@@ -2058,6 +2067,7 @@ export class SafeAccount extends SmartAccount {
 					eip7212WebAuthnContractVerifier,
 					webAuthnSignerFactory,
 					webAuthnSignerSingleton,
+                    webAuthnSignerProxyCreationCode
 				},
 			).toLowerCase();
 		}
@@ -2130,6 +2140,9 @@ export class SafeAccount extends SmartAccount {
 							const webAuthnSignerSingleton =
 								webAuthnSignatureOverrides.webAuthnSignerSingleton ??
 								SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+                            const webAuthnSignerProxyCreationCode =
+                                webAuthnSignatureOverrides.webAuthnSignerProxyCreationCode ??
+                                SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
 							signer = SafeAccount.createWebAuthnSignerVerifierAddress(
 								signer.x,
@@ -2139,6 +2152,7 @@ export class SafeAccount extends SmartAccount {
 									eip7212WebAuthnContractVerifier,
 									webAuthnSignerFactory,
 									webAuthnSignerSingleton,
+                                    webAuthnSignerProxyCreationCode
 								},
 							);
 						}
@@ -2225,11 +2239,15 @@ export class SafeAccount extends SmartAccount {
 			eip7212WebAuthnContractVerifier?: string;
 			webAuthnSignerFactory?: string;
 			webAuthnSignerSingleton?: string;
+	        webAuthnSignerProxyCreationCode?: string;
 		} = {},
 	): Promise<MetaTransaction[]> {
 		let deployNewOwnerSignerMetaTransaction: MetaTransaction | null = null;
 		let newOwnerT: string;
 		let oldOwnerT: string;
+        const webAuthnSignerProxyCreationCode =
+            overrides.webAuthnSignerProxyCreationCode ??
+            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
 		if (typeof newOwner != "string") {
 			newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(
@@ -2242,6 +2260,7 @@ export class SafeAccount extends SmartAccount {
 						overrides.eip7212WebAuthnContractVerifier,
 					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
 					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
+                    webAuthnSignerProxyCreationCode
 				},
 			);
 			const newOwnerCode = await sendEthGetCodeRequest(
@@ -2278,6 +2297,7 @@ export class SafeAccount extends SmartAccount {
 						overrides.eip7212WebAuthnContractVerifier,
 					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
 					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
+                    webAuthnSignerProxyCreationCode
 				},
 			);
 		} else {
@@ -2330,11 +2350,16 @@ export class SafeAccount extends SmartAccount {
 			eip7212WebAuthnContractVerifier?: string;
 			webAuthnSignerFactory?: string;
 			webAuthnSignerSingleton?: string;
+	        webAuthnSignerProxyCreationCode?: string;
 		} = {},
 	): Promise<MetaTransaction> {
 		let ownerToDeleteT: string;
 
 		if (typeof ownerToDelete != "string") {
+            const webAuthnSignerProxyCreationCode =
+                overrides.webAuthnSignerProxyCreationCode ??
+                SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+
 			ownerToDeleteT = SafeAccount.createWebAuthnSignerVerifierAddress(
 				ownerToDelete.x,
 				ownerToDelete.y,
@@ -2345,6 +2370,7 @@ export class SafeAccount extends SmartAccount {
 						overrides.eip7212WebAuthnContractVerifier,
 					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
 					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
+                    webAuthnSignerProxyCreationCode
 				},
 			);
 		} else {
@@ -2389,12 +2415,17 @@ export class SafeAccount extends SmartAccount {
 			eip7212WebAuthnContractVerifier?: string;
 			webAuthnSignerFactory?: string;
 			webAuthnSignerSingleton?: string;
+	        webAuthnSignerProxyCreationCode?: string;
 		} = {},
 	): Promise<MetaTransaction[]> {
 		let deployNewOwnerSignerMetaTransaction: MetaTransaction | null = null;
 		let newOwnerT: string;
 
 		if (typeof newOwner != "string") {
+            const webAuthnSignerProxyCreationCode =
+                overrides.webAuthnSignerProxyCreationCode ??
+                SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+
 			newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(
 				newOwner.x,
 				newOwner.y,
@@ -2405,6 +2436,7 @@ export class SafeAccount extends SmartAccount {
 						overrides.eip7212WebAuthnContractVerifier,
 					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
 					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
+                    webAuthnSignerProxyCreationCode
 				},
 			);
             if(overrides.nodeRpcUrl == null){
@@ -2820,6 +2852,9 @@ export class SafeAccount extends SmartAccount {
                     const webAuthnSignerSingleton =
                         webAuthnSignatureOverrides.webAuthnSignerSingleton ??
                         SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+                    const webAuthnSignerProxyCreationCode =
+                        webAuthnSignatureOverrides.webAuthnSignerProxyCreationCode ??
+                        SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
                     signerSignaturePair.signer = SafeAccount.createWebAuthnSignerVerifierAddress(
                         signer.x,
@@ -2829,6 +2864,7 @@ export class SafeAccount extends SmartAccount {
                             eip7212WebAuthnContractVerifier,
                             webAuthnSignerFactory,
                             webAuthnSignerSingleton,
+                            webAuthnSignerProxyCreationCode
                         },
                     );
                 }
