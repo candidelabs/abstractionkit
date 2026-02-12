@@ -18,6 +18,11 @@ import { EIP712_MULTI_SAFE_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants"
 import { generateMerkleProofs } from "./MerkleTree";
 import { TypedDataEncoder, Wallet } from "ethers";
 
+/**
+ * @class
+ * @experimental
+ * @classdesc This is an experimental class that may change in future versions
+ */
 export class SafeMultiChainSigAccount extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V9;
 	static readonly DEFAULT_SAFE_4337_MODULE_ADDRESS =
