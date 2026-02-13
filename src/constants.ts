@@ -39,6 +39,8 @@ export const BaseUserOperationDummyValues = {
 	signature: "0x",
 };
 
+export const EIP712_SAFE_OPERATION_PRIMARY_TYPE = "SafeOp";
+
 /** EIP-712 type definition for Safe UserOperation signing (EntryPoint v0.6) */
 export const EIP712_SAFE_OPERATION_V6_TYPE = {
 	SafeOp: [
