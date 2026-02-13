@@ -14,7 +14,7 @@ import {
 } from "./types";
 
 import { UserOperationV9, MetaTransaction, OnChainIdentifierParamsType, PaymasterFieldsInitValues } from "../../types";
-import { EIP712_MULTI_SAFE_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants";
+import { EIP712_MULTI_CHAIN_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants";
 import { generateMerkleProofs } from "./MerkleTree";
 import { TypedDataEncoder, Wallet } from "ethers";
 
@@ -398,7 +398,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 
             const merkleTreeRootHash = TypedDataEncoder.hash(
                 {verifyingContract: this.safe4337ModuleAddress},
-			    EIP712_MULTI_SAFE_OPERATIONS_TYPE,
+			    EIP712_MULTI_CHAIN_OPERATIONS_TYPE,
                 {merkleTreeRoot: root},
             )
 
@@ -499,7 +499,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
         const [root, _proofs] = generateMerkleProofs(userOperationsHashes);
 		return {
             domain: {verifyingContract: safe4337ModuleAddress},
-			types: EIP712_MULTI_SAFE_OPERATIONS_TYPE,
+			types: EIP712_MULTI_CHAIN_OPERATIONS_TYPE,
 			messageValue: {merkleTreeRoot: root},
         };
     }

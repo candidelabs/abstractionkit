@@ -77,8 +77,10 @@ export const EIP712_SAFE_OPERATION_V7_TYPE = {
 	],
 };
 
+export const EIP712_MULTI_CHAIN_OPERATIONS_PRIMARY_TYPE = "MerkleTreeRoot";
+
 /** EIP-712 type definition for multi-chain Safe operations using Merkle tree roots */
-export const EIP712_MULTI_SAFE_OPERATIONS_TYPE = {
+export const EIP712_MULTI_CHAIN_OPERATIONS_TYPE = {
 	MerkleTreeRoot: [
 		{ type: "bytes32", name: "merkleTreeRoot" },
 	],
