@@ -387,10 +387,10 @@ export class SafeMultiChainSigAccount extends SafeAccount {
         if(userOperationsToSign.length > 1){
             const userOperationsHashes: string[] = [];
             userOperationsToSign.forEach(
-                (userOperationsToSignToSign, _index) => {
+                (userOperationsToSign, _index) => {
                     const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
-                        userOperationsToSignToSign.userOperation,
-                        userOperationsToSignToSign.chainId,
+                        userOperationsToSign.userOperation,
+                        userOperationsToSign.chainId,
                     );
                     userOperationsHashes.push(userOperationHash);
             });
@@ -416,13 +416,13 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 
             const userOpSignatures: string[] = [];
             userOperationsToSign.forEach(
-                (userOperationsToSignToSign, index) => {
+                (userOperationsToSign, index) => {
                     userOpSignatures.push(
                         SafeAccount.formatSignaturesToUseroperationSignature(
                             signerSignaturePairs,
                             {
-                                validAfter: userOperationsToSignToSign.validAfter,
-                                validUntil: userOperationsToSignToSign.validUntil,
+                                validAfter: userOperationsToSign.validAfter,
+                                validUntil: userOperationsToSign.validUntil,
                                 isMultiChainSignature:true,
                                 multiChainMerkleProof: proofs[index]
                             },
@@ -489,10 +489,10 @@ export class SafeMultiChainSigAccount extends SafeAccount {
         const userOperationsHashes: string[] = [];
 
         userOperationsToSignsToSign.forEach(
-            (userOperationsToSignToSign, _index) => {
+            (userOperationsToSign, _index) => {
                 const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
-                    userOperationsToSignToSign.userOperation,
-                    userOperationsToSignToSign.chainId,
+                    userOperationsToSign.userOperation,
+                    userOperationsToSign.chainId,
                 );
                 userOperationsHashes.push(userOperationHash);
         });
@@ -526,17 +526,17 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 	): string[] {
         const userOperationsHashes: string[] = [];
         userOperationsToSignsToSign.forEach(
-            (userOperationsToSignToSign, _index) => {
+            (userOperationsToSign, _index) => {
                 const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
-                    userOperationsToSignToSign.userOperation,
-                    userOperationsToSignToSign.chainId,
+                    userOperationsToSign.userOperation,
+                    userOperationsToSign.chainId,
                 );
                 userOperationsHashes.push(userOperationHash);
         });
         const [_root, proofs] = generateMerkleProofs(userOperationsHashes);
         const userOpSignatures: string[] = [];
         userOperationsToSignsToSign.forEach(
-            (_userOperationsToSignToSign, index) => {
+            (_userOperationsToSign, index) => {
                 userOpSignatures.push(
                     SafeAccount.formatSignaturesToUseroperationSignature(
                         signerSignaturePairs,
