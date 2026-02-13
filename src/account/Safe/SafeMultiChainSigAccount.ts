@@ -22,6 +22,9 @@ import { TypedDataEncoder, Wallet } from "ethers";
  * @class
  * @experimental
  * @classdesc This is an experimental class that may change in future versions
+ * Safe account variant that supports multi-chain signatures via Merkle trees.
+ * Allows signing UserOperations for multiple chains with a single signature,
+ * using EntryPoint v0.9 and EIP-712 typed data with Merkle proofs.
  */
 export class SafeMultiChainSigAccount extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V9;
@@ -30,6 +33,11 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 	static readonly DEFAULT_SAFE_MODULE_SETUP_ADDRESS =
 		"0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47";
 
+	/**
+	 * Create a SafeMultiChainSigAccount instance for an existing or new account.
+	 * @param accountAddress - the Safe account address
+	 * @param overrides - optional overrides for module, entrypoint, and singleton addresses
+	 */
 	constructor(
 		accountAddress: string,
 		overrides: {
@@ -224,6 +232,13 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 		});
 	}
 
+	/**
+	 * Create the initializer callData for setting up a new Safe account.
+	 * @param owners - list of account owner signers
+	 * @param threshold - number of required signatures for execution
+	 * @param overrides - optional overrides for module and contract addresses
+	 * @returns hex-encoded initializer callData
+	 */
 	public static createInitializerCallData(
 		owners: Signer[],
 		threshold: number,
@@ -428,6 +443,13 @@ export class SafeMultiChainSigAccount extends SafeAccount {
         }
 	}
 
+	/**
+	 * Compute the EIP-712 hash of a multi-chain Merkle tree root for a set of UserOperations.
+	 * This hash is what signers sign to approve multiple cross-chain operations at once.
+	 * @param userOperationsToSignsToSign - list of UserOperations with their target chain IDs
+	 * @param overrides - optional overrides for the Safe 4337 module address
+	 * @returns the EIP-712 hash as a hex string
+	 */
 	public static getMultiChainSingleSignatureUserOperationsEip712Hash(
 		userOperationsToSignsToSign: UserOperationToSign[],
 		overrides: {
@@ -443,6 +465,13 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 		);
     }
 
+	/**
+	 * Get the EIP-712 typed data components for a multi-chain Merkle tree root.
+	 * Returns the domain, types, and message value needed for signing or hashing.
+	 * @param userOperationsToSignsToSign - list of UserOperations with their target chain IDs
+	 * @param overrides - optional overrides for the Safe 4337 module address
+	 * @returns an object with domain, types, and messageValue for EIP-712 signing
+	 */
 	public static getMultiChainSingleSignatureUserOperationsEip712Data(
 		userOperationsToSignsToSign: UserOperationToSign[],
 		overrides: {

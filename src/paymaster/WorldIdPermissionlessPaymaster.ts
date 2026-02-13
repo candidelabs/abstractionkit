@@ -4,9 +4,19 @@ import { AbiCoder, keccak256, solidityPacked } from "ethers";
 import { ENTRYPOINT_V7, ENTRYPOINT_V8 } from "src/constants";
 import { Bundler } from "src/Bundler";
 
+/**
+ * A paymaster that sponsors UserOperations for accounts verified through
+ * World ID proof-of-personhood. Encodes the World ID Merkle root,
+ * nullifier hash, and zero-knowledge proof into the paymasterData field
+ * and re-estimates gas limits via the bundler.
+ */
 export class WorldIdPermissionlessPaymaster extends Paymaster {
+	/** The on-chain paymaster contract address. */
 	readonly address: string;
 
+	/**
+	 * @param address - The deployed WorldIdPermissionlessPaymaster contract address
+	 */
 	constructor(address: string) {
 		super();
 		this.address = address;

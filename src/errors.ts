@@ -2,6 +2,9 @@
 
 import { Dictionary } from "./types";
 
+/**
+ * General SDK error codes for non-bundler, non-RPC failures.
+ */
 export type BasicErrorCode =
 	| "UNKNOWN_ERROR"
 	| "TIMEOUT"
@@ -9,6 +12,10 @@ export type BasicErrorCode =
 	| "BUNDLER_ERROR"
 	| "PAYMASTER_ERROR";
 
+/**
+ * ERC-4337 bundler-specific error codes, mapped from JSON-RPC error numbers
+ * defined in the ERC-4337 specification.
+ */
 export type BundlerErrorCode =
 	| "INVALID_FIELDS"
 	| "SIMULATE_VALIDATION"
@@ -22,6 +29,9 @@ export type BundlerErrorCode =
 	| "INVALID_USEROPERATION_HASH"
 	| "EXECUTION_REVERTED";
 
+/**
+ * Standard JSON-RPC 2.0 error codes plus Tenderly simulation errors.
+ */
 export type JsonRpcErrorCode =
 	| "PARSE_ERROR"
 	| "INVALID_REQUEST"
@@ -31,6 +41,9 @@ export type JsonRpcErrorCode =
 	| "SERVER_ERROR"
     | "TENDERLY_SIMULATION_ERROR";
 
+/**
+ * Maps JSON-RPC numeric error codes to human-readable {@link BundlerErrorCode} values.
+ */
 export const BundlerErrorCodeDict: Dictionary<BundlerErrorCode> = {
 	"-32602": "INVALID_FIELDS",
 	"-32500": "SIMULATE_VALIDATION",
@@ -45,6 +58,9 @@ export const BundlerErrorCodeDict: Dictionary<BundlerErrorCode> = {
 	"-32521": "EXECUTION_REVERTED",
 };
 
+/**
+ * Maps JSON-RPC numeric error codes to human-readable {@link JsonRpcErrorCode} values.
+ */
 export const JsonRpcErrorDict: Dictionary<JsonRpcErrorCode> = {
 	"-32700": "PARSE_ERROR",
 	"-32600": "INVALID_REQUEST",
@@ -63,11 +79,21 @@ type Jsonable =
 	| { readonly [key: string]: Jsonable }
 	| { toJSON(): Jsonable };
 
+/**
+ * Custom error class for the AbstractionKit SDK. Wraps bundler, JSON-RPC,
+ * and general errors with a structured code, optional numeric errno, and
+ * arbitrary JSON-serializable context.
+ */
 export class AbstractionKitError extends Error {
 	public readonly code: BundlerErrorCode | BasicErrorCode | JsonRpcErrorCode;
 	public readonly context?: Jsonable;
 	public readonly errno?: number;
 
+	/**
+	 * @param code - Error code identifying the category of failure
+	 * @param message - Human-readable error description
+	 * @param options - Optional cause, numeric errno, and JSON-serializable context
+	 */
 	constructor(
 		code: BundlerErrorCode | BasicErrorCode | JsonRpcErrorCode,
 		message: string,
@@ -83,8 +109,12 @@ export class AbstractionKitError extends Error {
 		this.context = context;
 	}
 
-	//get a string representation of AbstractionKitError
-	//Usefull with React Native, as Error "cause" is not shown in the error trace
+	/**
+	 * Returns a JSON string representation of this error including name, code,
+	 * message, cause, errno, and context. Useful in React Native where the
+	 * Error "cause" property is not shown in stack traces.
+	 * @returns JSON string of the error
+	 */
 	stringify(): string {
 		return JSON.stringify(this, [
 			"name",
@@ -97,6 +127,13 @@ export class AbstractionKitError extends Error {
 	}
 }
 
+/**
+ * Coerces an unknown thrown value into an Error instance.
+ * If the value is already an Error it is returned as-is; otherwise it is
+ * stringified and wrapped in a new Error.
+ * @param value - The caught value to normalize
+ * @returns An Error instance
+ */
 export function ensureError(value: unknown): Error {
 	if (value instanceof Error) return value;
 

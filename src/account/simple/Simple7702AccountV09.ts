@@ -4,9 +4,18 @@ import { ENTRYPOINT_V9 } from "src/constants";
 import { SendUseroperationResponse } from "../SendUseroperationResponse";
 
 /**
- * Simple7702Account with entrypoint v0.09
+ * EIP-7702 simple smart account targeting EntryPoint v0.9
+ * (`0x433709009B8330FDa32311DF1C2AFA402eD8D009`).
+ * Extends {@link BaseSimple7702Account} with concrete types for
+ * {@link UserOperationV9} and sensible defaults for the delegatee address.
  */
 export class Simple7702AccountV09 extends BaseSimple7702Account {
+	/**
+	 * @param accountAddress - The EOA address that will be delegated via EIP-7702
+	 * @param overrides - Optional overrides for entrypoint and delegatee addresses
+	 * @param overrides.entrypointAddress - Custom EntryPoint address (defaults to EntryPoint v0.9)
+	 * @param overrides.delegateeAddress - Custom delegatee contract address
+	 */
 	constructor(
 		accountAddress: string,
         overrides: {
@@ -22,14 +31,14 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	}
 
     /**
-	 * baseCreateUserOperation will determine the nonce, fetch the gas prices,
-	 * estimate gas limits and return a useroperation to be signed.
-	 * you can override all these values using the overrides parameter.
-	 * @param transactions - metatransaction list to be encoded
-	 * @param providerRpc - node rpc to fetch account nonce and gas prices
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param overrides - overrides for the default values
-	 * @returns promise with useroperation
+	 * Create a {@link UserOperationV9} for EntryPoint v0.9.
+	 * Determines nonce, fetches gas prices, estimates gas limits, and returns
+	 * an unsigned UserOperation. All auto-determined values can be overridden.
+	 * @param transactions - One or more transactions to encode into callData
+	 * @param providerRpc - JSON-RPC endpoint for nonce and gas price queries
+	 * @param bundlerRpc - Bundler RPC endpoint for gas estimation
+	 * @param overrides - Optional overrides for gas, nonce, and EIP-7702 auth fields
+	 * @returns A promise resolving to an unsigned {@link UserOperationV9}
 	 */
     public async createUserOperation(
 		transactions: SimpleMetaTransaction[],
@@ -46,13 +55,13 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
     }
 
     /**
-	 * estimate gas limits for a useroperation
-	 * @param userOperation - useroperation to estimate gas for
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param overrides - overrides for the default values
-	 * @param overrides.stateOverrideSet - state override values to set during gs estimation
-	 * @param overrides.dummySignature - a single eoa dummy signature
-	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
+	 * Estimate gas limits for a {@link UserOperationV9}.
+	 * @param userOperation - The UserOperation to estimate gas for
+	 * @param bundlerRpc - Bundler RPC endpoint for gas estimation
+	 * @param overrides - Optional overrides
+	 * @param overrides.stateOverrideSet - State overrides to apply during estimation
+	 * @param overrides.dummySignature - Custom dummy signature for estimation
+	 * @returns A promise resolving to `[preVerificationGas, verificationGasLimit, callGasLimit]`
 	 */
     public async estimateUserOperationGas(
 		userOperation: UserOperationV9,
@@ -70,11 +79,12 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
     }
 
     /**
-	 * create a useroperation signature
-	 * @param useroperation - useroperation to sign
-	 * @param privateKeys - for the signers
-	 * @param chainId - target chain id
-	 * @returns signature
+	 * Sign a {@link UserOperationV9} with an EOA private key.
+	 * Computes the UserOperation hash and produces an ECDSA signature.
+	 * @param useroperation - The UserOperation to sign
+	 * @param privateKey - Hex-encoded private key of the EOA signer
+	 * @param chainId - Target chain ID
+	 * @returns Hex-encoded ECDSA signature
 	 */
     public signUserOperation(
 		useroperation: UserOperationV9,
@@ -85,10 +95,10 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
     }
 
     /**
-	 * sends a useroperation to a bundler rpc
-	 * @param userOperation - useroperation to send
-	 * @param bundlerRpc - bundler rpc to send useroperation
-	 * @returns promise with SendUseroperationResponse
+	 * Send a signed {@link UserOperationV9} to a bundler for on-chain inclusion.
+	 * @param userOperation - The signed UserOperation to submit
+	 * @param bundlerRpc - Bundler RPC endpoint
+	 * @returns A {@link SendUseroperationResponse} that can be used to wait for inclusion
 	 */
 	public async sendUserOperation(
 		userOperation: UserOperationV9,

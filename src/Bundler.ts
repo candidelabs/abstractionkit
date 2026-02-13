@@ -12,16 +12,30 @@ import type {
 import { sendJsonRpcRequest } from "./utils";
 import { AbstractionKitError, ensureError } from "./errors";
 
+/**
+ * Client for communicating with an ERC-4337 bundler via JSON-RPC.
+ * Provides methods for gas estimation, UserOperation submission, and receipt retrieval.
+ *
+ * Candide's bundler endpoint follows the format:
+ * - `https://api.candide.dev/api/v3/{chainId}/{apiKey}` (authenticated)
+ * - `https://api.candide.dev/public/v3/{chainId}` (public, no key required)
+ *
+ * @example
+ * const bundler = new Bundler("https://api.candide.dev/public/v3/11155111");
+ * const receipt = await bundler.getUserOperationReceipt(userOpHash);
+ */
 export class Bundler {
+	/** The bundler JSON-RPC endpoint URL */
 	readonly rpcUrl: string;
 
+	/** @param rpcUrl - The bundler JSON-RPC endpoint URL */
 	constructor(rpcUrl: string) {
 		this.rpcUrl = rpcUrl;
 	}
 
 	/**
-	 * call eth_chainId bundler rpc method
-	 * @returns promise with chainid
+	 * Get the chain ID from the bundler.
+	 * @returns The chain ID as a hex-encoded string
 	 */
 	async chainId(): Promise<string> {
 		try {
@@ -52,8 +66,8 @@ export class Bundler {
 	}
 
 	/**
-	 * call eth_supportedEntryPoints bundler rpc method
-	 * @returns promise with supportedEntryPoints
+	 * Get the list of EntryPoint addresses supported by this bundler.
+	 * @returns An array of supported EntryPoint contract addresses
 	 */
 	async supportedEntryPoints(): Promise<string[]> {
 		try {
@@ -77,11 +91,11 @@ export class Bundler {
 	}
 
 	/**
-	 * call eth_estimateUserOperationGas bundler rpc method
-	 * @param useroperation - useroperation to estimate gas for
-	 * @param entrypointAddress - supported entrypoint
-	 * @param state_override_set - state override values to set during gs estimation
-	 * @returns promise with GasEstimationResult
+	 * Estimate gas limits for a UserOperation.
+	 * @param useroperation - UserOperation to estimate gas for
+	 * @param entrypointAddress - Target EntryPoint address
+	 * @param state_override_set - Optional state overrides for estimation
+	 * @returns Gas estimation with callGasLimit, preVerificationGas, and verificationGasLimit
 	 */
 	async estimateUserOperationGas(
 		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
@@ -125,10 +139,10 @@ export class Bundler {
 	}
 
 	/**
-	 * call eth_sendUserOperation bundler rpc method
-	 * @param useroperation - useroperation to estimate gas for
-	 * @param entrypointAddress - supported entrypoint
-	 * @returns promise with useroperationhash
+	 * Submit a signed UserOperation to the bundler for on-chain inclusion.
+	 * @param useroperation - The signed UserOperation to submit
+	 * @param entrypointAddress - Target EntryPoint address
+	 * @returns The UserOperation hash
 	 */
 	async sendUserOperation(
 		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
@@ -155,9 +169,9 @@ export class Bundler {
 	}
 
 	/**
-	 * call eth_getUserOperationReceipt bundler rpc method
-	 * @param useroperationhash - useroperation hash
-	 * @returns promise with UserOperationReceiptResult
+	 * Get the receipt for a previously submitted UserOperation.
+	 * @param useroperationhash - The hash of the UserOperation to look up
+	 * @returns The receipt, or null if not yet included
 	 */
 	async getUserOperationReceipt(
 		useroperationhash: string,
@@ -214,9 +228,9 @@ export class Bundler {
 	}
 
 	/**
-	 * call eth_getUserOperationByHash bundler rpc method
-	 * @param useroperationhash - useroperation hash
-	 * @returns promise with UserOperationByHashResult
+	 * Look up a UserOperation by its hash.
+	 * @param useroperationhash - The hash of the UserOperation to look up
+	 * @returns The UserOperation with metadata, or null if not found
 	 */
 	async getUserOperationByHash(
 		useroperationhash: string,

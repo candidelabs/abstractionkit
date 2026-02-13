@@ -1,14 +1,29 @@
 import { Paymaster } from "./Paymaster";
 import { PaymasterFieldsInitValues, UserOperationV9 } from "../types";
 
+/**
+ * A paymaster that sponsors all UserOperations unconditionally.
+ * Uses a fixed magic signature that the on-chain paymaster contract accepts
+ * without additional validation. Useful for testing and development.
+ */
 export class AllowAllPaymaster extends Paymaster {
+	/** The on-chain paymaster contract address. */
 	readonly address: string;
 
+	/**
+	 * @param address - Paymaster contract address. Defaults to the canonical AllowAll deployment.
+	 */
 	constructor(address: string = "0x36A337b8b4cE5CF6ca1dDaeef73Da4928d714DF2") {
 		super();
 		this.address = address;
 	}
 
+	/**
+	 * Returns initial paymaster fields (address, gas limits, and data) for
+	 * UserOperation construction before gas estimation.
+	 * @param chainId - The chain ID (unused, kept for interface compatibility)
+	 * @returns Paymaster fields with the magic signature as paymasterData
+	 */
 	async getPaymasterFieldsInitValues(
         chainId: bigint
     ):Promise<PaymasterFieldsInitValues>{

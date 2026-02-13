@@ -2,16 +2,34 @@ import { SafeModule } from "./SafeModule";
 import { createCallData, sendEthCallRequest } from "../../../utils";
 import { MetaTransaction } from "../../../types";
 
+/**
+ * Safe module for managing token spending allowances. Enables Safe owners
+ * to grant delegates recurring or one-time permission to transfer ERC-20
+ * tokens from the Safe, subject to configurable limits and reset periods.
+ */
 export class AllowanceModule extends SafeModule{
     static readonly DEFAULT_ALLOWANCE_MODULE_ADDRESS =
         "0xAA46724893dedD72658219405185Fb0Fc91e091C";
 
+    /**
+     * @param moduleAddress - Deployed address of the Allowance Module contract.
+     *   Defaults to {@link DEFAULT_ALLOWANCE_MODULE_ADDRESS}.
+     */
     constructor(
 		moduleAddress: string = AllowanceModule.DEFAULT_ALLOWANCE_MODULE_ADDRESS,
 	) {
 		super(moduleAddress);
 	}
         
+    /**
+     * Creates a MetaTransaction that sets a one-time (non-recurring) token allowance
+     * for a delegate. The allowance is consumed once and never resets.
+     * @param delegate - Address of the delegate to grant the allowance to.
+     * @param token - ERC-20 token contract address (use zero address for native token).
+     * @param allowanceAmount - Maximum amount the delegate can spend, in the token's smallest unit.
+     * @param startAfterInMinutes - Delay in minutes before the allowance becomes active.
+     * @returns A MetaTransaction to be executed by the Safe.
+     */
     public createOneTimeAllowanceMetaTransaction(
         delegate: string,
         token: string,
@@ -27,6 +45,16 @@ export class AllowanceModule extends SafeModule{
         )
     }
     
+    /**
+     * Creates a MetaTransaction that sets a recurring token allowance for a delegate.
+     * The allowance resets to the full amount after each validity period elapses.
+     * @param delegate - Address of the delegate to grant the allowance to.
+     * @param token - ERC-20 token contract address (use zero address for native token).
+     * @param allowanceAmount - Maximum amount per period, in the token's smallest unit.
+     * @param recurringAllowanceValidityPeriodInMinutes - Duration of each allowance period in minutes.
+     * @param startAfterInMinutes - Delay in minutes before the first allowance period begins.
+     * @returns A MetaTransaction to be executed by the Safe.
+     */
     public createRecurringAllowanceMetaTransaction(
         delegate: string,
         token: string,
@@ -122,6 +150,20 @@ export class AllowanceModule extends SafeModule{
         }
     }
     
+    /**
+     * Creates a MetaTransaction that executes a token transfer using an existing allowance.
+     * Can be called by the delegate or by anyone with a valid delegate signature.
+     * @param allowanceSourceSafeAddress - Safe address whose allowance is being spent.
+     * @param token - ERC-20 token contract address to transfer.
+     * @param to - Recipient address for the token transfer.
+     * @param amount - Amount to transfer, in the token's smallest unit.
+     * @param delegate - Delegate address whose allowance is being used.
+     * @param overrides.delegateSignature - Optional signature from the delegate. Defaults to a
+     *   sentinel value indicating the caller is the delegate themselves.
+     * @param overrides.paymentToken - Optional token address used to pay for execution.
+     * @param overrides.paymentAmount - Amount to pay for execution (required if paymentToken is set).
+     * @returns A MetaTransaction to be executed by the Safe.
+     */
     public createAllowanceTransferMetaTransaction(
         allowanceSourceSafeAddress: string,
         token: string,
@@ -337,6 +379,16 @@ export class AllowanceModule extends SafeModule{
         };
     }
 
+    /**
+     * Fetches all delegate addresses for a Safe. Automatically paginates through
+     * all results unless `maxNumberOfResults` is specified.
+     * @param nodeRpcUrl - JSON-RPC endpoint URL for the target chain.
+     * @param safeAddress - The Safe account address to query delegates for.
+     * @param overrides.start - Starting index for pagination (default 0).
+     * @param overrides.maxNumberOfResults - Maximum number of delegates to return.
+     *   If omitted, all delegates are fetched via automatic pagination.
+     * @returns Array of delegate addresses.
+     */
     public async getDelegates(
         nodeRpcUrl: string,
         safeAddress: string,
@@ -411,10 +463,18 @@ export class AllowanceModule extends SafeModule{
     }
 }
 
+/**
+ * On-chain allowance state for a delegate/token pair on a Safe account.
+ */
 export type Allowance  = {
+    /** Total allowance amount per period, in the token's smallest unit. */
     amount: bigint,
+    /** Amount already spent in the current period. */
     spent: bigint,
+    /** Reset period duration in minutes. 0 means one-time (non-recurring). */
     resetTimeMin: bigint,
+    /** Timestamp (in minutes since epoch) of the last allowance reset. */
     lastResetMin: bigint,
+    /** Monotonically increasing nonce, incremented on each allowance update. */
     nonce: bigint,
 }

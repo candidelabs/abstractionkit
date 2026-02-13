@@ -30,6 +30,12 @@ export function encodeMultiSendCallData(
 	);
 }
 
+/**
+ * Decodes a MultiSend callData back into its packed transaction bytes.
+ * Strips the function selector and ABI-decodes the inner bytes payload.
+ * @param callData - The full MultiSend callData (with 0x prefix and function selector).
+ * @returns The decoded packed transaction bytes as a hex string.
+ */
 export function decodeMultiSendCallData(callData: string): string {
 	const abiCoder = AbiCoder.defaultAbiCoder();
 	const decodedCalldata = abiCoder.decode(["bytes"], "0x" + callData.slice(10));
