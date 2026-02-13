@@ -14,14 +14,25 @@ import {
 } from "./errors";
 import { sendJsonRpcRequest } from "./utils";
 
+/**
+ * State override mapping for Tenderly simulations.
+ * Maps contract addresses to their overridden state (balance, storage, or stateDiff).
+ */
 export type OverrideType = Record<
-    string, 
+    string,
     Record<
         string,
         string | Record<string,string>
     >
 >;
 
+/**
+ * Shares an existing Tenderly simulation so it can be viewed via a public link.
+ * @param tenderlyAccountSlug - The Tenderly account slug.
+ * @param tenderlyProjectSlug - The Tenderly project slug.
+ * @param tenderlyAccessKey - The Tenderly API access key.
+ * @param tenderlySimulationId - The ID of the simulation to share.
+ */
 export async function shareTenderlySimulationAndCreateLink(
     tenderlyAccountSlug:string,
     tenderlyProjectSlug:string,
@@ -63,6 +74,19 @@ export async function shareTenderlySimulationAndCreateLink(
 	}
 }
 
+/**
+ * Simulates a full UserOperation via Tenderly's handleOps/handleUserOps entry
+ * and creates a shareable link.
+ * @param tenderlyAccountSlug - The Tenderly account slug.
+ * @param tenderlyProjectSlug - The Tenderly project slug.
+ * @param tenderlyAccessKey - The Tenderly API access key.
+ * @param chainId - The chain ID to simulate on.
+ * @param entrypointAddress - The EntryPoint contract address.
+ * @param userOperation - The UserOperation to simulate (v0.6, v0.7, or v0.8).
+ * @param blockNumber - Optional block number for the simulation.
+ * @param stateOverrides - Optional state overrides for the simulation.
+ * @returns The simulation result and a shareable dashboard link.
+ */
 export async function simulateUserOperationWithTenderlyAndCreateShareLink(
     tenderlyAccountSlug:string,
     tenderlyProjectSlug:string,
@@ -101,6 +125,20 @@ export async function simulateUserOperationWithTenderlyAndCreateShareLink(
     }
 }
 
+/**
+ * Simulates a full UserOperation via the EntryPoint's handleOps/handleUserOps
+ * function on Tenderly. Encodes the UserOperation into the appropriate calldata
+ * based on the EntryPoint version.
+ * @param tenderlyAccountSlug - The Tenderly account slug.
+ * @param tenderlyProjectSlug - The Tenderly project slug.
+ * @param tenderlyAccessKey - The Tenderly API access key.
+ * @param chainId - The chain ID to simulate on.
+ * @param entrypointAddress - The EntryPoint contract address.
+ * @param userOperation - The UserOperation to simulate (v0.6, v0.7, or v0.8).
+ * @param blockNumber - Optional block number for the simulation.
+ * @param stateOverrides - Optional state overrides for the simulation.
+ * @returns The simulation result from Tenderly.
+ */
 export async function simulateUserOperationWithTenderly(
     tenderlyAccountSlug:string,
     tenderlyProjectSlug:string,
@@ -235,53 +273,95 @@ export async function simulateUserOperationWithTenderly(
 }
 
 /**
- * Base wrapper for a useroperation
+ * Base fields shared by all UserOperation versions for Tenderly simulation.
+ * Contains the common fields present in every EntryPoint version.
  */
 export interface BaseUserOperationToSimulate {
+	/** The smart account address that sends the UserOperation. */
 	sender: string;
+	/** The encoded call data to execute on the account. */
 	callData: string;
+	/** The account nonce. */
 	nonce: any;
+	/** The gas limit for the main execution call. */
 	callGasLimit: any;
+	/** The gas limit for the verification step. */
 	verificationGasLimit: any;
+	/** The gas overhead to compensate the bundler. */
 	preVerificationGas: any;
+	/** The maximum fee per gas (EIP-1559). */
 	maxFeePerGas: any;
+	/** The maximum priority fee per gas (EIP-1559). */
 	maxPriorityFeePerGas: any;
+	/** The UserOperation signature. */
 	signature: any;
 }
 
 /**
- * Wrapper for a useroperation to simulate for an entrypoint v0.6.0
+ * UserOperation fields for Tenderly simulation targeting EntryPoint v0.6.
+ * Uses the combined `initCode` and `paymasterAndData` fields.
  */
 export interface UserOperationV6ToSimulate extends BaseUserOperationToSimulate {
+	/** The concatenated factory address and factory data, or null if already deployed. */
 	initCode: string | null;
+	/** The concatenated paymaster address and paymaster-specific data. */
 	paymasterAndData: any;
 }
 
 /**
- * Wrapper for a useroperation to simulate for an entrypoint v0.7.0
+ * UserOperation fields for Tenderly simulation targeting EntryPoint v0.7.
+ * Uses separate factory/paymaster fields instead of combined byte arrays.
  */
 export interface UserOperationV7ToSimulate extends BaseUserOperationToSimulate {
+	/** The factory contract address, or null if already deployed. */
 	factory: string | null;
+	/** The factory-specific initialization data, or null if already deployed. */
 	factoryData: string | null;
+	/** The paymaster contract address. */
 	paymaster: any;
+	/** The gas limit for paymaster verification. */
 	paymasterVerificationGasLimit: any;
+	/** The gas limit for paymaster postOp execution. */
 	paymasterPostOpGasLimit: any;
+	/** The paymaster-specific data. */
 	paymasterData: any;
 }
 
 /**
- * Wrapper for a useroperation to simulate for an entrypoint v0.8.0
+ * UserOperation fields for Tenderly simulation targeting EntryPoint v0.8.
+ * Extends the v0.7 structure with an additional `eip7702Auth` field for
+ * EIP-7702 delegation support.
  */
 export interface UserOperationV8ToSimulate extends BaseUserOperationToSimulate {
+	/** The factory contract address, or null if already deployed. */
 	factory: string | null;
+	/** The factory-specific initialization data, or null if already deployed. */
 	factoryData: string | null;
+	/** The paymaster contract address. */
 	paymaster: any;
+	/** The gas limit for paymaster verification. */
 	paymasterVerificationGasLimit: any;
+	/** The gas limit for paymaster postOp execution. */
 	paymasterPostOpGasLimit: any;
+	/** The paymaster-specific data. */
 	paymasterData: any;
+	/** The EIP-7702 delegation authorization data. */
     eip7702Auth: any;
 }
 
+/**
+ * Simulates a UserOperation's callData (and optional account deployment) on
+ * Tenderly, then creates shareable links for each simulation.
+ * @param tenderlyAccountSlug - The Tenderly account slug.
+ * @param tenderlyProjectSlug - The Tenderly project slug.
+ * @param tenderlyAccessKey - The Tenderly API access key.
+ * @param chainId - The chain ID to simulate on.
+ * @param entrypointAddress - The EntryPoint contract address.
+ * @param userOperation - The UserOperation to simulate (v0.6, v0.7, or v0.8 format).
+ * @param blockNumber - Optional block number for the simulation.
+ * @param stateOverrides - Optional state overrides for the simulation.
+ * @returns The simulation results and shareable dashboard links.
+ */
 export async function simulateUserOperationCallDataWithTenderlyAndCreateShareLink(
     tenderlyAccountSlug:string,
     tenderlyProjectSlug:string,
@@ -344,6 +424,19 @@ export async function simulateUserOperationCallDataWithTenderlyAndCreateShareLin
     } 
 }
 
+/**
+ * Simulates a UserOperation's callData on Tenderly by extracting the sender,
+ * callData, and factory info, then delegating to {@link simulateSenderCallDataWithTenderly}.
+ * @param tenderlyAccountSlug - The Tenderly account slug.
+ * @param tenderlyProjectSlug - The Tenderly project slug.
+ * @param tenderlyAccessKey - The Tenderly API access key.
+ * @param chainId - The chain ID to simulate on.
+ * @param entrypointAddress - The EntryPoint contract address.
+ * @param userOperation - The UserOperation to simulate (v0.6, v0.7, or v0.8 format).
+ * @param blockNumber - Optional block number for the simulation.
+ * @param stateOverrides - Optional state overrides for the simulation.
+ * @returns The Tenderly simulation results.
+ */
 export async function simulateUserOperationCallDataWithTenderly(
     tenderlyAccountSlug:string,
     tenderlyProjectSlug:string,
@@ -381,6 +474,22 @@ export async function simulateUserOperationCallDataWithTenderly(
     )
 }
 
+/**
+ * Simulates the sender's callData (and optional account deployment) on Tenderly,
+ * then creates shareable links for each simulation.
+ * @param tenderlyAccountSlug - The Tenderly account slug.
+ * @param tenderlyProjectSlug - The Tenderly project slug.
+ * @param tenderlyAccessKey - The Tenderly API access key.
+ * @param chainId - The chain ID to simulate on.
+ * @param entrypointAddress - The EntryPoint contract address.
+ * @param sender - The smart account address.
+ * @param callData - The encoded call data to simulate.
+ * @param factory - The factory contract address, or null if already deployed.
+ * @param factoryData - The factory initialization data, or null if already deployed.
+ * @param blockNumber - Optional block number for the simulation.
+ * @param stateOverrides - Optional state overrides for the simulation.
+ * @returns The simulation results and shareable dashboard links.
+ */
 export async function simulateSenderCallDataWithTenderlyAndCreateShareLink(
     tenderlyAccountSlug:string,
     tenderlyProjectSlug:string,
@@ -449,6 +558,23 @@ export async function simulateSenderCallDataWithTenderlyAndCreateShareLink(
     } 
 }
 
+/**
+ * Simulates the sender's callData on Tenderly. If factory and factoryData are
+ * provided, simulates account deployment first, then the callData execution.
+ * Uses the appropriate SenderCreator address based on the EntryPoint version.
+ * @param tenderlyAccountSlug - The Tenderly account slug.
+ * @param tenderlyProjectSlug - The Tenderly project slug.
+ * @param tenderlyAccessKey - The Tenderly API access key.
+ * @param chainId - The chain ID to simulate on.
+ * @param entrypointAddress - The EntryPoint contract address.
+ * @param sender - The smart account address.
+ * @param callData - The encoded call data to simulate.
+ * @param factory - The factory contract address, or null if already deployed.
+ * @param factoryData - The factory initialization data, or null if already deployed.
+ * @param blockNumber - Optional block number for the simulation.
+ * @param stateOverrides - Optional state overrides for the simulation.
+ * @returns The Tenderly simulation results (one or two entries depending on deployment).
+ */
 export async function simulateSenderCallDataWithTenderly(
     tenderlyAccountSlug:string,
     tenderlyProjectSlug:string,
@@ -527,6 +653,15 @@ export async function simulateSenderCallDataWithTenderly(
 }
 
 
+/**
+ * Sends a bundle of transactions to Tenderly's simulate-bundle API endpoint.
+ * This is the low-level function that all other Tenderly simulation functions delegate to.
+ * @param tenderlyAccountSlug - The Tenderly account slug.
+ * @param tenderlyProjectSlug - The Tenderly project slug.
+ * @param tenderlyAccessKey - The Tenderly API access key.
+ * @param transactions - Array of transaction objects to simulate as a bundle.
+ * @returns The simulation results from Tenderly.
+ */
 export async function callTenderlySimulateBundle(
     tenderlyAccountSlug:string,
     tenderlyProjectSlug:string,

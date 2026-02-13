@@ -85,8 +85,11 @@ export interface CreateUserOperationV7Overrides
 
 export interface CreateUserOperationV9Overrides extends CreateUserOperationV7Overrides{}
 
+/** Safe singleton contract address and init hash for deterministic deployment. */
 export interface SafeAccountSingleton {
+	/** The address of the Safe singleton contract */
 	singletonAddress: string;
+	/** The init code hash used for CREATE2 address computation */
 	singletonInitHash: string;
 }
 
@@ -145,6 +148,7 @@ export interface BaseInitOverrides {
 	eip7212WebAuthnContractVerifierForSharedSigner?: string;
 }
 
+/** Overrides for WebAuthn signature creation and verification. */
 export interface WebAuthnSignatureOverrides {
 	isInit?: boolean;
 	webAuthnSharedSigner?: string;
@@ -167,52 +171,90 @@ export enum SafeModuleExecutorFunctionSelector {
 	executeUserOp = "0x7bb37428",
 }
 
+/** EIP-712 domain for Safe UserOperation signing. */
 export interface SafeUserOperationTypedDataDomain {
+	/** Target chain ID to prevent cross-chain replay */
 	chainId: number;
+	/** Address of the Safe 4337 module contract */
 	verifyingContract: string;
 }
+
+/** EIP-712 typed data values for a Safe UserOperation (EntryPoint v0.6). */
 export interface SafeUserOperationV6TypedMessageValue {
+	/** The Safe account address */
 	safe: string;
+	/** The UserOperation nonce */
 	nonce: bigint;
+	/** Packed factory address and init data for account deployment */
 	initCode: string;
+	/** Encoded call data for the account to execute */
 	callData: string;
+	/** Gas limit for the main execution call */
 	callGasLimit: bigint;
+	/** Gas limit for the verification step */
 	verificationGasLimit: bigint;
+	/** Gas overhead to compensate for pre-verification execution */
 	preVerificationGas: bigint;
+	/** Maximum fee per gas unit */
 	maxFeePerGas: bigint;
+	/** Maximum priority fee (tip) per gas unit */
 	maxPriorityFeePerGas: bigint;
+	/** Packed paymaster address and data */
 	paymasterAndData: string;
+	/** Unix timestamp after which the signature becomes valid */
 	validAfter: bigint;
+	/** Unix timestamp after which the signature expires */
 	validUntil: bigint;
+	/** EntryPoint contract address */
 	entryPoint: string;
 }
 
+/** EIP-712 typed data values for a Safe UserOperation (EntryPoint v0.7). Note: field order differs from v0.6. */
 export interface SafeUserOperationV7TypedMessageValue {
+	/** The Safe account address */
 	safe: string;
+	/** The UserOperation nonce */
 	nonce: bigint;
+	/** Packed factory address and init data for account deployment */
 	initCode: string;
+	/** Encoded call data for the account to execute */
 	callData: string;
+	/** Gas limit for the verification step */
 	verificationGasLimit: bigint;
+	/** Gas limit for the main execution call */
 	callGasLimit: bigint;
+	/** Gas overhead to compensate for pre-verification execution */
 	preVerificationGas: bigint;
+	/** Maximum priority fee (tip) per gas unit */
 	maxPriorityFeePerGas: bigint;
+	/** Maximum fee per gas unit */
 	maxFeePerGas: bigint;
+	/** Packed paymaster address and data */
 	paymasterAndData: string;
+	/** Unix timestamp after which the signature becomes valid */
 	validAfter: bigint;
+	/** Unix timestamp after which the signature expires */
 	validUntil: bigint;
+	/** EntryPoint contract address */
 	entryPoint: string;
 }
 
+/** EIP-712 typed data values for a Safe UserOperation (EntryPoint v0.9). */
 export interface SafeUserOperationV9TypedMessageValue extends SafeUserOperationV7TypedMessageValue{
 }
 
+/** An Ethereum address string representing an ECDSA signer. */
 export type ECDSAPublicAddress = string;
 
+/** WebAuthn/Passkey public key with x,y coordinates on the P-256 curve. */
 export interface WebauthnPublicKey {
+	/** X coordinate of the public key */
 	x: bigint;
+	/** Y coordinate of the public key */
 	y: bigint;
 }
 
+/** A signer can be either an ECDSA address or a WebAuthn public key. */
 export type Signer = ECDSAPublicAddress | WebauthnPublicKey;
 
 export type ECDSASignature = string;
@@ -223,12 +265,17 @@ export interface WebauthnSignatureData {
 	rs: [bigint, bigint];
 }
 
+/** A pair of signer identity and their signature. */
 export interface SignerSignaturePair {
+	/** The signer (ECDSA address or WebAuthn key) */
 	signer: Signer;
+	/** The signature hex string */
 	signature: string;
+	/** Whether this is a contract signature (EIP-1271) */
 	isContractSignature?: boolean;
 }
 
+/** Dummy signer-signature pair for gas estimation with EOA signers. */
 export const EOADummySignerSignaturePair: SignerSignaturePair = {
 	signer: "0xfD90FAd33ee8b58f32c00aceEad1358e4AFC23f9",
 	signature:
@@ -236,6 +283,7 @@ export const EOADummySignerSignaturePair: SignerSignaturePair = {
 	isContractSignature: false,
 };
 
+/** Dummy signer-signature pair for gas estimation with WebAuthn signers. */
 export const WebauthnDummySignerSignaturePair: SignerSignaturePair = {
 	signer: "0xfD90FAd33ee8b58f32c00aceEad1358e4AFC23f9",
 	signature:
@@ -243,6 +291,7 @@ export const WebauthnDummySignerSignaturePair: SignerSignaturePair = {
 	isContractSignature: true,
 };
 
+/** A UserOperation with chain context ready for signing. */
 export interface UserOperationToSign {
     chainId: bigint,
     userOperation: UserOperationV9,
@@ -250,6 +299,7 @@ export interface UserOperationToSign {
     validUntil?: bigint;
 }
 
+/** A batch of transactions targeting a specific chain, used for multi-chain operations. */
 export interface PerChainBatchTransaction {
     chainId: bigint,
 	metaTransactions: MetaTransaction[],
@@ -259,10 +309,12 @@ export interface PerChainBatchTransaction {
 	overrides?: CreateUserOperationV9Overrides,
 }
 
+/** EIP-712 domain for multi-chain signature Merkle tree root. */
 export interface MultiChainSignatureMerkleTreeRootTypedDataDomain {
 	verifyingContract: string;
 }
 
+/** EIP-712 typed message value containing a Merkle tree root for multi-chain signatures. */
 export interface MultiChainSignatureMerkleTreeRootTypedMessageValue {
 	merkleTreeRoot: string;
 }

@@ -42,11 +42,14 @@ function buildDomainSeparator(chainId: bigint, entrypoint: string): string{
 }
 
 /**
- * createUserOperationHash for the standard entrypointv0.6 hash
- * @param useroperation - useroperation to create hash for
- * @param entrypointAddress - supported entrypoint
- * @param chainId - target chain id
- * @returns UserOperationHash
+ * Compute the UserOperation hash for any supported EntryPoint version.
+ * This hash is what gets signed by the account owner(s).
+ * Automatically selects the correct packing format based on the entrypoint address.
+ *
+ * @param useroperation - UserOperation to hash
+ * @param entrypointAddress - EntryPoint contract address (determines hash format)
+ * @param chainId - Target chain ID
+ * @returns The UserOperation hash as a hex string
  */
 export function createUserOperationHash(
 	useroperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
@@ -95,9 +98,11 @@ export function createUserOperationHash(
 }
 
 /**
- * createPackedUserOperation for the standard entrypointv0.6 hash
- * @param useroperation -useroperation to pack
- * @returns packed UserOperation
+ * ABI-encode and pack a UserOperation for hashing (EntryPoint v0.6 format).
+ * Bytes fields (initCode, callData, paymasterAndData) are keccak256-hashed before packing.
+ *
+ * @param useroperation - UserOperation to pack
+ * @returns ABI-encoded packed UserOperation as a hex string
  */
 export function createPackedUserOperationV6(
 	useroperation: UserOperationV6,
@@ -135,9 +140,11 @@ export function createPackedUserOperationV6(
 }
 
 /**
- * createPackedUserOperation for the standard entrypointv0.7 hash
- * @param useroperation -useroperation to pack
- * @returns packed UserOperation
+ * ABI-encode and pack a UserOperation for hashing (EntryPoint v0.7 format).
+ * Reconstructs initCode, accountGasLimits, gasFees, and paymasterAndData from separate fields.
+ *
+ * @param useroperation - UserOperation to pack
+ * @returns ABI-encoded packed UserOperation as a hex string
  */
 export function createPackedUserOperationV7(
 	useroperation: UserOperationV7,
@@ -223,9 +230,10 @@ export function paymasterDataKeccakV9(paymasterAndData: string): string{
 }
 
 /**
- * createPackedUserOperation for the standard entrypointv0.9 hash
- * @param useroperation -useroperation to pack
- * @returns packed UserOperation
+ * ABI-encode and pack a UserOperation for hashing (EntryPoint v0.9 format).
+ *
+ * @param useroperation - UserOperation to pack
+ * @returns ABI-encoded packed UserOperation as a hex string
  */
 export function createPackedUserOperationV9(
 	useroperation: UserOperationV8,
@@ -234,9 +242,10 @@ export function createPackedUserOperationV9(
 }
 
 /**
- * createPackedUserOperation for the standard entrypointv0.8 hash
- * @param useroperation -useroperation to pack
- * @returns packed UserOperation
+ * ABI-encode and pack a UserOperation for hashing (EntryPoint v0.8 format).
+ *
+ * @param useroperation - UserOperation to pack
+ * @returns ABI-encoded packed UserOperation as a hex string
  */
 export function createPackedUserOperationV8(
 	useroperation: UserOperationV8,
@@ -330,11 +339,19 @@ function baseCreatePackedUserOperationV8V9(
 }
 
 /**
- * creates calldata from the function selector, abi and parameters
- * @param functionSelector- hexstring representation of the first four bytes of the hash of the signature of the function
- * @param functionInputAbi - list of input api types
- * @param functionInputParameters - list of input parameters values
- * @returns calldata
+ * Encode a function call into ABI-encoded calldata.
+ *
+ * @param functionSelector - 4-byte hex function selector (e.g., "0xa9059cbb" for ERC-20 transfer)
+ * @param functionInputAbi - Array of ABI type strings (e.g., ["address", "uint256"])
+ * @param functionInputParameters - Array of parameter values matching the ABI types
+ * @returns ABI-encoded calldata as a hex string (selector + encoded parameters)
+ *
+ * @example
+ * const transferCallData = createCallData(
+ *   "0xa9059cbb",
+ *   ["address", "uint256"],
+ *   ["0xRecipientAddress", 1000000n],
+ * );
  */
 export function createCallData(
 	functionSelector: string,
@@ -351,6 +368,18 @@ export function createCallData(
 	return callData;
 }
 
+/**
+ * Send a JSON-RPC request to the specified endpoint.
+ * Automatically converts bigint values to hex strings in the request body.
+ *
+ * @param rpcUrl - The JSON-RPC endpoint URL (bundler, node, or paymaster)
+ * @param method - The JSON-RPC method name (e.g., "eth_call", "eth_sendUserOperation")
+ * @param params - The JSON-RPC parameters
+ * @param headers - Custom HTTP headers (defaults to Content-Type: application/json)
+ * @param paramsKeyName - Key name for the params field (defaults to "params")
+ * @returns The result field from the JSON-RPC response
+ * @throws AbstractionKitError if the RPC returns an error
+ */
 export async function sendJsonRpcRequest(
 	rpcUrl: string,
 	method: string,
@@ -426,12 +455,14 @@ export function getFunctionSelector(functionSignature: string): string {
 }
 
 /**
- * fetch account nonce by calling the entrypoint's "getNonce"
- * @param rpcUrl -node rpc to fetch account nonce and gas prices
- * @param entryPoint - target entrypoint
- * @param account - target ccount
- * @param key - nonce key
- * @returns promise with nonce
+ * Fetch the account's nonce from the EntryPoint contract.
+ *
+ * @param rpcUrl - Ethereum JSON-RPC node URL
+ * @param entryPoint - EntryPoint contract address
+ * @param account - Smart account address to query
+ * @param key - Nonce key (default 0). Different keys allow parallel nonce channels.
+ * @returns The current nonce as a bigint
+ * @throws AbstractionKitError with code "BAD_DATA" if the nonce call fails
  */
 export async function fetchAccountNonce(
 	rpcUrl: string,
@@ -493,6 +524,14 @@ export async function fetchAccountNonce(
 	}
 }
 
+/**
+ * Fetch current gas prices from a JSON-RPC node.
+ * Applies a gas level multiplier to adjust for faster or cheaper inclusion.
+ *
+ * @param provideRpc - Ethereum JSON-RPC node URL
+ * @param gasLevel - Gas price multiplier (default: GasOption.Medium = 1.2x)
+ * @returns A tuple of [maxFeePerGas, maxPriorityFeePerGas] as bigints
+ */
 export async function fetchGasPrice(
 	provideRpc: string,
 	gasLevel: GasOption = GasOption.Medium,
@@ -540,6 +579,13 @@ export async function fetchGasPrice(
     }
 }
 
+/**
+ * Fetch current gas prices from the Polygon Gas Station API.
+ *
+ * @param polygonChain - Target Polygon chain (Mainnet, Amoy, etc.)
+ * @param gasLevel - Gas price level (Slow, Medium, Fast)
+ * @returns A tuple of [maxFeePerGas, maxPriorityFeePerGas] as bigints
+ */
 export async function fetchGasPricePolygon(
 	polygonChain: PolygonChain,
 	gasLevel: GasOption = GasOption.Medium,
@@ -582,6 +628,13 @@ export async function fetchGasPricePolygon(
     }
 }
 
+/**
+ * Calculate the maximum gas cost (in wei) that a UserOperation could consume.
+ * Uses different formulas for v0.6 (with paymaster multiplier) and v0.7+ UserOperations.
+ *
+ * @param useroperation - The UserOperation to calculate the max gas cost for
+ * @returns Maximum possible gas cost in wei as a bigint
+ */
 export function calculateUserOperationMaxGasCost(
 	useroperation: UserOperationV6 | UserOperationV7,
 ): bigint {
@@ -607,6 +660,9 @@ export function calculateUserOperationMaxGasCost(
 	}
 }
 
+/**
+ * Deposit information for an address in the EntryPoint contract.
+ */
 export type DepositInfo = {
     deposit: bigint;
     staked: boolean;
@@ -615,6 +671,14 @@ export type DepositInfo = {
     withdrawTime: bigint;
 };
 
+/**
+ * Get the deposit balance of an address in the EntryPoint contract.
+ *
+ * @param nodeRpcUrl - Ethereum JSON-RPC node URL
+ * @param address - Address to query the deposit for
+ * @param entrypointAddress - EntryPoint contract address
+ * @returns The deposit balance as a bigint
+ */
 export async function getBalanceOf(
 	nodeRpcUrl: string,
 	address: string,
@@ -626,6 +690,14 @@ export async function getBalanceOf(
     return depositInfo.deposit;
 }
 
+/**
+ * Get the full deposit info of an address from the EntryPoint contract.
+ *
+ * @param nodeRpcUrl - Ethereum JSON-RPC node URL
+ * @param address - Address to query
+ * @param entrypointAddress - EntryPoint contract address
+ * @returns DepositInfo with deposit, staked, stake, unstakeDelaySec, withdrawTime
+ */
 export async function getDepositInfo(
 	nodeRpcUrl: string,
 	address: string,
@@ -702,6 +774,15 @@ type EthCallTransaction = {
 	data?: string;
 };
 
+/**
+ * Send an eth_call JSON-RPC request with optional state overrides.
+ *
+ * @param nodeRpcUrl - Ethereum JSON-RPC node URL
+ * @param ethCallTransaction - The call transaction parameters
+ * @param blockNumber - Block number or "latest"
+ * @param stateOverrides - Optional state overrides for the call
+ * @returns The call result as a hex string
+ */
 export async function sendEthCallRequest(
 	nodeRpcUrl: string,
 	ethCallTransaction: EthCallTransaction,
@@ -750,6 +831,14 @@ export async function sendEthCallRequest(
 	}
 }
 
+/**
+ * Send an eth_getCode JSON-RPC request to check deployed bytecode.
+ *
+ * @param nodeRpcUrl - Ethereum JSON-RPC node URL
+ * @param contractAddress - Contract address to query
+ * @param blockNumber - Block number or "latest"
+ * @returns The deployed bytecode as a hex string
+ */
 export async function sendEthGetCodeRequest(
 	nodeRpcUrl: string,
 	contractAddress: string,
@@ -792,6 +881,14 @@ export async function sendEthGetCodeRequest(
 	}
 }
 
+/**
+ * Fetch gas prices using either the Polygon Gas Station or a standard JSON-RPC node.
+ *
+ * @param providerRpc - Ethereum JSON-RPC node URL (used if polygonGasStation is null)
+ * @param polygonGasStation - Polygon chain to use for gas station (takes priority)
+ * @param gasLevel - Gas price multiplier (default: GasOption.Medium)
+ * @returns A tuple of [maxFeePerGas, maxPriorityFeePerGas] as bigints
+ */
 export async function handlefetchGasPrice(
     providerRpc: string | undefined,
     polygonGasStation: PolygonChain | undefined,

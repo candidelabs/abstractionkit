@@ -12,14 +12,24 @@ import { Wallet, AbiCoder } from "ethers";
 import { SendUseroperationResponse } from "../SendUseroperationResponse";
 
 /**
- * Wrapper for a SimpleMetatransaction
+ * A minimal transaction object for EIP-7702 simple accounts.
+ * Represents a single call with a target address, ETH value, and calldata.
  */
 export interface SimpleMetaTransaction {
+	/** Target contract or EOA address */
 	to: string;
+	/** Amount of native token (in wei) to send with the call */
 	value: bigint;
+	/** ABI-encoded calldata, or "0x" for plain ETH transfers */
 	data: string;
 }
 
+/**
+ * Optional overrides for UserOperation fields when calling
+ * {@link BaseSimple7702Account.baseCreateUserOperation}.
+ * Any field left undefined will be auto-determined (nonce fetched from RPC,
+ * gas limits estimated via bundler, gas prices fetched from the network).
+ */
 export interface CreateUserOperationOverrides {
 	/** set the nonce instead of quering the current nonce from the rpc node */
 	nonce?: bigint;
@@ -50,11 +60,20 @@ export interface CreateUserOperationOverrides {
 	/** pass some state overrides for gas estimation"*/
 	state_override_set?: StateOverrideSet;
 
+	/** Override the dummy signature used during gas estimation */
 	dummySignature?: string;
 
+	/** Gas price level preference (e.g., slow, medium, fast) */
 	gasLevel?: GasOption;
+	/** Polygon chain identifier for fetching gas prices from Polygon Gas Station */
 	polygonGasStation?: PolygonChain;
 
+	/**
+	 * EIP-7702 authorization fields. When provided, the UserOperation
+	 * will include an authorization tuple that delegates the EOA to
+	 * the account's delegatee contract. If address/nonce are omitted,
+	 * defaults are used (delegateeAddress and fetched from RPC respectively).
+	 */
     eip7702Auth?:{
         chainId: bigint;
         address?: string;
@@ -65,21 +84,40 @@ export interface CreateUserOperationOverrides {
     };
 }
 
+/**
+ * Abstract base class for EIP-7702 simple smart accounts.
+ * Provides shared logic for creating, signing, and sending UserOperations
+ * using the SimpleAccount execute/executeBatch interface. Subclasses
+ * (e.g., {@link Simple7702Account}, {@link Simple7702AccountV09}) bind
+ * a specific EntryPoint version and delegatee address.
+ */
 export class BaseSimple7702Account extends SmartAccount {
+	/** Function selector for `execute(address,uint256,bytes)` */
 	static readonly executorFunctionSelector = "0xb61d27f6"; //execute
+	/** ABI parameter types for the single-call `execute` function */
 	static readonly executorFunctionInputAbi: string[] = [
         "address", //dest
         "uint256", //value
         "bytes", //func
     ];
+    /** Function selector for `executeBatch((address,uint256,bytes)[])` */
     static readonly batchExecutorFunctionSelector = "0x34fcd5be"; //executeBatch
+	/** ABI parameter types for the batch `executeBatch` function */
 	static readonly batchExecutorFunctionInputAbi = ["(address,uint256,bytes)[]"];
+    /** Dummy ECDSA signature used during gas estimation */
     static readonly dummySignature =
         "0xd2614025fc173b86704caf37b2fb447f7618101a0d31f5f304c777024cef38a060a29ee43fcf0c46f9107d4f670b8a85c2c017a1fe9e4af891f24f0be6ba5d671c";
 
+	/** The EntryPoint contract address this account targets */
 	readonly entrypointAddress: string;
+	/** The EIP-7702 delegatee (implementation) contract address */
 	readonly delegateeAddress: string;
 
+	/**
+	 * @param accountAddress - The EOA address that will be delegated via EIP-7702
+	 * @param entrypointAddress - The EntryPoint contract address
+	 * @param delegateeAddress - The EIP-7702 delegatee (implementation) contract address
+	 */
 	constructor(
 		accountAddress: string,
         entrypointAddress: string,
@@ -91,11 +129,11 @@ export class BaseSimple7702Account extends SmartAccount {
 	}
     
     /**
-	 * encode calldata to be executed
-	 * @param to - target address
-	 * @param value - amount of natic token to transafer to target address
-	 * @param data - calldata
-	 * @returns callData
+	 * Encode calldata for a single `execute(address,uint256,bytes)` call.
+	 * @param to - Target contract or EOA address
+	 * @param value - Amount of native token (in wei) to transfer
+	 * @param data - ABI-encoded calldata for the target
+	 * @returns Encoded calldata for the execute function
 	 */
     public static createAccountCallData(
 		to: string,
@@ -112,9 +150,9 @@ export class BaseSimple7702Account extends SmartAccount {
     }
     
     /**
-	 * encode calldata for a single SimpleMetaTransaction to be executed
-	 * @param metaTransaction - metaTransaction to create calldata for
-	 * @returns calldata
+	 * Encode calldata for a single {@link SimpleMetaTransaction} using `execute`.
+	 * @param metaTransaction - The transaction to encode
+	 * @returns Encoded calldata for the execute function
 	 */
     public static createAccountCallDataSingleTransaction(
 		metaTransaction: SimpleMetaTransaction,
@@ -130,9 +168,9 @@ export class BaseSimple7702Account extends SmartAccount {
 	}
 
     /**
-	 * encode calldata for a list of SimpleMetaTransactions to be executed
-	 * @param metaTransaction - metaTransaction to create calldata for
-	 * @returns calldata
+	 * Encode calldata for a batch of {@link SimpleMetaTransaction}s using `executeBatch`.
+	 * @param transactions - Array of transactions to batch
+	 * @returns Encoded calldata for the executeBatch function
 	 */
 	public static createAccountCallDataBatchTransactions(
         transactions: SimpleMetaTransaction[]
@@ -149,14 +187,15 @@ export class BaseSimple7702Account extends SmartAccount {
 	}
     
     /**
-	 * baseCreateUserOperation will determine the nonce, fetch the gas prices,
-	 * estimate gas limits and return a useroperation to be signed.
-	 * you can override all these values using the overrides parameter.
-	 * @param transactions - metatransaction list to be encoded
-	 * @param providerRpc - node rpc to fetch account nonce and gas prices
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param overrides - overrides for the default values
-	 * @returns promise with useroperation
+	 * Build an unsigned UserOperation from one or more transactions.
+	 * Determines nonce, fetches gas prices, estimates gas limits, and
+	 * optionally includes EIP-7702 authorization. All auto-determined
+	 * values can be overridden.
+	 * @param transactions - One or more transactions to encode into callData
+	 * @param providerRpc - JSON-RPC endpoint for nonce and gas price queries
+	 * @param bundlerRpc - Bundler RPC endpoint for gas estimation
+	 * @param overrides - Optional overrides for gas, nonce, and EIP-7702 auth fields
+	 * @returns A promise resolving to an unsigned UserOperation (v8 or v9)
 	 */
     protected async baseCreateUserOperation(
 		transactions: SimpleMetaTransaction[],
@@ -464,13 +503,13 @@ export class BaseSimple7702Account extends SmartAccount {
     }
     
     /**
-	 * estimate gas limits for a useroperation
-	 * @param userOperation - useroperation to estimate gas for
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param overrides - overrides for the default values
-	 * @param overrides.stateOverrideSet - state override values to set during gs estimation
-	 * @param overrides.dummySignature - a single eoa dummy signature
-	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
+	 * Estimate gas limits for a UserOperation via the bundler.
+	 * @param userOperation - The UserOperation to estimate gas for
+	 * @param bundlerRpc - Bundler RPC endpoint for gas estimation
+	 * @param overrides - Optional overrides
+	 * @param overrides.stateOverrideSet - State overrides to apply during estimation
+	 * @param overrides.dummySignature - Custom dummy ECDSA signature for estimation
+	 * @returns A promise resolving to `[preVerificationGas, verificationGasLimit, callGasLimit]`
 	 */
     protected async baseEstimateUserOperationGas(
 		userOperation: UserOperationV8 | UserOperationV9,
@@ -507,11 +546,12 @@ export class BaseSimple7702Account extends SmartAccount {
 	}
     
     /**
-	 * create a useroperation signature
-	 * @param useroperation - useroperation to sign
-	 * @param privateKeys - for the signers
-	 * @param chainId - target chain id
-	 * @returns signature
+	 * Sign a UserOperation with an EOA private key.
+	 * Computes the UserOperation hash and produces an ECDSA signature.
+	 * @param useroperation - The UserOperation to sign
+	 * @param privateKey - Hex-encoded private key of the EOA signer
+	 * @param chainId - Target chain ID
+	 * @returns Hex-encoded ECDSA signature
 	 */
     protected baseSignUserOperation(
 		useroperation: UserOperationV8 | UserOperationV9,
@@ -529,10 +569,10 @@ export class BaseSimple7702Account extends SmartAccount {
 	}
     
     /**
-	 * sends a useroperation to a bundler rpc
-	 * @param userOperation - useroperation to send
-	 * @param bundlerRpc - bundler rpc to send useroperation
-	 * @returns promise with SendUseroperationResponse
+	 * Submit a signed UserOperation to a bundler for on-chain inclusion.
+	 * @param userOperation - The signed UserOperation to submit
+	 * @param bundlerRpc - Bundler RPC endpoint
+	 * @returns A {@link SendUseroperationResponse} that can be used to wait for inclusion
 	 */
 	protected async baseSendUserOperation(
 		userOperation: UserOperationV8 | UserOperationV9,
@@ -552,14 +592,13 @@ export class BaseSimple7702Account extends SmartAccount {
 	}
 
     /**
-	 * a non static wrapper function for  prependTokenPaymasterApproveToCallDataStatic
-	 * which adds a token approve call to the call data for a token paymaster
-	 * @param callData - calldata to be added to, if after decoding it is not
-	 * a multisend transaction, it will be encoded as a batch transaction
-	 * @param tokenAddress - token to add approve for
-	 * @param paymasterAddress - paymaster to add approve for
-	 * @param approveAmount - amount to add approve for
-	 * @returns callData
+	 * Prepend a token `approve` call to existing calldata for a token paymaster.
+	 * Instance wrapper for {@link BaseSimple7702Account.prependTokenPaymasterApproveToCallDataStatic}.
+	 * @param callData - Existing encoded calldata (execute or executeBatch)
+	 * @param tokenAddress - ERC-20 token contract to approve
+	 * @param paymasterAddress - Paymaster address to approve as spender
+	 * @param approveAmount - Token amount to approve
+	 * @returns Re-encoded calldata with the approve transaction prepended as a batch
 	 */
 	public prependTokenPaymasterApproveToCallData(
 		callData: string,
@@ -576,13 +615,14 @@ export class BaseSimple7702Account extends SmartAccount {
 	}
 
     /**
-	 * adds a token approve call to the call data for a token paymaster
-	 * @param callData - calldata to be added to, if after decoding it is not
-	 * a multisend transaction, it will be encoded as a batch transaction
-	 * @param tokenAddress - token to add approve for
-	 * @param paymasterAddress - paymaster to add approve for
-	 * @param approveAmount - amount to add approve for
-	 * @returns callData
+	 * Prepend a token `approve` call to existing calldata for a token paymaster.
+	 * Decodes the existing calldata, prepends an ERC-20 approve transaction,
+	 * and re-encodes as a batch via `executeBatch`.
+	 * @param callData - Existing encoded calldata (execute or executeBatch)
+	 * @param tokenAddress - ERC-20 token contract to approve
+	 * @param paymasterAddress - Paymaster address to approve as spender
+	 * @param approveAmount - Token amount to approve
+	 * @returns Re-encoded calldata with the approve transaction prepended as a batch
 	 */
 	public static prependTokenPaymasterApproveToCallDataStatic(
 		callData: string,
@@ -651,9 +691,18 @@ export class BaseSimple7702Account extends SmartAccount {
 }
 
 /**
- * Simple7702Account with entrypoint v0.08
+ * EIP-7702 simple smart account targeting EntryPoint v0.8
+ * (`0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108`).
+ * Wraps {@link BaseSimple7702Account} with concrete types for
+ * {@link UserOperationV8} and sensible defaults for the delegatee address.
  */
 export class Simple7702Account extends BaseSimple7702Account {
+	/**
+	 * @param accountAddress - The EOA address that will be delegated via EIP-7702
+	 * @param overrides - Optional overrides for entrypoint and delegatee addresses
+	 * @param overrides.entrypointAddress - Custom EntryPoint address (defaults to EntryPoint v0.8)
+	 * @param overrides.delegateeAddress - Custom delegatee contract address
+	 */
 	constructor(
 		accountAddress: string,
         overrides: {
@@ -669,14 +718,14 @@ export class Simple7702Account extends BaseSimple7702Account {
 	}
 
     /**
-	 * baseCreateUserOperation will determine the nonce, fetch the gas prices,
-	 * estimate gas limits and return a useroperation to be signed.
-	 * you can override all these values using the overrides parameter.
-	 * @param transactions - metatransaction list to be encoded
-	 * @param providerRpc - node rpc to fetch account nonce and gas prices
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param overrides - overrides for the default values
-	 * @returns promise with useroperation
+	 * Create a {@link UserOperationV8} for EntryPoint v0.8.
+	 * Determines nonce, fetches gas prices, estimates gas limits, and returns
+	 * an unsigned UserOperation. All auto-determined values can be overridden.
+	 * @param transactions - One or more transactions to encode into callData
+	 * @param providerRpc - JSON-RPC endpoint for nonce and gas price queries
+	 * @param bundlerRpc - Bundler RPC endpoint for gas estimation
+	 * @param overrides - Optional overrides for gas, nonce, and EIP-7702 auth fields
+	 * @returns A promise resolving to an unsigned {@link UserOperationV8}
 	 */
     public async createUserOperation(
 		transactions: SimpleMetaTransaction[],
@@ -693,13 +742,13 @@ export class Simple7702Account extends BaseSimple7702Account {
     }
 
     /**
-	 * estimate gas limits for a useroperation
-	 * @param userOperation - useroperation to estimate gas for
-	 * @param bundlerRpc - bundler rpc for gas estimation
-	 * @param overrides - overrides for the default values
-	 * @param overrides.stateOverrideSet - state override values to set during gs estimation
-	 * @param overrides.dummySignature - a single eoa dummy signature
-	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
+	 * Estimate gas limits for a {@link UserOperationV8}.
+	 * @param userOperation - The UserOperation to estimate gas for
+	 * @param bundlerRpc - Bundler RPC endpoint for gas estimation
+	 * @param overrides - Optional overrides
+	 * @param overrides.stateOverrideSet - State overrides to apply during estimation
+	 * @param overrides.dummySignature - Custom dummy signature for estimation
+	 * @returns A promise resolving to `[preVerificationGas, verificationGasLimit, callGasLimit]`
 	 */
     public async estimateUserOperationGas(
 		userOperation: UserOperationV8,
@@ -717,11 +766,12 @@ export class Simple7702Account extends BaseSimple7702Account {
     }
 
     /**
-	 * create a useroperation signature
-	 * @param useroperation - useroperation to sign
-	 * @param privateKeys - for the signers
-	 * @param chainId - target chain id
-	 * @returns signature
+	 * Sign a {@link UserOperationV8} with an EOA private key.
+	 * Computes the UserOperation hash and produces an ECDSA signature.
+	 * @param useroperation - The UserOperation to sign
+	 * @param privateKey - Hex-encoded private key of the EOA signer
+	 * @param chainId - Target chain ID
+	 * @returns Hex-encoded ECDSA signature
 	 */
     public signUserOperation(
 		useroperation: UserOperationV8,
@@ -732,10 +782,10 @@ export class Simple7702Account extends BaseSimple7702Account {
     }
 
     /**
-	 * sends a useroperation to a bundler rpc
-	 * @param userOperation - useroperation to send
-	 * @param bundlerRpc - bundler rpc to send useroperation
-	 * @returns promise with SendUseroperationResponse
+	 * Send a signed {@link UserOperationV8} to a bundler for on-chain inclusion.
+	 * @param userOperation - The signed UserOperation to submit
+	 * @param bundlerRpc - Bundler RPC endpoint
+	 * @returns A {@link SendUseroperationResponse} that can be used to wait for inclusion
 	 */
 	public async sendUserOperation(
 		userOperation: UserOperationV8,

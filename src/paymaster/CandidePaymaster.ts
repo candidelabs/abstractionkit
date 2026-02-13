@@ -29,7 +29,21 @@ import { Bundler } from "src/Bundler";
 import { AbstractionKitError, ensureError } from "src/errors";
 import { ENTRYPOINT_V8, ENTRYPOINT_V7, ENTRYPOINT_V6 } from "src/constants";
 
+/**
+ * Client for the Candide Paymaster service.
+ * Supports both gas sponsorship (sponsor paymaster) and ERC-20 token payment for gas (token paymaster).
+ * Auto-initializes on first use by fetching supported tokens and metadata from the paymaster RPC.
+ *
+ * Candide's paymaster endpoint follows the format:
+ * - `https://api.candide.dev/api/v3/{chainId}/{apiKey}` (authenticated)
+ * - `https://api.candide.dev/public/v3/{chainId}` (public, no key required)
+ *
+ * @example
+ * const paymaster = new CandidePaymaster("https://api.candide.dev/public/v3/11155111");
+ * const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(userOp, bundlerRpcUrl);
+ */
 export class CandidePaymaster extends Paymaster {
+	/** The paymaster JSON-RPC endpoint URL */
 	readonly rpcUrl: string;
 	private version: "v3" | "v2" | undefined;
 	private entrypointDataV8: SupportedERC20TokensAndMetadataV8 | undefined;
@@ -37,15 +51,18 @@ export class CandidePaymaster extends Paymaster {
 	private entrypointDataV6: SupportedERC20TokensAndMetadataV6 | undefined;
 	private initialized = false;
 
+	/** @param rpcUrl - The Candide paymaster JSON-RPC endpoint URL */
 	constructor(rpcUrl: string) {
 		super();
 		this.rpcUrl = rpcUrl;
 	}
 
 	/**
-	 * initialize the paymaster object the paymaster supported tokens,
-	 * entrypoint and metadata from the bundler url
+	 * Fetch and cache the paymaster's supported tokens, EntryPoint addresses, and metadata.
+	 * Called automatically on first use of other methods.
+	 *
 	 * @returns null
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if initialization fails
 	 */
 	private async initialize(): Promise<null> {
 		try {
@@ -246,8 +263,10 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * gets the entrypoints that the paymaster supports,
-	 * @returns a promise of a list of entrypoints addresses
+	 * Get the EntryPoint addresses supported by this paymaster.
+	 * Auto-initializes if not yet initialized.
+	 *
+	 * @returns Array of supported EntryPoint contract addresses
 	 */
 	async getSupportedEntrypoints(): Promise<string[]> {
 		if (!this.initialized) {
@@ -266,6 +285,14 @@ export class CandidePaymaster extends Paymaster {
 		return supportedEntrypoints;
 	}
 
+	/**
+	 * Get the paymaster contract metadata for a specific EntryPoint.
+	 * Auto-initializes if not yet initialized.
+	 *
+	 * @param entrypoint - Target EntryPoint address
+	 * @returns The paymaster metadata (name, address, icons, dummyPaymasterAndData, etc.)
+	 * @throws RangeError if the entrypoint is not supported
+	 */
 	async getPaymasterMetaData(
 		entrypoint: string,
 	): Promise<PaymasterMetadataV8 | PaymasterMetadataV7 | PaymasterMetadataV6 | null> {
@@ -285,10 +312,11 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * check if the token paymaster accepts an erc20 token
-	 * @param erc20TokenAddress - token address to check if supported
-	 * @param entrypoint - target entrypoint address
-	 * @returns a promise of a boolean(true if the token is supported)
+	 * Check if the token paymaster supports a given ERC-20 token for gas payment.
+	 *
+	 * @param erc20TokenAddress - The ERC-20 token contract address to check
+	 * @param entrypoint - Target EntryPoint address (default: ENTRYPOINT_V7)
+	 * @returns true if the token is supported, false otherwise
 	 */
 	async isSupportedERC20Token(
 		erc20TokenAddress: string,
@@ -306,10 +334,12 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * get the paymaster token data
-	 * @param erc20TokenAddress - token to get data for
-	 * @param entrypoint - target entrypoint address
-	 * @returns promise of ERC20Token or null
+	 * Get the paymaster's data for a specific ERC-20 token.
+	 *
+	 * @param erc20TokenAddress - The ERC-20 token contract address
+	 * @param entrypoint - Target EntryPoint address (default: ENTRYPOINT_V7)
+	 * @returns The token data (name, symbol, address, decimals), or null if not supported
+	 * @throws RangeError if the entrypoint is not supported
 	 */
 	async getSupportedERC20TokenData(
 		erc20TokenAddress: string,
@@ -348,15 +378,16 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * createPaymasterUserOperation will estimate gas and set paymasterAndData.
-	 * gas limits will only change if the estimated gas limits returned by
-	 * the bundler is more than the input gas limits, then gas overrides
-	 * and multipliers will be applied
-	 * @param userOperation - User operation that requests the paymaster sponsorship
-	 * @param bundlerRpc - Bundler endpoint rpc url
-	 * @param context - Paymaster context data
-	 * @param overrides - Overrides for the default values
-	 * @returns a promise of [UserOperationV8 | UserOperationV7 | UserOperationV6, SponsorMetadata | undefined]
+	 * Estimate gas, set paymaster fields, and return a paymaster-ready UserOperation.
+	 * Gas limits will only increase if the bundler estimation exceeds the input values.
+	 * Gas overrides and multipliers are applied after estimation.
+	 *
+	 * @param userOperation - The UserOperation to sponsor
+	 * @param bundlerRpc - Bundler RPC URL for gas estimation
+	 * @param context - Paymaster context (e.g., `{ token: "0x..." }` for token paymaster)
+	 * @param overrides - Override gas limits and multipliers
+	 * @returns A tuple of [UserOperation, SponsorMetadata | undefined]
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
 	 */
 	async createPaymasterUserOperation(
 		userOperation: UserOperationV8,
@@ -659,13 +690,15 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * createSponsorPaymasterUserOperation will request sponsorship from the paymaster and fill
-	 * all paymaster fields and gas fields for the UserOperation
-	 * @param userOperation - User operation that requests the paymaster sponsorship
-	 * @param bundlerRpc - Bundler endpoint rpc url
-	 * @param sponsorshipPolicyId - Sponsorship policy ID
-	 * @param overrides - Overrides for the paymaster operation
-	 * @returns promise with [UserOperationV6 | UserOperationV7 | UserOperationV8, SponsorMetadata | undefined]
+	 * Create a gas-sponsored UserOperation (no token payment required).
+	 * Convenience wrapper around createPaymasterUserOperation with sponsor context.
+	 *
+	 * @param userOperation - The UserOperation to sponsor
+	 * @param bundlerRpc - Bundler RPC URL for gas estimation
+	 * @param sponsorshipPolicyId - Optional sponsorship policy ID
+	 * @param overrides - Override gas limits and multipliers
+	 * @returns A tuple of [UserOperation, SponsorMetadata | undefined]
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
 	 */
 	async createSponsorPaymasterUserOperation(
 		userOperation: UserOperationV8,
@@ -725,14 +758,16 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
-	 * createPaymasterUserOperation will request sponsorship from the paymaster using the token provided and fill
-	 * all paymaster fields and gas fields for the UserOperation
-	 * @param smartAccount - Smart Account object that created the userOperation
-	 * @param userOperation - User operation that requests the paymaster token sponsorship
-	 * @param tokenAddress - Target token to pay gas with
-	 * @param bundlerRpc - Bundler endpoint rpc url
-	 * @param overrides - Overrides for the paymaster operation
-	 * @returns a promise with UserOperationV8 | UserOperationV7 | UserOperationV6
+	 * Create a UserOperation that pays for gas with an ERC-20 token.
+	 * Automatically prepends a token approval to the calldata and sets paymaster fields.
+	 *
+	 * @param smartAccount - The smart account instance (must implement prependTokenPaymasterApproveToCallData)
+	 * @param userOperation - The UserOperation to modify for token payment
+	 * @param tokenAddress - The ERC-20 token contract address to pay gas with
+	 * @param bundlerRpc - Bundler RPC URL for gas estimation
+	 * @param overrides - Override gas limits and multipliers
+	 * @returns The UserOperation with token approval prepended and paymaster fields set
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the token is not supported
 	 */
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
@@ -849,6 +884,16 @@ export class CandidePaymaster extends Paymaster {
 		}
 	}
 
+	/**
+	 * Calculate the maximum ERC-20 token cost for a UserOperation's gas.
+	 * Uses the token's exchange rate from the paymaster to convert from wei.
+	 *
+	 * @param userOperation - The UserOperation to calculate the cost for
+	 * @param erc20TokenAddress - The ERC-20 token contract address
+	 * @param overrides - Optional entrypoint override
+	 * @returns Maximum token cost as a bigint (in token's smallest unit)
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the token is not supported
+	 */
 	async calculateUserOperationErc20TokenMaxGasCost(
 		userOperation: UserOperationV8 | UserOperationV7 | UserOperationV6,
 		erc20TokenAddress: string,
@@ -887,6 +932,14 @@ export class CandidePaymaster extends Paymaster {
 		}
 	}
 
+	/**
+	 * Fetch the current exchange rate for an ERC-20 token from the paymaster.
+	 *
+	 * @param erc20TokenAddress - The ERC-20 token contract address
+	 * @param entrypoint - Target EntryPoint address (default: ENTRYPOINT_V7)
+	 * @returns The exchange rate as a bigint
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the token is not supported
+	 */
 	async fetchTokenPaymasterExchangeRate(
 		erc20TokenAddress: string,
 		entrypoint: string = ENTRYPOINT_V7,
@@ -962,6 +1015,14 @@ export class CandidePaymaster extends Paymaster {
 		}
 	}
 
+	/**
+	 * Fetch fresh supported ERC-20 tokens with exchange rates and paymaster metadata.
+	 * Unlike the cached version, this always makes an RPC call.
+	 *
+	 * @param entrypoint - Target EntryPoint address (default: ENTRYPOINT_V7)
+	 * @returns Supported tokens with exchange rates and paymaster metadata
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the call fails
+	 */
 	async fetchSupportedERC20TokensAndPaymasterMetadata(
 		entrypoint: string = ENTRYPOINT_V7,
 	): Promise<

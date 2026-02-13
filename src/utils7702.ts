@@ -7,24 +7,56 @@ import {
 
 const SET_CODE_TX_TYPE = "0x04";
 
+/**
+ * An EIP-7702 delegation authorization with bigint values.
+ * Represents a signed authorization that delegates an EOA's code to a contract.
+ */
 export type Authorization7702 = {
+    /** The chain ID the authorization is valid for. */
     chainId: bigint,
+    /** The contract address to delegate code from. */
     address: string,
+    /** The EOA's nonce at the time of signing. */
     nonce: bigint,
+    /** The parity of the signature's y-coordinate (0 or 1). */
     yParity: 0 | 1,
+    /** The r component of the ECDSA signature. */
     r: bigint,
+    /** The s component of the ECDSA signature. */
     s: bigint
 };
 
+/**
+ * An EIP-7702 delegation authorization with hex-encoded string values.
+ * Same as {@link Authorization7702} but with all numeric fields as hex strings.
+ */
 export type Authorization7702Hex = {
+    /** The chain ID as a hex string. */
     chainId: string,
+    /** The contract address to delegate code from. */
     address: string,
+    /** The EOA's nonce as a hex string. */
     nonce: string,
+    /** The parity of the signature's y-coordinate as a hex string. */
     yParity: string,
+    /** The r component of the ECDSA signature as a hex string. */
     r: string,
+    /** The s component of the ECDSA signature as a hex string. */
     s: string
 };
 
+/**
+ * Creates and signs a legacy (pre-EIP-1559) raw transaction using RLP encoding.
+ * @param chainId - The chain ID for replay protection.
+ * @param nonce - The sender's transaction nonce.
+ * @param gas_price - The gas price in wei.
+ * @param gas_limit - The maximum gas units for the transaction.
+ * @param destination - The recipient address (42-character hex string).
+ * @param value - The amount of ETH to send in wei.
+ * @param data - The transaction input data.
+ * @param eoaPrivateKey - The sender's private key for signing.
+ * @returns The RLP-encoded signed transaction as a hex string.
+ */
 export function createAndSignLegacyRawTransaction(
     chainId: bigint,
     nonce: bigint,
@@ -82,6 +114,15 @@ export function createAndSignLegacyRawTransaction(
     return transactionPayload;
 }
 
+/**
+ * Creates and signs an EIP-7702 delegation authorization.
+ * The authorization allows an EOA to delegate its code to a specified contract address.
+ * @param chainId - The chain ID the authorization is valid for.
+ * @param address - The contract address to delegate code from.
+ * @param nonce - The EOA's nonce at the time of signing.
+ * @param eoaPrivateKey - The EOA's private key for signing.
+ * @returns The signed authorization with all numeric values as hex strings.
+ */
 export function createAndSignEip7702DelegationAuthorization(
     chainId: bigint,
     address: string,
@@ -101,6 +142,14 @@ export function createAndSignEip7702DelegationAuthorization(
     };
 }
 
+/**
+ * Computes the keccak256 hash of an EIP-7702 delegation authorization.
+ * Uses the MAGIC prefix (0x05) as defined in the EIP-7702 spec.
+ * @param chainId - The chain ID the authorization is valid for.
+ * @param address - The contract address to delegate code from.
+ * @param nonce - The EOA's nonce at the time of signing.
+ * @returns The authorization hash as a hex string.
+ */
 export function createEip7702DelegationAuthorizationHash(
     chainId: bigint,
     address: string,
@@ -116,6 +165,12 @@ export function createEip7702DelegationAuthorizationHash(
     return keccak256(MAGIC + encoded_auth.slice(2));
 }
 
+/**
+ * Signs a hash using an EOA's private key.
+ * @param authHash - The hash to sign.
+ * @param eoaPrivateKey - The EOA's private key for signing.
+ * @returns An object containing the signature components: yParity, r, and s.
+ */
 export function signHash(
     authHash: string,
     eoaPrivateKey: string
@@ -131,6 +186,22 @@ export function signHash(
     };
 }
 
+/**
+ * Creates and signs an EIP-7702 (set-code) raw transaction.
+ * Encodes the transaction with a type 0x04 prefix and includes the authorization list.
+ * @param chainId - The chain ID for replay protection.
+ * @param nonce - The sender's transaction nonce.
+ * @param max_priority_fee_per_gas - The maximum priority fee per gas (tip) in wei.
+ * @param max_fee_per_gas - The maximum total fee per gas in wei.
+ * @param gas_limit - The maximum gas units for the transaction.
+ * @param destination - The recipient address (42-character hex string).
+ * @param value - The amount of ETH to send in wei.
+ * @param data - The transaction input data.
+ * @param access_list - The EIP-2930 access list as [address, storageKeys] tuples.
+ * @param authorization_list - The list of signed EIP-7702 delegation authorizations.
+ * @param eoaPrivateKey - The sender's private key for signing.
+ * @returns The signed, RLP-encoded transaction with 0x04 type prefix.
+ */
 export function createAndSignEip7702RawTransaction(
     chainId: bigint,
     nonce: bigint,
@@ -182,6 +253,20 @@ export function createAndSignEip7702RawTransaction(
 }
 
 
+/**
+ * Computes the keccak256 hash of an EIP-7702 transaction for signing.
+ * @param chainId - The chain ID for replay protection.
+ * @param nonce - The sender's transaction nonce.
+ * @param max_priority_fee_per_gas - The maximum priority fee per gas (tip) in wei.
+ * @param max_fee_per_gas - The maximum total fee per gas in wei.
+ * @param gas_limit - The maximum gas units for the transaction.
+ * @param destination - The recipient address (42-character hex string).
+ * @param value - The amount of ETH to send in wei.
+ * @param data - The transaction input data.
+ * @param access_list - The EIP-2930 access list as [address, storageKeys] tuples.
+ * @param authorization_list - The list of signed EIP-7702 delegation authorizations.
+ * @returns The transaction hash as a hex string.
+ */
 export function createEip7702TransactionHash(
     chainId: bigint,
     nonce: bigint,
@@ -210,6 +295,10 @@ export function createEip7702TransactionHash(
     return keccak256(SET_CODE_TX_TYPE + encodeRlp(payload).slice(2));
 }
 
+/**
+ * Encodes the base RLP list for an EIP-7702 transaction (without signature fields).
+ * Used internally to build the payload that gets hashed and signed.
+ */
 function encodeEip7702TransactionBaseList(
     chainId: bigint,
     nonce: bigint,
@@ -252,6 +341,7 @@ function encodeEip7702TransactionBaseList(
     return payload;
 }
 
+/** Encodes an array of EIP-7702 authorizations into RLP-compatible nested arrays. */
 function encodeAuthList(authorization_list: Authorization7702[]){
     let encoded_auth_list = [];
     for (const auth of authorization_list){
@@ -271,6 +361,7 @@ function encodeAuthList(authorization_list: Authorization7702[]){
     return encoded_auth_list;
 }
 
+/** Encodes an EIP-2930 access list into RLP-compatible nested arrays. */
 function encodeAccessList(access_list: [string, string[]][]){
     let encoded_access_list = [];
     for (const [access_add, storage_arr] of access_list){
@@ -291,11 +382,17 @@ function encodeAccessList(access_list: [string, string[]][]){
     return encoded_access_list;
 }
 
+/** Converts a bigint to a Uint8Array of its big-endian byte representation. */
 function bigintToBytes(bi: bigint){
     return getBytes(toBeArray(bi))
 }
 
 
+/**
+ * Converts a bigint to a 0x-prefixed hex string with even-length padding.
+ * @param value - The bigint value to convert.
+ * @returns The hex string representation (e.g., "0x01", "0xff").
+ */
 export function bigintToHex(value: bigint): string {
     let hex = value.toString(16);
     return hex.length % 2 ? "0x0" + hex : "0x" + hex;

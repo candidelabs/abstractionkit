@@ -2,17 +2,35 @@ import { SafeModule } from "./SafeModule";
 import { createCallData, sendEthCallRequest } from "../../../utils";
 import { MetaTransaction } from "../../../types";
 
+/**
+ * Pre-deployed Social Recovery Module addresses, each with a different
+ * grace period before a confirmed recovery can be finalized.
+ */
 export enum SocialRecoveryModuleGracePeriodSelector {
+	/** 3-minute grace period (useful for testing). */
 	After3Minutes = "0x949d01d424bE050D09C16025dd007CB59b3A8c66",
+	/** 3-day grace period. */
 	After3Days = "0x38275826E1933303E508433dD5f289315Da2541c",
+	/** 7-day grace period. */
 	After7Days = "0x088f6cfD8BB1dDb1BB069CCb3fc1A98927D233f2",
+	/** 14-day grace period. */
 	After14Days = "0x9BacD92F4687Db306D7ded5d4513a51EA05df25b",
 }
 
+/**
+ * Safe module for social recovery with guardians. Allows designated guardians
+ * to replace the owners of a Safe account when the original keys are lost.
+ * Guardians must reach a configurable approval threshold before recovery
+ * can be executed, and a grace period must elapse before finalization.
+ */
 export class SocialRecoveryModule extends SafeModule{
     static readonly DEFAULT_SOCIAL_RECOVERY_ADDRESS =
         SocialRecoveryModuleGracePeriodSelector.After3Days;
 
+    /**
+     * @param moduleAddress - Deployed address of the Social Recovery Module.
+     *   Defaults to the 3-day grace period deployment.
+     */
     constructor(
 		moduleAddress: string = SocialRecoveryModule.DEFAULT_SOCIAL_RECOVERY_ADDRESS,
 	) {
@@ -640,34 +658,62 @@ export class SocialRecoveryModule extends SafeModule{
 	}
 }
 
+/**
+ * Represents an ongoing recovery request for a Safe account.
+ */
 export type RecoveryRequest  = {
+    /** Number of guardians that have approved this recovery request. */
     guardiansApprovalCount:bigint;
+    /** The new owner threshold that will be set after recovery. */
     newThreshold:bigint;
+    /** Unix timestamp (seconds) after which the recovery can be finalized. 0 if not yet executed. */
     executeAfter:bigint;
+    /** The list of new owner addresses that will replace the current owners. */
     newOwners:string[];
 }
 
+/**
+ * A guardian address paired with its EIP-712 signature authorizing a recovery.
+ */
 export type RecoverySignaturePair  = {
+    /** Guardian address that produced the signature. */
     signer:string;
+    /** Hex-encoded signature bytes. */
     signature:string;
 }
 
+/** EIP-712 primary type string used when signing recovery requests. */
 export const EXECUTE_RECOVERY_PRIMARY_TYPE = "ExecuteRecovery";
 
+/**
+ * EIP-712 domain separator fields for signing recovery requests.
+ */
 export type RecoveryRequestTypedDataDomain = {
+    /** Domain name, always "Social Recovery Module". */
     name: string;
+    /** Domain version, e.g. "0.0.1". */
     version: string;
+    /** Chain ID of the target network. */
 	chainId: number;
+    /** Address of the Social Recovery Module contract. */
 	verifyingContract: string;
 }
 
+/**
+ * EIP-712 structured message values for a recovery request signature.
+ */
 export type RecoveryRequestTypedMessageValue = {
+    /** Address of the Safe account being recovered. */
 	wallet: string;
+    /** New owner addresses to set after recovery. */
 	newOwners: string[];
+    /** New Safe threshold to set after recovery. */
 	newThreshold: bigint;
+    /** Recovery nonce for replay protection. */
 	nonce: bigint;
 }
 
+/** EIP-712 type definitions for the `ExecuteRecovery` primary type. */
 export const EIP712_RECOVERY_MODULE_TYPE = {
     ExecuteRecovery: [
       { type: "address", name: "wallet" },

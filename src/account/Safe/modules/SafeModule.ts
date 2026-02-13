@@ -3,10 +3,17 @@ import { MetaTransaction } from "../../../types";
 import { SafeAccount } from "../SafeAccount";
 import { AbiCoder } from "ethers";
 
+/**
+ * Abstract base class for Safe modules. Provides shared utilities for
+ * encoding calldata, enabling the module, and validating on-chain results.
+ */
 export abstract class SafeModule {
 	readonly moduleAddress: string;
     protected readonly abiCoder:AbiCoder;
 
+	/**
+	 * @param moduleAddress - The deployed address of the Safe module contract.
+	 */
 	constructor(moduleAddress: string) {
 		this.moduleAddress = moduleAddress;
         this.abiCoder = AbiCoder.defaultAbiCoder();
@@ -26,6 +33,12 @@ export abstract class SafeModule {
         );
     }
 
+    /**
+     * Throws if the RPC call returned empty data (`0x`), which typically
+     * indicates the module contract is not deployed at the expected address.
+     * @param result - The raw hex result from an `eth_call`.
+     * @param requestName - Name of the calling method, used in the error message.
+     */
     public checkForEmptyResultAndRevert(
         result: string, requestName: string
     ): void {

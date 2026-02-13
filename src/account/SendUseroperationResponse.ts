@@ -2,11 +2,27 @@ import { Bundler } from "src/Bundler";
 import { AbstractionKitError } from "src/errors";
 import { UserOperationReceiptResult } from "src/types";
 
+/**
+ * Response object returned after submitting a UserOperation to a bundler.
+ * Provides the `included()` method to poll for on-chain inclusion.
+ *
+ * @example
+ * const response = await smartAccount.sendUserOperation(userOp, bundlerRpc);
+ * const receipt = await response.included();
+ */
 export class SendUseroperationResponse {
+	/** The hash of the submitted UserOperation */
 	readonly userOperationHash: string;
+	/** The bundler client used for polling */
 	readonly bundler: Bundler;
+	/** The EntryPoint address the operation was submitted to */
 	readonly entrypointAddress: string;
 
+	/**
+	 * @param userOperationHash - The hash of the submitted UserOperation
+	 * @param bundler - The bundler client to use for polling
+	 * @param entrypointAddress - The EntryPoint address
+	 */
 	constructor(
 		userOperationHash: string,
 		bundler: Bundler,
@@ -22,11 +38,13 @@ export class SendUseroperationResponse {
 	}
 
 	/**
-	 * Query the bundler for the useroperation receipt repeatedly
-	 * and return when successful or timeout
-	 * @param timeoutInSeconds - number of seconds to stop trying after
-	 * @param requestIntervalInSeconds - time between getUserOperationReceipt request
-	 * @returns UserOperationReceiptResult
+	 * Poll the bundler for the UserOperation receipt until it is included on-chain or times out.
+	 *
+	 * @param timeoutInSeconds - Maximum time to wait for inclusion (default: 180s)
+	 * @param requestIntervalInSeconds - Time between polling requests (default: 2s)
+	 * @returns The UserOperation receipt once included
+	 * @throws RangeError if timeout or interval are <= 0, or timeout < interval
+	 * @throws AbstractionKitError with code "TIMEOUT" if the operation is not found within the timeout
 	 */
 	async included(
 		timeoutInSeconds: number = 180,

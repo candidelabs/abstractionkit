@@ -1,7 +1,11 @@
 import { keccak256 } from "ethers";
 
 /**
- * Hashes two values together using keccak256
+ * Hashes two values together using keccak256, sorting them so the smaller
+ * value is always first to ensure consistent ordering.
+ * @param left - The first hash value.
+ * @param right - The second hash value.
+ * @returns The keccak256 hash of the sorted pair.
  */
 function hashPair(left: string, right: string): string {
     if(left < right){
