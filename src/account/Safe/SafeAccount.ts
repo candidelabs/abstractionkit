@@ -1732,6 +1732,7 @@ export class SafeAccount extends SmartAccount {
                                 eip7212WebAuthnContractVerifier,
                                 webAuthnSignerFactory,
                                 webAuthnSignerSingleton,
+                                webAuthnSignerProxyCreationCode,
                                 validAfter,
                                 validUntil,
                             }
@@ -2833,7 +2834,7 @@ export class SafeAccount extends SmartAccount {
                         "Must define isInit parameter when using WebAuthn",
                     );
                 }
-                signerSignaturePair = WebauthnDummySignerSignaturePair;
+                signerSignaturePair = { ...WebauthnDummySignerSignaturePair };
                 if (webAuthnSignatureOverrides.isInit) {
                     const webauthnsharedsigner =
                         webAuthnSignatureOverrides.webAuthnSharedSigner ??
