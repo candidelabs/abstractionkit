@@ -78,7 +78,7 @@ export function generateMerkleProofs(hashes: string[]): [string, string[]] {
       currentIndex = Math.floor(currentIndex / 2);
     }
     let proof = root;
-    proofArr.forEach((proofElement) =>{
+    proofArr.reverse().forEach((proofElement) =>{
         proof += proofElement.slice(2);
     });
     return proof;
