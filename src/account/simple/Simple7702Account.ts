@@ -697,6 +697,8 @@ export class BaseSimple7702Account extends SmartAccount {
  * {@link UserOperationV8} and sensible defaults for the delegatee address.
  */
 export class Simple7702Account extends BaseSimple7702Account {
+	static readonly DEFAULT_DELEGATEE_ADDRESS = "0xe6Cae83BdE06E4c305530e199D7217f42808555B";
+
 	/**
 	 * @param accountAddress - The EOA address that will be delegated via EIP-7702
 	 * @param overrides - Optional overrides for entrypoint and delegatee addresses
@@ -713,7 +715,7 @@ export class Simple7702Account extends BaseSimple7702Account {
 		super(
             accountAddress,
             overrides.entrypointAddress ?? ENTRYPOINT_V8,
-            overrides.delegateeAddress ?? "0xe6Cae83BdE06E4c305530e199D7217f42808555B"
+            overrides.delegateeAddress ?? Simple7702Account.DEFAULT_DELEGATEE_ADDRESS
         );
 	}
 
