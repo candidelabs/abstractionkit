@@ -10,6 +10,17 @@
 	"module": "dist/index.m.js",
 	"unpkg": "dist/index.umd.js",
 	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.m.js",
+			"default": "./dist/index.js"
+		},
+		"./dist/account/Safe/safeMessage": {
+			"types": "./dist/abstractionkit.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
 	"scripts": {
 		"build": "rimraf dist && microbundle --tsconfig tsconfig.json --no-sourcemap",
 		"clean": "rimraf dist",

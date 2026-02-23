@@ -125,6 +125,12 @@ export {
     DEFAULT_SECP256R1_PRECOMPILE_ADDRESS
 } from "./constants";
 
-export * from "./account/Safe/safeMessage";
+export {
+	SAFE_MESSAGE_PRIMARY_TYPE,
+	SAFE_MESSAGE_MODULE_TYPE,
+	type SafeMessageTypedDataDomain,
+	type SafeMessageTypedMessageValue,
+	getSafeMessageEip712Data,
+} from "./account/Safe/safeMessage";
 
 export { AbstractionKitError } from "./errors";
