@@ -1,0 +1,1110 @@
+import { SmartAccount } from "../SmartAccount";
+import { BaseUserOperationDummyValues, ENTRYPOINT_V8, ZeroAddress } from "src/constants";
+import {
+	createCallData, createUserOperationHash, fetchAccountNonce,
+	getFunctionSelector, handlefetchGasPrice, sendJsonRpcRequest
+} from "../../utils";
+import { GasOption, PolygonChain, StateOverrideSet, UserOperationV8 } from "src/types";
+import { AbstractionKitError } from "src/errors";
+import { Authorization7702Hex, bigintToHex } from "src/utils7702";
+import { Bundler } from "src/Bundler";
+import { Wallet, AbiCoder, keccak256 } from "ethers";
+import { SendUseroperationResponse } from "../SendUseroperationResponse";
+import { SimpleMetaTransaction } from "../simple/Simple7702Account";
+import { PrependTokenPaymasterApproveAccount } from "src/paymaster/types";
+import {
+	CaliburKeyType, CaliburKey, CaliburKeySettings,
+	WebAuthnSignatureData, CaliburCreateUserOperationOverrides,
+	CaliburSignatureOverrides,
+} from "./types";
+
+/** Default Calibur singleton address */
+const CALIBUR_SINGLETON_ADDRESS = "0x000000009B1D0aF20D8C6d0A44e162d11F9b8f00";
+
+/** Root key hash (bytes32 zero) — used for the EOA's own secp256k1 key */
+const ROOT_KEY_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+// Function selectors — computed from Calibur's actual Solidity interfaces:
+// - executeUserOp is IAccountExecute.executeUserOp(PackedUserOperation,bytes32)
+//   The EntryPoint calls this; userOp.callData = selector + abi.encode(BatchedCall)
+// - register takes Key struct: register((uint8,bytes))
+// - update/revoke/invalidateNonce match standard signatures
+
+/** executeUserOp selector — `executeUserOp((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes),bytes32)` from IAccountExecute */
+const EXECUTE_USER_OP_SELECTOR = "0x8dd7712f";
+/** register((uint8,bytes)) — registers a Key struct */
+const REGISTER_SELECTOR = "0x30b1fa3b";
+/** update(bytes32,uint256) — updates key settings */
+const UPDATE_SELECTOR = "0xa58bb84a";
+/** revoke(bytes32) — revokes a key by hash */
+const REVOKE_SELECTOR = "0xb75c7dc6";
+/** invalidateNonce(uint256) — invalidates nonces */
+const INVALIDATE_NONCE_SELECTOR = "0xb70e36f0";
+
+// Read function selectors
+/** isRegistered(bytes32) */
+const IS_REGISTERED_SELECTOR = "0x27258b22";
+/** getKeySettings(bytes32) — returns packed Settings (uint256) */
+const GET_KEY_SETTINGS_SELECTOR = "0x0f3ebf6e";
+/** getKey(bytes32) — returns Key struct (uint8,bytes) */
+const GET_KEY_SELECTOR = "0x12aaac70";
+/** keyCount() */
+const KEY_COUNT_SELECTOR = "0xfac750e0";
+/** keyAt(uint256) — returns Key struct */
+const KEY_AT_SELECTOR = "0x4223b5c2";
+
+/**
+ * EIP-7702 smart account implementation for the Calibur (Uniswap) singleton.
+ * Calibur turns an EOA into a smart account via EIP-7702 delegation, providing
+ * batched transactions, passkey signing, ERC-4337 support, and per-key hooks.
+ *
+ * Unlike Safe accounts, there is no factory or proxy — the EOA IS the account.
+ * All transactions go through `executeUserOp(bytes)` with `BatchedCall` encoding.
+ *
+ * @example
+ * ```typescript
+ * const account = new Calibur7702Account("0xMyEOA");
+ * const userOp = await account.createUserOperation(
+ *     [{ to: "0xRecipient", value: 1000000000000000n, data: "0x" }],
+ *     nodeRpc, bundlerRpc,
+ *     { eip7702Auth: { chainId: 11155111n } }
+ * );
+ * userOp.signature = account.signUserOperation(userOp, privateKey, 11155111n);
+ * const response = await account.sendUserOperation(userOp, bundlerRpc);
+ * ```
+ */
+export class Calibur7702Account extends SmartAccount
+	implements PrependTokenPaymasterApproveAccount {
+
+	/** Function selector for `executeUserOp(bytes)` */
+	static readonly executorFunctionSelector = EXECUTE_USER_OP_SELECTOR;
+
+	/**
+	 * Dummy ECDSA signature for gas estimation with root key signing.
+	 * Format: `abi.encode(bytes32 keyHash, bytes sig, bytes hookData)`
+	 */
+	static readonly dummySignature: string = AbiCoder.defaultAbiCoder().encode(
+		["bytes32", "bytes", "bytes"],
+		[
+			ROOT_KEY_HASH,
+			"0xd2614025fc173b86704caf37b2fb447f7618101a0d31f5f304c777024cef38a060a29ee43fcf0c46f9107d4f670b8a85c2c017a1fe9e4af891f24f0be6ba5d671c",
+			"0x",
+		],
+	);
+
+	/**
+	 * Create a dummy WebAuthn signature for gas estimation with passkey signing.
+	 * The key hash must correspond to an actually registered key on the account,
+	 * otherwise the contract's `validateUserOp` will revert with `KeyDoesNotExist`.
+	 *
+	 * @param keyHash - The key hash of a registered passkey (from {@link getKeyHash})
+	 * @returns A dummy signature suitable for passing as `dummySignature` override
+	 */
+	public static createDummyWebAuthnSignature(keyHash: string): string {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		return abiCoder.encode(
+			["bytes32", "bytes", "bytes"],
+			[
+				keyHash,
+				abiCoder.encode(
+					["(bytes,string,uint256,uint256,uint256,uint256)"],
+					[[
+						"0x49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000000",
+						'{"type":"webauthn.get","challenge":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","origin":"https://example.com","crossOrigin":false}',
+						36n,
+						8n,
+						BigInt("0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0"),
+						BigInt("0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0"),
+					]],
+				),
+				"0x",
+			],
+		);
+	}
+
+	/** The EntryPoint contract address this account targets */
+	readonly entrypointAddress: string;
+	/** The Calibur singleton (delegatee) contract address */
+	readonly delegateeAddress: string;
+
+	/**
+	 * Create a new Calibur7702Account instance for an existing EOA.
+	 * @param accountAddress - The EOA address that will be (or already is) delegated via EIP-7702
+	 * @param overrides - Optional overrides for entrypoint and delegatee addresses
+	 * @param overrides.entrypointAddress - Custom EntryPoint address (defaults to EntryPoint v0.8)
+	 * @param overrides.delegateeAddress - Custom Calibur singleton address
+	 */
+	constructor(
+		accountAddress: string,
+		overrides: {
+			entrypointAddress?: string;
+			delegateeAddress?: string;
+		} = {},
+	) {
+		super(accountAddress);
+		this.entrypointAddress = overrides.entrypointAddress ?? ENTRYPOINT_V8;
+		this.delegateeAddress = overrides.delegateeAddress ?? CALIBUR_SINGLETON_ADDRESS;
+	}
+
+	// ─── CallData Encoding ───────────────────────────────────────────────
+
+	/**
+	 * Encode calldata for `executeUserOp(bytes)` with BatchedCall format.
+	 * All transactions (even single ones) go through the same BatchedCall path.
+	 *
+	 * @param transactions - One or more transactions to encode
+	 * @param revertOnFailure - Whether to revert the entire batch if any call fails (default: true)
+	 * @returns Encoded calldata for the executeUserOp function
+	 */
+	public static createAccountCallData(
+		transactions: SimpleMetaTransaction[],
+		revertOnFailure = true,
+	): string {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		const calls = transactions.map(tx => [tx.to, tx.value, tx.data]);
+		// BatchedCall struct { Call[] calls; bool revertOnFailure; }
+		// Solidity's abi.decode(data, (BatchedCall)) expects a single struct/tuple
+		// parameter, which has an extra offset layer compared to two separate args.
+		const batchedCallEncoded = abiCoder.encode(
+			["((address,uint256,bytes)[],bool)"],
+			[[calls, revertOnFailure]],
+		);
+		return EXECUTE_USER_OP_SELECTOR + batchedCallEncoded.slice(2);
+	}
+
+	// ─── UserOperation Lifecycle ─────────────────────────────────────────
+
+	/**
+	 * Build an unsigned {@link UserOperationV8} from one or more transactions.
+	 * Determines nonce, fetches gas prices, estimates gas limits, and
+	 * optionally includes EIP-7702 authorization. All auto-determined
+	 * values can be overridden.
+	 *
+	 * @param transactions - One or more transactions to encode into callData
+	 * @param providerRpc - JSON-RPC endpoint for nonce and gas price queries
+	 * @param bundlerRpc - Bundler RPC endpoint for gas estimation
+	 * @param overrides - Optional overrides for gas, nonce, and EIP-7702 auth fields
+	 * @returns A promise resolving to an unsigned {@link UserOperationV8}
+	 */
+	public async createUserOperation(
+		transactions: SimpleMetaTransaction[],
+		providerRpc?: string,
+		bundlerRpc?: string,
+		overrides: CaliburCreateUserOperationOverrides = {},
+	): Promise<UserOperationV8> {
+		if (transactions.length < 1) {
+			throw new RangeError("There should be at least one transaction");
+		}
+
+		let nonce: bigint | null = null;
+		let nonceOp: Promise<bigint> | null = null;
+
+		if (overrides.nonce == null) {
+			if (providerRpc != null) {
+				nonceOp = fetchAccountNonce(
+					providerRpc,
+					this.entrypointAddress,
+					this.accountAddress,
+				);
+			} else {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"providerRpc can't be null if nonce is not overridden",
+				);
+			}
+		} else {
+			nonce = overrides.nonce;
+		}
+
+		if (
+			typeof overrides.maxFeePerGas === "bigint" &&
+			overrides.maxFeePerGas < 0n
+		) {
+			throw new RangeError("maxFeePerGas override can't be negative");
+		}
+
+		if (
+			typeof overrides.maxPriorityFeePerGas === "bigint" &&
+			overrides.maxPriorityFeePerGas < 0n
+		) {
+			throw new RangeError("maxPriorityFeePerGas override can't be negative");
+		}
+
+		let maxFeePerGas = BaseUserOperationDummyValues.maxFeePerGas;
+		let maxPriorityFeePerGas = BaseUserOperationDummyValues.maxPriorityFeePerGas;
+
+		let gasPriceOp: Promise<[bigint, bigint]> | null = null;
+		if (
+			overrides.maxFeePerGas == null ||
+			overrides.maxPriorityFeePerGas == null
+		) {
+			gasPriceOp = handlefetchGasPrice(
+				providerRpc, overrides.polygonGasStation, overrides.gasLevel
+			);
+		}
+
+		let eip7702AuthChainId: bigint | null = null;
+		let eip7702AuthAddress: string | null = null;
+		let eip7702AuthNonce: bigint | null = null;
+
+		if (overrides.eip7702Auth != null) {
+			eip7702AuthChainId = overrides.eip7702Auth.chainId;
+			eip7702AuthAddress = overrides.eip7702Auth.address ??
+				this.delegateeAddress;
+			eip7702AuthNonce = overrides.eip7702Auth.nonce ?? null;
+		}
+
+		if (overrides.eip7702Auth != null && eip7702AuthNonce == null) {
+			let eip7702AuthNonceOp;
+			if (providerRpc != null) {
+				eip7702AuthNonceOp = sendJsonRpcRequest(
+					providerRpc,
+					"eth_getTransactionCount",
+					[this.accountAddress, "latest"]
+				);
+			} else {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"providerRpc can't be null if eoaDelegatorNonce " +
+					"is not overriden",
+				);
+			}
+
+			if (gasPriceOp != null && nonceOp != null) {
+				await Promise.all(
+					[eip7702AuthNonceOp, nonceOp, gasPriceOp]
+				).then((values) => {
+					eip7702AuthNonce = BigInt(values[0] as string);
+					nonce = values[1];
+					[maxFeePerGas, maxPriorityFeePerGas] = values[2];
+				});
+			} else if (gasPriceOp != null) {
+				await Promise.all(
+					[eip7702AuthNonceOp, gasPriceOp]
+				).then((values) => {
+					eip7702AuthNonce = BigInt(values[0] as string);
+					[maxFeePerGas, maxPriorityFeePerGas] = values[1];
+				});
+			} else if (nonceOp != null) {
+				await Promise.all(
+					[eip7702AuthNonceOp, nonceOp]
+				).then((values) => {
+					eip7702AuthNonce = BigInt(values[0] as string);
+					nonce = values[1];
+				});
+			} else {
+				eip7702AuthNonce = BigInt(await eip7702AuthNonceOp as string);
+			}
+		} else {
+			if (gasPriceOp != null && nonceOp != null) {
+				await Promise.all([nonceOp, gasPriceOp]).then((values) => {
+					nonce = values[0];
+					[maxFeePerGas, maxPriorityFeePerGas] = values[1];
+				});
+			} else if (gasPriceOp != null) {
+				[maxFeePerGas, maxPriorityFeePerGas] = await gasPriceOp;
+			} else if (nonceOp != null) {
+				nonce = await nonceOp;
+			}
+		}
+
+		maxFeePerGas = overrides.maxFeePerGas ??
+			BigInt(
+				Math.floor(
+					Number(maxFeePerGas) *
+					(((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100) / 100)
+				)
+			);
+		maxPriorityFeePerGas = overrides.maxPriorityFeePerGas ??
+			BigInt(
+				Math.floor(
+					Number(maxPriorityFeePerGas) *
+					(((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100) / 100)
+				)
+			);
+
+		if (nonce == null) {
+			throw new RangeError("failed to determine nonce");
+		} else if (nonce < 0n) {
+			throw new RangeError("nonce can't be negative");
+		}
+
+		let callData = "0x" as string;
+		if (overrides.callData == null) {
+			callData = Calibur7702Account.createAccountCallData(
+				transactions,
+				overrides.revertOnFailure ?? true,
+			);
+		} else {
+			callData = overrides.callData;
+		}
+
+		let userOperation: UserOperationV8;
+		if (overrides.eip7702Auth != null) {
+			const yParity = overrides.eip7702Auth.yParity ?? "0x0";
+			if (
+				yParity != "0x0" && yParity != "0x00" &&
+				yParity != "0x1" && yParity != "0x01"
+			) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"invalid yParity value for eoaDelegatorSignature. " +
+					"must be '0x0' or '0x1'"
+				);
+			}
+
+			const authorization: Authorization7702Hex = {
+				chainId: bigintToHex(eip7702AuthChainId as bigint),
+				address: eip7702AuthAddress as string,
+				nonce: bigintToHex(eip7702AuthNonce as bigint),
+				yParity: yParity,
+				r: overrides.eip7702Auth.r ??
+					"0x4277ba564d2c138823415df0ec8e8f97f30825056d54ec5128a8b29ec2dd81b2",
+				s: overrides.eip7702Auth.s ??
+					"0x1075a1bec7f59848cca899ece93075199cd2aabceb0654b9ae00b881a30044cd",
+			};
+			userOperation = {
+				...BaseUserOperationDummyValues,
+				sender: this.accountAddress,
+				nonce: nonce,
+				callData: callData,
+				maxFeePerGas: maxFeePerGas,
+				maxPriorityFeePerGas: maxPriorityFeePerGas,
+				factory: "0x7702",
+				factoryData: null,
+				paymaster: null,
+				paymasterVerificationGasLimit: null,
+				paymasterPostOpGasLimit: null,
+				paymasterData: null,
+				eip7702Auth: authorization,
+			};
+		} else {
+			userOperation = {
+				...BaseUserOperationDummyValues,
+				sender: this.accountAddress,
+				nonce: nonce,
+				callData: callData,
+				maxFeePerGas: maxFeePerGas,
+				maxPriorityFeePerGas: maxPriorityFeePerGas,
+				factory: null,
+				factoryData: null,
+				paymaster: null,
+				paymasterVerificationGasLimit: null,
+				paymasterPostOpGasLimit: null,
+				paymasterData: null,
+				eip7702Auth: null,
+			};
+		}
+
+		let preVerificationGas = BaseUserOperationDummyValues.preVerificationGas;
+		let verificationGasLimit = BaseUserOperationDummyValues.verificationGasLimit;
+		let callGasLimit = BaseUserOperationDummyValues.callGasLimit;
+
+		if (
+			overrides.preVerificationGas == null ||
+			overrides.verificationGasLimit == null ||
+			overrides.callGasLimit == null
+		) {
+			if (bundlerRpc != null) {
+				userOperation.callGasLimit = 0n;
+				userOperation.verificationGasLimit = 0n;
+				userOperation.preVerificationGas = 0n;
+				const inputMaxFeePerGas = userOperation.maxFeePerGas;
+				const inputMaxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
+				userOperation.maxFeePerGas = 0n;
+				userOperation.maxPriorityFeePerGas = 0n;
+
+				const userOperationToEstimate: UserOperationV8 = { ...userOperation };
+				userOperationToEstimate.signature = overrides.dummySignature ??
+					Calibur7702Account.dummySignature;
+
+				const bundler = new Bundler(bundlerRpc);
+				const estimation = await bundler.estimateUserOperationGas(
+					userOperationToEstimate,
+					this.entrypointAddress,
+					overrides.state_override_set,
+				);
+
+				preVerificationGas = BigInt(estimation.preVerificationGas);
+				verificationGasLimit = BigInt(estimation.verificationGasLimit);
+				callGasLimit = BigInt(estimation.callGasLimit);
+				verificationGasLimit += 55_000n;
+
+				userOperation.maxFeePerGas = inputMaxFeePerGas;
+				userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas;
+			} else {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"bundlerRpc can't be null if preVerificationGas," +
+					"verificationGasLimit and callGasLimit are not overriden",
+				);
+			}
+		}
+
+		if (
+			typeof overrides.preVerificationGas === "bigint" &&
+			overrides.preVerificationGas < 0n
+		) {
+			throw new RangeError("preVerificationGas override can't be negative");
+		}
+
+		if (
+			typeof overrides.verificationGasLimit === "bigint" &&
+			overrides.verificationGasLimit < 0n
+		) {
+			throw new RangeError("verificationGasLimit override can't be negative");
+		}
+
+		if (
+			typeof overrides.callGasLimit === "bigint" &&
+			overrides.callGasLimit < 0n
+		) {
+			throw new RangeError("callGasLimit override can't be negative");
+		}
+
+		userOperation.preVerificationGas = overrides.preVerificationGas ??
+			BigInt(
+				Math.floor(
+					Number(preVerificationGas) *
+					(((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100) / 100)
+				),
+			);
+
+		userOperation.verificationGasLimit = overrides.verificationGasLimit ??
+			BigInt(
+				Math.floor(
+					Number(verificationGasLimit) *
+					(((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100) / 100)
+				),
+			);
+
+		userOperation.callGasLimit = overrides.callGasLimit ??
+			BigInt(
+				Math.floor(
+					Number(callGasLimit) *
+					(((overrides.callGasLimitPercentageMultiplier ?? 0) + 100) / 100)
+				),
+			);
+
+		// Set the dummy signature so paymaster sponsorship calls can simulate
+		// validateUserOp (Calibur's signature decoder rejects empty signatures).
+		userOperation.signature = overrides.dummySignature ??
+			Calibur7702Account.dummySignature;
+
+		return userOperation;
+	}
+
+	/**
+	 * Sign a UserOperation with the EOA's root private key.
+	 * Computes the UserOperation hash and wraps the ECDSA signature in
+	 * Calibur's format: `abi.encode(keyHash, ecdsaSig, hookData)`.
+	 *
+	 * @param userOperation - The UserOperation to sign
+	 * @param privateKey - Hex-encoded private key of the EOA
+	 * @param chainId - Target chain ID
+	 * @param overrides - Optional signature overrides (e.g., hookData)
+	 * @returns Hex-encoded wrapped signature
+	 */
+	public signUserOperation(
+		userOperation: UserOperationV8,
+		privateKey: string,
+		chainId: bigint,
+		overrides: CaliburSignatureOverrides = {},
+	): string {
+		const userOperationHash = createUserOperationHash(
+			userOperation,
+			this.entrypointAddress,
+			chainId,
+		);
+
+		const wallet = new Wallet(privateKey);
+		const ecdsaSig = wallet.signingKey.sign(userOperationHash).serialized;
+		const hookData = overrides.hookData ?? "0x";
+
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		return abiCoder.encode(
+			["bytes32", "bytes", "bytes"],
+			[ROOT_KEY_HASH, ecdsaSig, hookData],
+		);
+	}
+
+	/**
+	 * Format a WebAuthn (passkey) assertion into Calibur's signature format.
+	 * The challenge for the WebAuthn assertion should be `abi.encode(userOpHash)`.
+	 *
+	 * @param keyHash - The key hash of the registered passkey (from {@link getKeyHash})
+	 * @param webAuthnAuth - WebAuthn assertion data from the browser
+	 * @param overrides - Optional signature overrides (e.g., hookData)
+	 * @returns Hex-encoded wrapped signature
+	 */
+	public formatWebAuthnSignature(
+		keyHash: string,
+		webAuthnAuth: WebAuthnSignatureData,
+		overrides: CaliburSignatureOverrides = {},
+	): string {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		const hookData = overrides.hookData ?? "0x";
+
+		// Encode as a struct/tuple — Calibur decodes with:
+		//   abi.decode(signature, (WebAuthn.WebAuthnAuth))
+		// which expects struct-wrapped encoding (extra offset for dynamic tuple).
+		const webAuthnEncoded = abiCoder.encode(
+			["(bytes,string,uint256,uint256,uint256,uint256)"],
+			[[
+				webAuthnAuth.authenticatorData,
+				webAuthnAuth.clientDataJSON,
+				webAuthnAuth.challengeIndex,
+				webAuthnAuth.typeIndex,
+				webAuthnAuth.r,
+				webAuthnAuth.s,
+			]],
+		);
+
+		return abiCoder.encode(
+			["bytes32", "bytes", "bytes"],
+			[keyHash, webAuthnEncoded, hookData],
+		);
+	}
+
+	/**
+	 * Submit a signed UserOperation to a bundler for on-chain inclusion.
+	 *
+	 * @param userOperation - The signed UserOperation to submit
+	 * @param bundlerRpc - Bundler RPC endpoint
+	 * @returns A {@link SendUseroperationResponse} that can be used to wait for inclusion
+	 */
+	public async sendUserOperation(
+		userOperation: UserOperationV8,
+		bundlerRpc: string,
+	): Promise<SendUseroperationResponse> {
+		const bundler = new Bundler(bundlerRpc);
+		const sendUserOperationRes = await bundler.sendUserOperation(
+			userOperation,
+			this.entrypointAddress,
+		);
+
+		return new SendUseroperationResponse(
+			sendUserOperationRes,
+			bundler,
+			this.entrypointAddress,
+		);
+	}
+
+	// ─── Key Helpers (static) ────────────────────────────────────────────
+
+	/**
+	 * Create a secp256k1 key descriptor from an Ethereum address.
+	 * @param address - The Ethereum address (EOA public address)
+	 * @returns A {@link CaliburKey} with type Secp256k1
+	 */
+	public static createSecp256k1Key(address: string): CaliburKey {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		return {
+			keyType: CaliburKeyType.Secp256k1,
+			publicKey: abiCoder.encode(["address"], [address]),
+		};
+	}
+
+	/**
+	 * Create a WebAuthn P-256 key descriptor from public key coordinates.
+	 * @param x - The x coordinate of the P-256 public key
+	 * @param y - The y coordinate of the P-256 public key
+	 * @returns A {@link CaliburKey} with type WebAuthnP256
+	 */
+	public static createWebAuthnP256Key(x: bigint, y: bigint): CaliburKey {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		return {
+			keyType: CaliburKeyType.WebAuthnP256,
+			publicKey: abiCoder.encode(["uint256", "uint256"], [x, y]),
+		};
+	}
+
+	/**
+	 * Create a raw P-256 key descriptor from public key coordinates.
+	 * @param x - The x coordinate of the P-256 public key
+	 * @param y - The y coordinate of the P-256 public key
+	 * @returns A {@link CaliburKey} with type P256
+	 */
+	public static createP256Key(x: bigint, y: bigint): CaliburKey {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		return {
+			keyType: CaliburKeyType.P256,
+			publicKey: abiCoder.encode(["uint256", "uint256"], [x, y]),
+		};
+	}
+
+	/**
+	 * Compute the key hash for a Calibur key.
+	 * Uses double hashing: `keccak256(abi.encode(uint8 keyType, bytes32 keccak256(publicKey)))`.
+	 *
+	 * @param key - The key to hash
+	 * @returns The key hash as a bytes32 hex string
+	 */
+	public static getKeyHash(key: CaliburKey): string {
+		const innerHash = keccak256(key.publicKey);
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		const encoded = abiCoder.encode(
+			["uint8", "bytes32"],
+			[key.keyType, innerHash],
+		);
+		return keccak256(encoded);
+	}
+
+	/**
+	 * Pack key settings into a single uint256 value.
+	 * Layout: `(isAdmin << 200) | (expiration << 160) | hook`
+	 *
+	 * @param settings - The key settings to pack
+	 * @returns The packed settings as a bigint
+	 */
+	public static packKeySettings(settings: CaliburKeySettings): bigint {
+		const hook = BigInt(settings.hook ?? ZeroAddress);
+		const expiration = BigInt(settings.expiration ?? 0);
+		const isAdmin = settings.isAdmin ? 1n : 0n;
+		return (isAdmin << 200n) | (expiration << 160n) | hook;
+	}
+
+	/**
+	 * Unpack a uint256 settings value into a {@link CaliburKeySettings} object.
+	 *
+	 * @param packed - The packed settings value
+	 * @returns Parsed key settings
+	 */
+	public static unpackKeySettings(packed: bigint): CaliburKeySettings {
+		const hook = "0x" + (packed & ((1n << 160n) - 1n)).toString(16).padStart(40, "0");
+		const expiration = Number((packed >> 160n) & ((1n << 40n) - 1n));
+		const isAdmin = ((packed >> 200n) & 1n) === 1n;
+		return { hook, expiration, isAdmin };
+	}
+
+	// ─── Key Management (static, return SimpleMetaTransaction) ───────────
+
+	/**
+	 * Create meta-transactions to register a new key on the Calibur account.
+	 * Returns **two transactions**: `[register, update]`. Both must be included
+	 * in the same UserOperation.
+	 *
+	 * **Safety guardrail:** This method never sets `isAdmin: true` regardless
+	 * of input settings. Developers who need admin keys must encode calldata themselves.
+	 *
+	 * @param key - The key to register
+	 * @param settings - Optional key settings (isAdmin is always forced to false)
+	 * @returns An array of two {@link SimpleMetaTransaction}s: [registerTx, updateTx]
+	 */
+	public static createRegisterKeyMetaTransactions(
+		key: CaliburKey,
+		settings: CaliburKeySettings = {},
+	): SimpleMetaTransaction[] {
+		if (settings.isAdmin === true) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"createRegisterKeyMetaTransactions does not allow setting " +
+				"isAdmin to true. Encode the calldata manually for admin keys.",
+			);
+		}
+
+		const abiCoder = AbiCoder.defaultAbiCoder();
+
+		// Register: register((uint8 keyType, bytes publicKey))
+		const registerCallData = REGISTER_SELECTOR + abiCoder.encode(
+			["(uint8,bytes)"],
+			[[key.keyType, key.publicKey]],
+		).slice(2);
+
+		// Update: update(bytes32 keyHash, uint256 packedSettings)
+		const safeSettings: CaliburKeySettings = {
+			...settings,
+			isAdmin: false,
+		};
+		const keyHash = Calibur7702Account.getKeyHash(key);
+		const packedSettings = Calibur7702Account.packKeySettings(safeSettings);
+		const updateCallData = UPDATE_SELECTOR + abiCoder.encode(
+			["bytes32", "uint256"],
+			[keyHash, packedSettings],
+		).slice(2);
+
+		return [
+			{ to: ZeroAddress, value: 0n, data: registerCallData },
+			{ to: ZeroAddress, value: 0n, data: updateCallData },
+		];
+	}
+
+	/**
+	 * Create a meta-transaction to revoke a key from the Calibur account.
+	 *
+	 * @param keyHash - The key hash to revoke
+	 * @returns A {@link SimpleMetaTransaction} that calls `revoke(bytes32)`
+	 */
+	public static createRevokeKeyMetaTransaction(
+		keyHash: string,
+	): SimpleMetaTransaction {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		const callData = REVOKE_SELECTOR + abiCoder.encode(
+			["bytes32"],
+			[keyHash],
+		).slice(2);
+
+		return { to: ZeroAddress, value: 0n, data: callData };
+	}
+
+	/**
+	 * Create a meta-transaction to update settings for a registered key.
+	 *
+	 * **Safety guardrail:** Throws if `settings.isAdmin` is `true`.
+	 * Developers who need admin keys must encode calldata themselves.
+	 *
+	 * @param keyHash - The key hash to update
+	 * @param settings - New settings for the key
+	 * @returns A {@link SimpleMetaTransaction} that calls `update(bytes32, uint256)`
+	 * @throws {AbstractionKitError} If settings.isAdmin is true
+	 */
+	public static createUpdateKeySettingsMetaTransaction(
+		keyHash: string,
+		settings: CaliburKeySettings,
+	): SimpleMetaTransaction {
+		if (settings.isAdmin === true) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"createUpdateKeySettingsMetaTransaction does not allow setting " +
+				"isAdmin to true. Encode the calldata manually for admin keys.",
+			);
+		}
+
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		const packedSettings = Calibur7702Account.packKeySettings(settings);
+		const callData = UPDATE_SELECTOR + abiCoder.encode(
+			["bytes32", "uint256"],
+			[keyHash, packedSettings],
+		).slice(2);
+
+		return { to: ZeroAddress, value: 0n, data: callData };
+	}
+
+	/**
+	 * Create a meta-transaction to invalidate nonces up to a given value.
+	 *
+	 * @param newNonce - The new nonce value (all nonces below this are invalidated)
+	 * @returns A {@link SimpleMetaTransaction} that calls `invalidateNonce(uint256)`
+	 */
+	public static createInvalidateNonceMetaTransaction(
+		newNonce: bigint,
+	): SimpleMetaTransaction {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		const callData = INVALIDATE_NONCE_SELECTOR + abiCoder.encode(
+			["uint256"],
+			[newNonce],
+		).slice(2);
+
+		return { to: ZeroAddress, value: 0n, data: callData };
+	}
+
+	// ─── Read Functions (instance, RPC calls) ────────────────────────────
+
+	/**
+	 * Get the account nonce from the EntryPoint.
+	 *
+	 * @param providerRpc - JSON-RPC endpoint
+	 * @param sequenceKey - Optional sequence key for parallel nonce channels (default: 0)
+	 * @returns The fully constructed nonce `(sequenceKey << 64) | seq`
+	 */
+	public async getNonce(
+		providerRpc: string,
+		sequenceKey = 0,
+	): Promise<bigint> {
+		return fetchAccountNonce(
+			providerRpc,
+			this.entrypointAddress,
+			this.accountAddress,
+			sequenceKey,
+		);
+	}
+
+	/**
+	 * Check if a key is registered on this account.
+	 *
+	 * @param providerRpc - JSON-RPC endpoint
+	 * @param keyHash - The key hash to check
+	 * @returns True if the key is registered
+	 */
+	public async isKeyRegistered(
+		providerRpc: string,
+		keyHash: string,
+	): Promise<boolean> {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		const callData = IS_REGISTERED_SELECTOR + abiCoder.encode(
+			["bytes32"],
+			[keyHash],
+		).slice(2);
+
+		const result = await sendJsonRpcRequest(
+			providerRpc,
+			"eth_call",
+			[
+				{
+					from: ZeroAddress,
+					to: this.accountAddress,
+					data: callData,
+				},
+				"latest",
+			],
+		);
+
+		if (typeof result === "string") {
+			const decoded = abiCoder.decode(["bool"], result);
+			return decoded[0] as boolean;
+		}
+		throw new AbstractionKitError(
+			"BAD_DATA",
+			"Unexpected response from isRegistered call",
+		);
+	}
+
+	/**
+	 * Get the settings for a registered key.
+	 *
+	 * @param providerRpc - JSON-RPC endpoint
+	 * @param keyHash - The key hash to query
+	 * @returns Parsed {@link CaliburKeySettings}
+	 */
+	public async getKeySettings(
+		providerRpc: string,
+		keyHash: string,
+	): Promise<CaliburKeySettings> {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		const callData = GET_KEY_SETTINGS_SELECTOR + abiCoder.encode(
+			["bytes32"],
+			[keyHash],
+		).slice(2);
+
+		const result = await sendJsonRpcRequest(
+			providerRpc,
+			"eth_call",
+			[
+				{
+					from: ZeroAddress,
+					to: this.accountAddress,
+					data: callData,
+				},
+				"latest",
+			],
+		);
+
+		if (typeof result === "string") {
+			const decoded = abiCoder.decode(["uint256"], result);
+			return Calibur7702Account.unpackKeySettings(BigInt(decoded[0]));
+		}
+		throw new AbstractionKitError(
+			"BAD_DATA",
+			"Unexpected response from getKeySettings call",
+		);
+	}
+
+	/**
+	 * Get the full key data for a registered key.
+	 *
+	 * @param providerRpc - JSON-RPC endpoint
+	 * @param keyHash - The key hash to query
+	 * @returns Parsed {@link CaliburKey}
+	 */
+	public async getKey(
+		providerRpc: string,
+		keyHash: string,
+	): Promise<CaliburKey> {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		const callData = GET_KEY_SELECTOR + abiCoder.encode(
+			["bytes32"],
+			[keyHash],
+		).slice(2);
+
+		const result = await sendJsonRpcRequest(
+			providerRpc,
+			"eth_call",
+			[
+				{
+					from: ZeroAddress,
+					to: this.accountAddress,
+					data: callData,
+				},
+				"latest",
+			],
+		);
+
+		if (typeof result === "string") {
+			const decoded = abiCoder.decode(["(uint8,bytes)"], result);
+			const keyTuple = decoded[0] as [number, string];
+			return {
+				keyType: Number(keyTuple[0]) as CaliburKeyType,
+				publicKey: keyTuple[1] as string,
+			};
+		}
+		throw new AbstractionKitError(
+			"BAD_DATA",
+			"Unexpected response from getKey call",
+		);
+	}
+
+	/**
+	 * List all keys registered on this account.
+	 * Iterates `keyCount()` + `keyAt(i)` to enumerate all keys.
+	 *
+	 * @param providerRpc - JSON-RPC endpoint
+	 * @returns Array of registered {@link CaliburKey}s
+	 */
+	public async listKeys(
+		providerRpc: string,
+	): Promise<CaliburKey[]> {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+
+		// Get key count
+		const countResult = await sendJsonRpcRequest(
+			providerRpc,
+			"eth_call",
+			[
+				{
+					from: ZeroAddress,
+					to: this.accountAddress,
+					data: KEY_COUNT_SELECTOR,
+				},
+				"latest",
+			],
+		);
+
+		if (typeof countResult !== "string") {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"Unexpected response from keyCount call",
+			);
+		}
+
+		const count = Number(BigInt(countResult));
+		const keys: CaliburKey[] = [];
+
+		for (let i = 0; i < count; i++) {
+			const keyAtCallData = KEY_AT_SELECTOR + abiCoder.encode(
+				["uint256"],
+				[i],
+			).slice(2);
+
+			const keyResult = await sendJsonRpcRequest(
+				providerRpc,
+				"eth_call",
+				[
+					{
+						from: ZeroAddress,
+						to: this.accountAddress,
+						data: keyAtCallData,
+					},
+					"latest",
+				],
+			);
+
+			if (typeof keyResult === "string") {
+				const decoded = abiCoder.decode(["(uint8,bytes)"], keyResult);
+				const keyTuple = decoded[0] as [number, string];
+				keys.push({
+					keyType: Number(keyTuple[0]) as CaliburKeyType,
+					publicKey: keyTuple[1] as string,
+				});
+			}
+		}
+
+		return keys;
+	}
+
+	// ─── Token Paymaster Support ─────────────────────────────────────────
+
+	/**
+	 * Prepend a token `approve` call to existing calldata for a token paymaster.
+	 * Decodes the existing BatchedCall, prepends an ERC-20 approve transaction,
+	 * and re-encodes.
+	 *
+	 * @param callData - Existing encoded calldata (executeUserOp format)
+	 * @param tokenAddress - ERC-20 token contract to approve
+	 * @param paymasterAddress - Paymaster address to approve as spender
+	 * @param approveAmount - Token amount to approve
+	 * @returns Re-encoded calldata with the approve transaction prepended
+	 */
+	public prependTokenPaymasterApproveToCallData(
+		callData: string,
+		tokenAddress: string,
+		paymasterAddress: string,
+		approveAmount: bigint,
+	): string {
+		return Calibur7702Account.prependTokenPaymasterApproveToCallDataStatic(
+			callData,
+			tokenAddress,
+			paymasterAddress,
+			approveAmount,
+		);
+	}
+
+	/**
+	 * Static version of {@link prependTokenPaymasterApproveToCallData}.
+	 * Decodes existing executeUserOp calldata, prepends an ERC-20 approve call,
+	 * and re-encodes the BatchedCall.
+	 *
+	 * @param callData - Existing encoded calldata (executeUserOp format)
+	 * @param tokenAddress - ERC-20 token contract to approve
+	 * @param paymasterAddress - Paymaster address to approve as spender
+	 * @param approveAmount - Token amount to approve
+	 * @returns Re-encoded calldata with the approve transaction prepended
+	 */
+	public static prependTokenPaymasterApproveToCallDataStatic(
+		callData: string,
+		tokenAddress: string,
+		paymasterAddress: string,
+		approveAmount: bigint,
+	): string {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+
+		// Build approve transaction
+		const approveFunctionSelector = getFunctionSelector("approve(address,uint256)");
+		const approveCallData = createCallData(
+			approveFunctionSelector,
+			["address", "uint256"],
+			[paymasterAddress, approveAmount],
+		);
+
+		if (!callData.startsWith(EXECUTE_USER_OP_SELECTOR)) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"Invalid calldata, should start with " + EXECUTE_USER_OP_SELECTOR +
+				" (executeUserOp selector)",
+				{ context: { callData } },
+			);
+		}
+
+		// Decode: strip selector -> decode BatchedCall struct
+		const batchedCallDecoded = abiCoder.decode(
+			["((address,uint256,bytes)[],bool)"],
+			"0x" + callData.slice(10),
+		);
+		const existingCalls = batchedCallDecoded[0][0] as [];
+		const revertOnFailure = batchedCallDecoded[0][1] as boolean;
+
+		const decodedTransactions: SimpleMetaTransaction[] = existingCalls.map(
+			(call: [string, bigint, string]) => ({
+				to: call[0],
+				value: BigInt(call[1]),
+				data: typeof call[2] !== "string"
+					? new TextDecoder().decode(call[2])
+					: call[2],
+			}),
+		);
+
+		// Prepend approve
+		decodedTransactions.unshift({
+			to: tokenAddress,
+			value: 0n,
+			data: approveCallData,
+		});
+
+		// Re-encode as BatchedCall struct
+		const calls = decodedTransactions.map(tx => [tx.to, tx.value, tx.data]);
+		const batchedCallEncoded = abiCoder.encode(
+			["((address,uint256,bytes)[],bool)"],
+			[[calls, revertOnFailure]],
+		);
+		return EXECUTE_USER_OP_SELECTOR + batchedCallEncoded.slice(2);
+	}
+}

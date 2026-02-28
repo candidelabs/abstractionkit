@@ -2,6 +2,12 @@ export { SmartAccount } from "./account/SmartAccount";
 export { Simple7702Account } from "./account/simple/Simple7702Account";
 export { Simple7702AccountV09 } from "./account/simple/Simple7702AccountV09";
 export { ExperimentalSafeMultiChainSigAccount } from "./account/Safe/SafeMultiChainSigAccount";
+export { Calibur7702Account } from "./account/Calibur/Calibur7702Account";
+export {
+	CaliburKeyType, CaliburKey, CaliburKeySettings,
+	WebAuthnSignatureData, CaliburCreateUserOperationOverrides,
+	CaliburSignatureOverrides,
+} from "./account/Calibur/types";
 export {
 	SocialRecoveryModule,
 	RecoveryRequest,
@@ -126,7 +132,8 @@ export {
 	EIP712_SAFE_OPERATION_V7_TYPE,
 	EIP712_SAFE_OPERATION_V6_TYPE,
 	EIP712_SAFE_OPERATION_PRIMARY_TYPE,
-    DEFAULT_SECP256R1_PRECOMPILE_ADDRESS
+    DEFAULT_SECP256R1_PRECOMPILE_ADDRESS,
+    CALIBUR_SINGLETON_ADDRESS,
 } from "./constants";
 
 export * from "./account/Safe/safeMessage";
