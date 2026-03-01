@@ -9,7 +9,7 @@ import { MetaTransaction } from "../../../types";
  */
 export class AllowanceModule extends SafeModule{
     static readonly DEFAULT_ALLOWANCE_MODULE_ADDRESS =
-        "0xAA46724893dedD72658219405185Fb0Fc91e091C";
+        "0x691f59471Bfd2B7d639DCF74671a2d648ED1E331";
 
     /**
      * @param moduleAddress - Deployed address of the Allowance Module contract.
