@@ -10,6 +10,8 @@ import { SendUseroperationResponse } from "../SendUseroperationResponse";
  * {@link UserOperationV9} and sensible defaults for the delegatee address.
  */
 export class Simple7702AccountV09 extends BaseSimple7702Account {
+	static readonly DEFAULT_DELEGATEE_ADDRESS = "0xa46cc63eBF4Bd77888AA327837d20b23A63a56B5";
+
 	/**
 	 * @param accountAddress - The EOA address that will be delegated via EIP-7702
 	 * @param overrides - Optional overrides for entrypoint and delegatee addresses
@@ -26,7 +28,7 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 		super(
             accountAddress,
             overrides.entrypointAddress ?? ENTRYPOINT_V9,
-            overrides.delegateeAddress ?? "0xa46cc63eBF4Bd77888AA327837d20b23A63a56B5"
+            overrides.delegateeAddress ?? Simple7702AccountV09.DEFAULT_DELEGATEE_ADDRESS
         );
 	}
 
