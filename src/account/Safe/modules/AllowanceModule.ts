@@ -3,13 +3,18 @@ import { createCallData, sendEthCallRequest } from "../../../utils";
 import { MetaTransaction } from "../../../types";
 
 /**
- * Safe module for managing token spending allowances. Enables Safe owners
+ * Safe module for managing token spending allowances (v1.0.0). Enables Safe owners
  * to grant delegates recurring or one-time permission to transfer ERC-20
  * tokens from the Safe, subject to configurable limits and reset periods.
+ *
+ * Requires Safe v1.1.1 or later.
+ *
+ * Each delegate is limited to 65534 transfers per token allowance (uint16 nonce).
+ * Once exhausted, a new delegate must be used.
  */
 export class AllowanceModule extends SafeModule{
     static readonly DEFAULT_ALLOWANCE_MODULE_ADDRESS =
-        "0xAA46724893dedD72658219405185Fb0Fc91e091C";
+        "0x691f59471Bfd2B7d639DCF74671a2d648ED1E331";
 
     /**
      * @param moduleAddress - Deployed address of the Allowance Module contract.
@@ -163,6 +168,7 @@ export class AllowanceModule extends SafeModule{
      * @param overrides.paymentToken - Optional token address used to pay for execution.
      * @param overrides.paymentAmount - Amount to pay for execution (required if paymentToken is set).
      * @returns A MetaTransaction to be executed by the Safe.
+     * @throws Will revert on-chain if the delegate's nonce has reached 65534 for this token.
      */
     public createAllowanceTransferMetaTransaction(
         allowanceSourceSafeAddress: string,
@@ -475,6 +481,9 @@ export type Allowance  = {
     resetTimeMin: bigint,
     /** Timestamp (in minutes since epoch) of the last allowance reset. */
     lastResetMin: bigint,
-    /** Monotonically increasing nonce, incremented on each allowance update. */
+    /**
+     * Monotonically increasing nonce, incremented on each allowance transfer.
+     * Capped at 65534 (uint16 max - 1); once exhausted, a new delegate is required.
+     */
     nonce: bigint,
 }
