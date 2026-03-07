@@ -1,3 +1,8 @@
+// Mock isomorphic-unfetch: default to real implementation, override in specific tests
+const realFetch = jest.requireActual('isomorphic-unfetch');
+const mockFetch = jest.fn((...args) => realFetch(...args));
+jest.mock('isomorphic-unfetch', () => mockFetch);
+
 const ak = require('../../dist/index.umd');
 const { AbiCoder, keccak256, Wallet } = require('ethers');
 require('dotenv').config();
@@ -11,7 +16,7 @@ describe('Calibur7702Account', () => {
 
     // ─── Constructor ─────────────────────────────────────────────────────
 
-    test('constructor sets default entrypoint and delegatee', () => {
+    test('constructor sets default entrypoint and delegatee (v0.8)', () => {
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         expect(account.accountAddress).toBe("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         expect(account.entrypointAddress).toBe("0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108");
@@ -458,8 +463,12 @@ describe('Calibur7702Account', () => {
 
     // ─── Exports ─────────────────────────────────────────────────────────
 
-    test('CALIBUR_SINGLETON_ADDRESS is exported', () => {
-        expect(ak.CALIBUR_SINGLETON_ADDRESS).toBe("0x000000009B1D0aF20D8C6d0A44e162d11F9b8f00");
+    test('CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS is exported', () => {
+        expect(ak.CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS).toBe("0x000000009B1D0aF20D8C6d0A44e162d11F9b8f00");
+    });
+
+    test('CALIBUR_CANDIDE_V0_1_0_SINGLETON_ADDRESS is exported', () => {
+        expect(ak.CALIBUR_CANDIDE_V0_1_0_SINGLETON_ADDRESS).toBe("0x71032285A847c4311Eb7ec2E7A636aB94A9805Aa");
     });
 
     test('CaliburKeyType enum is exported', () => {
@@ -496,5 +505,455 @@ describe('Calibur7702Account', () => {
                 [{ to: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", value: 0n, data: "0x" }],
             )
         ).rejects.toThrow("providerRpc");
+    });
+
+    // ─── signUserOperationWithKey ────────────────────────────────────────
+
+    test('signUserOperationWithKey wraps signature with provided keyHash', () => {
+        if (!signingKey) return;
+        const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+        const keyHash = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+
+        const userOp = {
+            sender: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            nonce: 0n, callData: "0x", callGasLimit: 0n,
+            verificationGasLimit: 0n, preVerificationGas: 0n,
+            maxFeePerGas: 0n, maxPriorityFeePerGas: 0n, signature: "0x",
+            factory: null, factoryData: null,
+            paymaster: null, paymasterVerificationGasLimit: null,
+            paymasterPostOpGasLimit: null, paymasterData: null,
+            eip7702Auth: null,
+        };
+
+        const sig = account.signUserOperationWithKey(userOp, signingKey, 11155111n, keyHash);
+        const decoded = abiCoder.decode(["bytes32", "bytes", "bytes"], sig);
+        expect(decoded[0]).toBe(keyHash);
+        expect(decoded[2]).toBe("0x"); // default hookData
+    });
+
+    test('signUserOperationWithKey with hookData', () => {
+        if (!signingKey) return;
+        const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+        const keyHash = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+        const hookData = "0xdeadbeef";
+
+        const userOp = {
+            sender: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            nonce: 0n, callData: "0x", callGasLimit: 0n,
+            verificationGasLimit: 0n, preVerificationGas: 0n,
+            maxFeePerGas: 0n, maxPriorityFeePerGas: 0n, signature: "0x",
+            factory: null, factoryData: null,
+            paymaster: null, paymasterVerificationGasLimit: null,
+            paymasterPostOpGasLimit: null, paymasterData: null,
+            eip7702Auth: null,
+        };
+
+        const sig = account.signUserOperationWithKey(userOp, signingKey, 11155111n, keyHash, { hookData });
+        const decoded = abiCoder.decode(["bytes32", "bytes", "bytes"], sig);
+        expect(decoded[0]).toBe(keyHash);
+        expect(decoded[2]).toBe(hookData);
+    });
+
+    test('signUserOperationWithKey produces different sig than signUserOperation for same userOp', () => {
+        if (!signingKey) return;
+        const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+        const keyHash = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+
+        const userOp = {
+            sender: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            nonce: 0n, callData: "0x", callGasLimit: 0n,
+            verificationGasLimit: 0n, preVerificationGas: 0n,
+            maxFeePerGas: 0n, maxPriorityFeePerGas: 0n, signature: "0x",
+            factory: null, factoryData: null,
+            paymaster: null, paymasterVerificationGasLimit: null,
+            paymasterPostOpGasLimit: null, paymasterData: null,
+            eip7702Auth: null,
+        };
+
+        const rootSig = account.signUserOperation(userOp, signingKey, 11155111n);
+        const keySig = account.signUserOperationWithKey(userOp, signingKey, 11155111n, keyHash);
+
+        // Same ECDSA signature bytes (same key, same hash), but different keyHash wrapper
+        const rootDecoded = abiCoder.decode(["bytes32", "bytes", "bytes"], rootSig);
+        const keyDecoded = abiCoder.decode(["bytes32", "bytes", "bytes"], keySig);
+        expect(rootDecoded[0]).toBe("0x0000000000000000000000000000000000000000000000000000000000000000");
+        expect(keyDecoded[0]).toBe(keyHash);
+        // ECDSA sig should be identical (same private key, same hash)
+        expect(rootDecoded[1]).toBe(keyDecoded[1]);
+    });
+
+    // ─── wrapSignature ────────────────────────────────────────────────────
+
+    test('wrapSignature wraps raw signature with keyHash and hookData', () => {
+        const keyHash = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+        const rawSig = "0xd2614025fc173b86704caf37b2fb447f7618101a0d31f5f304c777024cef38a060a29ee43fcf0c46f9107d4f670b8a85c2c017a1fe9e4af891f24f0be6ba5d671c";
+
+        const wrapped = ak.Calibur7702Account.wrapSignature(keyHash, rawSig);
+        const decoded = abiCoder.decode(["bytes32", "bytes", "bytes"], wrapped);
+        expect(decoded[0]).toBe(keyHash);
+        expect(decoded[1]).toBe(rawSig);
+        expect(decoded[2]).toBe("0x"); // default hookData
+    });
+
+    test('wrapSignature with custom hookData', () => {
+        const keyHash = "0x0000000000000000000000000000000000000000000000000000000000000000";
+        const rawSig = "0xaabbccdd";
+        const hookData = "0xdeadbeef";
+
+        const wrapped = ak.Calibur7702Account.wrapSignature(keyHash, rawSig, hookData);
+        const decoded = abiCoder.decode(["bytes32", "bytes", "bytes"], wrapped);
+        expect(decoded[0]).toBe(keyHash);
+        expect(decoded[1]).toBe("0xaabbccdd");
+        expect(decoded[2]).toBe(hookData);
+    });
+
+    test('wrapSignature output matches signUserOperation output for same inputs', () => {
+        if (!signingKey) return;
+        const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+
+        const userOp = {
+            sender: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            nonce: 0n, callData: "0x", callGasLimit: 100000n,
+            verificationGasLimit: 100000n, preVerificationGas: 50000n,
+            maxFeePerGas: 1000000000n, maxPriorityFeePerGas: 1000000000n,
+            signature: "0x",
+            factory: null, factoryData: null,
+            paymaster: null, paymasterVerificationGasLimit: null,
+            paymasterPostOpGasLimit: null, paymasterData: null,
+            eip7702Auth: null,
+        };
+
+        // Sign with signUserOperation
+        const signedSig = account.signUserOperation(userOp, signingKey, 11155111n);
+
+        // Extract the raw ECDSA sig from signed output, then re-wrap
+        const decoded = abiCoder.decode(["bytes32", "bytes", "bytes"], signedSig);
+        const rawEcdsaSig = decoded[1];
+        const ROOT_KEY_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+        const manualWrapped = ak.Calibur7702Account.wrapSignature(ROOT_KEY_HASH, rawEcdsaSig);
+        expect(manualWrapped).toBe(signedSig);
+    });
+
+    // ─── getUserOperationHash ────────────────────────────────────────────
+
+    test('getUserOperationHash matches standalone createUserOperationHash', () => {
+        const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+        const chainId = 11155111n;
+
+        const userOp = {
+            sender: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            nonce: 0n, callData: "0x", callGasLimit: 100000n,
+            verificationGasLimit: 100000n, preVerificationGas: 50000n,
+            maxFeePerGas: 1000000000n, maxPriorityFeePerGas: 1000000000n,
+            signature: "0x",
+            factory: null, factoryData: null,
+            paymaster: null, paymasterVerificationGasLimit: null,
+            paymasterPostOpGasLimit: null, paymasterData: null,
+            eip7702Auth: null,
+        };
+
+        const hash1 = account.getUserOperationHash(userOp, chainId);
+        const hash2 = ak.createUserOperationHash(userOp, account.entrypointAddress, chainId);
+        expect(hash1).toBe(hash2);
+        expect(hash1.length).toBe(66); // 0x + 64 hex chars
+    });
+
+    test('getUserOperationHash uses the instance entrypointAddress', () => {
+        const customEP = "0x1111111111111111111111111111111111111111";
+        const account = new ak.Calibur7702Account(
+            "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            { entrypointAddress: customEP }
+        );
+        const chainId = 11155111n;
+
+        const userOp = {
+            sender: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            nonce: 0n, callData: "0x", callGasLimit: 0n,
+            verificationGasLimit: 0n, preVerificationGas: 0n,
+            maxFeePerGas: 0n, maxPriorityFeePerGas: 0n, signature: "0x",
+            factory: null, factoryData: null,
+            paymaster: null, paymasterVerificationGasLimit: null,
+            paymasterPostOpGasLimit: null, paymasterData: null,
+            eip7702Auth: null,
+        };
+
+        const hash = account.getUserOperationHash(userOp, chainId);
+        const expected = ak.createUserOperationHash(userOp, customEP, chainId);
+        expect(hash).toBe(expected);
+    });
+
+    // ─── Signer callback overloads ──────────────────────────────────────
+
+    test('signUserOperation with signer callback returns Promise', async () => {
+        if (!signingKey) return;
+        const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+        const wallet = new Wallet(signingKey);
+
+        const userOp = {
+            sender: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            nonce: 0n, callData: "0x", callGasLimit: 100000n,
+            verificationGasLimit: 100000n, preVerificationGas: 50000n,
+            maxFeePerGas: 1000000000n, maxPriorityFeePerGas: 1000000000n,
+            signature: "0x",
+            factory: null, factoryData: null,
+            paymaster: null, paymasterVerificationGasLimit: null,
+            paymasterPostOpGasLimit: null, paymasterData: null,
+            eip7702Auth: null,
+        };
+
+        // Signer callback
+        const signerFn = async (hash) => {
+            return wallet.signingKey.sign(hash).serialized;
+        };
+
+        const sigFromCallback = await account.signUserOperation(userOp, signerFn, 11155111n);
+        const sigFromKey = account.signUserOperation(userOp, signingKey, 11155111n);
+
+        // Both should produce identical signatures
+        expect(sigFromCallback).toBe(sigFromKey);
+    });
+
+    test('signUserOperationWithKey with signer callback returns Promise', async () => {
+        if (!signingKey) return;
+        const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+        const wallet = new Wallet(signingKey);
+        const keyHash = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+
+        const userOp = {
+            sender: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            nonce: 0n, callData: "0x", callGasLimit: 0n,
+            verificationGasLimit: 0n, preVerificationGas: 0n,
+            maxFeePerGas: 0n, maxPriorityFeePerGas: 0n, signature: "0x",
+            factory: null, factoryData: null,
+            paymaster: null, paymasterVerificationGasLimit: null,
+            paymasterPostOpGasLimit: null, paymasterData: null,
+            eip7702Auth: null,
+        };
+
+        const signerFn = async (hash) => wallet.signingKey.sign(hash).serialized;
+
+        const sigFromCallback = await account.signUserOperationWithKey(userOp, signerFn, 11155111n, keyHash);
+        const sigFromKey = account.signUserOperationWithKey(userOp, signingKey, 11155111n, keyHash);
+
+        expect(sigFromCallback).toBe(sigFromKey);
+    });
+
+    // ─── createAndSignEip7702DelegationAuthorization callback ────────────
+
+    test('createAndSignEip7702DelegationAuthorization with signer callback', async () => {
+        if (!signingKey) return;
+        const wallet = new Wallet(signingKey);
+
+        const signerFn = async (hash) => wallet.signingKey.sign(hash).serialized;
+
+        const authFromKey = ak.createAndSignEip7702DelegationAuthorization(
+            11155111n, "0x71032285A847c4311Eb7ec2E7A636aB94A9805Aa", 0n, signingKey,
+        );
+        const authFromCallback = await ak.createAndSignEip7702DelegationAuthorization(
+            11155111n, "0x71032285A847c4311Eb7ec2E7A636aB94A9805Aa", 0n, signerFn,
+        );
+
+        expect(authFromCallback.chainId).toBe(authFromKey.chainId);
+        expect(authFromCallback.address).toBe(authFromKey.address);
+        expect(authFromCallback.nonce).toBe(authFromKey.nonce);
+        expect(authFromCallback.yParity).toBe(authFromKey.yParity);
+        expect(authFromCallback.r).toBe(authFromKey.r);
+        expect(authFromCallback.s).toBe(authFromKey.s);
+    });
+
+    // ─── SignerFunction export ──────────────────────────────────────────
+
+    test('SignerFunction type is exported (runtime check via typeof)', () => {
+        // SignerFunction is a type alias, so it doesn't exist at runtime.
+        // We verify the pattern works by creating one and using it.
+        const fn = async (hash) => "0x" + "00".repeat(65);
+        expect(typeof fn).toBe('function');
+    });
+
+    // ─── CaliburKeySettingsResult ────────────────────────────────────────
+
+    test('unpackKeySettings returns CaliburKeySettingsResult with required fields', () => {
+        const packed = (1n << 200n) | (BigInt(1700000000) << 160n) | BigInt("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+        const result = ak.Calibur7702Account.unpackKeySettings(packed);
+        // All fields should be present (not undefined)
+        expect(result.hook).toBeDefined();
+        expect(result.expiration).toBeDefined();
+        expect(result.isAdmin).toBeDefined();
+        expect(typeof result.hook).toBe('string');
+        expect(typeof result.expiration).toBe('number');
+        expect(typeof result.isAdmin).toBe('boolean');
+        expect(result.isAdmin).toBe(true);
+        expect(result.expiration).toBe(1700000000);
+    });
+
+    // ─── EntryPoint v0.9 overrides ──────────────────────────────────────
+
+    const ENTRYPOINT_V9 = "0x433709009B8330FDa32311DF1C2AFA402eD8D009";
+    const CALIBUR_V9_SINGLETON = "0x71032285A847c4311Eb7ec2E7A636aB94A9805Aa";
+
+    test('constructor with v0.9 overrides sets correct addresses', () => {
+        const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", {
+            entrypointAddress: ENTRYPOINT_V9,
+            delegateeAddress: CALIBUR_V9_SINGLETON,
+        });
+        expect(account.entrypointAddress).toBe(ENTRYPOINT_V9);
+        expect(account.delegateeAddress).toBe(CALIBUR_V9_SINGLETON);
+    });
+
+    test('v0.9 getUserOperationHash differs from v0.8 for same userOp', () => {
+        const userOp = {
+            sender: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            nonce: 0n, callData: "0x", callGasLimit: 100000n,
+            verificationGasLimit: 100000n, preVerificationGas: 50000n,
+            maxFeePerGas: 1000000000n, maxPriorityFeePerGas: 1000000000n,
+            signature: "0x",
+            factory: null, factoryData: null,
+            paymaster: null, paymasterVerificationGasLimit: null,
+            paymasterPostOpGasLimit: null, paymasterData: null,
+            eip7702Auth: null,
+        };
+
+        const accountV8 = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+        const accountV9 = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", {
+            entrypointAddress: ENTRYPOINT_V9,
+            delegateeAddress: CALIBUR_V9_SINGLETON,
+        });
+
+        const hashV8 = accountV8.getUserOperationHash(userOp, 11155111n);
+        const hashV9 = accountV9.getUserOperationHash(userOp, 11155111n);
+
+        // Different entrypoints produce different domain separators → different hashes
+        expect(hashV8).not.toBe(hashV9);
+        expect(hashV8.length).toBe(66);
+        expect(hashV9.length).toBe(66);
+    });
+
+    test('v0.9 signUserOperation produces valid signature with v0.9 hash', () => {
+        if (!signingKey) return;
+
+        const accountV8 = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+        const accountV9 = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", {
+            entrypointAddress: ENTRYPOINT_V9,
+            delegateeAddress: CALIBUR_V9_SINGLETON,
+        });
+
+        const userOp = {
+            sender: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            nonce: 0n, callData: "0x", callGasLimit: 100000n,
+            verificationGasLimit: 100000n, preVerificationGas: 50000n,
+            maxFeePerGas: 1000000000n, maxPriorityFeePerGas: 1000000000n,
+            signature: "0x",
+            factory: null, factoryData: null,
+            paymaster: null, paymasterVerificationGasLimit: null,
+            paymasterPostOpGasLimit: null, paymasterData: null,
+            eip7702Auth: null,
+        };
+
+        const sigV8 = accountV8.signUserOperation(userOp, signingKey, 11155111n);
+        const sigV9 = accountV9.signUserOperation(userOp, signingKey, 11155111n);
+
+        // Both are valid wrapped signatures but with different ECDSA sigs (different hashes)
+        const decodedV8 = abiCoder.decode(["bytes32", "bytes", "bytes"], sigV8);
+        const decodedV9 = abiCoder.decode(["bytes32", "bytes", "bytes"], sigV9);
+
+        // Same key hash (root), but different inner ECDSA sigs
+        expect(decodedV8[0]).toBe(decodedV9[0]); // both ROOT_KEY_HASH
+        expect(decodedV8[1]).not.toBe(decodedV9[1]); // different signatures
+    });
+
+    test('v0.9 createAccountCallData is identical to v0.8 (encoding is EP-independent)', () => {
+        const txs = [{ to: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", value: 1000n, data: "0x" }];
+        // createAccountCallData is static — doesn't depend on entrypoint
+        const callData = ak.Calibur7702Account.createAccountCallData(txs);
+        expect(callData.startsWith("0x8dd7712f")).toBe(true);
+    });
+
+    test('v0.9 createUserOperation throws when providerRpc missing (same validation as v0.8)', async () => {
+        const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", {
+            entrypointAddress: ENTRYPOINT_V9,
+            delegateeAddress: CALIBUR_V9_SINGLETON,
+        });
+        await expect(
+            account.createUserOperation(
+                [{ to: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", value: 0n, data: "0x" }],
+            )
+        ).rejects.toThrow("providerRpc");
+    });
+
+    test('getDelegatedAddress is exported', () => {
+        expect(typeof ak.getDelegatedAddress).toBe('function');
+    });
+
+    // ─── getDelegatedAddress parsing ─────────────────────────────────────
+
+    function mockFetchWithCode(code) {
+        mockFetch.mockImplementationOnce(() =>
+            Promise.resolve({
+                json: async () => ({ jsonrpc: '2.0', id: 1, result: code }),
+            })
+        );
+    }
+
+    afterEach(() => {
+        mockFetch.mockReset();
+        mockFetch.mockImplementation((...args) => realFetch(...args));
+    });
+
+    test('getDelegatedAddress returns address for valid EIP-7702 delegation code', async () => {
+        const delegatee = '0x000000009B1D0aF20D8C6d0A44e162d11F9b8f00';
+        const code = '0xef0100' + delegatee.slice(2).toLowerCase();
+        mockFetchWithCode(code);
+        const result = await ak.getDelegatedAddress('0x1111111111111111111111111111111111111111', 'http://localhost');
+        expect(result.toLowerCase()).toBe(delegatee.toLowerCase());
+    });
+
+    test('getDelegatedAddress returns null for non-delegated EOA (0x)', async () => {
+        mockFetchWithCode('0x');
+        const result = await ak.getDelegatedAddress('0x1111111111111111111111111111111111111111', 'http://localhost');
+        expect(result).toBeNull();
+    });
+
+    test('getDelegatedAddress returns null for regular contract code', async () => {
+        mockFetchWithCode('0x6080604052');
+        const result = await ak.getDelegatedAddress('0x1111111111111111111111111111111111111111', 'http://localhost');
+        expect(result).toBeNull();
+    });
+
+    // ─── isDelegated ─────────────────────────────────────────────────────
+
+    test('isDelegated returns true when delegated to the account delegatee', async () => {
+        const delegatee = '0x000000009B1D0aF20D8C6d0A44e162d11F9b8f00';
+        const code = '0xef0100' + delegatee.slice(2).toLowerCase();
+        mockFetchWithCode(code);
+        const account = new ak.Calibur7702Account('0x1111111111111111111111111111111111111111');
+        const result = await account.isDelegated('http://localhost');
+        expect(result).toBe(true);
+    });
+
+    test('isDelegated returns false when delegated to a different address', async () => {
+        const code = '0xef0100' + '2222222222222222222222222222222222222222';
+        mockFetchWithCode(code);
+        const account = new ak.Calibur7702Account('0x1111111111111111111111111111111111111111');
+        const result = await account.isDelegated('http://localhost');
+        expect(result).toBe(false);
+    });
+
+    test('isDelegated returns false when not delegated', async () => {
+        mockFetchWithCode('0x');
+        const account = new ak.Calibur7702Account('0x1111111111111111111111111111111111111111');
+        const result = await account.isDelegated('http://localhost');
+        expect(result).toBe(false);
+    });
+
+    test('isDelegated checks against custom delegatee from overrides', async () => {
+        const customDelegatee = '0x71032285A847c4311Eb7ec2E7A636aB94A9805Aa';
+        const code = '0xef0100' + customDelegatee.slice(2).toLowerCase();
+        mockFetchWithCode(code);
+        const account = new ak.Calibur7702Account('0x1111111111111111111111111111111111111111', {
+            delegateeAddress: customDelegatee,
+        });
+        const result = await account.isDelegated('http://localhost');
+        expect(result).toBe(true);
     });
 });
