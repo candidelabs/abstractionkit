@@ -5,7 +5,8 @@ require('dotenv').config();
 const chainId = BigInt(process.env.CHAIN_ID);
 const providerRpc = process.env.JSON_RPC_NODE_PROVIDER;
 const bundlerRpc = process.env.BUNDLER_URL;
-const entryPointV8 = "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108";
+const entryPointV9 = "0x433709009B8330FDa32311DF1C2AFA402eD8D009";
+const caliburV9Singleton = "0x71032285A847c4311Eb7ec2E7A636aB94A9805Aa";
 
 const eoaPrivateKey = process.env.PRIVATE_KEY1;
 const eoaAddress = process.env.PUBLIC_ADDRESS1;
@@ -50,7 +51,10 @@ function p256Sign(data) {
 }
 
 async function main() {
-    const account = new ak.Calibur7702Account(eoaAddress);
+    const account = new ak.Calibur7702Account(eoaAddress, {
+        entrypointAddress: entryPointV9,
+        delegateeAddress: caliburV9Singleton,
+    });
 
     const balance = await ak.sendJsonRpcRequest(providerRpc, "eth_getBalance", [eoaAddress, "latest"]);
     console.log("\nEOA balance:", Number(BigInt(balance)) / 1e18, "ETH");
@@ -111,7 +115,7 @@ async function main() {
     // Compute the userOpHash
     const userOpHash = ak.createUserOperationHash(
         passkeyOp,
-        entryPointV8,
+        entryPointV9,
         chainId,
     );
     console.log("UserOp hash:", userOpHash);

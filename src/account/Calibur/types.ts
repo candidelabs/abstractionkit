@@ -1,4 +1,4 @@
-import { GasOption, PolygonChain, StateOverrideSet } from "src/types";
+import { GasOption, PaymasterFieldsInitValues, PolygonChain, StateOverrideSet } from "src/types";
 
 /**
  * Key types supported by the Calibur smart account.
@@ -24,6 +24,7 @@ export interface CaliburKey {
 
 /**
  * Settings for a key registered on a Calibur account.
+ * All fields are optional — used as input when registering or updating keys.
  */
 export interface CaliburKeySettings {
 	/** Hook contract address called during validation (zero address = no hook) */
@@ -32,6 +33,20 @@ export interface CaliburKeySettings {
 	expiration?: number;
 	/** Whether the key has admin privileges */
 	isAdmin?: boolean;
+}
+
+/**
+ * Concrete key settings returned from on-chain reads.
+ * Unlike {@link CaliburKeySettings}, all fields are required since
+ * the contract always returns concrete values.
+ */
+export interface CaliburKeySettingsResult {
+	/** Hook contract address called during validation (zero address = no hook) */
+	hook: string;
+	/** Unix timestamp after which the key expires (0 = never) */
+	expiration: number;
+	/** Whether the key has admin privileges */
+	isAdmin: boolean;
 }
 
 /**
@@ -100,6 +115,14 @@ export interface CaliburCreateUserOperationOverrides {
 	revertOnFailure?: boolean;
 
 	/**
+	 * Paymaster init values for gas estimation. Set these to include
+	 * paymaster data during gas estimation so preVerificationGas is accurate.
+	 * Use {@link AllowAllPaymaster.getPaymasterFieldsInitValues} or similar
+	 * to obtain these values.
+	 */
+	paymasterFields?: PaymasterFieldsInitValues;
+
+	/**
 	 * EIP-7702 authorization fields. Required for the first UserOperation
 	 * to delegate the EOA to the Calibur singleton.
 	 */
@@ -120,3 +143,10 @@ export interface CaliburSignatureOverrides {
 	/** Hook data to append to the signature (default: "0x" = empty) */
 	hookData?: string;
 }
+
+/**
+ * A signing function that takes a hash and returns a raw signature.
+ * Use this to integrate viem, ethers Signers, hardware wallets, or MPC signers
+ * without passing raw private keys.
+ */
+export type SignerFunction = (hash: string) => Promise<string>;

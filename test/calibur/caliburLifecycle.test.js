@@ -15,7 +15,8 @@ const bundlerRpc = process.env.BUNDLER_URL;
 const eoaPrivateKey = process.env.PRIVATE_KEY1;
 const eoaAddress = process.env.PUBLIC_ADDRESS1;
 
-const ENTRYPOINT_V8 = "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108";
+const ENTRYPOINT_V9 = "0x433709009B8330FDa32311DF1C2AFA402eD8D009";
+const CALIBUR_V9_SINGLETON = "0x71032285A847c4311Eb7ec2E7A636aB94A9805Aa";
 const ROOT_KEY_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 // ─── Shared State ───────────────────────────────────────────────────────
@@ -101,7 +102,10 @@ describe('Calibur7702Account Sepolia Lifecycle', () => {
     // ─── 2.1: EIP-7702 delegation + basic transfer ─────────────────────
 
     test('2.1 EIP-7702 delegation + basic transfer', async () => {
-        account = new ak.Calibur7702Account(eoaAddress);
+        account = new ak.Calibur7702Account(eoaAddress, {
+            entrypointAddress: ENTRYPOINT_V9,
+            delegateeAddress: CALIBUR_V9_SINGLETON,
+        });
 
         const userOp = await account.createUserOperation(
             [{ to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0n, data: '0x' }],
@@ -175,7 +179,7 @@ describe('Calibur7702Account Sepolia Lifecycle', () => {
             { dummySignature: dummyWebAuthnSig },
         );
 
-        const userOpHash = ak.createUserOperationHash(userOp, ENTRYPOINT_V8, chainId);
+        const userOpHash = ak.createUserOperationHash(userOp, ENTRYPOINT_V9, chainId);
         userOp.signature = buildWebAuthnSignature(
             account, keyHash, userOpHash, p256KeyPair.privateKey,
         );
@@ -291,7 +295,7 @@ describe('Calibur7702Account Sepolia Lifecycle', () => {
             },
         );
 
-        const userOpHash = ak.createUserOperationHash(userOp, ENTRYPOINT_V8, chainId);
+        const userOpHash = ak.createUserOperationHash(userOp, ENTRYPOINT_V9, chainId);
         userOp.signature = buildWebAuthnSignature(
             account, keyHash, userOpHash, p256KeyPair.privateKey,
         );
@@ -319,7 +323,7 @@ describe('Calibur7702Account Sepolia Lifecycle', () => {
             },
         );
 
-        const userOpHash = ak.createUserOperationHash(userOp, ENTRYPOINT_V8, chainId);
+        const userOpHash = ak.createUserOperationHash(userOp, ENTRYPOINT_V9, chainId);
         userOp.signature = buildWebAuthnSignature(
             account, shortLivedKeyHash, userOpHash, shortLivedP256KeyPair.privateKey,
         );
@@ -546,7 +550,7 @@ describe('Calibur7702Account Sepolia Lifecycle', () => {
             },
         );
 
-        const userOpHash = ak.createUserOperationHash(userOp, ENTRYPOINT_V8, chainId);
+        const userOpHash = ak.createUserOperationHash(userOp, ENTRYPOINT_V9, chainId);
         userOp.signature = buildWebAuthnSignature(
             account, keyHash, userOpHash, p256KeyPair.privateKey,
         );

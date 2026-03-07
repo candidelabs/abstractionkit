@@ -1,10 +1,10 @@
 import { SmartAccount } from "../SmartAccount";
-import { BaseUserOperationDummyValues, ENTRYPOINT_V8, ZeroAddress } from "src/constants";
+import { BaseUserOperationDummyValues, CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS, ENTRYPOINT_V8, ZeroAddress } from "src/constants";
 import {
 	createCallData, createUserOperationHash, fetchAccountNonce,
-	getFunctionSelector, handlefetchGasPrice, sendJsonRpcRequest
+	getDelegatedAddress, getFunctionSelector, handlefetchGasPrice, sendJsonRpcRequest
 } from "../../utils";
-import { GasOption, PolygonChain, StateOverrideSet, UserOperationV8 } from "src/types";
+import { UserOperationV8 } from "src/types";
 import { AbstractionKitError } from "src/errors";
 import { Authorization7702Hex, bigintToHex } from "src/utils7702";
 import { Bundler } from "src/Bundler";
@@ -13,13 +13,13 @@ import { SendUseroperationResponse } from "../SendUseroperationResponse";
 import { SimpleMetaTransaction } from "../simple/Simple7702Account";
 import { PrependTokenPaymasterApproveAccount } from "src/paymaster/types";
 import {
-	CaliburKeyType, CaliburKey, CaliburKeySettings,
+	CaliburKeyType, CaliburKey, CaliburKeySettings, CaliburKeySettingsResult,
 	WebAuthnSignatureData, CaliburCreateUserOperationOverrides,
-	CaliburSignatureOverrides,
+	CaliburSignatureOverrides, SignerFunction,
 } from "./types";
 
-/** Default Calibur singleton address */
-const CALIBUR_SINGLETON_ADDRESS = "0x000000009B1D0aF20D8C6d0A44e162d11F9b8f00";
+
+const DEFAULT_SINGLETON_ADDRESS = CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS;
 
 /** Root key hash (bytes32 zero) — used for the EOA's own secp256k1 key */
 const ROOT_KEY_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
@@ -122,6 +122,30 @@ export class Calibur7702Account extends SmartAccount
 		);
 	}
 
+	/**
+	 * Wrap a raw ECDSA signature in Calibur's signature format:
+	 * `abi.encode(bytes32 keyHash, bytes signature, bytes hookData)`.
+	 *
+	 * Use this when signing externally (e.g., with viem, hardware wallet, MPC)
+	 * to avoid manually ABI-encoding the wrapped signature.
+	 *
+	 * @param keyHash - The key hash (use ROOT_KEY_HASH `0x00...00` for the EOA's root key)
+	 * @param rawSignature - The raw ECDSA signature (65 bytes, hex-encoded)
+	 * @param hookData - Optional hook data (default: "0x")
+	 * @returns Hex-encoded wrapped signature ready for `userOp.signature`
+	 */
+	public static wrapSignature(
+		keyHash: string,
+		rawSignature: string,
+		hookData = "0x",
+	): string {
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		return abiCoder.encode(
+			["bytes32", "bytes", "bytes"],
+			[keyHash, rawSignature, hookData],
+		);
+	}
+
 	/** The EntryPoint contract address this account targets */
 	readonly entrypointAddress: string;
 	/** The Calibur singleton (delegatee) contract address */
@@ -143,7 +167,27 @@ export class Calibur7702Account extends SmartAccount
 	) {
 		super(accountAddress);
 		this.entrypointAddress = overrides.entrypointAddress ?? ENTRYPOINT_V8;
-		this.delegateeAddress = overrides.delegateeAddress ?? CALIBUR_SINGLETON_ADDRESS;
+		this.delegateeAddress = overrides.delegateeAddress ?? DEFAULT_SINGLETON_ADDRESS;
+	}
+
+	/**
+	 * Compute the UserOperation hash for this account's EntryPoint.
+	 * Convenience wrapper around the standalone `createUserOperationHash` that
+	 * automatically uses this account's EntryPoint address.
+	 *
+	 * @param userOperation - The UserOperation to hash
+	 * @param chainId - Target chain ID
+	 * @returns The UserOperation hash as a hex string
+	 */
+	public getUserOperationHash(
+		userOperation: UserOperationV8,
+		chainId: bigint,
+	): string {
+		return createUserOperationHash(
+			userOperation,
+			this.entrypointAddress,
+			chainId,
+		);
 	}
 
 	// ─── CallData Encoding ───────────────────────────────────────────────
@@ -339,6 +383,7 @@ export class Calibur7702Account extends SmartAccount
 			callData = overrides.callData;
 		}
 
+		const pmFields = overrides.paymasterFields;
 		let userOperation: UserOperationV8;
 		if (overrides.eip7702Auth != null) {
 			const yParity = overrides.eip7702Auth.yParity ?? "0x0";
@@ -372,10 +417,10 @@ export class Calibur7702Account extends SmartAccount
 				maxPriorityFeePerGas: maxPriorityFeePerGas,
 				factory: "0x7702",
 				factoryData: null,
-				paymaster: null,
-				paymasterVerificationGasLimit: null,
-				paymasterPostOpGasLimit: null,
-				paymasterData: null,
+				paymaster: pmFields?.paymaster ?? null,
+				paymasterVerificationGasLimit: pmFields?.paymasterVerificationGasLimit ?? null,
+				paymasterPostOpGasLimit: pmFields?.paymasterPostOpGasLimit ?? null,
+				paymasterData: pmFields?.paymasterData ?? null,
 				eip7702Auth: authorization,
 			};
 		} else {
@@ -388,10 +433,10 @@ export class Calibur7702Account extends SmartAccount
 				maxPriorityFeePerGas: maxPriorityFeePerGas,
 				factory: null,
 				factoryData: null,
-				paymaster: null,
-				paymasterVerificationGasLimit: null,
-				paymasterPostOpGasLimit: null,
-				paymasterData: null,
+				paymaster: pmFields?.paymaster ?? null,
+				paymasterVerificationGasLimit: pmFields?.paymasterVerificationGasLimit ?? null,
+				paymasterPostOpGasLimit: pmFields?.paymasterPostOpGasLimit ?? null,
+				paymasterData: pmFields?.paymasterData ?? null,
 				eip7702Auth: null,
 			};
 		}
@@ -499,32 +544,102 @@ export class Calibur7702Account extends SmartAccount
 	 * Computes the UserOperation hash and wraps the ECDSA signature in
 	 * Calibur's format: `abi.encode(keyHash, ecdsaSig, hookData)`.
 	 *
+	 * Accepts either a hex-encoded private key string or a signer callback
+	 * `(hash: string) => Promise<string>` for use with viem, ethers Signers,
+	 * hardware wallets, or MPC signers.
+	 *
 	 * @param userOperation - The UserOperation to sign
-	 * @param privateKey - Hex-encoded private key of the EOA
+	 * @param signer - Hex-encoded private key or a signing function
 	 * @param chainId - Target chain ID
 	 * @param overrides - Optional signature overrides (e.g., hookData)
-	 * @returns Hex-encoded wrapped signature
+	 * @returns Hex-encoded wrapped signature (or a Promise if using a signer callback)
 	 */
 	public signUserOperation(
 		userOperation: UserOperationV8,
-		privateKey: string,
+		signer: string,
+		chainId: bigint,
+		overrides?: CaliburSignatureOverrides,
+	): string;
+	public signUserOperation(
+		userOperation: UserOperationV8,
+		signer: SignerFunction,
+		chainId: bigint,
+		overrides?: CaliburSignatureOverrides,
+	): Promise<string>;
+	public signUserOperation(
+		userOperation: UserOperationV8,
+		signer: string | SignerFunction,
 		chainId: bigint,
 		overrides: CaliburSignatureOverrides = {},
-	): string {
+	): string | Promise<string> {
 		const userOperationHash = createUserOperationHash(
 			userOperation,
 			this.entrypointAddress,
 			chainId,
 		);
-
-		const wallet = new Wallet(privateKey);
-		const ecdsaSig = wallet.signingKey.sign(userOperationHash).serialized;
 		const hookData = overrides.hookData ?? "0x";
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		return abiCoder.encode(
-			["bytes32", "bytes", "bytes"],
-			[ROOT_KEY_HASH, ecdsaSig, hookData],
+		if (typeof signer === "string") {
+			const wallet = new Wallet(signer);
+			const ecdsaSig = wallet.signingKey.sign(userOperationHash).serialized;
+			return Calibur7702Account.wrapSignature(ROOT_KEY_HASH, ecdsaSig, hookData);
+		}
+
+		return signer(userOperationHash).then((ecdsaSig) =>
+			Calibur7702Account.wrapSignature(ROOT_KEY_HASH, ecdsaSig, hookData)
+		);
+	}
+
+	/**
+	 * Sign a UserOperation with a registered secp256k1 secondary key.
+	 * Computes the UserOperation hash and wraps the ECDSA signature in
+	 * Calibur's format: `abi.encode(keyHash, ecdsaSig, hookData)`.
+	 *
+	 * Accepts either a hex-encoded private key string or a signer callback.
+	 *
+	 * @param userOperation - The UserOperation to sign
+	 * @param signer - Hex-encoded private key or a signing function
+	 * @param chainId - Target chain ID
+	 * @param keyHash - The key hash of the registered key (from {@link getKeyHash})
+	 * @param overrides - Optional signature overrides (e.g., hookData)
+	 * @returns Hex-encoded wrapped signature (or a Promise if using a signer callback)
+	 */
+	public signUserOperationWithKey(
+		userOperation: UserOperationV8,
+		signer: string,
+		chainId: bigint,
+		keyHash: string,
+		overrides?: CaliburSignatureOverrides,
+	): string;
+	public signUserOperationWithKey(
+		userOperation: UserOperationV8,
+		signer: SignerFunction,
+		chainId: bigint,
+		keyHash: string,
+		overrides?: CaliburSignatureOverrides,
+	): Promise<string>;
+	public signUserOperationWithKey(
+		userOperation: UserOperationV8,
+		signer: string | SignerFunction,
+		chainId: bigint,
+		keyHash: string,
+		overrides: CaliburSignatureOverrides = {},
+	): string | Promise<string> {
+		const userOperationHash = createUserOperationHash(
+			userOperation,
+			this.entrypointAddress,
+			chainId,
+		);
+		const hookData = overrides.hookData ?? "0x";
+
+		if (typeof signer === "string") {
+			const wallet = new Wallet(signer);
+			const ecdsaSig = wallet.signingKey.sign(userOperationHash).serialized;
+			return Calibur7702Account.wrapSignature(keyHash, ecdsaSig, hookData);
+		}
+
+		return signer(userOperationHash).then((ecdsaSig) =>
+			Calibur7702Account.wrapSignature(keyHash, ecdsaSig, hookData)
 		);
 	}
 
@@ -665,12 +780,12 @@ export class Calibur7702Account extends SmartAccount
 	}
 
 	/**
-	 * Unpack a uint256 settings value into a {@link CaliburKeySettings} object.
+	 * Unpack a uint256 settings value into a {@link CaliburKeySettingsResult} object.
 	 *
 	 * @param packed - The packed settings value
-	 * @returns Parsed key settings
+	 * @returns Parsed key settings with all fields populated
 	 */
-	public static unpackKeySettings(packed: bigint): CaliburKeySettings {
+	public static unpackKeySettings(packed: bigint): CaliburKeySettingsResult {
 		const hook = "0x" + (packed & ((1n << 160n) - 1n)).toString(16).padStart(40, "0");
 		const expiration = Number((packed >> 160n) & ((1n << 40n) - 1n));
 		const isAdmin = ((packed >> 200n) & 1n) === 1n;
@@ -689,12 +804,13 @@ export class Calibur7702Account extends SmartAccount
 	 *
 	 * @param key - The key to register
 	 * @param settings - Optional key settings (isAdmin is always forced to false)
-	 * @returns An array of two {@link SimpleMetaTransaction}s: [registerTx, updateTx]
+	 * @returns A tuple of exactly two {@link SimpleMetaTransaction}s: [registerTx, updateTx].
+	 *          Both must be included in the same UserOperation.
 	 */
 	public static createRegisterKeyMetaTransactions(
 		key: CaliburKey,
 		settings: CaliburKeySettings = {},
-	): SimpleMetaTransaction[] {
+	): [SimpleMetaTransaction, SimpleMetaTransaction] {
 		if (settings.isAdmin === true) {
 			throw new AbstractionKitError(
 				"BAD_DATA",
@@ -726,7 +842,7 @@ export class Calibur7702Account extends SmartAccount
 		return [
 			{ to: ZeroAddress, value: 0n, data: registerCallData },
 			{ to: ZeroAddress, value: 0n, data: updateCallData },
-		];
+		] as [SimpleMetaTransaction, SimpleMetaTransaction];
 	}
 
 	/**
@@ -801,6 +917,21 @@ export class Calibur7702Account extends SmartAccount
 	// ─── Read Functions (instance, RPC calls) ────────────────────────────
 
 	/**
+	 * Check if this EOA is delegated to this account's singleton (delegatee).
+	 * Returns `false` if not delegated at all or delegated to a different
+	 * singleton. Use the standalone {@link getDelegatedAddress} utility to
+	 * get the raw delegatee address regardless of which singleton it is.
+	 *
+	 * @param providerRpc - JSON-RPC endpoint
+	 * @returns True if the account is delegated to `this.delegateeAddress`
+	 */
+	public async isDelegated(providerRpc: string): Promise<boolean> {
+		const address = await getDelegatedAddress(this.accountAddress, providerRpc);
+		if (address === null) return false;
+		return address.toLowerCase() === this.delegateeAddress.toLowerCase();
+	}
+
+	/**
 	 * Get the account nonce from the EntryPoint.
 	 *
 	 * @param providerRpc - JSON-RPC endpoint
@@ -864,12 +995,12 @@ export class Calibur7702Account extends SmartAccount
 	 *
 	 * @param providerRpc - JSON-RPC endpoint
 	 * @param keyHash - The key hash to query
-	 * @returns Parsed {@link CaliburKeySettings}
+	 * @returns Parsed {@link CaliburKeySettingsResult} with all fields populated
 	 */
 	public async getKeySettings(
 		providerRpc: string,
 		keyHash: string,
-	): Promise<CaliburKeySettings> {
+	): Promise<CaliburKeySettingsResult> {
 		const abiCoder = AbiCoder.defaultAbiCoder();
 		const callData = GET_KEY_SETTINGS_SELECTOR + abiCoder.encode(
 			["bytes32"],

@@ -5,6 +5,7 @@ require('dotenv').config();
 const abiCoder = AbiCoder.defaultAbiCoder();
 
 const ENTRYPOINT_V8 = "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108";
+const ENTRYPOINT_V9 = "0x433709009B8330FDa32311DF1C2AFA402eD8D009";
 const ROOT_KEY_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 // Tests 1.6 and 1.13 need a private key for deterministic ECDSA signing.
