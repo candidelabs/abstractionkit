@@ -153,10 +153,16 @@ export async function simulateUserOperationWithTenderly(
     const entrypointAddressLowerCase = entrypointAddress.toLowerCase();
     let callData: string | null = null;
     const abiCoder = AbiCoder.defaultAbiCoder();
-	if (
-        "initCode" in userOperation &&
-        entrypointAddressLowerCase == '0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789'
-    ) {
+    const isV6UserOperation = "initCode" in userOperation;
+    const isV6Entrypoint =
+        entrypointAddressLowerCase == "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789";
+
+    if (isV6UserOperation !== isV6Entrypoint) {
+        throw new RangeError("UserOperation version does not match entrypoint.");
+    }
+
+    if (isV6UserOperation) {
+        userOperation = userOperation as UserOperationV6;
         const useroperationValuesArray = [
             userOperation.sender,
             userOperation.nonce,
