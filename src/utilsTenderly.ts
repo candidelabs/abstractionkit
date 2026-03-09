@@ -13,7 +13,7 @@ import {
 import {
 	AbstractionKitError
 } from "./errors";
-import { sendJsonRpcRequest } from "./utils";
+import { sendJsonRpcRequest, createUserOperationHash } from "./utils";
 
 /**
  * State override mapping for Tenderly simulations.
@@ -456,6 +456,7 @@ export async function simulateUserOperationCallDataWithTenderly(
 ) : Promise<TenderlySimulationResult> {
     let factory = null;
     let factoryData = null;
+    let callData = userOperation.callData;
 	if ("initCode" in userOperation) {
         if(userOperation.initCode != null && userOperation.initCode.length > 2){
             factory = userOperation.initCode.slice(0,22);
@@ -464,6 +465,76 @@ export async function simulateUserOperationCallDataWithTenderly(
     }else{
         factory = userOperation.factory;
         factoryData = userOperation.factoryData;
+
+        // Handle IAccountExecute.executeUserOp callData rewriting.
+        // When callData starts with the executeUserOp selector (0x8dd7712f),
+        // the EntryPoint rewrites the call to
+        // sender.executeUserOp(packedUserOp, userOpHash) instead of
+        // sender.call(callData). Replicate that behavior here.
+        const EXECUTE_USEROP_SELECTOR = "0x8dd7712f";
+        if (callData.toLowerCase().startsWith(EXECUTE_USEROP_SELECTOR)) {
+            const abiCoder = AbiCoder.defaultAbiCoder();
+
+            let initCode = "0x";
+            if (userOperation.factory != null) {
+                initCode = userOperation.factory;
+                if (userOperation.factoryData != null) {
+                    initCode += userOperation.factoryData.slice(2);
+                }
+            }
+
+            const accountGasLimits =
+                "0x" +
+                abiCoder.encode(["uint128"], [userOperation.verificationGasLimit]).slice(34) +
+                abiCoder.encode(["uint128"], [userOperation.callGasLimit]).slice(34);
+
+            const gasFees =
+                "0x" +
+                abiCoder.encode(["uint128"], [userOperation.maxPriorityFeePerGas]).slice(34) +
+                abiCoder.encode(["uint128"], [userOperation.maxFeePerGas]).slice(34);
+
+            let paymasterAndData = "0x";
+            if (userOperation.paymaster != null) {
+                paymasterAndData = userOperation.paymaster;
+                if (userOperation.paymasterVerificationGasLimit != null) {
+                    paymasterAndData += abiCoder
+                        .encode(["uint128"], [userOperation.paymasterVerificationGasLimit])
+                        .slice(34);
+                }
+                if (userOperation.paymasterPostOpGasLimit != null) {
+                    paymasterAndData += abiCoder
+                        .encode(["uint128"], [userOperation.paymasterPostOpGasLimit])
+                        .slice(34);
+                }
+                if (userOperation.paymasterData != null) {
+                    paymasterAndData += userOperation.paymasterData.slice(2);
+                }
+            }
+
+            const userOpHash = createUserOperationHash(
+                userOperation as unknown as UserOperationV7 | UserOperationV8,
+                entrypointAddress,
+                chainId,
+            );
+
+            const packedUserOp = [
+                userOperation.sender,
+                userOperation.nonce,
+                initCode,
+                userOperation.callData,
+                accountGasLimits,
+                userOperation.preVerificationGas,
+                gasFees,
+                paymasterAndData,
+                userOperation.signature,
+            ];
+
+            const encodedParams = abiCoder.encode(
+                ["(address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)", "bytes32"],
+                [packedUserOp, userOpHash],
+            );
+            callData = EXECUTE_USEROP_SELECTOR + encodedParams.slice(2);
+        }
     }
 
     return await simulateSenderCallDataWithTenderly(
@@ -473,7 +544,7 @@ export async function simulateUserOperationCallDataWithTenderly(
         chainId,
         entrypointAddress,
         userOperation.sender,
-        userOperation.callData,
+        callData,
         factory,
         factoryData,
         blockNumber,
