@@ -52,7 +52,7 @@ function buildDomainSeparator(chainId: bigint, entrypoint: string): string{
  * @returns The UserOperation hash as a hex string
  */
 export function createUserOperationHash(
-	useroperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
+	useroperation: UserOperationV6 | UserOperationV7 | UserOperationV8 | UserOperationV9,
 	entrypointAddress: string,
 	chainId: bigint,
 ): string {
