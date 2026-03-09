@@ -512,7 +512,7 @@ export async function simulateUserOperationCallDataWithTenderly(
             }
 
             const userOpHash = createUserOperationHash(
-                userOperation as unknown as UserOperationV7 | UserOperationV8,
+                userOperation as UserOperationV7 | UserOperationV8 | UserOperationV9,
                 entrypointAddress,
                 chainId,
             );
