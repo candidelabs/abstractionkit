@@ -6,6 +6,7 @@ import {
 	UserOperationV6,
 	UserOperationV7,
 	UserOperationV8,
+    UserOperationV9,
     TenderlySimulationResult,
     SingleTransactionTenderlySimulationResult,
 } from "./types";
@@ -93,7 +94,7 @@ export async function simulateUserOperationWithTenderlyAndCreateShareLink(
     tenderlyAccessKey: string,
     chainId: bigint,
 	entrypointAddress: string,
-	userOperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
+	userOperation: UserOperationV6 | UserOperationV7 | UserOperationV8 | UserOperationV9,
     blockNumber: number | null = null,
     stateOverrides?: OverrideType | null
 ): Promise<{
@@ -145,7 +146,7 @@ export async function simulateUserOperationWithTenderly(
     tenderlyAccessKey: string,
     chainId: bigint,
 	entrypointAddress: string,
-	userOperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
+	userOperation: UserOperationV6 | UserOperationV7 | UserOperationV8 | UserOperationV9,
     blockNumber: number | null = null,
     stateOverrides?: OverrideType | null
 ): Promise<SingleTransactionTenderlySimulationResult> {
@@ -183,7 +184,7 @@ export async function simulateUserOperationWithTenderly(
         callData = '0x1fad948c' + encodedUserOperation.slice(2);
 
     }else{
-        userOperation = userOperation as UserOperationV7 | UserOperationV8;
+        userOperation = userOperation as UserOperationV7 | UserOperationV8 | UserOperationV9;
         let initCode = "0x";
         if (userOperation.factory != null) {
             initCode = userOperation.factory;
@@ -249,7 +250,8 @@ export async function simulateUserOperationWithTenderly(
 
         if(
             entrypointAddressLowerCase == '0x0000000071727de22e5e9d8baf0edac6f37da032' ||
-            entrypointAddressLowerCase == '0x4337084d9e255ff0702461cf8895ce9e3b5ff108'
+            entrypointAddressLowerCase == '0x4337084d9e255ff0702461cf8895ce9e3b5ff108' ||
+            entrypointAddressLowerCase == '0x433709009b8330fda32311df1c2afa402ed8d009'
         ){
             callData = '0x765e827f' + encodedUserOperation.slice(2);
         }else{
@@ -350,6 +352,11 @@ export interface UserOperationV8ToSimulate extends BaseUserOperationToSimulate {
 }
 
 /**
+ * UserOperation fields for Tenderly simulation targeting EntryPoint v0.9.
+ */
+export interface UserOperationV9ToSimulate extends UserOperationV8ToSimulate {}
+
+/**
  * Simulates a UserOperation's callData (and optional account deployment) on
  * Tenderly, then creates shareable links for each simulation.
  * @param tenderlyAccountSlug - The Tenderly account slug.
@@ -368,7 +375,7 @@ export async function simulateUserOperationCallDataWithTenderlyAndCreateShareLin
     tenderlyAccessKey: string,
     chainId: bigint,
 	entrypointAddress: string,
-	userOperation: UserOperationV6ToSimulate | UserOperationV7ToSimulate | UserOperationV8ToSimulate,
+	userOperation: UserOperationV6ToSimulate | UserOperationV7ToSimulate | UserOperationV8ToSimulate | UserOperationV9ToSimulate,
     blockNumber: number | null = null,
     stateOverrides?: OverrideType | null,
 ): Promise<{
@@ -443,7 +450,7 @@ export async function simulateUserOperationCallDataWithTenderly(
     tenderlyAccessKey: string,
     chainId: bigint,
 	entrypointAddress: string,
-	userOperation: UserOperationV6ToSimulate | UserOperationV7ToSimulate | UserOperationV8ToSimulate,
+	userOperation: UserOperationV6ToSimulate | UserOperationV7ToSimulate | UserOperationV8ToSimulate | UserOperationV9ToSimulate,
     blockNumber: number | null = null,
     stateOverrides?: OverrideType | null,
 ) : Promise<TenderlySimulationResult> {
@@ -603,6 +610,10 @@ export async function simulateSenderCallDataWithTenderly(
         entrypointAddressLowerCase == '0x4337084d9e255ff0702461cf8895ce9e3b5ff108'
     ){
         senderCreator = "0x449ed7c3e6fee6a97311d4b55475df59c44add33";
+    }else if(
+        entrypointAddressLowerCase == '0x433709009b8330fda32311df1c2afa402ed8d009'
+    ){
+        senderCreator = "0x0A630a99Df908A81115A3022927Be82f9299987e";
     }else{
         throw new RangeError(`Invalid entrypoint: ${entrypointAddress}`);
     }
