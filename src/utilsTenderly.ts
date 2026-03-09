@@ -462,6 +462,15 @@ export async function simulateUserOperationCallDataWithTenderly(
 ) : Promise<TenderlySimulationResult> {
     let factory = null;
     let factoryData = null;
+    const entrypointAddressLowerCase = entrypointAddress.toLowerCase();
+    const isV6UserOperation = "initCode" in userOperation;
+    const isV6Entrypoint =
+        entrypointAddressLowerCase == "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789";
+
+    if (isV6UserOperation !== isV6Entrypoint) {
+        throw new RangeError("UserOperation version does not match entrypoint.");
+    }
+
     let callData = userOperation.callData;
 	if ("initCode" in userOperation) {
         if(userOperation.initCode != null && userOperation.initCode.length > 2){
