@@ -10,7 +10,7 @@ import { PaymasterFieldsInitValues, UserOperationV9 } from "../types";
  * This paymaster accepts all operations without validation and should
  * not be used in production environments. Use CandidePaymaster for prod.
  */
-export class AllowAllPaymaster extends Paymaster {
+export class ExperimentalAllowAllPaymaster extends Paymaster {
 	/** The on-chain paymaster contract address. */
 	readonly address: string;
 
