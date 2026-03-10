@@ -21,10 +21,14 @@ import { TypedDataEncoder, Wallet } from "ethers";
 /**
  * @class
  * @experimental
- * @classdesc This is an experimental class that may change in future versions
+ * @classdesc This is an experimental class that may change in future versions.
  * Safe account variant that supports multi-chain signatures via Merkle trees.
  * Allows signing UserOperations for multiple chains with a single signature,
  * using EntryPoint v0.9 and EIP-712 typed data with Merkle proofs.
+ *
+ * **WARNING: UNAUDITED** — The underlying smart contracts of SafeMultiChainSigAccount 
+ * have not been audited yet. It is provided as an alpha early release for experimentation. 
+ * Use at your own risk.
  */
 export class SafeMultiChainSigAccount extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V9;

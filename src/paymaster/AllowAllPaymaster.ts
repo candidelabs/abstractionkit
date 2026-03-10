@@ -4,7 +4,11 @@ import { PaymasterFieldsInitValues, UserOperationV9 } from "../types";
 /**
  * A paymaster that sponsors all UserOperations unconditionally.
  * Uses a fixed magic signature that the on-chain paymaster contract accepts
- * without additional validation. Useful for testing and development.
+ * without additional validation.
+ *
+ * **WARNING: FOR DEVELOPMENT AND TESTING ONLY.**
+ * This paymaster accepts all operations without validation and should
+ * not be used in production environments. Use CandidePaymaster for prod.
  */
 export class AllowAllPaymaster extends Paymaster {
 	/** The on-chain paymaster contract address. */
