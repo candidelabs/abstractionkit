@@ -264,6 +264,31 @@ export async function simulateUserOperationWithTenderly(
             throw new RangeError("Invalid entrypoint.");
         }
     }
+
+    // For EIP-7702 userOps (factory == "0x7702"), the EntryPoint checks
+    // that the sender's code starts with the EIP-7702 delegation prefix
+    // (0xef0100). Inject a code state override so the check passes in
+    // simulation.
+    if (
+        !isV6UserOperation &&
+        (userOperation as UserOperationV7 | UserOperationV8 | UserOperationV9)
+            .factory === "0x7702"
+    ) {
+        const eip7702Auth = (userOperation as UserOperationV8 | UserOperationV9).eip7702Auth;
+        if (eip7702Auth != null && eip7702Auth.address != null) {
+            const delegationCode =
+                "0xef0100" + eip7702Auth.address.toLowerCase().replace("0x", "");
+            const senderLower = userOperation.sender.toLowerCase();
+            stateOverrides = stateOverrides
+                ? { ...stateOverrides }
+                : {};
+            stateOverrides[senderLower] = {
+                ...(stateOverrides[senderLower] || {}),
+                code: delegationCode,
+            };
+        }
+    }
+
     const simulation = await callTenderlySimulateBundle(
         tenderlyAccountSlug,
         tenderlyProjectSlug,
@@ -480,6 +505,14 @@ export async function simulateUserOperationCallDataWithTenderly(
     }else{
         factory = userOperation.factory;
         factoryData = userOperation.factoryData;
+
+        // EIP-7702 userOps use factory:"0x7702" as a sentinel with
+        // factoryData:null. This doesn't represent an actual factory
+        // deployment, so normalize to null.
+        if (factory === "0x7702") {
+            factory = null;
+            factoryData = null;
+        }
 
         // Handle IAccountExecute.executeUserOp callData rewriting.
         // When callData starts with the executeUserOp selector (0x8dd7712f),
@@ -817,7 +850,7 @@ export async function callTenderlySimulateBundle(
                 const stateOverrides = transaction.stateOverrides;
                 for (const address in stateOverrides) {
                     for (const key in stateOverrides[address]) {
-                       if(key != 'balance' && key != 'storage' && key != 'stateDiff'){
+                       if(key != 'balance' && key != 'code' && key != 'storage' && key != 'stateDiff'){
                             throw new RangeError(
                                 `Invalide stateOverrides key: ${key}.`
                             );
