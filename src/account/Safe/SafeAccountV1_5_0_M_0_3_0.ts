@@ -1,6 +1,6 @@
 import { OnChainIdentifierParamsType } from "src/types";
 import { SafeAccountV0_3_0 } from "./SafeAccountV0_3_0";
-import { Signer, InitCodeOverrides } from "./types";
+import { Signer, InitCodeOverrides, SafeAccountSingleton } from "./types";
 import { Safe_L2_V1_5_0 } from "src/constants";
 
 /**
@@ -28,7 +28,8 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 			safe4337ModuleAddress?: string;
 			entrypointAddress?: string;
             onChainIdentifierParams?: OnChainIdentifierParamsType;
-            onChainIdentifier?: string
+            onChainIdentifier?: string;
+			safeAccountSingleton?: SafeAccountSingleton;
 		} = {},
 	) {
         super(
@@ -36,7 +37,7 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
             {
                 onChainIdentifierParams: overrides.onChainIdentifierParams,
                 onChainIdentifier: overrides.onChainIdentifier,
-                safeAccountSingleton: Safe_L2_V1_5_0
+                safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0
             }
         );
 	}
@@ -87,7 +88,7 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
             overrides.safeAccountSingleton??Safe_L2_V1_5_0;
         return SafeAccountV0_3_0.initializeNewAccount(
             owners,
-            overrides
+            modOverrides
         );
     }
 
