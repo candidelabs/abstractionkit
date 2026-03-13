@@ -1,7 +1,7 @@
 export { SmartAccount } from "./account/SmartAccount";
 export { Simple7702Account } from "./account/simple/Simple7702Account";
 export { Simple7702AccountV09 } from "./account/simple/Simple7702AccountV09";
-export { SafeMultiChainSigAccount } from "./account/Safe/SafeMultiChainSigAccount";
+export { ExperimentalSafeMultiChainSigAccount } from "./account/Safe/SafeMultiChainSigAccount";
 export {
 	SocialRecoveryModule,
 	RecoveryRequest,
