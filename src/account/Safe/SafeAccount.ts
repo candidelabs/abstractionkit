@@ -888,7 +888,7 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @param overrides.entrypoint - target entrypoint
 	 * defaults to ENTRYPOINT_V9
-	 * @param overrides.safe4337ModuleAddress - defaults to "0xf998536d89f3e483087da37eabb016faa694b641"
+	 * @param overrides.safe4337ModuleAddress - defaults to "0xee8005d7e79f9a6829ea61A81Fc2A85055fB2a42"
      * @returns an object containing the typed data domain, type and typed data vales
      * object needed for hashing and signing
 	 */
@@ -908,7 +908,7 @@ export class SafeAccount extends SmartAccount {
     } {
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
-			"0xf998536d89f3e483087da37eabb016faa694b641";
+			"0xee8005d7e79f9a6829ea61A81Fc2A85055fB2a42";
 
         return SafeAccount.baseGetUserOperationEip712DataV7V8V9(
             useroperation,
