@@ -11,6 +11,7 @@ import {
     MultiChainSignatureMerkleTreeRootTypedMessageValue,
     SignerSignaturePair,
     WebAuthnSignatureOverrides,
+    WebauthnPublicKey,
 } from "./types";
 
 import { Safe_L2_V1_5_0 } from "src/constants";
@@ -38,6 +39,10 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
         "0xee8005d7e79f9a6829ea61A81Fc2A85055fB2a42";
 	static readonly DEFAULT_SAFE_MODULE_SETUP_ADDRESS =
 		"0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47";
+	static readonly DEFAULT_WEB_AUTHN_PRECOMPILE: string =
+		"0x0000000000000000000000000000000000000100";  // EIP-7951
+	static readonly DEFAULT_WEB_AUTHN_DAIMO_VERIFIER: string =
+		"0xc2b78104907F722DABAc4C69f826a522B2754De4";
 
 	/**
 	 * Create a SafeMultiChainSigAccount instance for an existing or new account.
@@ -108,6 +113,8 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 	): string {
        const modOverrides = { ...overrides,
         	safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
+			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifierForSharedSigner: overrides.eip7212WebAuthnContractVerifierForSharedSigner??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
        };
 		const [accountAddress, ,] =
 			SafeAccount.createAccountAddressAndFactoryAddressAndData(
@@ -158,6 +165,8 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 		}
         const modOverrides = { ...overrides,
             safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
+			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifierForSharedSigner: overrides.eip7212WebAuthnContractVerifierForSharedSigner??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
         };
 		const [accountAddress, factoryAddress, factoryData] =
 			SafeAccount.createAccountAddressAndFactoryAddressAndData(
@@ -303,8 +312,10 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 			safeModuleSetupAddress,
 			overrides.multisendContractAddress,
 			overrides.webAuthnSharedSigner,
-			overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner,
-			overrides.eip7212WebAuthnContractVerifierForSharedSigner,
+			overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner ??
+				ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
+				ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
 		);
 	}
 
@@ -320,6 +331,8 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 	): [string, string] {
      	const modOverrides = { ...overrides,
             safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
+			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifierForSharedSigner: overrides.eip7212WebAuthnContractVerifierForSharedSigner??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
         };
 		return SafeAccount.createFactoryAddressAndData(
 			owners,
@@ -355,7 +368,9 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 				bundlerRpc,
 				{
 					...overrides,
-					isMultiChainSignature: true
+					isMultiChainSignature: true,
+					eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
+					eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
 				}
 			);
 
@@ -604,4 +619,67 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
         });
         return userOpSignatures;
     }
+
+	public static createWebAuthnSignerVerifierAddress(
+		x: bigint,
+		y: bigint,
+		overrides: {
+			eip7212WebAuthnPrecompileVerifier?: string;
+			eip7212WebAuthnContractVerifier?: string;
+			webAuthnSignerFactory?: string;
+			webAuthnSignerSingleton?: string;
+			webAuthnSignerProxyCreationCode?: string;
+		} = {},
+	): string {
+		return SafeAccount.createWebAuthnSignerVerifierAddress(x, y, {
+			...overrides,
+			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+		});
+	}
+
+	public static createDeployWebAuthnVerifierMetaTransaction(
+		x: bigint,
+		y: bigint,
+		overrides: {
+			eip7212WebAuthnPrecompileVerifier?: string;
+			eip7212WebAuthnContractVerifier?: string;
+			webAuthnSignerFactory?: string;
+		} = {},
+	): MetaTransaction {
+		return SafeAccount.createDeployWebAuthnVerifierMetaTransaction(x, y, {
+			...overrides,
+			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+		});
+	}
+
+	public static createDummySignerSignaturePairForExpectedSigners(
+		expectedSigners: Signer[],
+		webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
+	): SignerSignaturePair[] {
+		return SafeAccount.createDummySignerSignaturePairForExpectedSigners(expectedSigners, {
+			...webAuthnSignatureOverrides,
+			eip7212WebAuthnPrecompileVerifier: webAuthnSignatureOverrides.eip7212WebAuthnPrecompileVerifier??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifier: webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+		});
+	}
+
+	public static async verifyWebAuthnSignatureForMessageHash(
+		nodeRpcUrl: string,
+		signer: WebauthnPublicKey,
+		messageHash: string,
+		signature: string,
+		overrides: {
+			eip7212WebAuthnPrecompileVerifier?: string;
+			eip7212WebAuthnContractVerifier?: string;
+			webAuthnSignerSingleton?: string;
+		} = {},
+	): Promise<boolean> {
+		return SafeAccount.verifyWebAuthnSignatureForMessageHash(nodeRpcUrl, signer, messageHash, signature, {
+			...overrides,
+			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+		});
+	}
 }
