@@ -87,10 +87,10 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 			singletonInitHash?: string;
 		} = {},
 	): string {
-		const modOverrides = overrides;
-		modOverrides.singletonInitHash =
-			overrides.singletonInitHash??Safe_L2_V1_5_0.singletonInitHash;
-		return ExperimentalSafeMultiChainSigAccount.createProxyAddress(
+		const modOverrides = { ...overrides,
+			singletonInitHash: overrides.singletonInitHash??Safe_L2_V1_5_0.singletonInitHash,
+		};
+		return SafeAccount.createProxyAddress(
 			initializerCallData,
 			modOverrides
 		);
@@ -106,9 +106,9 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): string {
-       const modOverrides = overrides;
-        modOverrides.safeAccountSingleton =
-        	overrides.safeAccountSingleton??Safe_L2_V1_5_0;	
+       const modOverrides = { ...overrides,
+        	safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
+       };
 		const [accountAddress, ,] =
 			SafeAccount.createAccountAddressAndFactoryAddressAndData(
 				owners,
@@ -156,9 +156,9 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 				y = owner.y;
 			}
 		}
-        const modOverrides = overrides;
-        modOverrides.safeAccountSingleton =
-            overrides.safeAccountSingleton??Safe_L2_V1_5_0;
+        const modOverrides = { ...overrides,
+            safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
+        };
 		const [accountAddress, factoryAddress, factoryData] =
 			SafeAccount.createAccountAddressAndFactoryAddressAndData(
 				owners,
@@ -318,9 +318,9 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): [string, string] {
-     	const modOverrides = overrides;
-        modOverrides.safeAccountSingleton =
-            overrides.safeAccountSingleton??Safe_L2_V1_5_0;
+     	const modOverrides = { ...overrides,
+            safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
+        };
 		return SafeAccount.createFactoryAddressAndData(
 			owners,
 			modOverrides,
@@ -435,6 +435,8 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
                         {
                             validAfter: userOperationsToSign.validAfter,
                             validUntil: userOperationsToSign.validUntil,
+                            safe4337ModuleAddress: this.safe4337ModuleAddress,
+                            entrypointAddress: this.entrypointAddress,
                         },
                     );
                     userOperationsHashes.push(userOperationHash);
@@ -544,6 +546,7 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
                     {
                         validAfter: userOperationsToSign.validAfter,
                         validUntil: userOperationsToSign.validUntil,
+                        safe4337ModuleAddress,
                     },
                 );
                 userOperationsHashes.push(userOperationHash);
@@ -579,6 +582,7 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
                     {
                         validAfter: userOperationsToSign.validAfter,
                         validUntil: userOperationsToSign.validUntil,
+                        safe4337ModuleAddress: overrides.safe4337ModuleAddress,
                     },
                 );
                 userOperationsHashes.push(userOperationHash);

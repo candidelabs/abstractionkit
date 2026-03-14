@@ -161,6 +161,7 @@ export interface WebAuthnSignatureOverrides {
 	validUntil?: bigint;
 	isMultiChainSignature?: boolean;
 	multiChainMerkleProof?: string;
+	safe4337ModuleAddress?: string;
 }
 
 /**
