@@ -67,7 +67,7 @@ export class SendUseroperationResponse {
 				this.userOperationHash,
 			);
 			if (res == null) {
-				count++;
+				count += requestIntervalInSeconds;
 			} else {
 				return res;
 			}

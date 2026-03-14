@@ -35,6 +35,8 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
         super(
             accountAddress,
             {
+                safe4337ModuleAddress: overrides.safe4337ModuleAddress,
+                entrypointAddress: overrides.entrypointAddress,
                 onChainIdentifierParams: overrides.onChainIdentifierParams,
                 onChainIdentifier: overrides.onChainIdentifier,
                 safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0

@@ -387,14 +387,14 @@ export async function simulateUserOperationCallDataWithTenderlyAndCreateShareLin
         stateOverrides
     );
     const simulationIds = simulation.map(s => s.simulation.id) as string[];
-    simulationIds.map(simulationId => 
+    await Promise.all(simulationIds.map(simulationId =>
         shareTenderlySimulationAndCreateLink(
             tenderlyAccountSlug,
             tenderlyProjectSlug,
             tenderlyAccessKey,
             simulationId,
         )
-    );
+    ));
    
     const simulationLinks = simulationIds.map(
         s => 'https://dashboard.tenderly.co/shared/simulation/' + s );
@@ -521,14 +521,14 @@ export async function simulateSenderCallDataWithTenderlyAndCreateShareLink(
         stateOverrides
     );
     const simulationIds = simulation.map(s => s.simulation.id) as string[];
-    simulationIds.map(simulationId => 
+    await Promise.all(simulationIds.map(simulationId =>
         shareTenderlySimulationAndCreateLink(
             tenderlyAccountSlug,
             tenderlyProjectSlug,
             tenderlyAccessKey,
             simulationId,
         )
-    );
+    ));
    
     const simulationLinks = simulationIds.map(
         s => 'https://dashboard.tenderly.co/shared/simulation/' + s );
