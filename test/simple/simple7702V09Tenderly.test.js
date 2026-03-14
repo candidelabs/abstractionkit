@@ -57,7 +57,7 @@ describe('Simple7702AccountV09 Tenderly live simulation', () => {
         userOperation.signature = smartAccount.signUserOperation(
             userOperation,
             ownerPrivateKey,
-            chainId,
+            BigInt(chainId),
         );
     });
 
@@ -216,7 +216,7 @@ describe('Simple7702AccountV09 Tenderly live simulation with AllowAllPaymaster',
         userOperation.signature = smartAccount.signUserOperation(
             userOperation,
             ownerPrivateKey,
-            chainId,
+            BigInt(chainId),
         );
 
         // Set approved paymaster data AFTER signing
