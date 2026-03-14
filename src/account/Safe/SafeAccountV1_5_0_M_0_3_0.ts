@@ -60,9 +60,9 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 			singletonInitHash?: string;
 		} = {},
 	): string {
-        const modOverrides = overrides;
-        modOverrides.singletonInitHash =
-            overrides.singletonInitHash??Safe_L2_V1_5_0.singletonInitHash;
+        const modOverrides = { ...overrides,
+            singletonInitHash: overrides.singletonInitHash??Safe_L2_V1_5_0.singletonInitHash,
+        };
         return SafeAccountV0_3_0.createProxyAddress(
             initializerCallData,
             modOverrides
@@ -85,9 +85,9 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): SafeAccountV1_5_0_M_0_3_0 {
-        const modOverrides = overrides;
-        modOverrides.safeAccountSingleton =
-            overrides.safeAccountSingleton??Safe_L2_V1_5_0;
+        const modOverrides = { ...overrides,
+            safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
+        };
         return SafeAccountV0_3_0.initializeNewAccount(
             owners,
             modOverrides
@@ -106,9 +106,9 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): string {
-        const modOverrides = overrides;
-        modOverrides.safeAccountSingleton =
-            overrides.safeAccountSingleton??Safe_L2_V1_5_0;
+        const modOverrides = { ...overrides,
+            safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
+        };
         return SafeAccountV0_3_0.createAccountAddress(
             owners,
             modOverrides
@@ -127,12 +127,12 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): [string, string] {
-     const modOverrides = overrides;
-        modOverrides.safeAccountSingleton =
-            overrides.safeAccountSingleton??Safe_L2_V1_5_0;
+     const modOverrides = { ...overrides,
+            safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
+        };
         return SafeAccountV0_3_0.createFactoryAddressAndData(
             owners,
-            overrides
+            modOverrides
         );
     }
 }

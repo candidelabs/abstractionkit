@@ -801,10 +801,9 @@ export class CandidePaymaster extends Paymaster {
 			if (!this.initialized) {
 				await this.initialize();
 			}
-			const _overrides = overrides || {};
-			if (_overrides?.callGasLimitPercentageMultiplier == undefined){
-				_overrides.callGasLimitPercentageMultiplier = 105;
-			}
+			const _overrides = { ...(overrides || {}),
+				callGasLimitPercentageMultiplier: overrides?.callGasLimitPercentageMultiplier ?? 105,
+			};
 			let entrypoint = overrides?.entrypoint;
 			if (entrypoint == null) {
 				if ("initCode" in userOperation) {
