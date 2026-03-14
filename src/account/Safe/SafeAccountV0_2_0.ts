@@ -389,7 +389,6 @@ export class SafeAccountV0_2_0 extends SafeAccount {
         overrides:{
 			safeV06ModuleAddress?: string;
 			safeV07ModuleAddress?: string;
-            safeV06PrevModuleAddress?: string;
             pageSize?: bigint;
 			modulesStart?: string;
         } = {}
