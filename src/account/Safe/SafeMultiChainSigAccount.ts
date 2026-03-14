@@ -173,7 +173,8 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 			safe4337ModuleAddress: overrides.safe4337ModuleAddress,
 			entrypointAddress: overrides.entrypointAddress,
             onChainIdentifierParams: overrides.onChainIdentifierParams,
-            onChainIdentifier: overrides.onChainIdentifier
+            onChainIdentifier: overrides.onChainIdentifier,
+			safeAccountSingleton: overrides.safeAccountSingleton,
 		});
 		safe.factoryAddress = factoryAddress;
 		safe.factoryData = factoryData;
@@ -431,6 +432,10 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
                     const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
                         userOperationsToSign.userOperation,
                         userOperationsToSign.chainId,
+                        {
+                            validAfter: userOperationsToSign.validAfter,
+                            validUntil: userOperationsToSign.validUntil,
+                        },
                     );
                     userOperationsHashes.push(userOperationHash);
             });
@@ -536,6 +541,10 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
                 const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
                     userOperationsToSign.userOperation,
                     userOperationsToSign.chainId,
+                    {
+                        validAfter: userOperationsToSign.validAfter,
+                        validUntil: userOperationsToSign.validUntil,
+                    },
                 );
                 userOperationsHashes.push(userOperationHash);
         });
@@ -556,16 +565,7 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 	public static formatSignaturesToUseroperationsSignatures(
 		userOperationsToSign: UserOperationToSign[],
 		signerSignaturePairs: SignerSignaturePair[],
-		overrides: {
-            isInit?: boolean;
-            webAuthnSharedSigner?: string;
-            eip7212WebAuthnPrecompileVerifier?: string;
-            eip7212WebAuthnContractVerifier?: string;
-            webAuthnSignerFactory?: string;
-            webAuthnSignerSingleton?: string;
-            validAfter?: bigint;
-            validUntil?: bigint;
-        } = {},
+		overrides: WebAuthnSignatureOverrides = {},
 	): string[] {
 		if (userOperationsToSign.length < 1) {
 			throw new RangeError("There should be at least one userOperationsToSign");
@@ -576,6 +576,10 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
                 const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
                     userOperationsToSign.userOperation,
                     userOperationsToSign.chainId,
+                    {
+                        validAfter: userOperationsToSign.validAfter,
+                        validUntil: userOperationsToSign.validUntil,
+                    },
                 );
                 userOperationsHashes.push(userOperationHash);
         });
@@ -587,9 +591,9 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
                     SafeAccount.formatSignaturesToUseroperationSignature(
                         signerSignaturePairs,
                         {
+                            ...overrides,
                             isMultiChainSignature:true,
                             multiChainMerkleProof: proofs[index],
-                            ...overrides
                         },
                     )
                 );
