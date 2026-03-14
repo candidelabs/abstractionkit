@@ -1,7 +1,7 @@
 # ============================================
 # CI Pipeline — Build Only
 # ============================================
-# Verifies that all examples compile successfully.
+# Verifies that the main project builds successfully.
 
 name: CI
 
@@ -31,10 +31,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: "npm"
+          cache: "yarn"
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --frozen-lockfile
 
       - name: Build
-        run: npm run build
+        run: yarn build
