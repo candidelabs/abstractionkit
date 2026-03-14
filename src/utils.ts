@@ -81,17 +81,18 @@ export function createUserOperationHash(
         packedUserOperationHash = keccak256(
 			createPackedUserOperationV8(useroperation as UserOperationV8),
 		);
-        const domainSeparator = buildDomainSeparator(chainId, ENTRYPOINT_V8);
+        const domainSeparator = buildDomainSeparator(chainId, entrypointAddress);
         userOperationHash = keccak256(
             "0x1901" + domainSeparator.slice(2) + packedUserOperationHash.slice(2));
-    }else{
+    }else if (entrypointAddress.toLowerCase() == ENTRYPOINT_V9.toLowerCase()) {
         packedUserOperationHash = keccak256(
 			createPackedUserOperationV9(useroperation as UserOperationV8),
 		);
-        const domainSeparator = buildDomainSeparator(chainId, ENTRYPOINT_V9);
+        const domainSeparator = buildDomainSeparator(chainId, entrypointAddress);
         userOperationHash = keccak256(
             "0x1901" + domainSeparator.slice(2) + packedUserOperationHash.slice(2));
-
+    }else{
+        throw new RangeError("unsupported entrypoint address: " + entrypointAddress);
     }
 
 	return userOperationHash;

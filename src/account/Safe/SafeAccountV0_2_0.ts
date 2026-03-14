@@ -451,6 +451,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
             webAuthnSharedSigner?: string;
             webAuthnSignerFactory?: string;
             webAuthnSignerSingleton?: string;
+            webAuthnSignerProxyCreationCode?: string;
             eip7212WebAuthnPrecompileVerifier?: string;
             eip7212WebAuthnContractVerifier?: string;
 		} = {},
