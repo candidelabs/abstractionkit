@@ -140,7 +140,8 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			safe4337ModuleAddress: overrides.safe4337ModuleAddress,
 			entrypointAddress: overrides.entrypointAddress,
             onChainIdentifierParams: overrides.onChainIdentifierParams,
-            onChainIdentifier: overrides.onChainIdentifier
+            onChainIdentifier: overrides.onChainIdentifier,
+			safeAccountSingleton: overrides.safeAccountSingleton,
 		});
 		safe.factoryAddress = factoryAddress;
 		safe.factoryData = factoryData;

@@ -1315,6 +1315,7 @@ export class SafeAccount extends SmartAccount {
             webAuthnSharedSigner?: string;
             webAuthnSignerFactory?: string;
             webAuthnSignerSingleton?: string;
+            webAuthnSignerProxyCreationCode?: string;
             eip7212WebAuthnPrecompileVerifier?: string;
             eip7212WebAuthnContractVerifier?: string;
             isMultiChainSignature?: boolean;
@@ -1362,6 +1363,7 @@ export class SafeAccount extends SmartAccount {
                     eip7212WebAuthnContractVerifier:overrides.eip7212WebAuthnContractVerifier,
                     webAuthnSignerFactory:overrides.webAuthnSignerFactory,
                     webAuthnSignerSingleton:overrides.webAuthnSignerSingleton,
+                    webAuthnSignerProxyCreationCode:overrides.webAuthnSignerProxyCreationCode,
                     validAfter,
                     validUntil,
                 }
