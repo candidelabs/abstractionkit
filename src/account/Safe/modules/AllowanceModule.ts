@@ -3,6 +3,14 @@ import { createCallData, sendEthCallRequest } from "../../../utils";
 import { MetaTransaction } from "../../../types";
 
 /**
+ * Address of the legacy Allowance Module v0.1.0 contract.
+ * Replaced by v1.0.0 due to a bug in the v0.1.0 contract.
+ * Use this to interact with existing allowances set on the old module.
+ */
+export const ALLOWANCE_MODULE_V0_1_0_ADDRESS =
+    "0xAA46724893dedD72658219405185Fb0Fc91e091C";
+
+/**
  * Safe module for managing token spending allowances (v1.0.0). Enables Safe owners
  * to grant delegates recurring or one-time permission to transfer ERC-20
  * tokens from the Safe, subject to configurable limits and reset periods.
@@ -11,6 +19,11 @@ import { MetaTransaction } from "../../../types";
  *
  * Each delegate is limited to 65534 transfers per token allowance (uint16 nonce).
  * Once exhausted, a new delegate must be used.
+ *
+ * **Breaking change (v1.0.0):** The default module address changed from
+ * {@link ALLOWANCE_MODULE_V0_1_0_ADDRESS} (`0xAA46…091C`) due to a bug in the
+ * v0.1.0 contract. If you have active allowances on the old module, use
+ * `new AllowanceModule(ALLOWANCE_MODULE_V0_1_0_ADDRESS)` to interact with them.
  */
 export class AllowanceModule extends SafeModule{
     static readonly DEFAULT_ALLOWANCE_MODULE_ADDRESS =
