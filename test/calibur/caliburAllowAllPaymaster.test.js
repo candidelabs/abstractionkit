@@ -81,7 +81,7 @@ async function sendAndWait(acct, userOp, bRpc) {
 
 // ─── Tests ──────────────────────────────────────────────────────────────
 
-describe('Calibur7702Account AllowAllPaymaster', () => {
+describe('Calibur7702Account ExperimentalAllowAllPaymaster', () => {
 
     beforeAll(async () => {
         if (!providerRpc || !bundlerRpc || !eoaPrivateKey || !eoaAddress) {
@@ -93,11 +93,11 @@ describe('Calibur7702Account AllowAllPaymaster', () => {
             entrypointAddress: ENTRYPOINT_V9,
             delegateeAddress: CALIBUR_V9_SINGLETON,
         });
-        allowAllPaymaster = new ak.AllowAllPaymaster();
+        allowAllPaymaster = new ak.ExperimentalAllowAllPaymaster();
         paymasterInitFields = await allowAllPaymaster.getPaymasterFieldsInitValues(chainId);
     });
 
-    // ─── 6.1: AllowAllPaymaster init values ──────────────────────────────
+    // ─── 6.1: ExperimentalAllowAllPaymaster init values ──────────────────────────────
 
     test('6.1 getPaymasterFieldsInitValues returns correct structure', () => {
         expect(paymasterInitFields.paymaster).toBe("0x36A337b8b4cE5CF6ca1dDaeef73Da4928d714DF2");
@@ -106,7 +106,7 @@ describe('Calibur7702Account AllowAllPaymaster', () => {
         expect(paymasterInitFields.paymasterData).toBe("0x22e325a297439656");
     });
 
-    // ─── 6.2: AllowAllPaymaster approved data ────────────────────────────
+    // ─── 6.2: ExperimentalAllowAllPaymaster approved data ────────────────────────────
 
     test('6.2 getApprovedPaymasterData returns magic signature', async () => {
         // Minimal UserOp stub — no network call needed
@@ -120,9 +120,9 @@ describe('Calibur7702Account AllowAllPaymaster', () => {
         );
     });
 
-    // ─── 6.3: Sponsored delegation with AllowAllPaymaster ─────────────────
+    // ─── 6.3: Sponsored delegation with ExperimentalAllowAllPaymaster ─────────────────
 
-    test('6.3 delegation + transfer sponsored by AllowAllPaymaster', async () => {
+    test('6.3 delegation + transfer sponsored by ExperimentalAllowAllPaymaster', async () => {
         // Pass paymasterFields in overrides — gas estimation includes paymaster data
         const userOp = await account.createUserOperation(
             [{ to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0n, data: '0x' }],
@@ -150,9 +150,9 @@ describe('Calibur7702Account AllowAllPaymaster', () => {
         expect(receipt.success).toBe(true);
     });
 
-    // ─── 6.4: Regular transfer sponsored by AllowAllPaymaster ─────────────
+    // ─── 6.4: Regular transfer sponsored by ExperimentalAllowAllPaymaster ─────────────
 
-    test('6.4 regular transfer sponsored by AllowAllPaymaster', async () => {
+    test('6.4 regular transfer sponsored by ExperimentalAllowAllPaymaster', async () => {
         const userOp = await account.createUserOperation(
             [{ to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0n, data: '0x' }],
             providerRpc,
@@ -167,9 +167,9 @@ describe('Calibur7702Account AllowAllPaymaster', () => {
         expect(receipt.success).toBe(true);
     });
 
-    // ─── 6.5: Batch transaction sponsored by AllowAllPaymaster ────────────
+    // ─── 6.5: Batch transaction sponsored by ExperimentalAllowAllPaymaster ────────────
 
-    test('6.5 batch transaction sponsored by AllowAllPaymaster', async () => {
+    test('6.5 batch transaction sponsored by ExperimentalAllowAllPaymaster', async () => {
         const userOp = await account.createUserOperation(
             [
                 { to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0n, data: '0x' },
@@ -187,9 +187,9 @@ describe('Calibur7702Account AllowAllPaymaster', () => {
         expect(receipt.success).toBe(true);
     });
 
-    // ─── 6.6: Passkey registration sponsored by AllowAllPaymaster ─────────
+    // ─── 6.6: Passkey registration sponsored by ExperimentalAllowAllPaymaster ─────────
 
-    test('6.6 passkey registration sponsored by AllowAllPaymaster', async () => {
+    test('6.6 passkey registration sponsored by ExperimentalAllowAllPaymaster', async () => {
         p256KeyPair = generateP256KeyPair();
         webAuthnKey = ak.Calibur7702Account.createWebAuthnP256Key(p256KeyPair.x, p256KeyPair.y);
         keyHash = ak.Calibur7702Account.getKeyHash(webAuthnKey);
@@ -215,9 +215,9 @@ describe('Calibur7702Account AllowAllPaymaster', () => {
         expect(isRegistered).toBe(true);
     });
 
-    // ─── 6.7: Passkey-signed UserOp sponsored by AllowAllPaymaster ────────
+    // ─── 6.7: Passkey-signed UserOp sponsored by ExperimentalAllowAllPaymaster ────────
 
-    test('6.7 passkey-signed UserOp sponsored by AllowAllPaymaster', async () => {
+    test('6.7 passkey-signed UserOp sponsored by ExperimentalAllowAllPaymaster', async () => {
         const dummyWebAuthnSig = ak.Calibur7702Account.createDummyWebAuthnSignature(keyHash);
 
         const userOp = await account.createUserOperation(
@@ -240,9 +240,9 @@ describe('Calibur7702Account AllowAllPaymaster', () => {
         expect(receipt.success).toBe(true);
     });
 
-    // ─── 6.8: Key revocation sponsored by AllowAllPaymaster ───────────────
+    // ─── 6.8: Key revocation sponsored by ExperimentalAllowAllPaymaster ───────────────
 
-    test('6.8 key revocation sponsored by AllowAllPaymaster', async () => {
+    test('6.8 key revocation sponsored by ExperimentalAllowAllPaymaster', async () => {
         const revokeTx = ak.Calibur7702Account.createRevokeKeyMetaTransaction(keyHash);
 
         const userOp = await account.createUserOperation(
@@ -262,11 +262,11 @@ describe('Calibur7702Account AllowAllPaymaster', () => {
         expect(isRegistered).toBe(false);
     });
 
-    // ─── 6.9: Custom AllowAllPaymaster address ────────────────────────────
+    // ─── 6.9: Custom ExperimentalAllowAllPaymaster address ────────────────────────────
 
     test('6.9 custom paymaster address is accepted', async () => {
         const customAddress = "0x1234567890abcdef1234567890abcdef12345678";
-        const custom = new ak.AllowAllPaymaster(customAddress);
+        const custom = new ak.ExperimentalAllowAllPaymaster(customAddress);
 
         const fields = await custom.getPaymasterFieldsInitValues(chainId);
         expect(fields.paymaster).toBe(customAddress);

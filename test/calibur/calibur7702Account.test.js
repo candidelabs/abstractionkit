@@ -660,7 +660,7 @@ describe('Calibur7702Account', () => {
     });
 
     test('getUserOperationHash uses the instance entrypointAddress', () => {
-        const customEP = "0x1111111111111111111111111111111111111111";
+        const customEP = ak.ENTRYPOINT_V9;
         const account = new ak.Calibur7702Account(
             "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
             { entrypointAddress: customEP }
