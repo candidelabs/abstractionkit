@@ -15,6 +15,7 @@ export {
 export {
 	AllowanceModule,
 	Allowance,
+	ALLOWANCE_MODULE_V0_1_0_ADDRESS,
 } from "./account/Safe/modules/AllowanceModule";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
 export { SafeAccountV0_3_0 } from "./account/Safe/SafeAccountV0_3_0";
