@@ -6,6 +6,7 @@ import { MetaTransaction } from "../../../types";
  * Address of the legacy Allowance Module v0.1.0 contract.
  * Replaced by v1.0.0 due to a bug in the v0.1.0 contract.
  * Use this to interact with existing allowances set on the old module.
+ * @deprecated Prefer `AllowanceModule.DEFAULT_ALLOWANCE_MODULE_ADDRESS` (v1.0.0) for new allowances.
  */
 export const ALLOWANCE_MODULE_V0_1_0_ADDRESS =
     "0xAA46724893dedD72658219405185Fb0Fc91e091C";
