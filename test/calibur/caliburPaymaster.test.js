@@ -1,7 +1,9 @@
 const ak = require('../../dist/index.umd');
 const crypto = require('crypto');
-const { Wallet } = require('ethers');
+const { AbiCoder, Wallet } = require('ethers');
 require('dotenv').config();
+
+const abiCoder = AbiCoder.defaultAbiCoder();
 
 jest.setTimeout(300000);
 
@@ -10,6 +12,9 @@ const chainId = BigInt(process.env.CHAIN_ID);
 const providerRpc = process.env.JSON_RPC_NODE_PROVIDER;
 const bundlerRpc = process.env.BUNDLER_URL;
 const paymasterRpc = process.env.PAYMASTER_RPC;
+const eoaPrivateKey = process.env.PRIVATE_KEY1;
+const eoaAddress = process.env.PUBLIC_ADDRESS1;
+const erc20TokenAddress = process.env.ERC20_TOKEN_ADDRESS;
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -346,5 +351,181 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
 
         expect(sponsoredOp.paymaster).toBeTruthy();
         // Don't send — just verify structure
+    });
+});
+
+// ─── Token Paymaster Tests ──────────────────────────────────────────────
+// Requires: PRIVATE_KEY1, PUBLIC_ADDRESS1, ERC20_TOKEN_ADDRESS in .env
+// The EOA must hold a balance of the configured ERC-20 token.
+// NOTE: These tests depend on a fix to createTokenPaymasterUserOperation
+// to use a sufficient approve multiplier (see CandidePaymaster.ts).
+
+describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
+
+    let account;
+    let paymaster;
+
+    beforeAll(async () => {
+        if (!providerRpc || !bundlerRpc || !paymasterRpc || !eoaPrivateKey || !eoaAddress) {
+            throw new Error(
+                'Missing required env vars: CHAIN_ID, JSON_RPC_NODE_PROVIDER, BUNDLER_URL, PAYMASTER_RPC, PRIVATE_KEY1, PUBLIC_ADDRESS1.'
+            );
+        }
+        if (!erc20TokenAddress) {
+            throw new Error(
+                'Missing ERC20_TOKEN_ADDRESS env var. Set it to a paymaster-supported ERC-20 token address. ' +
+                'The test EOA must hold a balance of this token.'
+            );
+        }
+
+        account = new ak.Calibur7702Account(eoaAddress);
+        paymaster = new ak.CandidePaymaster(paymasterRpc);
+
+        // Ensure the account is delegated to the v0.8 default singleton.
+        const isDelegated = await account.isDelegated(providerRpc);
+        if (!isDelegated) {
+            console.log('Account not delegated to v0.8 singleton, delegating...');
+            const delegateOp = await account.createUserOperation(
+                [{ to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0n, data: '0x' }],
+                providerRpc,
+                bundlerRpc,
+                { eip7702Auth: { chainId } },
+            );
+            const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
+                delegateOp, bundlerRpc,
+            );
+            sponsoredOp.eip7702Auth = ak.createAndSignEip7702DelegationAuthorization(
+                BigInt(sponsoredOp.eip7702Auth.chainId),
+                sponsoredOp.eip7702Auth.address,
+                BigInt(sponsoredOp.eip7702Auth.nonce),
+                eoaPrivateKey,
+            );
+            sponsoredOp.signature = account.signUserOperation(sponsoredOp, eoaPrivateKey, chainId);
+            const receipt = await sendAndWait(account, sponsoredOp, bundlerRpc);
+            expect(receipt.success).toBe(true);
+            console.log('Delegation complete.');
+        }
+    });
+
+    // ─── 5.1: Token paymaster supports the configured token ─────────────
+
+    test('5.1 token paymaster supports the configured ERC-20 token', async () => {
+        const isSupported = await paymaster.isSupportedERC20Token(
+            erc20TokenAddress,
+            account.entrypointAddress,
+        );
+        expect(isSupported).toBe(true);
+
+        const tokenData = await paymaster.getSupportedERC20TokenData(
+            erc20TokenAddress,
+            account.entrypointAddress,
+        );
+        expect(tokenData).not.toBeNull();
+        expect(tokenData.symbol).toBeTruthy();
+        expect(tokenData.decimals).toBeGreaterThan(0);
+    });
+
+    // ─── 5.2: Transfer paid with ERC-20 token ───────────────────────────
+
+    test('5.2 transfer paid with ERC-20 token', async () => {
+        const userOp = await account.createUserOperation(
+            [{ to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0n, data: '0x' }],
+            providerRpc,
+            bundlerRpc,
+        );
+
+        const tokenOp = await paymaster.createTokenPaymasterUserOperation(
+            account,
+            userOp,
+            erc20TokenAddress,
+            bundlerRpc,
+        );
+
+        // Verify paymaster fields
+        expect(tokenOp.paymaster).toBeTruthy();
+        expect(tokenOp.paymasterData).toBeTruthy();
+
+        // Verify calldata has approve prepended (at least 2 calls)
+        const batchDecoded = abiCoder.decode(
+            ["((address,uint256,bytes)[],bool)"],
+            "0x" + tokenOp.callData.slice(10),
+        );
+        expect(batchDecoded[0][0].length).toBeGreaterThanOrEqual(2);
+
+        // First call should be the approve to the paymaster on the token
+        const approveCall = batchDecoded[0][0][0];
+        expect(approveCall[0].toLowerCase()).toBe(erc20TokenAddress.toLowerCase());
+
+        // Sign and send
+        tokenOp.signature = account.signUserOperation(tokenOp, eoaPrivateKey, chainId);
+        const receipt = await sendAndWait(account, tokenOp, bundlerRpc);
+        expect(receipt.success).toBe(true);
+    });
+
+    // ─── 5.3: Batch transaction paid with ERC-20 token ──────────────────
+
+    test('5.3 batch transaction paid with ERC-20 token', async () => {
+        const userOp = await account.createUserOperation(
+            [
+                { to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0n, data: '0x' },
+                { to: '0x1111111111111111111111111111111111111111', value: 0n, data: '0x' },
+            ],
+            providerRpc,
+            bundlerRpc,
+        );
+
+        const tokenOp = await paymaster.createTokenPaymasterUserOperation(
+            account,
+            userOp,
+            erc20TokenAddress,
+            bundlerRpc,
+        );
+
+        // Should have 3 calls: approve + 2 original
+        const batchDecoded = abiCoder.decode(
+            ["((address,uint256,bytes)[],bool)"],
+            "0x" + tokenOp.callData.slice(10),
+        );
+        expect(batchDecoded[0][0].length).toBe(3);
+
+        tokenOp.signature = account.signUserOperation(tokenOp, eoaPrivateKey, chainId);
+        const receipt = await sendAndWait(account, tokenOp, bundlerRpc);
+        expect(receipt.success).toBe(true);
+    });
+
+    // ─── 5.4: Gas cost estimation in ERC-20 tokens ──────────────────────
+
+    test('5.4 gas cost estimation in ERC-20 tokens', async () => {
+        const userOp = await account.createUserOperation(
+            [{ to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0n, data: '0x' }],
+            providerRpc,
+            bundlerRpc,
+        );
+
+        const maxCost = await paymaster.calculateUserOperationErc20TokenMaxGasCost(
+            userOp,
+            erc20TokenAddress,
+        );
+        expect(maxCost).toBeGreaterThan(0n);
+    });
+
+    // ─── 5.5: Exchange rate is fetchable ─────────────────────────────────
+
+    test('5.5 exchange rate is fetchable for the token', async () => {
+        const exchangeRate = await paymaster.fetchTokenPaymasterExchangeRate(
+            erc20TokenAddress,
+            account.entrypointAddress,
+        );
+        expect(exchangeRate).toBeGreaterThan(0n);
+    });
+
+    // ─── 5.6: Unsupported token is rejected ─────────────────────────────
+
+    test('5.6 unsupported token address is rejected', async () => {
+        const fakeToken = "0x0000000000000000000000000000000000000001";
+        const isSupported = await paymaster.isSupportedERC20Token(
+            fakeToken, account.entrypointAddress,
+        );
+        expect(isSupported).toBe(false);
     });
 });
