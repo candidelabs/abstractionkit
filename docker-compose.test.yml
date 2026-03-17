@@ -1,0 +1,56 @@
+# Test infrastructure: Anvil (Sepolia fork) + Voltaire bundler
+#
+# Required env vars:
+#   SEPOLIA_RPC  - Sepolia RPC URL to fork from
+#   BUNDLER_SECRET - Private key for the bundler signer (generated fresh each run)
+
+services:
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    platform: linux/amd64
+    entrypoint: ["anvil"]
+    command:
+      - "--fork-url"
+      - "${SEPOLIA_RPC}"
+      - "--chain-id"
+      - "11155111"
+      - "--host"
+      - "0.0.0.0"
+      - "--block-time"
+      - "1"
+    ports:
+      - "${ANVIL_PORT:-8545}:8545"
+    healthcheck:
+      test: ["CMD-SHELL", "cast block-number --rpc-url http://localhost:8545 || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 15
+
+  voltaire:
+    image: ghcr.io/candidelabs/voltaire/voltaire-bundler:0.1.0a66
+    platform: linux/amd64
+    depends_on:
+      anvil:
+        condition: service_healthy
+    command:
+      - "--bundler_secret"
+      - "${BUNDLER_SECRET}"
+      - "--chain_id"
+      - "11155111"
+      - "--verbose"
+      - "--eip7702"
+      - "--ethereum_node_url"
+      - "http://anvil:8545"
+      - "--disable_p2p"
+      - "--unsafe"
+      - "--rpc_url"
+      - "0.0.0.0"
+      - "--rpc_port"
+      - "3000"
+    ports:
+      - "${BUNDLER_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,json;urllib.request.urlopen(urllib.request.Request('http://localhost:3000/rpc',data=json.dumps({'jsonrpc':'2.0','method':'eth_chainId','params':[],'id':1}).encode(),headers={'Content-Type':'application/json'}))\" || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 15

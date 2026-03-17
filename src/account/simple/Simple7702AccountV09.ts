@@ -1,7 +1,8 @@
 import { StateOverrideSet, UserOperationV9 } from "src/types";
-import { BaseSimple7702Account, CreateUserOperationOverrides, SimpleMetaTransaction } from "./Simple7702Account";
+import { BaseSimple7702Account, SimpleMetaTransaction } from "./Simple7702Account";
 import { ENTRYPOINT_V9 } from "src/constants";
 import { SendUseroperationResponse } from "../SendUseroperationResponse";
+import { CreateUserOperationV9Overrides } from "src/abstractionkit";
 
 /**
  * EIP-7702 simple smart account targeting EntryPoint v0.9
@@ -31,30 +32,40 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
             overrides.delegateeAddress ?? Simple7702AccountV09.DEFAULT_DELEGATEE_ADDRESS
         );
 	}
-
-    /**
-	 * Create a {@link UserOperationV9} for EntryPoint v0.9.
-	 * Determines nonce, fetches gas prices, estimates gas limits, and returns
-	 * an unsigned UserOperation. All auto-determined values can be overridden.
-	 * @param transactions - One or more transactions to encode into callData
-	 * @param providerRpc - JSON-RPC endpoint for nonce and gas price queries
-	 * @param bundlerRpc - Bundler RPC endpoint for gas estimation
-	 * @param overrides - Optional overrides for gas, nonce, and EIP-7702 auth fields
-	 * @returns A promise resolving to an unsigned {@link UserOperationV9}
+    
+	/**
+	 * createUserOperation will determine the nonce, fetch the gas prices,
+	 * estimate gas limits and return a useroperation to be signed.
+	 * you can override all these values using the overrides parameter.
+	 * @param transactions - metatransaction list to be encoded
+	 * @param providerRpc - node rpc to fetch account nonce and gas prices
+	 * @param bundlerRpc - bundler rpc for gas estimation
+	 * @param overrides - overrides for the default values
+	 * @returns promise with useroperation
 	 */
-    public async createUserOperation(
+	public async createUserOperation(
 		transactions: SimpleMetaTransaction[],
 		providerRpc?: string,
 		bundlerRpc?: string,
-		overrides: CreateUserOperationOverrides = {},
+		overrides: CreateUserOperationV9Overrides = {},
 	): Promise<UserOperationV9> {
-        return this.baseCreateUserOperation(
-            transactions,
-            providerRpc,
-            bundlerRpc,
-            overrides,
-        );
-    }
+        const userOperationV9: UserOperationV9 =
+			await this.baseCreateUserOperation(
+                transactions,
+                providerRpc,
+                bundlerRpc,
+                overrides,
+            );
+
+		userOperationV9.paymaster = overrides.paymaster??null;
+		userOperationV9.paymasterVerificationGasLimit =
+            overrides.paymasterVerificationGasLimit??null;
+		userOperationV9.paymasterPostOpGasLimit =
+            overrides.paymasterPostOpGasLimit??null;
+		userOperationV9.paymasterData = overrides.paymasterData??null;
+
+		return userOperationV9;
+	}
 
     /**
 	 * Estimate gas limits for a {@link UserOperationV9}.

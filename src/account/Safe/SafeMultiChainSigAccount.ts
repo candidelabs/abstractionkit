@@ -371,6 +371,11 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 					isMultiChainSignature: true,
 					eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 					eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+                    paymaster: overrides.paymaster,
+                    paymasterVerificationGasLimit: overrides.paymasterVerificationGasLimit,
+                    paymasterPostOpGasLimit: overrides.paymasterPostOpGasLimit,
+                    paymasterData: overrides.paymasterData,
+
 				}
 			);
 

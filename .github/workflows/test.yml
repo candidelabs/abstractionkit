@@ -1,0 +1,44 @@
+# ============================================
+# Test Pipeline — Anvil fork + Voltaire bundler
+# ============================================
+# Runs integration tests against a local Sepolia fork and bundler.
+# Requires SEPOLIA_RPC secret set in the repository.
+
+name: Test
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ci/test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run tests
+        run: yarn test
+        env:
+          SEPOLIA_RPC: ${{ secrets.SEPOLIA_RPC }}
+
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.test.yml logs
