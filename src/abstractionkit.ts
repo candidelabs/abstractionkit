@@ -111,7 +111,7 @@ export {
     GasOption,
     SponsorMetadata,
     PolygonChain,
-    PaymasterFieldsInitValues
+    ParallelPaymasterInitValues
 } from "./types";
 
 export {

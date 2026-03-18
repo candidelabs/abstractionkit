@@ -1,5 +1,5 @@
 import { Paymaster } from "./Paymaster";
-import { PaymasterFieldsInitValues, UserOperationV9 } from "../types";
+import { ParallelPaymasterInitValues, UserOperationV9 } from "../types";
 
 /**
  * A paymaster that sponsors all UserOperations unconditionally.
@@ -31,7 +31,7 @@ export class ExperimentalAllowAllParallelPaymaster extends Paymaster {
 	 */
 	async getPaymasterFieldsInitValues(
         chainId: bigint
-    ):Promise<PaymasterFieldsInitValues>{
+    ):Promise<ParallelPaymasterInitValues>{
         return {
             paymaster: this.address,
             paymasterVerificationGasLimit: 45_000n,

@@ -450,9 +450,9 @@ export type OnChainIdentifierParamsType = {
   toolVersion?: string
 }
 
-export interface PaymasterFieldsInitValues {
-	paymaster?: string;
-	paymasterVerificationGasLimit?: bigint;
-	paymasterPostOpGasLimit?: bigint;
-	paymasterData?: string;
+export interface ParallelPaymasterInitValues {
+	paymaster: string;
+	paymasterVerificationGasLimit: bigint;
+	paymasterPostOpGasLimit: bigint;
+	paymasterData: string;
 }
