@@ -1,5 +1,5 @@
 import { SmartAccount } from "../SmartAccount";
-import { BaseUserOperationDummyValues, ENTRYPOINT_V8 } from "src/constants";
+import { BaseUserOperationDummyValues, ENTRYPOINT_V8, ENTRYPOINT_V9 } from "src/constants";
 import { 
     createCallData, createUserOperationHash, fetchAccountNonce,
     getFunctionSelector, handlefetchGasPrice, sendJsonRpcRequest
@@ -82,6 +82,17 @@ export interface CreateUserOperationOverrides {
         r?: string;
         s?: string;
     };
+
+	parallelPaymasterInitValues?: {
+		/** set the paymaster contract address */
+		paymaster: string;
+		/** set the paymaster verification gas limit */
+		paymasterVerificationGasLimit: bigint;
+		/** set the paymaster post-operation gas limit */
+		paymasterPostOpGasLimit: bigint;
+		/** set the paymaster data, only valid value is 0x22e325a297439656 */
+		paymasterData: string;
+	}
 }
 
 /**
@@ -420,6 +431,22 @@ export class BaseSimple7702Account extends SmartAccount {
 			overrides.verificationGasLimit == null ||
 			overrides.callGasLimit == null
 		) {
+            const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
+            if(parallelPaymasterInitValues != null){
+                if(this.entrypointAddress != ENTRYPOINT_V9){
+                    throw new RangeError(
+                        "parallelPaymasterInitValues only works with ep v0.9"
+                    );
+                }
+                userOperation.paymaster = parallelPaymasterInitValues.paymaster;
+                userOperation.paymasterVerificationGasLimit =
+                    parallelPaymasterInitValues.paymasterVerificationGasLimit;
+                userOperation.paymasterPostOpGasLimit =
+                    parallelPaymasterInitValues.paymasterPostOpGasLimit;
+                userOperation.paymasterData =
+                    parallelPaymasterInitValues.paymasterData;
+            }
+
 			if (bundlerRpc != null) {
 				userOperation.callGasLimit = 0n;
 				userOperation.verificationGasLimit = 0n;
