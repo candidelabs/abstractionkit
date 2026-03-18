@@ -1693,11 +1693,34 @@ export class SafeAccount extends SmartAccount {
 						...userOperation,
 						factory: factoryAddress,
 						factoryData: factoryData,
-						paymaster: overrides.paymaster??null,
-						paymasterVerificationGasLimit: overrides.paymasterVerificationGasLimit??null,
-						paymasterPostOpGasLimit: overrides.paymasterPostOpGasLimit??null,
-						paymasterData: overrides.paymasterData??null,
+						paymaster: null,
+						paymasterVerificationGasLimit: null,
+						paymasterPostOpGasLimit: null,
+						paymasterData: null,
 					};
+
+                    const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
+                    if(parallelPaymasterInitValues != null){
+                        if(
+                            parallelPaymasterInitValues.paymasterData != "0x22e325a297439656"
+                        ){
+                            throw new RangeError(
+                                "Invalid paymasterData override, the only valid value is 0x22e325a297439656."
+                            );
+                        }
+                        if(this.entrypointAddress != ENTRYPOINT_V9){
+                            throw new RangeError(
+                                "parallelPaymasterInitValues only works with ep v0.9"
+                            );
+                        }
+                        userOperationToEstimate.paymaster = parallelPaymasterInitValues.paymaster;
+                        userOperationToEstimate.paymasterVerificationGasLimit =
+                            parallelPaymasterInitValues.paymasterVerificationGasLimit;
+                        userOperationToEstimate.paymasterPostOpGasLimit =
+                            parallelPaymasterInitValues.paymasterPostOpGasLimit;
+                        userOperationToEstimate.paymasterData =
+                            parallelPaymasterInitValues.paymasterData;
+                    }
 				}
                 const validAfter = 0xffffffffffffn;
                 const validUntil = 0xffffffffffffn;

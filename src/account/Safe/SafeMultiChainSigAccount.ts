@@ -16,7 +16,7 @@ import {
 
 import { Safe_L2_V1_5_0 } from "src/constants";
 
-import { UserOperationV9, MetaTransaction, OnChainIdentifierParamsType, PaymasterFieldsInitValues } from "../../types";
+import { UserOperationV9, MetaTransaction, OnChainIdentifierParamsType } from "../../types";
 import { EIP712_MULTI_CHAIN_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants";
 import { generateMerkleProofs } from "./MerkleTree";
 import { TypedDataEncoder, Wallet } from "ethers";
@@ -360,7 +360,16 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 		bundlerRpc?: string,
 		overrides: CreateUserOperationV9Overrides = {},
 	): Promise<UserOperationV9> {
-		const [userOperation, factoryAddress, factoryData] =
+		const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
+		if(
+            parallelPaymasterInitValues != null &&
+            parallelPaymasterInitValues.paymasterData != "0x22e325a297439656"
+        ){
+            throw new RangeError(
+                "Invalid paymasterData override, the only valid value is 0x22e325a297439656."
+            );
+		}		
+        const [userOperation, factoryAddress, factoryData] =
 			await this.createBaseUserOperationAndFactoryAddressAndFactoryData(
 				transactions,
 				false,
@@ -373,19 +382,26 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 					eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
 				}
 			);
-
-		const userOperationV9: UserOperationV9 = {
-			...userOperation,
-			factory: factoryAddress,
-			factoryData,
-			paymaster: overrides.paymaster??null,
-			paymasterVerificationGasLimit: overrides.paymasterVerificationGasLimit??null,
-			paymasterPostOpGasLimit: overrides.paymasterPostOpGasLimit??null,
-			paymasterData: overrides.paymasterData??null,
-            eip7702Auth: null
-		};
-
-		return userOperationV9;
+		if(parallelPaymasterInitValues != null){
+			return {
+				...userOperation,
+				factory: factoryAddress,
+				factoryData,
+                ...parallelPaymasterInitValues,
+				eip7702Auth: null
+			};
+		}else{
+			return {
+				...userOperation,
+				factory: factoryAddress,
+				factoryData,
+				paymaster: null,
+				paymasterVerificationGasLimit: null,
+				paymasterPostOpGasLimit: null,
+				paymasterData: null,
+				eip7702Auth: null
+			};
+		}
 	}
 
 	/**

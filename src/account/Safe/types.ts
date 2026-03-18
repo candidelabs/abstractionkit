@@ -1,9 +1,9 @@
-import type { GasOption, StateOverrideSet, PolygonChain, OnChainIdentifierParamsType, MetaTransaction, UserOperationV9, PaymasterFieldsInitValues } from "../../types";
+import type { GasOption, StateOverrideSet, PolygonChain, OnChainIdentifierParamsType, MetaTransaction, UserOperationV9, ParallelPaymasterInitValues } from "../../types";
 
 /**
- * Overrides for the "createPaymasterUserOperation" function
+ * Overrides for the "createBaseUserOperationAndFactoryAddressAndFactoryData" function
  */
-export interface CreatePaymasterUserOperationOverrides {
+export interface CreateBaseUserOperationOverrides {
 	/** set the nonce instead of quering the current nonce from the rpc node */
 	nonce?: bigint;
 	/** set the callData instead of using the encoding of the provided Metatransactions*/
@@ -38,6 +38,7 @@ export interface CreatePaymasterUserOperationOverrides {
 	webAuthnSharedSigner?: string;
 	webAuthnSignerFactory?: string;
 	webAuthnSignerSingleton?: string;
+	webAuthnSignerProxyCreationCode?: string;
 
 	eip7212WebAuthnPrecompileVerifier?: string;
 	eip7212WebAuthnContractVerifier?: string;
@@ -49,18 +50,17 @@ export interface CreatePaymasterUserOperationOverrides {
 
     expectedSigners?: Signer[];
 	isMultiChainSignature?: boolean;
-}
 
-/**
- * Overrides for the "createBaseUserOperationAndFactoryAddressAndFactoryData" function
- */
-export interface CreateBaseUserOperationOverrides
-    extends CreatePaymasterUserOperationOverrides{
-	paymaster?: string;
-	paymasterVerificationGasLimit?: bigint;
-	paymasterPostOpGasLimit?: bigint;
-	paymasterData?: string;
-	webAuthnSignerProxyCreationCode?: string;
+	parallelPaymasterInitValues?: {
+		/** set the paymaster contract address */
+		paymaster: string;
+		/** set the paymaster verification gas limit */
+		paymasterVerificationGasLimit: bigint;
+		/** set the paymaster post-operation gas limit */
+		paymasterPostOpGasLimit: bigint;
+		/** set the paymaster data, only valid value is 0x22e325a297439656 */
+		paymasterData: string;
+	}
 }
 
 /**
