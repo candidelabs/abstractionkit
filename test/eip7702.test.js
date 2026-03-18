@@ -1,32 +1,29 @@
 const accountAbstractionkit = require('../dist/index.umd');
-const ak = require('abstractionkit');
+const ak = accountAbstractionkit;
 const ethers = require('ethers');
 require('dotenv').config()
 
 jest.setTimeout(3000);
 
-const eoaPrivateKey=process.env.PRIVATE_KEY1
+const eoaWallet = ethers.Wallet.createRandom();
+const eoaPrivateKey = eoaWallet.privateKey;
 
 describe('eip7702', () => {
-    test('test1' , async() => {
+    test('creates valid delegation authorization and signed transaction' , async() => {
         const chainId = 11155111;
-        const nodeRpc = "https://ethereum-sepolia-rpc.publicnode.com";
-        const eoaWallet = new ethers.Wallet(eoaPrivateKey);
+        const nonce = "0x0";
 
-        const nonce = await ak.sendJsonRpcRequest(
-            nodeRpc,
-            "eth_getTransactionCount",
-            [eoaWallet.address, "latest"]
-        );
-            
         const delegation = accountAbstractionkit.createAndSignEip7702DelegationAuthorization(
             chainId,
             "0xB52D62510cdcEBfedEd46aF5E99dC50DD352F25F", //delegation destination
             // if the delegator will be the transaction sender, increase the authorization nonce by one
-            BigInt(nonce)+1n, 
+            BigInt(nonce)+1n,
             eoaPrivateKey
         );
-        
+
+        expect(delegation).toBeDefined();
+        expect(delegation.address).toBeDefined();
+
         const tx = accountAbstractionkit.createAndSignEip7702RawTransaction(
             chainId,
             nonce,
@@ -40,10 +37,8 @@ describe('eip7702', () => {
             [delegation], //authorization list
             eoaPrivateKey
         );
-        const res = await ak.sendJsonRpcRequest(
-            nodeRpc,
-            "eth_sendRawTransaction",
-            [tx]
-        );
+
+        expect(tx).toBeDefined();
+        expect(tx).toMatch(/^0x04/); // EIP-7702 tx prefix
     });
 })

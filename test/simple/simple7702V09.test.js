@@ -8,7 +8,11 @@ const ENTRYPOINT_V8 = "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108";
 const ENTRYPOINT_V6 = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
 
 const chainId = process.env.CHAIN_ID ?? "11155111";
-const ownerPrivateKey = process.env.PRIVATE_KEY1;
+const crypto = require('crypto');
+const { secp256k1 } = require('@noble/curves/secp256k1');
+const { keccak_256 } = require('@noble/hashes/sha3');
+const ownerPrivateKeyBytes = crypto.randomBytes(32);
+const ownerPrivateKey = "0x" + ownerPrivateKeyBytes.toString("hex");
 
 // Helper to create a minimal V9 UserOperation for unit tests
 function createMockUserOperationV9(overrides = {}) {
@@ -213,10 +217,6 @@ describe('Tenderly simulation - executeUserOp callData rewriting', () => {
 
 describe('signUserOperation for Simple7702AccountV09', () => {
     test('produces a valid signature', () => {
-        if (!ownerPrivateKey) {
-            console.warn('Skipping sign test: PRIVATE_KEY1 not set in .env');
-            return;
-        }
         const account = new ak.Simple7702AccountV09(
             "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         );

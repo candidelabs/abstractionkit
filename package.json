@@ -13,7 +13,10 @@
 	"scripts": {
 		"build": "rimraf dist && microbundle --tsconfig tsconfig.json --no-sourcemap",
 		"clean": "rimraf dist",
-		"test": "jest --verbose"
+		"test": "jest --verbose",
+		"test:unit": "jest --verbose --selectProjects unit",
+		"test:integration": "jest --verbose --selectProjects integration",
+		"test:e2e": "jest --verbose --selectProjects e2e"
 	},
 	"repository": {
 		"type": "git",

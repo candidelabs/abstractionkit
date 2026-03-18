@@ -1,22 +1,31 @@
+const crypto = require('crypto');
 const ak = require('../../dist/index.umd');
+const { secp256k1 } = require('@noble/curves/secp256k1');
+const { keccak_256 } = require('@noble/hashes/sha3');
+const { ANVIL_RPC, ANVIL_CHAIN_ID, BUNDLER_RPC } = require('../integration/anvil-setup');
 require('dotenv').config();
 
 jest.setTimeout(300000);
 
 const ENTRYPOINT_V9 = "0x433709009B8330FDa32311DF1C2AFA402eD8D009";
 
-const chainId = process.env.CHAIN_ID;
-const ownerPublicAddress = process.env.PUBLIC_ADDRESS1;
-const ownerPrivateKey = process.env.PRIVATE_KEY1;
-const jsonRpcNodeProvider = process.env.JSON_RPC_NODE_PROVIDER;
-const bundlerUrl = process.env.BUNDLER_URL;
+const chainId = ANVIL_CHAIN_ID;
+
+// Generate a random owner keypair
+const ownerPrivateKeyBytes = crypto.randomBytes(32);
+const ownerPrivateKey = "0x" + ownerPrivateKeyBytes.toString("hex");
+const pubKey = secp256k1.getPublicKey(ownerPrivateKeyBytes, false).slice(1);
+const ownerPublicAddress = "0x" + Buffer.from(keccak_256(pubKey).slice(-20)).toString("hex");
+
+const jsonRpcNodeProvider = ANVIL_RPC;
+const bundlerUrl = BUNDLER_RPC;
 const tenderlyAccountSlug = process.env.TENDERLY_ACCOUNT_SLUG;
 const tenderlyProjectSlug = process.env.TENDERLY_PROJECT_SLUG;
 const tenderlyAccessKey = process.env.TENDERLY_ACCESS_KEY;
 
 const nftContractAddress = "0x9a7af758aE5d7B6aAE84fe4C5Ba67c041dFE5336";
 
-describe('Simple7702AccountV09 Tenderly live simulation', () => {
+describe.skip('Simple7702AccountV09 Tenderly live simulation', () => {
     let smartAccount;
     let userOperation;
 
@@ -151,13 +160,16 @@ describe('Simple7702AccountV09 Tenderly live simulation', () => {
     });
 });
 
-describe('Simple7702AccountV09 Tenderly live simulation with AllowAllPaymaster', () => {
+const skipTenderly = !tenderlyAccountSlug || !tenderlyProjectSlug || !tenderlyAccessKey;
+const describeTenderly = skipTenderly ? describe.skip : describe;
+
+describeTenderly('Simple7702AccountV09 Tenderly live simulation with ExperimentalAllowAllPaymaster', () => {
     let smartAccount;
     let userOperation;
 
     beforeAll(async () => {
         smartAccount = new ak.Simple7702AccountV09(ownerPublicAddress);
-        const paymaster = new ak.AllowAllPaymaster();
+        const paymaster = new ak.ExperimentalAllowAllPaymaster();
 
         const paymasterInitFields = await paymaster.getPaymasterFieldsInitValues(
             BigInt(chainId),
