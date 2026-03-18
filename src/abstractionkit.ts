@@ -28,7 +28,7 @@ export { SafeAccountFactory } from "./factory/SafeAccountFactory";
 export { Bundler } from "./Bundler";
 
 export { CandidePaymaster } from "./paymaster/CandidePaymaster";
-export { ExperimentalAllowAllPaymaster } from "./paymaster/AllowAllPaymaster";
+export { ExperimentalAllowAllParallelPaymaster } from "./paymaster/AllowAllPaymaster";
 
 export { 
     WorldIdPermissionlessPaymaster, createWorldIdSignal 
