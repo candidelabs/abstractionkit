@@ -300,16 +300,6 @@ export interface UserOperationToSign {
     validUntil?: bigint;
 }
 
-/** A batch of transactions targeting a specific chain, used for multi-chain operations. */
-export interface PerChainBatchTransaction {
-    chainId: bigint,
-	metaTransactions: MetaTransaction[],
-	paymasterFieldsInitValues: PaymasterFieldsInitValues,
-	providerRpc?: string,
-	bundlerRpc?: string,
-	overrides?: CreateUserOperationV9Overrides,
-}
-
 /** EIP-712 domain for multi-chain signature Merkle tree root. */
 export interface MultiChainSignatureMerkleTreeRootTypedDataDomain {
 	verifyingContract: string;
