@@ -2,11 +2,16 @@ import { SmartAccount } from "../SmartAccount";
 import { BaseUserOperationDummyValues, ENTRYPOINT_V8, ENTRYPOINT_V9 } from "src/constants";
 import { 
     createCallData, createUserOperationHash, fetchAccountNonce,
-    getFunctionSelector, handlefetchGasPrice, sendJsonRpcRequest
+    getDelegatedAddress, getFunctionSelector, handlefetchGasPrice,
+    sendJsonRpcRequest
 } from "../../utils";
 import { GasOption, PolygonChain, StateOverrideSet, UserOperationV8, UserOperationV9 } from "src/types";
 import { AbstractionKitError } from "src/errors";
-import { Authorization7702Hex, bigintToHex } from "src/utils7702";
+import {
+    Authorization7702Hex, bigintToHex,
+    createAndSignEip7702RawTransaction,
+    createRevokeDelegationAuthorization,
+} from "src/utils7702";
 import { Bundler } from "src/Bundler";
 import { Wallet, AbiCoder } from "ethers";
 import { SendUseroperationResponse } from "../SendUseroperationResponse";
@@ -138,7 +143,145 @@ export class BaseSimple7702Account extends SmartAccount {
         this.entrypointAddress = entrypointAddress;
         this.delegateeAddress = delegateeAddress;
 	}
-    
+
+    /**
+     * Check if this EOA is delegated to the expected delegatee address via EIP-7702.
+     * Returns `true` only when delegated to `this.delegateeAddress`.
+     * Use `getDelegatedAddress()` directly to get the raw delegatee address.
+     *
+     * @param providerRpc - Ethereum JSON-RPC node URL
+     * @returns `true` if delegated to the expected address, `false` otherwise
+     */
+    public async isDelegatedToThisAccount(providerRpc: string): Promise<boolean> {
+        const address = await getDelegatedAddress(this.accountAddress, providerRpc);
+        if (address === null) return false;
+        return address.toLowerCase() === this.delegateeAddress.toLowerCase();
+    }
+
+    /**
+     * Create a signed raw EIP-7702 transaction that revokes the delegation,
+     * restoring the EOA to a normal account. The transaction is type 0x04
+     * with a zero-address authorization.
+     *
+     * Cannot be done via UserOp — the authorization_list is processed before
+     * execution, removing the account's code mid-transaction.
+     *
+     * Authorization nonce defaults to txNonce + 1 because EIP-7702 increments
+     * the sender's transaction nonce before processing the authorization list.
+     *
+     * @param eoaPrivateKey - The EOA's private key (signs both auth and tx)
+     * @param providerRpc - JSON-RPC endpoint for nonce, gas price, chain ID
+     * @param overrides - Optional overrides for transaction fields
+     * @returns Signed raw transaction hex, ready for `eth_sendRawTransaction`
+     */
+    public async createRevokeDelegationTransaction(
+        eoaPrivateKey: string,
+        providerRpc: string,
+        overrides: {
+            nonce?: bigint;
+            authorizationNonce?: bigint;
+            maxFeePerGas?: bigint;
+            maxPriorityFeePerGas?: bigint;
+            gasLimit?: bigint;
+            chainId?: bigint;
+        } = {},
+    ): Promise<string> {
+        // Verify delegation state before revoking
+        const delegatedTo = await getDelegatedAddress(this.accountAddress, providerRpc);
+        if (delegatedTo === null) {
+            throw new AbstractionKitError(
+                "BAD_DATA",
+                "Account is not delegated — nothing to revoke",
+            );
+        }
+        if (delegatedTo.toLowerCase() !== this.delegateeAddress.toLowerCase()) {
+            throw new AbstractionKitError(
+                "BAD_DATA",
+                "Account is delegated to a different address (" +
+                    delegatedTo + "), not " + this.delegateeAddress +
+                    " — use the correct account class to revoke",
+            );
+        }
+
+        const results: {
+            nonce?: bigint;
+            maxFeePerGas?: bigint;
+            maxPriorityFeePerGas?: bigint;
+            chainId?: bigint;
+        } = {};
+
+        // Build parallel fetch list
+        const ops: Promise<void>[] = [];
+
+        if (overrides.nonce == null) {
+            ops.push(
+                sendJsonRpcRequest(
+                    providerRpc, "eth_getTransactionCount",
+                    [this.accountAddress, "latest"]
+                ).then((v) => { results.nonce = BigInt(v as string); })
+            );
+        }
+
+        if (overrides.maxFeePerGas == null || overrides.maxPriorityFeePerGas == null) {
+            ops.push(
+                handlefetchGasPrice(providerRpc, undefined)
+                    .then(([fee, tip]) => {
+                        results.maxFeePerGas = fee;
+                        results.maxPriorityFeePerGas = tip;
+                    })
+            );
+        }
+
+        if (overrides.chainId == null) {
+            ops.push(
+                sendJsonRpcRequest(providerRpc, "eth_chainId", [])
+                    .then((v) => { results.chainId = BigInt(v as string); })
+            );
+        }
+
+        if (ops.length > 0) await Promise.all(ops);
+
+        const txNonce = overrides.nonce ?? results.nonce ?? 0n;
+        const maxFeePerGas = overrides.maxFeePerGas ?? results.maxFeePerGas ?? 0n;
+        const maxPriorityFeePerGas = overrides.maxPriorityFeePerGas ?? results.maxPriorityFeePerGas ?? 0n;
+        const chainId = overrides.chainId ?? results.chainId ?? 0n;
+
+        // Authorization nonce = txNonce + 1 by default
+        // (tx nonce is incremented before authorization processing in EIP-7702)
+        const authNonce = overrides.authorizationNonce ?? (txNonce + 1n);
+
+        // Create undelegation authorization (returns Authorization7702Hex)
+        const authHex = createRevokeDelegationAuthorization(
+            chainId, authNonce, eoaPrivateKey
+        );
+
+        // Convert Authorization7702Hex -> Authorization7702 for raw tx builder
+        const auth = {
+            chainId: BigInt(authHex.chainId),
+            address: authHex.address,
+            nonce: BigInt(authHex.nonce),
+            yParity: (BigInt(authHex.yParity) === 0n ? 0 : 1) as 0 | 1,
+            r: BigInt(authHex.r),
+            s: BigInt(authHex.s),
+        };
+
+        const gasLimit = overrides.gasLimit ?? 60_000n;
+
+        return createAndSignEip7702RawTransaction(
+            chainId,
+            txNonce,
+            maxPriorityFeePerGas,
+            maxFeePerGas,
+            gasLimit,
+            this.accountAddress,
+            0n,
+            "0x",
+            [],
+            [auth],
+            eoaPrivateKey,
+        );
+    }
+
     /**
 	 * Encode calldata for a single `execute(address,uint256,bytes)` call.
 	 * @param to - Target contract or EOA address
@@ -264,9 +407,10 @@ export class BaseSimple7702Account extends SmartAccount {
             )
         }
         
-        let eip7702AuthChainId:bigint|null = null; 
-        let eip7702AuthAddress:string|null = null; 
-        let eip7702AuthNonce:bigint|null = null; 
+        let eip7702AuthChainId:bigint|null = null;
+        let eip7702AuthAddress:string|null = null;
+        let eip7702AuthNonce:bigint|null = null;
+        let skipEip7702Auth = false;
 
         if(overrides.eip7702Auth != null){
             eip7702AuthChainId = overrides.eip7702Auth.chainId;
@@ -274,6 +418,15 @@ export class BaseSimple7702Account extends SmartAccount {
                 this.delegateeAddress;
             eip7702AuthNonce = overrides.eip7702Auth.nonce??null;
         }
+
+        // When eip7702Auth is provided, check delegation status in parallel.
+        // Best-effort: if the check fails, proceed as if not delegated.
+        let delegationCheckOp:Promise<string|null>|null = null;
+        if(overrides.eip7702Auth != null && providerRpc != null){
+            delegationCheckOp = getDelegatedAddress(this.accountAddress, providerRpc)
+                .catch(() => null);
+        }
+
         if(overrides.eip7702Auth != null && eip7702AuthNonce == null){
             //check for eip7702AuthNonce
             let eip7702AuthNonceOp;
@@ -291,40 +444,53 @@ export class BaseSimple7702Account extends SmartAccount {
                 );
             }
 
-            if(gasPriceOp != null && nonceOp != null){
-                await Promise.all(
-                    [eip7702AuthNonceOp, nonceOp, gasPriceOp]
-                ).then((values) => {
-                    eip7702AuthNonce = BigInt(values[0] as string);
-                    nonce = values[1];
-                    [maxFeePerGas, maxPriorityFeePerGas] = values[2]; 
-                });
-            }else if(gasPriceOp != null){
-                await Promise.all(
-                    [eip7702AuthNonceOp, gasPriceOp]
-                ).then((values) => {
-                    eip7702AuthNonce = BigInt(values[0] as string);
-                    [maxFeePerGas, maxPriorityFeePerGas] = values[1]; 
-                });
-            }else if(nonceOp != null){
-                await Promise.all(
-                    [eip7702AuthNonceOp, nonceOp]
-                ).then((values) => {
-                    eip7702AuthNonce = BigInt(values[0] as string);
-                    nonce = values[1];
-                });
-            }else{
-                eip7702AuthNonce = BigInt(await eip7702AuthNonceOp as string);
+            // Build array of all parallel operations
+            const ops:Promise<any>[] = [eip7702AuthNonceOp];
+            if(nonceOp != null) ops.push(nonceOp);
+            if(gasPriceOp != null) ops.push(gasPriceOp);
+            if(delegationCheckOp != null) ops.push(delegationCheckOp);
+
+            const values = await Promise.all(ops);
+            let idx = 0;
+            eip7702AuthNonce = BigInt(values[idx++] as string);
+            if(nonceOp != null) nonce = values[idx++];
+            if(gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++];
+            if(delegationCheckOp != null){
+                const delegatedTo = values[idx++] as string|null;
+                if(delegatedTo != null &&
+                    delegatedTo.toLowerCase() === (eip7702AuthAddress as string).toLowerCase()){
+                    skipEip7702Auth = true;
+                }
+            }
+        }else if(overrides.eip7702Auth != null){
+            // eip7702AuthNonce was provided, but still need delegation check + other ops
+            const ops:Promise<any>[] = [];
+            if(nonceOp != null) ops.push(nonceOp);
+            if(gasPriceOp != null) ops.push(gasPriceOp);
+            if(delegationCheckOp != null) ops.push(delegationCheckOp);
+
+            if(ops.length > 0){
+                const values = await Promise.all(ops);
+                let idx = 0;
+                if(nonceOp != null) nonce = values[idx++];
+                if(gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++];
+                if(delegationCheckOp != null){
+                    const delegatedTo = values[idx++] as string|null;
+                    if(delegatedTo != null &&
+                        delegatedTo.toLowerCase() === (eip7702AuthAddress as string).toLowerCase()){
+                        skipEip7702Auth = true;
+                    }
+                }
             }
         }else{
             //don't check for eip7702AuthNonce
             if(gasPriceOp != null && nonceOp != null){
                 await Promise.all([nonceOp, gasPriceOp]).then((values) => {
                     nonce = values[0];
-                    [maxFeePerGas, maxPriorityFeePerGas] = values[1]; 
+                    [maxFeePerGas, maxPriorityFeePerGas] = values[1];
                 });
             }else if(gasPriceOp != null){
-                [maxFeePerGas, maxPriorityFeePerGas] = await gasPriceOp; 
+                [maxFeePerGas, maxPriorityFeePerGas] = await gasPriceOp;
             }else if(nonceOp != null){
                 nonce = await nonceOp;
             }
@@ -366,7 +532,7 @@ export class BaseSimple7702Account extends SmartAccount {
 		}
         
 		let userOperation:UserOperationV8 | UserOperationV9;
-        if(overrides.eip7702Auth != null){
+        if(overrides.eip7702Auth != null && !skipEip7702Auth){
             const yParity = overrides.eip7702Auth.yParity?? "0x0";
             if(
                 yParity != "0x0" && yParity != "0x00" &&
