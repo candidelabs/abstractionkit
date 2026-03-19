@@ -43,7 +43,14 @@ describe('EIP-7702 delegation lifecycle (live)', () => {
         );
 
         if (existingDelegation !== null) {
-            const smartAccount = new ak.Simple7702Account(eoaDelegatorAddress);
+            // Use the matching account class based on which delegatee
+            // the account is currently delegated to
+            const v9Default = ak.Simple7702AccountV09.DEFAULT_DELEGATEE_ADDRESS;
+            const smartAccount = existingDelegation.toLowerCase() === v9Default.toLowerCase()
+                ? new ak.Simple7702AccountV09(eoaDelegatorAddress)
+                : new ak.Simple7702Account(eoaDelegatorAddress, {
+                    delegateeAddress: existingDelegation,
+                });
             const rawTx = await smartAccount.createRevokeDelegationTransaction(
                 eoaDelegatorPrivateKey,
                 jsonRpcNodeProvider,
