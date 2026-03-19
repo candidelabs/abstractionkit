@@ -1,6 +1,6 @@
 import * as fetchImport from "isomorphic-unfetch";
 
-import { id, AbiCoder, keccak256, JsonRpcProvider, solidityPacked } from "ethers";
+import { id, AbiCoder, keccak256, JsonRpcProvider, solidityPacked, getAddress } from "ethers";
 
 import {
 	AbiInputValue,
@@ -880,6 +880,25 @@ export async function sendEthGetCodeRequest(
 			cause: error,
 		});
 	}
+}
+
+/**
+ * Check if an address is delegated via EIP-7702 and return the delegatee address.
+ * EIP-7702 delegated accounts have bytecode in the format `0xef0100` + 20-byte address.
+ *
+ * @param accountAddress - The address to check
+ * @param providerRpc - Ethereum JSON-RPC node URL
+ * @returns The checksummed delegatee address, or `null` if not delegated
+ */
+export async function getDelegatedAddress(
+    accountAddress: string,
+    providerRpc: string,
+): Promise<string | null> {
+    const code = (await sendEthGetCodeRequest(providerRpc, accountAddress, "latest")).toLowerCase();
+    if (code.length === 48 && code.startsWith("0xef0100")) {
+        return getAddress("0x" + code.slice(8));
+    }
+    return null;
 }
 
 /**
