@@ -143,6 +143,27 @@ export function createAndSignEip7702DelegationAuthorization(
 }
 
 /**
+ * Creates and signs an EIP-7702 delegation revocation authorization.
+ * Sets the delegatee address to the zero address, which revokes the delegation
+ * and restores the EOA to a normal account.
+ *
+ * @param chainId - The chain ID the authorization is valid for.
+ * @param nonce - The EOA's authorization nonce at the time of signing.
+ * @param eoaPrivateKey - The EOA's private key for signing.
+ * @returns The signed delegation revocation authorization with hex-encoded values.
+ */
+export function createRevokeDelegationAuthorization(
+    chainId: bigint,
+    nonce: bigint,
+    eoaPrivateKey: string,
+): Authorization7702Hex {
+    const ZeroAddress = "0x0000000000000000000000000000000000000000";
+    return createAndSignEip7702DelegationAuthorization(
+        chainId, ZeroAddress, nonce, eoaPrivateKey
+    );
+}
+
+/**
  * Computes the keccak256 hash of an EIP-7702 delegation authorization.
  * Uses the MAGIC prefix (0x05) as defined in the EIP-7702 spec.
  * @param chainId - The chain ID the authorization is valid for.

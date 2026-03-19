@@ -46,6 +46,7 @@ export {
     DepositInfo,
     getDepositInfo,
     getBalanceOf,
+    getDelegatedAddress,
 } from "./utils";
 
 export {
@@ -68,7 +69,7 @@ export {
     createEip7702DelegationAuthorizationHash,
     signHash,
     Authorization7702Hex,
-    Authorization7702
+    Authorization7702,
 } from "./utils7702";
 
 export {
