@@ -25,6 +25,7 @@ import {
 	CandidePaymasterContext,
 	PrependTokenPaymasterApproveAccount,
 	PaymasterUserOperationOverrides,
+	SmartAccountWithEntrypoint,
 } from "./types";
 import { Bundler } from "src/Bundler";
 import { AbstractionKitError, ensureError } from "src/errors";
@@ -392,35 +393,35 @@ export class CandidePaymaster extends Paymaster {
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
 	 */
 	async createPaymasterUserOperation(
-		smartAccount: PrependTokenPaymasterApproveAccount,
+		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: UserOperationV9,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
 		overrides?: PaymasterUserOperationOverrides,
 	): Promise<[UserOperationV9, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
-		smartAccount: PrependTokenPaymasterApproveAccount,
+		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: UserOperationV8,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
 		overrides?: PaymasterUserOperationOverrides,
 	): Promise<[UserOperationV8, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
-		smartAccount: PrependTokenPaymasterApproveAccount,
+		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: UserOperationV7,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
 		overrides?: PaymasterUserOperationOverrides,
 	): Promise<[UserOperationV7, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
-		smartAccount: PrependTokenPaymasterApproveAccount,
+		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: UserOperationV6,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
 		overrides?: PaymasterUserOperationOverrides,
 	): Promise<[UserOperationV6, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
-		smartAccount: PrependTokenPaymasterApproveAccount,
+		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: UserOperationV9 | UserOperationV8 | UserOperationV7 | UserOperationV6,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
@@ -717,35 +718,35 @@ export class CandidePaymaster extends Paymaster {
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
 	 */
 	async createSponsorPaymasterUserOperation(
-		smartAccount: PrependTokenPaymasterApproveAccount,
+		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: UserOperationV9,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
 		overrides?: PaymasterUserOperationOverrides,
 	): Promise<[UserOperationV9, SponsorMetadata | undefined]>;
 	async createSponsorPaymasterUserOperation(
-		smartAccount: PrependTokenPaymasterApproveAccount,
+		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: UserOperationV8,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
 		overrides?: PaymasterUserOperationOverrides,
 	): Promise<[UserOperationV8, SponsorMetadata | undefined]>;
 	async createSponsorPaymasterUserOperation(
-		smartAccount: PrependTokenPaymasterApproveAccount,
+		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: UserOperationV7,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
 		overrides?: PaymasterUserOperationOverrides,
 	): Promise<[UserOperationV7, SponsorMetadata | undefined]>;
 	async createSponsorPaymasterUserOperation(
-		smartAccount: PrependTokenPaymasterApproveAccount,
+		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: UserOperationV6,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
 		overrides?: PaymasterUserOperationOverrides,
 	): Promise<[UserOperationV6, SponsorMetadata | undefined]>;
 	async createSponsorPaymasterUserOperation(
-		smartAccount: PrependTokenPaymasterApproveAccount,
+		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: UserOperationV7 | UserOperationV6,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
