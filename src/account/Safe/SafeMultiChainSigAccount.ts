@@ -36,7 +36,7 @@ import { TypedDataEncoder, Wallet } from "ethers";
 export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V9;
 	static readonly DEFAULT_SAFE_4337_MODULE_ADDRESS =
-        "0xee8005d7e79f9a6829ea61A81Fc2A85055fB2a42";
+        "0x22939E839e3c0F479B713eAF95e0df128554AEAd";
 	static readonly DEFAULT_SAFE_MODULE_SETUP_ADDRESS =
 		"0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47";
 	static readonly DEFAULT_WEB_AUTHN_PRECOMPILE: string =
