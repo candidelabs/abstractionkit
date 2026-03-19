@@ -349,6 +349,7 @@ export interface SupportedERC20TokensAndMetadataV7 {
 	tokens: ERC20Token[];
 }
 
+export interface SupportedERC20TokensAndMetadataV9 extends SupportedERC20TokensAndMetadataV7 {}
 export interface SupportedERC20TokensAndMetadataV8 extends SupportedERC20TokensAndMetadataV7 {}
 
 /**

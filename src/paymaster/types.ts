@@ -16,6 +16,9 @@ export interface CandidePaymasterContext {
  * to their callData so the token paymaster can collect gas fees.
  */
 export interface PrependTokenPaymasterApproveAccount {
+	/** The EntryPoint contract address this account targets */
+	readonly entrypointAddress: string;
+
 	/**
 	 * Prepends a token approval call to the existing callData.
 	 * @param callData - The original encoded callData
@@ -33,19 +36,10 @@ export interface PrependTokenPaymasterApproveAccount {
 }
 
 /**
- * Base overrides for paymaster-assisted UserOperation creation.
- * Allows manually specifying the EntryPoint address instead of auto-detection.
- */
-export interface BasePaymasterUserOperationOverrides {
-	/** set the entrypoint address intead of determining it from the useroperation structure.*/
-	entrypoint?: string;
-}
-
-/**
- * Extended overrides for paymaster-assisted UserOperation creation with
+ * Overrides for paymaster-assisted UserOperation creation.
  * fine-grained control over gas limits and estimation parameters.
  */
-export interface GasPaymasterUserOperationOverrides extends BasePaymasterUserOperationOverrides {
+export interface PaymasterUserOperationOverrides {
 	/** set the callGasLimit instead of estimating gas using the bundler*/
 	callGasLimit?: bigint;
 	/** set the verificationGasLimit instead of estimating gas using the bundler*/

@@ -4,6 +4,7 @@ import {
 	UserOperationV6,
 	UserOperationV7,
 	UserOperationV8,
+	UserOperationV9,
 	SupportedERC20TokensAndMetadataV8,
 	SupportedERC20TokensAndMetadataV7,
 	SupportedERC20TokensAndMetadataV6,
@@ -18,16 +19,16 @@ import {
 	SupportedERC20TokensAndMetadataV8WithExchangeRate,
 	SupportedERC20TokensAndMetadataV7WithExchangeRate,
 	SupportedERC20TokensAndMetadataV6WithExchangeRate,
+    SupportedERC20TokensAndMetadataV9,
 } from "../types";
 import {
 	CandidePaymasterContext,
 	PrependTokenPaymasterApproveAccount,
-	GasPaymasterUserOperationOverrides,
-	BasePaymasterUserOperationOverrides,
+	PaymasterUserOperationOverrides,
 } from "./types";
 import { Bundler } from "src/Bundler";
 import { AbstractionKitError, ensureError } from "src/errors";
-import { ENTRYPOINT_V8, ENTRYPOINT_V7, ENTRYPOINT_V6 } from "src/constants";
+import { ENTRYPOINT_V8, ENTRYPOINT_V7, ENTRYPOINT_V6, ENTRYPOINT_V9 } from "src/constants";
 
 /**
  * Client for the Candide Paymaster service.
@@ -46,6 +47,7 @@ export class CandidePaymaster extends Paymaster {
 	/** The paymaster JSON-RPC endpoint URL */
 	readonly rpcUrl: string;
 	private version: "v3" | "v2" | undefined;
+	private entrypointDataV9: SupportedERC20TokensAndMetadataV9 | undefined;
 	private entrypointDataV8: SupportedERC20TokensAndMetadataV8 | undefined;
 	private entrypointDataV7: SupportedERC20TokensAndMetadataV7 | undefined;
 	private entrypointDataV6: SupportedERC20TokensAndMetadataV6 | undefined;
@@ -390,39 +392,42 @@ export class CandidePaymaster extends Paymaster {
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
 	 */
 	async createPaymasterUserOperation(
+		smartAccount: PrependTokenPaymasterApproveAccount,
+		userOperation: UserOperationV9,
+		bundlerRpc: string,
+		context?: CandidePaymasterContext,
+		overrides?: PaymasterUserOperationOverrides,
+	): Promise<[UserOperationV9, SponsorMetadata | undefined]>;
+	async createPaymasterUserOperation(
+		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV8,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
-		overrides?:
-			| BasePaymasterUserOperationOverrides
-			| GasPaymasterUserOperationOverrides,
+		overrides?: PaymasterUserOperationOverrides,
 	): Promise<[UserOperationV8, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
+		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV7,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
-		overrides?:
-			| BasePaymasterUserOperationOverrides
-			| GasPaymasterUserOperationOverrides,
+		overrides?: PaymasterUserOperationOverrides,
 	): Promise<[UserOperationV7, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
+		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV6,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
-		overrides?:
-			| BasePaymasterUserOperationOverrides
-			| GasPaymasterUserOperationOverrides,
+		overrides?: PaymasterUserOperationOverrides,
 	): Promise<[UserOperationV6, SponsorMetadata | undefined]>;
 	async createPaymasterUserOperation(
-		userOperation: UserOperationV8 | UserOperationV7 | UserOperationV6,
+		smartAccount: PrependTokenPaymasterApproveAccount,
+		userOperation: UserOperationV9 | UserOperationV8 | UserOperationV7 | UserOperationV6,
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
-		overrides?:
-			| BasePaymasterUserOperationOverrides
-			| GasPaymasterUserOperationOverrides,
+		overrides?: PaymasterUserOperationOverrides
 	): Promise<
 		[
-			UserOperationV8 | UserOperationV7 | UserOperationV6,
+			UserOperationV9 | UserOperationV8 | UserOperationV7 | UserOperationV6,
 			SponsorMetadata | undefined,
 		]
 	> {
@@ -430,7 +435,7 @@ export class CandidePaymaster extends Paymaster {
 			context = {};
 		}
 		let gasUserOperationOverrides =
-			overrides as GasPaymasterUserOperationOverrides;
+			overrides as PaymasterUserOperationOverrides;
 		if (gasUserOperationOverrides == null) {
 			gasUserOperationOverrides = {};
 		}
@@ -440,47 +445,57 @@ export class CandidePaymaster extends Paymaster {
 		}
 		let sponsorMetadata = undefined;
 		try {
-			let entrypointAddress = gasUserOperationOverrides.entrypoint;
-			if (entrypointAddress == null) {
-				if ("initCode" in userOperation) {
-					if (this.entrypointDataV6 == null) {
-						throw new RangeError("UserOperation v0.06 is not supported");
-					}
-					entrypointAddress = ENTRYPOINT_V6;
+			let entrypointAddress = smartAccount.entrypointAddress;
+            if ("initCode" in userOperation) {
+                if (this.entrypointDataV6 == null) {
+                    throw new RangeError("UserOperation v0.06 is not supported");
+                }
+                if(entrypointAddress.toLowerCase() != ENTRYPOINT_V6.toLowerCase()){
+                    throw new RangeError("Invalid useroperation for account entrypoint.");
+                }
+                const paymasterMetadata = this.entrypointDataV6.paymasterMetadata;
+                userOperation.paymasterAndData =
+                    paymasterMetadata.dummyPaymasterAndData;
+            } else if ("eip7702Auth" in userOperation) {
+                let paymasterMetadata;
+                if(entrypointAddress.toLowerCase() == ENTRYPOINT_V9.toLowerCase()){
+                    if (this.entrypointDataV9 == null) {
+                        throw new RangeError("UserOperation v0.09 is not supported");
+                    }
+                    paymasterMetadata = this.entrypointDataV9.paymasterMetadata;
+                } else if(entrypointAddress.toLowerCase() == ENTRYPOINT_V8.toLowerCase()){
+                    if (this.entrypointDataV8 == null) {
+                        throw new RangeError("UserOperation v0.08 is not supported");
+                    }
+                    paymasterMetadata = this.entrypointDataV8.paymasterMetadata;
+                } else{
+                    throw new RangeError("Invalid useroperation for account entrypoint.");
+                }
 
-					const paymasterMetadata = this.entrypointDataV6.paymasterMetadata;
-					userOperation.paymasterAndData =
-						paymasterMetadata.dummyPaymasterAndData;
-				} else if ("eip7702Auth" in userOperation) {
-					if (this.entrypointDataV8 == null) {
-						throw new RangeError("UserOperation v0.08 is not supported");
-					}
-					entrypointAddress = ENTRYPOINT_V8;
+                const paymasterAndData = paymasterMetadata.dummyPaymasterAndData;
+                userOperation.paymaster = paymasterAndData.paymaster;
+                userOperation.paymasterVerificationGasLimit =
+                    paymasterAndData.paymasterVerificationGasLimit;
+                userOperation.paymasterPostOpGasLimit =
+                    paymasterAndData.paymasterPostOpGasLimit;
+                userOperation.paymasterData = paymasterAndData.paymasterData;
+            } else {
+                if (this.entrypointDataV7 == null) {
+                    throw new RangeError("UserOperation v0.07 is not supported");
+                }
+				if(entrypointAddress.toLowerCase() != ENTRYPOINT_V7.toLowerCase()){
+                    throw new RangeError("Invalid useroperation for account entrypoint.");
+                }
 
-					const paymasterMetadata = this.entrypointDataV8.paymasterMetadata;
-					const paymasterAndData = paymasterMetadata.dummyPaymasterAndData;
-					userOperation.paymaster = paymasterAndData.paymaster;
-					userOperation.paymasterVerificationGasLimit =
-						paymasterAndData.paymasterVerificationGasLimit;
-					userOperation.paymasterPostOpGasLimit =
-						paymasterAndData.paymasterPostOpGasLimit;
-					userOperation.paymasterData = paymasterAndData.paymasterData;
-				} else {
-					if (this.entrypointDataV7 == null) {
-						throw new RangeError("UserOperation v0.07 is not supported");
-					}
-					entrypointAddress = ENTRYPOINT_V7;
-
-					const paymasterMetadata = this.entrypointDataV7.paymasterMetadata;
-					const paymasterAndData = paymasterMetadata.dummyPaymasterAndData;
-					userOperation.paymaster = paymasterAndData.paymaster;
-					userOperation.paymasterVerificationGasLimit =
-						paymasterAndData.paymasterVerificationGasLimit;
-					userOperation.paymasterPostOpGasLimit =
-						paymasterAndData.paymasterPostOpGasLimit;
-					userOperation.paymasterData = paymasterAndData.paymasterData;
-				}
-			}
+                const paymasterMetadata = this.entrypointDataV7.paymasterMetadata;
+                const paymasterAndData = paymasterMetadata.dummyPaymasterAndData;
+                userOperation.paymaster = paymasterAndData.paymaster;
+                userOperation.paymasterVerificationGasLimit =
+                    paymasterAndData.paymasterVerificationGasLimit;
+                userOperation.paymasterPostOpGasLimit =
+                    paymasterAndData.paymasterPostOpGasLimit;
+                userOperation.paymasterData = paymasterAndData.paymasterData;
+            }
 			//only estimate gas if:
 			//1- paymaster v2 (only supports entrypoint v0.06)
 			//2- token paymaster v3 (supports both entrypoints)
@@ -693,6 +708,7 @@ export class CandidePaymaster extends Paymaster {
 	 * Create a gas-sponsored UserOperation (no token payment required).
 	 * Convenience wrapper around createPaymasterUserOperation with sponsor context.
 	 *
+	 * @param smartAccount - The smart account instance (must implement prependTokenPaymasterApproveToCallData)
 	 * @param userOperation - The UserOperation to sponsor
 	 * @param bundlerRpc - Bundler RPC URL for gas estimation
 	 * @param sponsorshipPolicyId - Optional sponsorship policy ID
@@ -701,31 +717,42 @@ export class CandidePaymaster extends Paymaster {
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
 	 */
 	async createSponsorPaymasterUserOperation(
+		smartAccount: PrependTokenPaymasterApproveAccount,
+		userOperation: UserOperationV9,
+		bundlerRpc: string,
+		sponsorshipPolicyId?: string,
+		overrides?: PaymasterUserOperationOverrides,
+	): Promise<[UserOperationV9, SponsorMetadata | undefined]>;
+	async createSponsorPaymasterUserOperation(
+		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV8,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
-		overrides?: BasePaymasterUserOperationOverrides,
+		overrides?: PaymasterUserOperationOverrides,
 	): Promise<[UserOperationV8, SponsorMetadata | undefined]>;
 	async createSponsorPaymasterUserOperation(
+		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV7,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
-		overrides?: BasePaymasterUserOperationOverrides,
+		overrides?: PaymasterUserOperationOverrides,
 	): Promise<[UserOperationV7, SponsorMetadata | undefined]>;
 	async createSponsorPaymasterUserOperation(
+		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV6,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
-		overrides?: BasePaymasterUserOperationOverrides,
+		overrides?: PaymasterUserOperationOverrides,
 	): Promise<[UserOperationV6, SponsorMetadata | undefined]>;
 	async createSponsorPaymasterUserOperation(
+		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV7 | UserOperationV6,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
-		overrides?: BasePaymasterUserOperationOverrides,
+		overrides?: PaymasterUserOperationOverrides,
 	): Promise<
 		[
-			UserOperationV8 | UserOperationV7 | UserOperationV6,
+			UserOperationV9 | UserOperationV8 | UserOperationV7 | UserOperationV6,
 			SponsorMetadata | undefined,
 		]
 	> {
@@ -735,6 +762,7 @@ export class CandidePaymaster extends Paymaster {
 		}
 		if ("initCode" in userOperation) {
 			return await this.createPaymasterUserOperation(
+                smartAccount,
 				userOperation as UserOperationV6,
 				bundlerRpc,
 				context,
@@ -742,13 +770,15 @@ export class CandidePaymaster extends Paymaster {
 			);
 		} else if ("eip7702Auth" in userOperation) {
 			return await this.createPaymasterUserOperation(
-				userOperation as UserOperationV8,
+                smartAccount,
+				userOperation as UserOperationV9 | UserOperationV8,
 				bundlerRpc,
 				context,
 				overrides,
 			);
 		} else {
 			return await this.createPaymasterUserOperation(
+                smartAccount,
 				userOperation as UserOperationV7,
 				bundlerRpc,
 				context,
@@ -774,28 +804,28 @@ export class CandidePaymaster extends Paymaster {
 		userOperation: UserOperationV8,
 		tokenAddress: string,
 		bundlerRpc: string,
-		overrides?: GasPaymasterUserOperationOverrides,
+		overrides?: PaymasterUserOperationOverrides,
 	): Promise<UserOperationV8>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV7,
 		tokenAddress: string,
 		bundlerRpc: string,
-		overrides?: GasPaymasterUserOperationOverrides,
+		overrides?: PaymasterUserOperationOverrides,
 	): Promise<UserOperationV7>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV6,
 		tokenAddress: string,
 		bundlerRpc: string,
-		overrides?: GasPaymasterUserOperationOverrides,
+		overrides?: PaymasterUserOperationOverrides,
 	): Promise<UserOperationV6>;
 	async createTokenPaymasterUserOperation(
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: UserOperationV8 | UserOperationV7 | UserOperationV6,
 		tokenAddress: string,
 		bundlerRpc: string,
-		overrides?: GasPaymasterUserOperationOverrides,
+		overrides?: PaymasterUserOperationOverrides,
 	): Promise<UserOperationV8 | UserOperationV7 | UserOperationV6> {
 		try {
 			if (!this.initialized) {
@@ -804,16 +834,7 @@ export class CandidePaymaster extends Paymaster {
 			const _overrides = { ...(overrides || {}),
 				callGasLimitPercentageMultiplier: overrides?.callGasLimitPercentageMultiplier ?? 105,
 			};
-			let entrypoint = overrides?.entrypoint;
-			if (entrypoint == null) {
-				if ("initCode" in userOperation) {
-					entrypoint = ENTRYPOINT_V6;
-				} else if ("eip7702Auth" in userOperation) {
-					entrypoint = ENTRYPOINT_V8;
-				} else {
-					entrypoint = ENTRYPOINT_V7;
-				}
-			}
+			let entrypoint = smartAccount.entrypointAddress;
 			const maxErc20Cost =
 				await this.calculateUserOperationErc20TokenMaxGasCost(
 					userOperation,
@@ -841,6 +862,7 @@ export class CandidePaymaster extends Paymaster {
 
 			if ("initCode" in userOperation) {
 				const [resultUserOp] = await this.createPaymasterUserOperation(
+                    smartAccount,
 					userOperation as UserOperationV6,
 					bundlerRpc,
 					{
@@ -851,7 +873,8 @@ export class CandidePaymaster extends Paymaster {
 				return resultUserOp;
 			} else if ("eip7702Auth" in userOperation) {
 				const [resultUserOp] = await this.createPaymasterUserOperation(
-					userOperation as UserOperationV8,
+                    smartAccount,
+				    userOperation as UserOperationV9 | UserOperationV8,
 					bundlerRpc,
 					{
 						token: tokenAddress,
@@ -861,6 +884,7 @@ export class CandidePaymaster extends Paymaster {
 				return resultUserOp;
 			} else {
 				const [resultUserOp] = await this.createPaymasterUserOperation(
+                    smartAccount,
 					userOperation as UserOperationV7,
 					bundlerRpc,
 					{
