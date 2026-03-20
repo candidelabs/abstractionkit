@@ -4,30 +4,33 @@ import {
 	UserOperationV6,
 	UserOperationV7,
 	UserOperationV8,
-	SupportedERC20TokensAndMetadataV8,
-	SupportedERC20TokensAndMetadataV7,
-	SupportedERC20TokensAndMetadataV6,
+	SupportedERC20TokensAndMetadata,
+	SupportedERC20TokensAndMetadataWithExchangeRate,
 	PmUserOperationV8Result,
 	PmUserOperationV7Result,
 	PmUserOperationV6Result,
-	PaymasterMetadataV8,
-	PaymasterMetadataV7,
-	PaymasterMetadataV6,
+	PaymasterMetadata,
 	ERC20Token,
+	ERC20TokenWithExchangeRate,
 	SponsorMetadata,
-	SupportedERC20TokensAndMetadataV8WithExchangeRate,
-	SupportedERC20TokensAndMetadataV7WithExchangeRate,
-	SupportedERC20TokensAndMetadataV6WithExchangeRate,
 } from "../types";
 import {
 	CandidePaymasterContext,
 	PrependTokenPaymasterApproveAccount,
 	GasPaymasterUserOperationOverrides,
-	BasePaymasterUserOperationOverrides,
+	AnyUserOperation,
+	SameUserOp,
 } from "./types";
 import { Bundler } from "src/Bundler";
 import { AbstractionKitError, ensureError } from "src/errors";
 import { ENTRYPOINT_V8, ENTRYPOINT_V7, ENTRYPOINT_V6 } from "src/constants";
+
+/** Buffer added to verificationGasLimit for paymasterAndData verification overhead */
+const PAYMASTER_V06_VERIFICATION_OVERHEAD = 40000n;
+/** Max value for uint256 */
+const UINT256_MAX = 115792089237316195423570985008687907853269984665640564039457584007913129639935n;
+/** Multiplier for token approve amount to cover paymasterAndData cost variance */
+const TOKEN_APPROVE_AMOUNT_MULTIPLIER = 2n;
 
 /**
  * Client for the Candide Paymaster service.
@@ -45,92 +48,156 @@ import { ENTRYPOINT_V8, ENTRYPOINT_V7, ENTRYPOINT_V6 } from "src/constants";
 export class CandidePaymaster extends Paymaster {
 	/** The paymaster JSON-RPC endpoint URL */
 	readonly rpcUrl: string;
-	private version: "v3" | "v2" | undefined;
-	private entrypointDataV8: SupportedERC20TokensAndMetadataV8 | undefined;
-	private entrypointDataV7: SupportedERC20TokensAndMetadataV7 | undefined;
-	private entrypointDataV6: SupportedERC20TokensAndMetadataV6 | undefined;
-	private initialized = false;
+	/** Cached token/metadata per EntryPoint address (lowercase keys) */
+	private entrypointData = new Map<
+		string,
+		SupportedERC20TokensAndMetadata
+	>();
+	/** Per-entrypoint initialization promises (lowercase keys) */
+	private initPromises = new Map<string, Promise<void>>();
+	/** Cached chain ID (hex string), resolved from URL or pm_chainId RPC */
+	private chainId: string | null = null;
+	private chainIdPromise: Promise<string> | null = null;
 
 	/** @param rpcUrl - The Candide paymaster JSON-RPC endpoint URL */
 	constructor(rpcUrl: string) {
 		super();
 		this.rpcUrl = rpcUrl;
+		this.chainId = CandidePaymaster.extractChainIdFromUrl(rpcUrl);
 	}
 
 	/**
-	 * Fetch and cache the paymaster's supported tokens, EntryPoint addresses, and metadata.
-	 * Called automatically on first use of other methods.
+	 * Extract chain ID from a Candide paymaster URL.
+	 * Matches: https://api.candide.dev/(api|public)/v{N}/{chainId}(/{apiKey})?
+	 */
+	private static extractChainIdFromUrl(url: string): string | null {
+		const match = url.match(
+			/api\.candide\.dev\/(?:api|public)\/v\d+\/(\d+)(?:\/|$)/,
+		);
+		if (match) {
+			return "0x" + BigInt(match[1]).toString(16);
+		}
+		return null;
+	}
+
+	/**
+	 * Get the chain ID, resolving it from the URL or via pm_chainId RPC.
+	 * Deduplicates concurrent calls.
+	 */
+	private async getChainId(): Promise<string> {
+		if (this.chainId != null) {
+			return this.chainId;
+		}
+		if (this.chainIdPromise == null) {
+			this.chainIdPromise = this.fetchChainId().then((id) => {
+				this.chainId = id;
+				return id;
+			}).catch((err) => {
+				this.chainIdPromise = null;
+				throw err;
+			});
+		}
+		return this.chainIdPromise;
+	}
+
+	private async fetchChainId(): Promise<string> {
+		try {
+			const result = await sendJsonRpcRequest(
+				this.rpcUrl,
+				"pm_chainId",
+				[],
+			);
+			return result as string;
+		} catch (err) {
+			const error = ensureError(err);
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				"pm_chainId failed",
+				{ cause: error },
+			);
+		}
+	}
+
+	/**
+	 * Determine the EntryPoint address from the UserOperation's shape.
+	 * V6 ops have `initCode`, V8 ops have `eip7702Auth`, V7 is the default.
+	 */
+	private resolveEntrypoint(
+		userOperation: AnyUserOperation,
+	): string {
+		if ("initCode" in userOperation) {
+			return ENTRYPOINT_V6;
+		} else if ("eip7702Auth" in userOperation) {
+			return ENTRYPOINT_V8;
+		} else {
+			return ENTRYPOINT_V7;
+		}
+	}
+
+	/**
+	 * Get the cached entrypoint data for a given entrypoint address.
+	 */
+	private getEntrypointData(
+		entrypoint: string,
+	): SupportedERC20TokensAndMetadata | undefined {
+		return this.entrypointData.get(entrypoint.toLowerCase());
+	}
+
+	private static mapTokens(
+		tokens: { name: string; symbol: string; address: string; decimals: number | string }[],
+	): ERC20Token[] {
+		return tokens.map((t) => ({
+			name: t.name,
+			symbol: t.symbol,
+			address: t.address,
+			decimals: Number(t.decimals),
+		}));
+	}
+
+	private static mapTokensWithExchangeRate(
+		tokens: { name: string; symbol: string; address: string; decimals: number | string; exchangeRate: string | bigint }[],
+	): ERC20TokenWithExchangeRate[] {
+		return tokens.map((t) => ({
+			name: t.name,
+			symbol: t.symbol,
+			address: t.address,
+			decimals: Number(t.decimals),
+			exchangeRate: BigInt(t.exchangeRate),
+		}));
+	}
+
+	/**
+	 * Ensure the paymaster data for a specific entrypoint is initialized.
+	 * Deduplicates concurrent calls for the same entrypoint.
+	 * On failure, resets so the next call retries.
+	 */
+	private ensureInitialized(entrypoint: string): Promise<void> {
+		const key = entrypoint.toLowerCase();
+		let promise = this.initPromises.get(key);
+		if (promise == null) {
+			promise = this.doInitialize(entrypoint).catch((err) => {
+				this.initPromises.delete(key);
+				throw err;
+			});
+			this.initPromises.set(key, promise);
+		}
+		return promise;
+	}
+
+	/**
+	 * Fetch and cache the paymaster's supported tokens and metadata for a specific entrypoint.
 	 *
-	 * @returns null
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if initialization fails
 	 */
-	private async initialize(): Promise<null> {
+	private async doInitialize(entrypoint: string): Promise<void> {
 		try {
-			const paymasterVersionJsonRpcResult = (await sendJsonRpcRequest(
-				this.rpcUrl,
-				"pm_clientVersion",
-				[],
-			)) as string;
-
-			if (paymasterVersionJsonRpcResult.startsWith("Candide/v3")) {
-				this.version = "v3";
-			} else if (paymasterVersionJsonRpcResult.startsWith("Candide/v2")) {
-				this.version = "v2";
-			} else {
+			const data = await this.fetchAndTransformTokenData(entrypoint);
+			if (data == null) {
 				throw new RangeError(
-					"Invalid paymaster version received from paymaster rpc",
+					`Invalid data received during initialization for entrypoint ${entrypoint}.`,
 				);
 			}
-
-			const supportedEntrypoints = await this.getSupportedEntrypointsLive();
-			if (
-				supportedEntrypoints.some(
-					(x) => x.toLowerCase() === ENTRYPOINT_V8.toLowerCase(),
-				)
-			) {
-				const supportedTokensAndMetadataResultV8 =
-					await this.getSupportedERC20TokensAndPaymasterMetadata(ENTRYPOINT_V8);
-
-				this.entrypointDataV8 =
-					(supportedTokensAndMetadataResultV8 as SupportedERC20TokensAndMetadataV8) ??
-					null;
-			}
-
-			if (
-				supportedEntrypoints.some(
-					(x) => x.toLowerCase() === ENTRYPOINT_V7.toLowerCase(),
-				)
-			) {
-				const supportedTokensAndMetadataResultV7 =
-					await this.getSupportedERC20TokensAndPaymasterMetadata(ENTRYPOINT_V7);
-
-				this.entrypointDataV7 =
-					(supportedTokensAndMetadataResultV7 as SupportedERC20TokensAndMetadataV7) ??
-					null;
-			}
-
-			if (
-				supportedEntrypoints.some(
-					(x) => x.toLowerCase() === ENTRYPOINT_V6.toLowerCase(),
-				)
-			) {
-				const supportedTokensAndMetadataResultV6 =
-					await this.getSupportedERC20TokensAndPaymasterMetadata(ENTRYPOINT_V6);
-
-				this.entrypointDataV6 =
-					(supportedTokensAndMetadataResultV6 as SupportedERC20TokensAndMetadataV6) ??
-					null;
-			}
-
-			if (
-				this.entrypointDataV8 == null &&
-				this.entrypointDataV7 == null &&
-				this.entrypointDataV6 == null
-			) {
-				throw new RangeError("Invalid data received during initialization.");
-			}
-			this.initialized = true;
-			return null;
+			this.entrypointData.set(entrypoint.toLowerCase(), data);
 		} catch (err) {
 			const error = ensureError(err);
 
@@ -144,117 +211,38 @@ export class CandidePaymaster extends Paymaster {
 		}
 	}
 
-	private async getSupportedERC20TokensAndPaymasterMetadata(
+	/**
+	 * Fetch supported tokens and metadata for a specific entrypoint from the RPC
+	 * and transform the result into a normalized format. Used during initialization.
+	 */
+	private async fetchAndTransformTokenData(
 		entrypoint: string,
-	): Promise<
-		| SupportedERC20TokensAndMetadataV8
-		| SupportedERC20TokensAndMetadataV7
-		| SupportedERC20TokensAndMetadataV6
-		| null
-	> {
-		if (!this.initialized) {
-			try {
-				let jsonRpcResult;
-				if (this.version == "v3") {
-					jsonRpcResult = await sendJsonRpcRequest(
-						this.rpcUrl,
-						"pm_supportedERC20Tokens",
-						[entrypoint],
-					);
-				} else {
-					jsonRpcResult = await sendJsonRpcRequest(
-						this.rpcUrl,
-						"pm_supportedERC20Tokens",
-						[],
-					);
-				}
-				if (entrypoint == ENTRYPOINT_V8) {
-					jsonRpcResult = jsonRpcResult as SupportedERC20TokensAndMetadataV8;
-					return {
-						tokens: jsonRpcResult.tokens.map((gasToken) => ({
-							name: gasToken.name,
-							symbol: gasToken.symbol,
-							address: gasToken.address,
-							decimals: Number(gasToken.decimals),
-							//exchangeRate: BigInt(gasToken.exchangeRate),
-						})),
-						paymasterMetadata: jsonRpcResult.paymasterMetadata,
-					};
-				} else if (entrypoint == ENTRYPOINT_V7) {
-					jsonRpcResult = jsonRpcResult as SupportedERC20TokensAndMetadataV7;
-					return {
-						tokens: jsonRpcResult.tokens.map((gasToken) => ({
-							name: gasToken.name,
-							symbol: gasToken.symbol,
-							address: gasToken.address,
-							decimals: Number(gasToken.decimals),
-							//exchangeRate: BigInt(gasToken.exchangeRate),
-						})),
-						paymasterMetadata: jsonRpcResult.paymasterMetadata,
-					};
-				} else if (entrypoint == ENTRYPOINT_V6) {
-					jsonRpcResult = jsonRpcResult as SupportedERC20TokensAndMetadataV6;
-					return {
-						tokens: jsonRpcResult.tokens.map((gasToken) => ({
-							name: gasToken.name,
-							symbol: gasToken.symbol,
-							address: gasToken.address,
-							decimals: Number(gasToken.decimals),
-							//exchangeRate: BigInt(gasToken.exchangeRate),
-						})),
-						paymasterMetadata: jsonRpcResult.paymasterMetadata,
-					};
-				} else {
-					throw new RangeError("unsupported entrypoint.");
-				}
-			} catch (err) {
-				const error = ensureError(err);
-
-				throw new AbstractionKitError(
-					"PAYMASTER_ERROR",
-					"getSupportedERC20TokensAndPaymasterMetadata failed",
-					{
-						cause: error,
-					},
-				);
-			}
-		} else {
-			if (entrypoint == ENTRYPOINT_V8) {
-				return this.entrypointDataV8 ?? null;
-			} else if (entrypoint == ENTRYPOINT_V7) {
-				return this.entrypointDataV7 ?? null;
-			} else if (entrypoint == ENTRYPOINT_V6) {
-				return this.entrypointDataV6 ?? null;
-			}
-		}
-		return null;
-	}
-
-	private async getSupportedEntrypointsLive(): Promise<string[]> {
+	): Promise<SupportedERC20TokensAndMetadata | null> {
 		try {
-			if (this.version == "v3") {
-				const supportedEntrypoints = await sendJsonRpcRequest(
-					this.rpcUrl,
-					"pm_supportedEntryPoints",
-					[],
-				);
+			const jsonRpcResult = await this.fetchSupportedTokensRpc(entrypoint);
 
-				return supportedEntrypoints as string[];
-			} else {
-				const supportedEntrypoint = await sendJsonRpcRequest(
-					this.rpcUrl,
-					"pm_supportedEntryPoint",
-					[],
-				);
+			const result = jsonRpcResult as SupportedERC20TokensAndMetadata;
+			const metadata = result.paymasterMetadata;
 
-				return [supportedEntrypoint] as string[];
+			// Convert dummyPaymasterAndData gas fields from hex strings to bigint
+			if (typeof metadata.dummyPaymasterAndData !== "string") {
+				metadata.dummyPaymasterAndData = {
+					...metadata.dummyPaymasterAndData,
+					paymasterVerificationGasLimit: BigInt(metadata.dummyPaymasterAndData.paymasterVerificationGasLimit),
+					paymasterPostOpGasLimit: BigInt(metadata.dummyPaymasterAndData.paymasterPostOpGasLimit),
+				};
 			}
+
+			return {
+				tokens: CandidePaymaster.mapTokens(result.tokens),
+				paymasterMetadata: metadata,
+			};
 		} catch (err) {
 			const error = ensureError(err);
 
 			throw new AbstractionKitError(
 				"PAYMASTER_ERROR",
-				"getSupportedEntrypoint failed",
+				"fetchAndTransformTokenData failed",
 				{
 					cause: error,
 				},
@@ -262,27 +250,40 @@ export class CandidePaymaster extends Paymaster {
 		}
 	}
 
+	private async fetchSupportedTokensRpc(
+		entrypoint: string,
+	): Promise<unknown> {
+		return await sendJsonRpcRequest(
+			this.rpcUrl,
+			"pm_supportedERC20Tokens",
+			[entrypoint],
+		);
+	}
+
 	/**
 	 * Get the EntryPoint addresses supported by this paymaster.
-	 * Auto-initializes if not yet initialized.
 	 *
 	 * @returns Array of supported EntryPoint contract addresses
 	 */
 	async getSupportedEntrypoints(): Promise<string[]> {
-		if (!this.initialized) {
-			await this.initialize();
+		try {
+			const result = await sendJsonRpcRequest(
+				this.rpcUrl,
+				"pm_supportedEntryPoints",
+				[],
+			);
+			return result as string[];
+		} catch (err) {
+			const error = ensureError(err);
+
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				"pm_supportedEntryPoints failed",
+				{
+					cause: error,
+				},
+			);
 		}
-		const supportedEntrypoints = [];
-		if (this.entrypointDataV8 != null) {
-			supportedEntrypoints.push(ENTRYPOINT_V8);
-		}
-		if (this.entrypointDataV7 != null) {
-			supportedEntrypoints.push(ENTRYPOINT_V7);
-		}
-		if (this.entrypointDataV6 != null) {
-			supportedEntrypoints.push(ENTRYPOINT_V6);
-		}
-		return supportedEntrypoints;
 	}
 
 	/**
@@ -295,20 +296,14 @@ export class CandidePaymaster extends Paymaster {
 	 */
 	async getPaymasterMetaData(
 		entrypoint: string,
-	): Promise<PaymasterMetadataV8 | PaymasterMetadataV7 | PaymasterMetadataV6 | null> {
-		if (!this.initialized) {
-			await this.initialize();
-		}
+	): Promise<PaymasterMetadata | null> {
+		await this.ensureInitialized(entrypoint);
 
-		if (entrypoint == ENTRYPOINT_V8 && this.entrypointDataV8 != null) {
-			return this.entrypointDataV8.paymasterMetadata;
-		} else if (entrypoint == ENTRYPOINT_V7 && this.entrypointDataV7 != null) {
-			return this.entrypointDataV7.paymasterMetadata;
-		} else if (entrypoint == ENTRYPOINT_V6 && this.entrypointDataV6 != null) {
-			return this.entrypointDataV6.paymasterMetadata;
-		} else {
+		const data = this.getEntrypointData(entrypoint);
+		if (data == null) {
 			throw new RangeError("unsupported entrypoint.");
 		}
+		return data.paymasterMetadata;
 	}
 
 	/**
@@ -322,15 +317,11 @@ export class CandidePaymaster extends Paymaster {
 		erc20TokenAddress: string,
 		entrypoint: string = ENTRYPOINT_V7,
 	): Promise<boolean> {
-		const gasToken = this.getSupportedERC20TokenData(
+		const gasToken = await this.getSupportedERC20TokenData(
 			erc20TokenAddress,
 			entrypoint,
 		);
-		if (!gasToken) {
-			return false;
-		} else {
-			return true;
-		}
+		return gasToken != null;
 	}
 
 	/**
@@ -345,343 +336,174 @@ export class CandidePaymaster extends Paymaster {
 		erc20TokenAddress: string,
 		entrypoint: string = ENTRYPOINT_V7,
 	): Promise<ERC20Token | null> {
-		if (!this.initialized) {
-			await this.initialize();
-		}
-		let supportedTokens: ERC20Token[];
-		if (entrypoint == ENTRYPOINT_V8 && this.entrypointDataV8 != null) {
-			supportedTokens = this.entrypointDataV8.tokens;
-		} else if (entrypoint == ENTRYPOINT_V7 && this.entrypointDataV7 != null) {
-			supportedTokens = this.entrypointDataV7.tokens;
-		} else if (entrypoint == ENTRYPOINT_V6 && this.entrypointDataV6 != null) {
-			supportedTokens = this.entrypointDataV6.tokens;
-		} else {
+		await this.ensureInitialized(entrypoint);
+
+		const data = this.getEntrypointData(entrypoint);
+		if (data == null) {
 			throw new RangeError("unsupported entrypoint.");
 		}
 
-		const gasToken = supportedTokens.find(
+		const gasToken = data.tokens.find(
 			(token) =>
 				token.address.toLowerCase() === erc20TokenAddress.toLowerCase(),
 		);
 
 		if (!gasToken) {
 			return null;
+		}
+		return {
+			name: gasToken.name,
+			symbol: gasToken.symbol,
+			address: gasToken.address,
+			decimals: Number(gasToken.decimals),
+		};
+	}
+
+	// ── Private helpers for createPaymasterUserOperation ─────────────
+
+	private setDummyPaymasterFields(
+		userOp: AnyUserOperation,
+		epData: SupportedERC20TokensAndMetadata,
+	): void {
+		const dummyPaymasterAndData = epData.paymasterMetadata.dummyPaymasterAndData;
+		if ("initCode" in userOp) {
+			userOp.paymasterAndData = dummyPaymasterAndData as string;
 		} else {
-			return {
-				name: gasToken.name,
-				symbol: gasToken.symbol,
-				address: gasToken.address,
-				decimals: Number(gasToken.decimals),
-				//exchangeRate: BigInt(gasToken.exchangeRate),
-			};
+			const structured = dummyPaymasterAndData as Exclude<
+				typeof dummyPaymasterAndData, string
+			>;
+			userOp.paymaster = structured.paymaster;
+			userOp.paymasterVerificationGasLimit =
+				structured.paymasterVerificationGasLimit;
+			userOp.paymasterPostOpGasLimit =
+				structured.paymasterPostOpGasLimit;
+			userOp.paymasterData = structured.paymasterData;
 		}
 	}
 
-	/**
-	 * Estimate gas, set paymaster fields, and return a paymaster-ready UserOperation.
-	 * Gas limits will only increase if the bundler estimation exceeds the input values.
-	 * Gas overrides and multipliers are applied after estimation.
-	 *
-	 * @param userOperation - The UserOperation to sponsor
-	 * @param bundlerRpc - Bundler RPC URL for gas estimation
-	 * @param context - Paymaster context (e.g., `{ token: "0x..." }` for token paymaster)
-	 * @param overrides - Override gas limits and multipliers
-	 * @returns A tuple of [UserOperation, SponsorMetadata | undefined]
-	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
-	 */
-	async createPaymasterUserOperation(
-		userOperation: UserOperationV8,
+	private async estimateAndApplyGasLimits(
+		userOp: AnyUserOperation,
 		bundlerRpc: string,
-		context?: CandidePaymasterContext,
-		overrides?:
-			| BasePaymasterUserOperationOverrides
-			| GasPaymasterUserOperationOverrides,
-	): Promise<[UserOperationV8, SponsorMetadata | undefined]>;
-	async createPaymasterUserOperation(
-		userOperation: UserOperationV7,
-		bundlerRpc: string,
-		context?: CandidePaymasterContext,
-		overrides?:
-			| BasePaymasterUserOperationOverrides
-			| GasPaymasterUserOperationOverrides,
-	): Promise<[UserOperationV7, SponsorMetadata | undefined]>;
-	async createPaymasterUserOperation(
-		userOperation: UserOperationV6,
-		bundlerRpc: string,
-		context?: CandidePaymasterContext,
-		overrides?:
-			| BasePaymasterUserOperationOverrides
-			| GasPaymasterUserOperationOverrides,
-	): Promise<[UserOperationV6, SponsorMetadata | undefined]>;
-	async createPaymasterUserOperation(
-		userOperation: UserOperationV8 | UserOperationV7 | UserOperationV6,
-		bundlerRpc: string,
-		context?: CandidePaymasterContext,
-		overrides?:
-			| BasePaymasterUserOperationOverrides
-			| GasPaymasterUserOperationOverrides,
-	): Promise<
-		[
-			UserOperationV8 | UserOperationV7 | UserOperationV6,
-			SponsorMetadata | undefined,
-		]
-	> {
-		if (context == null) {
-			context = {};
+		entrypoint: string,
+		overrides: GasPaymasterUserOperationOverrides,
+	): Promise<void> {
+		let preVerificationGas = userOp.preVerificationGas;
+		let verificationGasLimit = userOp.verificationGasLimit;
+		let callGasLimit = userOp.callGasLimit;
+
+		if (
+			overrides.preVerificationGas == null ||
+			overrides.verificationGasLimit == null ||
+			overrides.callGasLimit == null
+		) {
+			if (bundlerRpc == null) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"bundlerRpc can't be null if preVerificationGas,verificationGasLimit and callGasLimit are not overridden",
+				);
+			}
+			const bundler = new Bundler(bundlerRpc);
+
+			userOp.callGasLimit = 0n;
+			userOp.verificationGasLimit = 0n;
+			userOp.preVerificationGas = 0n;
+			const inputMaxFeePerGas = userOp.maxFeePerGas;
+			const inputMaxPriorityFeePerGas = userOp.maxPriorityFeePerGas;
+			userOp.maxFeePerGas = 0n;
+			userOp.maxPriorityFeePerGas = 0n;
+
+			const estimation = await bundler.estimateUserOperationGas(
+				userOp,
+				entrypoint,
+				overrides.state_override_set,
+			);
+
+			if (preVerificationGas < estimation.preVerificationGas) {
+				preVerificationGas = estimation.preVerificationGas;
+			}
+			if (verificationGasLimit < estimation.verificationGasLimit) {
+				verificationGasLimit = estimation.verificationGasLimit;
+			}
+			if (callGasLimit < estimation.callGasLimit) {
+				callGasLimit = estimation.callGasLimit;
+			}
+
+			userOp.maxFeePerGas = inputMaxFeePerGas;
+			userOp.maxPriorityFeePerGas = inputMaxPriorityFeePerGas;
 		}
-		let gasUserOperationOverrides =
-			overrides as GasPaymasterUserOperationOverrides;
-		if (gasUserOperationOverrides == null) {
-			gasUserOperationOverrides = {};
+
+		if (typeof overrides.preVerificationGas === "bigint" && overrides.preVerificationGas < 0n) {
+			throw new RangeError("preVerificationGas override can't be negative");
 		}
-		userOperation = { ...userOperation };
-		if (!this.initialized) {
-			await this.initialize();
+		if (typeof overrides.verificationGasLimit === "bigint" && overrides.verificationGasLimit < 0n) {
+			throw new RangeError("verificationGasLimit override can't be negative");
 		}
-		let sponsorMetadata = undefined;
+		if (typeof overrides.callGasLimit === "bigint" && overrides.callGasLimit < 0n) {
+			throw new RangeError("callGasLimit override can't be negative");
+		}
+
+		const applyMultiplier = (value: bigint, multiplier?: number): bigint =>
+			value + (value * BigInt(multiplier ?? 0)) / 100n;
+
+		userOp.preVerificationGas = overrides.preVerificationGas
+			?? applyMultiplier(preVerificationGas, overrides.preVerificationGasPercentageMultiplier ?? 5);
+		userOp.verificationGasLimit = overrides.verificationGasLimit
+			?? applyMultiplier(verificationGasLimit, overrides.verificationGasLimitPercentageMultiplier ?? 10);
+		userOp.callGasLimit = overrides.callGasLimit
+			?? applyMultiplier(callGasLimit, overrides.callGasLimitPercentageMultiplier ?? 10);
+
+		if (entrypoint == ENTRYPOINT_V6){
+			userOp.verificationGasLimit += PAYMASTER_V06_VERIFICATION_OVERHEAD;
+		}
+	}
+
+	private applyPaymasterResult(
+		userOp: AnyUserOperation,
+		jsonRpcResult: unknown,
+	): SponsorMetadata | undefined {
+		const result = jsonRpcResult as
+			| PmUserOperationV8Result
+			| PmUserOperationV7Result
+			| PmUserOperationV6Result;
+
+		// Set version-specific paymaster fields (gas limits/prices are not overridden)
+		if ("initCode" in userOp) {
+			const v6Result = jsonRpcResult as PmUserOperationV6Result;
+			userOp.paymasterAndData = v6Result.paymasterAndData;
+		} else {
+			const v7Result = jsonRpcResult as PmUserOperationV7Result;
+			userOp.paymaster = v7Result.paymaster;
+			userOp.paymasterVerificationGasLimit = BigInt(v7Result.paymasterVerificationGasLimit);
+			userOp.paymasterPostOpGasLimit = BigInt(v7Result.paymasterPostOpGasLimit);
+			userOp.paymasterData = v7Result.paymasterData;
+		}
+
+		return result.sponsorMetadata ?? undefined;
+	}
+
+	// ── Core paymaster method (private) ──────────────────────────────
+
+	private async createPaymasterUserOperation<T extends AnyUserOperation>(
+		userOperation: T,
+		context: CandidePaymasterContext = {},
+		overrides: GasPaymasterUserOperationOverrides = {},
+	): Promise<[SameUserOp<T>, SponsorMetadata | undefined]> {
+		const userOp = { ...userOperation };
 		try {
-			let entrypointAddress = gasUserOperationOverrides.entrypoint;
-			if (entrypointAddress == null) {
-				if ("initCode" in userOperation) {
-					if (this.entrypointDataV6 == null) {
-						throw new RangeError("UserOperation v0.06 is not supported");
-					}
-					entrypointAddress = ENTRYPOINT_V6;
-
-					const paymasterMetadata = this.entrypointDataV6.paymasterMetadata;
-					userOperation.paymasterAndData =
-						paymasterMetadata.dummyPaymasterAndData;
-				} else if ("eip7702Auth" in userOperation) {
-					if (this.entrypointDataV8 == null) {
-						throw new RangeError("UserOperation v0.08 is not supported");
-					}
-					entrypointAddress = ENTRYPOINT_V8;
-
-					const paymasterMetadata = this.entrypointDataV8.paymasterMetadata;
-					const paymasterAndData = paymasterMetadata.dummyPaymasterAndData;
-					userOperation.paymaster = paymasterAndData.paymaster;
-					userOperation.paymasterVerificationGasLimit =
-						paymasterAndData.paymasterVerificationGasLimit;
-					userOperation.paymasterPostOpGasLimit =
-						paymasterAndData.paymasterPostOpGasLimit;
-					userOperation.paymasterData = paymasterAndData.paymasterData;
-				} else {
-					if (this.entrypointDataV7 == null) {
-						throw new RangeError("UserOperation v0.07 is not supported");
-					}
-					entrypointAddress = ENTRYPOINT_V7;
-
-					const paymasterMetadata = this.entrypointDataV7.paymasterMetadata;
-					const paymasterAndData = paymasterMetadata.dummyPaymasterAndData;
-					userOperation.paymaster = paymasterAndData.paymaster;
-					userOperation.paymasterVerificationGasLimit =
-						paymasterAndData.paymasterVerificationGasLimit;
-					userOperation.paymasterPostOpGasLimit =
-						paymasterAndData.paymasterPostOpGasLimit;
-					userOperation.paymasterData = paymasterAndData.paymasterData;
-				}
-			}
-			//only estimate gas if:
-			//1- paymaster v2 (only supports entrypoint v0.06)
-			//2- token paymaster v3 (supports both entrypoints)
-			//don't estimate gas for v3 (it will be overridden by the paymaster anyway)
-			if (this.version == "v2" || context.token !== undefined) {
-				let preVerificationGas = userOperation.preVerificationGas;
-				let verificationGasLimit = userOperation.verificationGasLimit;
-				let callGasLimit = userOperation.callGasLimit;
-
-				//call the bundler to estimate gas if one of the gas overrides
-				//is not provided
-				if (
-					gasUserOperationOverrides.preVerificationGas == null ||
-					gasUserOperationOverrides.verificationGasLimit == null ||
-					gasUserOperationOverrides.callGasLimit == null
-				) {
-					if (bundlerRpc != null) {
-						const bundler = new Bundler(bundlerRpc);
-
-						userOperation.callGasLimit = 0n;
-						userOperation.verificationGasLimit = 0n;
-						userOperation.preVerificationGas = 0n;
-						const inputMaxFeePerGas = userOperation.maxFeePerGas;
-						const inputMaxPriorityFeePerGas =
-							userOperation.maxPriorityFeePerGas;
-						userOperation.maxFeePerGas = 0n;
-						userOperation.maxPriorityFeePerGas = 0n;
-						const estimation = await bundler.estimateUserOperationGas(
-							userOperation,
-							entrypointAddress as string,
-							gasUserOperationOverrides.state_override_set,
-						);
-
-						// only change gas limits if the estimated limits is higher than
-						// the supplied
-						if (preVerificationGas < estimation.preVerificationGas) {
-							preVerificationGas = estimation.preVerificationGas;
-						}
-						if (verificationGasLimit < estimation.verificationGasLimit) {
-							verificationGasLimit = estimation.verificationGasLimit;
-						}
-						if (callGasLimit < estimation.callGasLimit) {
-							callGasLimit = estimation.callGasLimit;
-						}
-
-						userOperation.maxFeePerGas = inputMaxFeePerGas;
-						userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas;
-					} else {
-						throw new AbstractionKitError(
-							"BAD_DATA",
-							"bundlerRpc can't be null if preVerificationGas,verificationGasLimit and callGasLimit are not overridden",
-						);
-					}
-				}
-
-				//check gas overrides type and range
-				if (
-					typeof gasUserOperationOverrides.preVerificationGas === "bigint" &&
-					gasUserOperationOverrides.preVerificationGas < 0n
-				) {
-					throw new RangeError("preVerificationGas override can't be negative");
-				}
-
-				if (
-					typeof gasUserOperationOverrides.verificationGasLimit === "bigint" &&
-					gasUserOperationOverrides.verificationGasLimit < 0n
-				) {
-					throw new RangeError("verificationGasLimit override can't be negative");
-				}
-
-				if (
-					typeof gasUserOperationOverrides.callGasLimit === "bigint" &&
-					gasUserOperationOverrides.callGasLimit < 0n
-				) {
-					throw new RangeError("callGasLimit override can't be negative");
-				}
-
-				//apply gas overrides
-				userOperation.preVerificationGas = gasUserOperationOverrides.preVerificationGas ??
-                    BigInt(
-                        Math.floor(
-                            Number(preVerificationGas) *
-                            (((gasUserOperationOverrides.preVerificationGasPercentageMultiplier ?? 0) + 100) / 100)
-                        )
-                    );
-
-				userOperation.verificationGasLimit = gasUserOperationOverrides.verificationGasLimit ??
-                   BigInt(
-                        Math.floor(
-                            Number(verificationGasLimit) *
-                            (((gasUserOperationOverrides.verificationGasLimitPercentageMultiplier ?? 0) + 100) / 100)
-                        )
-                    );
-
-				userOperation.callGasLimit = gasUserOperationOverrides.callGasLimit ??
-                    BigInt(
-                        Math.floor(
-                            Number(callGasLimit) *
-                            (((gasUserOperationOverrides.callGasLimitPercentageMultiplier ?? 0) + 100) / 100)
-                        )
-                    );
-
-				//add small buffer to preVerification gas
-				userOperation.preVerificationGas =
-					userOperation.preVerificationGas + 100n;
-				//add gas to compensate for paymasterAndData verification overhead
-				userOperation.verificationGasLimit =
-					userOperation.verificationGasLimit + 10000n;
-			} else {
-				//gas limits overrides are useless with the sponsor paymaster v3
-				if (
-					gasUserOperationOverrides.preVerificationGas != null ||
-					gasUserOperationOverrides.verificationGasLimit != null ||
-					gasUserOperationOverrides.callGasLimit != null ||
-					gasUserOperationOverrides.preVerificationGasPercentageMultiplier !=
-						null ||
-					gasUserOperationOverrides.verificationGasLimitPercentageMultiplier !=
-						null ||
-					gasUserOperationOverrides.callGasLimitPercentageMultiplier != null
-				) {
-					throw new RangeError(
-						"you can't use any gas overrides for paymaster v3," +
-							" as it will estimate gas and override any provided values.",
-					);
-				}
-			}
-
-			// call the paymaster rpc to sponsor the UserOperation
+			const entrypoint = overrides.entrypoint ?? this.resolveEntrypoint(userOp);
+			const chainId = await this.getChainId();
 			const jsonRpcResult = await sendJsonRpcRequest(
 				this.rpcUrl,
-				"pm_sponsorUserOperation",
-				[userOperation, entrypointAddress, context],
+				"pm_getPaymasterData",
+				[userOp, entrypoint, chainId, context],
 			);
-			const result = jsonRpcResult as
-				| PmUserOperationV8Result
-				| PmUserOperationV7Result
-				| PmUserOperationV6Result;
-			const resultMod = {
-				//paymasterAndData: result.paymasterAndData,
-				//the paymaster may decide to override the gas prices and gas limits
-				callGasLimit:
-					result.callGasLimit == null ? undefined : BigInt(result.callGasLimit),
-				preVerificationGas:
-					result.preVerificationGas == null
-						? undefined
-						: BigInt(result.preVerificationGas),
-				verificationGasLimit:
-					result.verificationGasLimit == null
-						? undefined
-						: BigInt(result.verificationGasLimit),
-				maxFeePerGas:
-					result.maxFeePerGas == null ? undefined : BigInt(result.maxFeePerGas),
-				maxPriorityFeePerGas:
-					result.maxPriorityFeePerGas == null
-						? undefined
-						: BigInt(result.maxPriorityFeePerGas),
-				sponsorMetadata:
-					result.sponsorMetadata == null ? undefined : result.sponsorMetadata,
-			};
-
-			//override gas limits and gas prices if the paymaster modified them
-			//needed in case the paymaster modifies the UserOperation before
-			//generating the paymasterAndData
-			userOperation.callGasLimit =
-				resultMod.callGasLimit ?? userOperation.callGasLimit;
-			userOperation.preVerificationGas =
-				resultMod.preVerificationGas ?? userOperation.preVerificationGas;
-			userOperation.verificationGasLimit =
-				resultMod.verificationGasLimit ?? userOperation.verificationGasLimit;
-			userOperation.maxFeePerGas =
-				resultMod.maxFeePerGas ?? userOperation.maxFeePerGas;
-			userOperation.maxPriorityFeePerGas =
-				resultMod.maxPriorityFeePerGas ?? userOperation.maxPriorityFeePerGas;
-			sponsorMetadata = resultMod.sponsorMetadata;
-
-			if ("initCode" in userOperation) {
-				const result = jsonRpcResult as PmUserOperationV6Result;
-
-				userOperation.paymasterAndData = result.paymasterAndData;
-			} else {
-				const result = jsonRpcResult as
-					| PmUserOperationV8Result
-					| PmUserOperationV7Result;
-
-				userOperation.paymaster = result.paymaster;
-				userOperation.paymasterVerificationGasLimit = BigInt(
-					result.paymasterVerificationGasLimit,
-				);
-				userOperation.paymasterPostOpGasLimit = BigInt(
-					result.paymasterPostOpGasLimit,
-				);
-				userOperation.paymasterData = result.paymasterData;
-			}
-
-			return [userOperation, sponsorMetadata];
+			const sponsorMetadata = this.applyPaymasterResult(userOp, jsonRpcResult);
+			return [userOp as unknown as SameUserOp<T>, sponsorMetadata];
 		} catch (err) {
 			const error = ensureError(err);
-
 			throw new AbstractionKitError(
 				"PAYMASTER_ERROR",
-				"pm_sponsorUserOperation failed",
+				"pm_getPaymasterData failed",
 				{
 					cause: error,
 				},
@@ -689,72 +511,46 @@ export class CandidePaymaster extends Paymaster {
 		}
 	}
 
+	// ── Public convenience methods ───────────────────────────────────
+
 	/**
 	 * Create a gas-sponsored UserOperation (no token payment required).
-	 * Convenience wrapper around createPaymasterUserOperation with sponsor context.
 	 *
 	 * @param userOperation - The UserOperation to sponsor
 	 * @param bundlerRpc - Bundler RPC URL for gas estimation
 	 * @param sponsorshipPolicyId - Optional sponsorship policy ID
-	 * @param overrides - Override gas limits and multipliers
+	 * @param overrides - Override entrypoint address
 	 * @returns A tuple of [UserOperation, SponsorMetadata | undefined]
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
 	 */
-	async createSponsorPaymasterUserOperation(
-		userOperation: UserOperationV8,
+	async createSponsorPaymasterUserOperation<T extends AnyUserOperation>(
+		userOperation: T,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
-		overrides?: BasePaymasterUserOperationOverrides,
-	): Promise<[UserOperationV8, SponsorMetadata | undefined]>;
-	async createSponsorPaymasterUserOperation(
-		userOperation: UserOperationV7,
-		bundlerRpc: string,
-		sponsorshipPolicyId?: string,
-		overrides?: BasePaymasterUserOperationOverrides,
-	): Promise<[UserOperationV7, SponsorMetadata | undefined]>;
-	async createSponsorPaymasterUserOperation(
-		userOperation: UserOperationV6,
-		bundlerRpc: string,
-		sponsorshipPolicyId?: string,
-		overrides?: BasePaymasterUserOperationOverrides,
-	): Promise<[UserOperationV6, SponsorMetadata | undefined]>;
-	async createSponsorPaymasterUserOperation(
-		userOperation: UserOperationV7 | UserOperationV6,
-		bundlerRpc: string,
-		sponsorshipPolicyId?: string,
-		overrides?: BasePaymasterUserOperationOverrides,
-	): Promise<
-		[
-			UserOperationV8 | UserOperationV7 | UserOperationV6,
-			SponsorMetadata | undefined,
-		]
-	> {
+		overrides?: GasPaymasterUserOperationOverrides,
+	): Promise<[SameUserOp<T>, SponsorMetadata | undefined]> {
+		const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(userOperation);
+		await this.ensureInitialized(entrypoint);
+		const epData = this.getEntrypointData(entrypoint);
+		if (epData == null) {
+			throw new RangeError(
+				`UserOperation for entrypoint ${entrypoint} is not supported`,
+			);
+		}
+		this.setDummyPaymasterFields(userOperation, epData);
+		await this.estimateAndApplyGasLimits(userOperation, bundlerRpc, entrypoint, overrides ?? {});
 		const context: CandidePaymasterContext = {};
 		if (sponsorshipPolicyId && sponsorshipPolicyId.trim().length > 0) {
 			context["sponsorshipPolicyId"] = sponsorshipPolicyId;
 		}
-		if ("initCode" in userOperation) {
-			return await this.createPaymasterUserOperation(
-				userOperation as UserOperationV6,
-				bundlerRpc,
-				context,
-				overrides,
-			);
-		} else if ("eip7702Auth" in userOperation) {
-			return await this.createPaymasterUserOperation(
-				userOperation as UserOperationV8,
-				bundlerRpc,
-				context,
-				overrides,
-			);
-		} else {
-			return await this.createPaymasterUserOperation(
-				userOperation as UserOperationV7,
-				bundlerRpc,
-				context,
-				overrides,
-			);
-		}
+		const _overrides = { ...(overrides || {}),
+			entrypoint: entrypoint,
+		};
+		return await this.createPaymasterUserOperation(
+			userOperation,
+			context,
+			_overrides,
+		);
 	}
 
 	/**
@@ -769,107 +565,57 @@ export class CandidePaymaster extends Paymaster {
 	 * @returns The UserOperation with token approval prepended and paymaster fields set
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the token is not supported
 	 */
-	async createTokenPaymasterUserOperation(
+	async createTokenPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: PrependTokenPaymasterApproveAccount,
-		userOperation: UserOperationV8,
+		userOperation: T,
 		tokenAddress: string,
 		bundlerRpc: string,
 		overrides?: GasPaymasterUserOperationOverrides,
-	): Promise<UserOperationV8>;
-	async createTokenPaymasterUserOperation(
-		smartAccount: PrependTokenPaymasterApproveAccount,
-		userOperation: UserOperationV7,
-		tokenAddress: string,
-		bundlerRpc: string,
-		overrides?: GasPaymasterUserOperationOverrides,
-	): Promise<UserOperationV7>;
-	async createTokenPaymasterUserOperation(
-		smartAccount: PrependTokenPaymasterApproveAccount,
-		userOperation: UserOperationV6,
-		tokenAddress: string,
-		bundlerRpc: string,
-		overrides?: GasPaymasterUserOperationOverrides,
-	): Promise<UserOperationV6>;
-	async createTokenPaymasterUserOperation(
-		smartAccount: PrependTokenPaymasterApproveAccount,
-		userOperation: UserOperationV8 | UserOperationV7 | UserOperationV6,
-		tokenAddress: string,
-		bundlerRpc: string,
-		overrides?: GasPaymasterUserOperationOverrides,
-	): Promise<UserOperationV8 | UserOperationV7 | UserOperationV6> {
+	): Promise<SameUserOp<T>> {
 		try {
-			if (!this.initialized) {
-				await this.initialize();
-			}
-			const _overrides = { ...(overrides || {}),
-				callGasLimitPercentageMultiplier: overrides?.callGasLimitPercentageMultiplier ?? 105,
-			};
-			let entrypoint = overrides?.entrypoint;
-			if (entrypoint == null) {
-				if ("initCode" in userOperation) {
-					entrypoint = ENTRYPOINT_V6;
-				} else if ("eip7702Auth" in userOperation) {
-					entrypoint = ENTRYPOINT_V8;
-				} else {
-					entrypoint = ENTRYPOINT_V7;
-				}
-			}
-			const maxErc20Cost =
-				await this.calculateUserOperationErc20TokenMaxGasCost(
-					userOperation,
-					tokenAddress,
+			const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(userOperation);
+			await this.ensureInitialized(entrypoint);
+			const epData = this.getEntrypointData(entrypoint);
+			if (epData == null) {
+				throw new RangeError(
+					`UserOperation for entrypoint ${entrypoint} is not supported`,
 				);
-
-			const approveAmount = maxErc20Cost * 2n; //for the extra cost of the paymasterAndData
-
-			const metadata = await this.getPaymasterMetaData(entrypoint);
-
-			if (metadata == null) {
-				throw new RangeError("unsupported entrypoint.");
 			}
-
-			const paymasterAddress = metadata.address;
-
-			const callDataWithApprove =
-				smartAccount.prependTokenPaymasterApproveToCallData(
-					userOperation.callData,
-					tokenAddress,
-					paymasterAddress,
-					approveAmount,
-				);
+			this.setDummyPaymasterFields(userOperation, epData);
+			// Prepend an infinite approval and re-estimate UserOperation gas limits (a later rational allowance will be calculated and replace the infinite one)
+			const oldCallData = userOperation.callData;
+			let callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
+				userOperation.callData,
+				tokenAddress,
+				epData.paymasterMetadata.address,
+				UINT256_MAX,
+			);
 			userOperation.callData = callDataWithApprove;
 
-			if ("initCode" in userOperation) {
-				const [resultUserOp] = await this.createPaymasterUserOperation(
-					userOperation as UserOperationV6,
-					bundlerRpc,
-					{
-						token: tokenAddress,
-					},
-					_overrides,
-				);
-				return resultUserOp;
-			} else if ("eip7702Auth" in userOperation) {
-				const [resultUserOp] = await this.createPaymasterUserOperation(
-					userOperation as UserOperationV8,
-					bundlerRpc,
-					{
-						token: tokenAddress,
-					},
-					_overrides,
-				);
-				return resultUserOp;
-			} else {
-				const [resultUserOp] = await this.createPaymasterUserOperation(
-					userOperation as UserOperationV7,
-					bundlerRpc,
-					{
-						token: tokenAddress,
-					},
-					_overrides,
-				);
-				return resultUserOp;
-			}
+			await this.estimateAndApplyGasLimits(userOperation, bundlerRpc, entrypoint, overrides ?? {});
+
+			const maxErc20Cost = await this.calculateUserOperationErc20TokenMaxGasCost(
+				userOperation,
+				tokenAddress,
+			);
+			const approveAmount = maxErc20Cost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
+			callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
+				oldCallData,
+				tokenAddress,
+				epData.paymasterMetadata.address,
+				approveAmount,
+			);
+			userOperation.callData = callDataWithApprove;
+
+			const _overrides = { ...(overrides || {}),
+				entrypoint: entrypoint,
+			};
+			const [resultUserOp] = await this.createPaymasterUserOperation(
+				userOperation,
+				{ token: tokenAddress },
+				_overrides,
+			);
+			return resultUserOp;
 		} catch (err) {
 			const error = ensureError(err);
 
@@ -899,19 +645,8 @@ export class CandidePaymaster extends Paymaster {
 		overrides: { entrypoint?: string | null } = {},
 	): Promise<bigint> {
 		try {
-			if (!this.initialized) {
-				await this.initialize();
-			}
-			let entrypoint = overrides.entrypoint;
-			if (entrypoint == null) {
-				if ("initCode" in userOperation) {
-					entrypoint = ENTRYPOINT_V6;
-				} else if ("eip7702Auth" in userOperation) {
-					entrypoint = ENTRYPOINT_V8;
-				} else {
-					entrypoint = ENTRYPOINT_V7;
-				}
-			}
+			const entrypoint = overrides.entrypoint ?? this.resolveEntrypoint(userOperation);
+			await this.ensureInitialized(entrypoint);
 			const exchangeRate = await this.fetchTokenPaymasterExchangeRate(
 				erc20TokenAddress,
 				entrypoint,
@@ -944,37 +679,11 @@ export class CandidePaymaster extends Paymaster {
 		entrypoint: string = ENTRYPOINT_V7,
 	): Promise<bigint> {
 		try {
-			if (!this.initialized) {
-				await this.initialize();
-			}
+			await this.ensureInitialized(entrypoint);
 
-			let jsonRpcResult;
-			if (this.version == "v3") {
-				jsonRpcResult = await sendJsonRpcRequest(
-					this.rpcUrl,
-					"pm_supportedERC20Tokens",
-					[entrypoint],
-				);
-			} else {
-				jsonRpcResult = await sendJsonRpcRequest(
-					this.rpcUrl,
-					"pm_supportedERC20Tokens",
-					[],
-				);
-			}
+			const jsonRpcResult = await this.fetchSupportedTokensRpc(entrypoint) as SupportedERC20TokensAndMetadataWithExchangeRate;
 
-			jsonRpcResult = jsonRpcResult as
-				| SupportedERC20TokensAndMetadataV7WithExchangeRate
-				| SupportedERC20TokensAndMetadataV6WithExchangeRate;
-
-			const supportedTokensExchangeRates = jsonRpcResult.tokens.map(
-				(gasToken) => ({
-					address: gasToken.address,
-					exchangeRate: gasToken.exchangeRate,
-				}),
-			);
-
-			const gasToken = supportedTokensExchangeRates.find(
+			const gasToken = jsonRpcResult.tokens.find(
 				(token) =>
 					token.address.toLowerCase() === erc20TokenAddress.toLowerCase(),
 			);
@@ -985,16 +694,8 @@ export class CandidePaymaster extends Paymaster {
 					erc20TokenAddress + " token is not supported by the paymaster.",
 					{
 						context: {
-							supportedERC20TokensAndPaymasterMetadataV7: JSON.stringify(
-								this.entrypointDataV7,
-								(_key, value) =>
-									typeof value === "bigint" ? "0x" + value.toString(16) : value,
-							),
-							supportedERC20TokensAndPaymasterMetadataV6: JSON.stringify(
-								this.entrypointDataV6,
-								(_key, value) =>
-									typeof value === "bigint" ? "0x" + value.toString(16) : value,
-							),
+							entrypoint,
+							supportedTokens: jsonRpcResult.tokens.map((t) => t.address),
 						},
 					},
 				);
@@ -1024,60 +725,20 @@ export class CandidePaymaster extends Paymaster {
 	 */
 	async fetchSupportedERC20TokensAndPaymasterMetadata(
 		entrypoint: string = ENTRYPOINT_V7,
-	): Promise<
-		| SupportedERC20TokensAndMetadataV8WithExchangeRate
-		| SupportedERC20TokensAndMetadataV7WithExchangeRate
-		| SupportedERC20TokensAndMetadataV6WithExchangeRate
-	> {
+	): Promise<SupportedERC20TokensAndMetadataWithExchangeRate> {
 		try {
-			if (!this.initialized) {
-				await this.initialize();
-			}
+			await this.ensureInitialized(entrypoint);
 
-			let jsonRpcResult;
-			if (this.version == "v3") {
-				jsonRpcResult = await sendJsonRpcRequest(
-					this.rpcUrl,
-					"pm_supportedERC20Tokens",
-					[entrypoint],
-				);
-			} else {
-				jsonRpcResult = await sendJsonRpcRequest(
-					this.rpcUrl,
-					"pm_supportedERC20Tokens",
-					[],
-				);
-			}
-
-			if (entrypoint == ENTRYPOINT_V8 || entrypoint == ENTRYPOINT_V7) {
-				jsonRpcResult =
-					jsonRpcResult as SupportedERC20TokensAndMetadataV7WithExchangeRate;
-				return {
-					tokens: jsonRpcResult.tokens.map((gasToken) => ({
-						name: gasToken.name,
-						symbol: gasToken.symbol,
-						address: gasToken.address,
-						decimals: Number(gasToken.decimals),
-						exchangeRate: BigInt(gasToken.exchangeRate),
-					})),
-					paymasterMetadata: jsonRpcResult.paymasterMetadata,
-				};
-			} else if (entrypoint == ENTRYPOINT_V6) {
-				jsonRpcResult =
-					jsonRpcResult as SupportedERC20TokensAndMetadataV6WithExchangeRate;
-				return {
-					tokens: jsonRpcResult.tokens.map((gasToken) => ({
-						name: gasToken.name,
-						symbol: gasToken.symbol,
-						address: gasToken.address,
-						decimals: Number(gasToken.decimals),
-						exchangeRate: BigInt(gasToken.exchangeRate),
-					})),
-					paymasterMetadata: jsonRpcResult.paymasterMetadata,
-				};
-			} else {
+			if (this.getEntrypointData(entrypoint) == null) {
 				throw new RangeError("unsupported entrypoint.");
 			}
+
+			const result = await this.fetchSupportedTokensRpc(entrypoint) as
+				SupportedERC20TokensAndMetadataWithExchangeRate;
+			return {
+				tokens: CandidePaymaster.mapTokensWithExchangeRate(result.tokens),
+				paymasterMetadata: result.paymasterMetadata,
+			};
 		} catch (err) {
 			const error = ensureError(err);
 
