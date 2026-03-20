@@ -1,4 +1,18 @@
-import type { StateOverrideSet } from "../types";
+import type {StateOverrideSet, UserOperationV6, UserOperationV7, UserOperationV8, UserOperationV9} from "../types";
+
+/** Union of all UserOperation versions supported by the Candide paymaster. */
+export type AnyUserOperation = UserOperationV9 | UserOperationV8 | UserOperationV7 | UserOperationV6;
+
+/**
+ * Conditional type that maps an input UserOperation type to its matching output type.
+ * Preserves type narrowing: pass V7 in → get V7 back.
+ * Order matters: V9/V8 is checked first (V7 lacks `eip7702Auth` so won't match V8/V9).
+ */
+export type SameUserOp<T extends AnyUserOperation> =
+	T extends UserOperationV9 ? UserOperationV9 :
+	T extends UserOperationV8 ? UserOperationV8 :
+	T extends UserOperationV7 ? UserOperationV7 :
+	UserOperationV6;
 
 /**
  * Context passed to the Candide paymaster RPC when requesting sponsorship

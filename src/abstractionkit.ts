@@ -91,6 +91,8 @@ export {
 export {
 	CandidePaymasterContext,
 	PrependTokenPaymasterApproveAccount,
+	AnyUserOperation,
+	SameUserOp,
 } from "./paymaster/types";
 
 export {

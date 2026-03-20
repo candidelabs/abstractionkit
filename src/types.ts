@@ -121,8 +121,7 @@ export type JsonRpcResult =
 	| UserOperationByHashResult
 	| UserOperationReceipt
 	| UserOperationReceiptResult
-	| SupportedERC20TokensAndMetadataV7
-	| SupportedERC20TokensAndMetadataV6
+	| SupportedERC20TokensAndMetadata
 	| PmUserOperationV7Result
 	| PmUserOperationV6Result
     | TenderlySimulationResult;
@@ -221,7 +220,7 @@ export type SponsorMetadata = {
 	icons: string[];
 };
 
-/** Paymaster-modified fields returned by pm_sponsorUserOperation for EntryPoint v0.7+. */
+/** Paymaster fields returned by pm_getPaymasterData for EntryPoint v0.7+. */
 export type PmUserOperationV7Result = {
 	/** Paymaster contract address */
 	paymaster: string;
@@ -247,7 +246,7 @@ export type PmUserOperationV7Result = {
 
 export type PmUserOperationV8Result = PmUserOperationV7Result;
 
-/** Paymaster-modified fields returned by pm_sponsorUserOperation for EntryPoint v0.6. */
+/** Paymaster fields returned by pm_getPaymasterData for EntryPoint v0.6. */
 export type PmUserOperationV6Result = {
 	/** Concatenated paymaster address and paymaster-specific data */
 	paymasterAndData: string;
@@ -312,9 +311,10 @@ export interface ERC20TokenWithExchangeRate extends ERC20Token {
 }
 
 /**
- * Paymaster metadata
+ * Paymaster metadata returned by the paymaster RPC.
+ * V7/V8 paymasters return structured dummyPaymasterAndData; V6 returns a concatenated hex string.
  */
-interface BasePaymasterMetadata {
+export interface PaymasterMetadata {
 	name: string;
 	description: string;
 	icons: string[];
@@ -322,60 +322,53 @@ interface BasePaymasterMetadata {
 	address: string;
 	/** the event that will be emitted when a useroperation is sponsored */
 	sponsoredEventTopic: string;
-}
-
-export interface PaymasterMetadataV7 extends BasePaymasterMetadata {
 	/** dummyPaymasterAndData to use for gas estimation */
-	dummyPaymasterAndData: {
-		paymaster: string;
-		paymasterVerificationGasLimit: bigint;
-		paymasterPostOpGasLimit: bigint;
-		paymasterData: string;
-	};
+	dummyPaymasterAndData:
+		| {
+				paymaster: string;
+				paymasterVerificationGasLimit: bigint;
+				paymasterPostOpGasLimit: bigint;
+				paymasterData: string;
+		  }
+		| string;
 }
 
-export interface PaymasterMetadataV8 extends PaymasterMetadataV7 {};
-
-export interface PaymasterMetadataV6 extends BasePaymasterMetadata {
-	/** dummyPaymasterAndData to use for gas estimation */
-	dummyPaymasterAndData: string;
-}
+/** @deprecated Use PaymasterMetadata instead */
+export type PaymasterMetadataV7 = PaymasterMetadata;
+/** @deprecated Use PaymasterMetadata instead */
+export type PaymasterMetadataV8 = PaymasterMetadata;
+/** @deprecated Use PaymasterMetadata instead */
+export type PaymasterMetadataV6 = PaymasterMetadata;
 
 /**
  * Paymaster metadata and supported erc20 tokens
  */
-export interface SupportedERC20TokensAndMetadataV7 {
-	paymasterMetadata: PaymasterMetadataV7;
+export interface SupportedERC20TokensAndMetadata {
+	paymasterMetadata: PaymasterMetadata;
 	tokens: ERC20Token[];
 }
 
-export interface SupportedERC20TokensAndMetadataV8 extends SupportedERC20TokensAndMetadataV7 {}
+/** @deprecated Use SupportedERC20TokensAndMetadata instead */
+export type SupportedERC20TokensAndMetadataV7 = SupportedERC20TokensAndMetadata;
+/** @deprecated Use SupportedERC20TokensAndMetadata instead */
+export type SupportedERC20TokensAndMetadataV8 = SupportedERC20TokensAndMetadata;
+/** @deprecated Use SupportedERC20TokensAndMetadata instead */
+export type SupportedERC20TokensAndMetadataV6 = SupportedERC20TokensAndMetadata;
 
 /**
- * Paymaster metadata and supported erc20 tokens
+ * Paymaster metadata and supported erc20 tokens with exchange rates
  */
-export interface SupportedERC20TokensAndMetadataV6 {
-	paymasterMetadata: PaymasterMetadataV6;
-	tokens: ERC20Token[];
-}
-
-/**
- * Paymaster metadata and supported erc20 tokens
- */
-export interface SupportedERC20TokensAndMetadataV7WithExchangeRate {
-	paymasterMetadata: PaymasterMetadataV7;
+export interface SupportedERC20TokensAndMetadataWithExchangeRate {
+	paymasterMetadata: PaymasterMetadata;
 	tokens: ERC20TokenWithExchangeRate[];
 }
 
-export interface SupportedERC20TokensAndMetadataV8WithExchangeRate extends SupportedERC20TokensAndMetadataV7WithExchangeRate {};
-
-/**
- * Paymaster metadata and supported erc20 tokens
- */
-export interface SupportedERC20TokensAndMetadataV6WithExchangeRate {
-	paymasterMetadata: PaymasterMetadataV6;
-	tokens: ERC20TokenWithExchangeRate[];
-}
+/** @deprecated Use SupportedERC20TokensAndMetadataWithExchangeRate instead */
+export type SupportedERC20TokensAndMetadataV7WithExchangeRate = SupportedERC20TokensAndMetadataWithExchangeRate;
+/** @deprecated Use SupportedERC20TokensAndMetadataWithExchangeRate instead */
+export type SupportedERC20TokensAndMetadataV8WithExchangeRate = SupportedERC20TokensAndMetadataWithExchangeRate;
+/** @deprecated Use SupportedERC20TokensAndMetadataWithExchangeRate instead */
+export type SupportedERC20TokensAndMetadataV6WithExchangeRate = SupportedERC20TokensAndMetadataWithExchangeRate;
 
 /**
  * Wrapper for a dictionary type
