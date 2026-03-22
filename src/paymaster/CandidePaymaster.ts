@@ -167,6 +167,26 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	/**
+	 * Convert dummyPaymasterAndData gas fields from hex strings to bigint.
+	 * RPC returns these as hex strings, but our types expect bigint.
+	 */
+	private static normalizePaymasterMetadata(
+		metadata: PaymasterMetadata,
+	): PaymasterMetadata {
+		if (typeof metadata.dummyPaymasterAndData !== "string") {
+			return {
+				...metadata,
+				dummyPaymasterAndData: {
+					...metadata.dummyPaymasterAndData,
+					paymasterVerificationGasLimit: BigInt(metadata.dummyPaymasterAndData.paymasterVerificationGasLimit),
+					paymasterPostOpGasLimit: BigInt(metadata.dummyPaymasterAndData.paymasterPostOpGasLimit),
+				},
+			};
+		}
+		return metadata;
+	}
+
+	/**
 	 * Ensure the paymaster data for a specific entrypoint is initialized.
 	 * Deduplicates concurrent calls for the same entrypoint.
 	 * On failure, resets so the next call retries.
@@ -222,20 +242,9 @@ export class CandidePaymaster extends Paymaster {
 			const jsonRpcResult = await this.fetchSupportedTokensRpc(entrypoint);
 
 			const result = jsonRpcResult as SupportedERC20TokensAndMetadata;
-			const metadata = result.paymasterMetadata;
-
-			// Convert dummyPaymasterAndData gas fields from hex strings to bigint
-			if (typeof metadata.dummyPaymasterAndData !== "string") {
-				metadata.dummyPaymasterAndData = {
-					...metadata.dummyPaymasterAndData,
-					paymasterVerificationGasLimit: BigInt(metadata.dummyPaymasterAndData.paymasterVerificationGasLimit),
-					paymasterPostOpGasLimit: BigInt(metadata.dummyPaymasterAndData.paymasterPostOpGasLimit),
-				};
-			}
-
 			return {
 				tokens: CandidePaymaster.mapTokens(result.tokens),
-				paymasterMetadata: metadata,
+				paymasterMetadata: CandidePaymaster.normalizePaymasterMetadata(result.paymasterMetadata),
 			};
 		} catch (err) {
 			const error = ensureError(err);
@@ -737,7 +746,7 @@ export class CandidePaymaster extends Paymaster {
 				SupportedERC20TokensAndMetadataWithExchangeRate;
 			return {
 				tokens: CandidePaymaster.mapTokensWithExchangeRate(result.tokens),
-				paymasterMetadata: result.paymasterMetadata,
+				paymasterMetadata: CandidePaymaster.normalizePaymasterMetadata(result.paymasterMetadata),
 			};
 		} catch (err) {
 			const error = ensureError(err);
