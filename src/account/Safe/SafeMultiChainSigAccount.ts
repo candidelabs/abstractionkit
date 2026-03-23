@@ -606,6 +606,17 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 		if (userOperationsToSign.length < 1) {
 			throw new RangeError("There should be at least one userOperationsToSign");
 		}
+        if (userOperationsToSign.length === 1) {
+            return [
+                SafeAccount.formatSignaturesToUseroperationSignature(
+                    signerSignaturePairs,
+                    {
+                        ...overrides,
+                        isMultiChainSignature: true,
+                    },
+                ),
+            ];
+        }
         const userOperationsHashes: string[] = [];
         userOperationsToSign.forEach(
             (userOperationsToSign, _index) => {
