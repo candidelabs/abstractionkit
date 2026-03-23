@@ -554,6 +554,7 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 		userOperationsToSign: UserOperationToSign[],
 		overrides: {
 			safe4337ModuleAddress?: string;
+			entrypointAddress?: string;
 		} = {},
     ): {
         domain: MultiChainSignatureMerkleTreeRootTypedDataDomain,
@@ -578,6 +579,7 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
                         validAfter: userOperationsToSign.validAfter,
                         validUntil: userOperationsToSign.validUntil,
                         safe4337ModuleAddress,
+                        entrypointAddress: overrides.entrypointAddress,
                     },
                 );
                 userOperationsHashes.push(userOperationHash);
@@ -604,6 +606,26 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 		if (userOperationsToSign.length < 1) {
 			throw new RangeError("There should be at least one userOperationsToSign");
 		}
+		const resolvedOverrides: WebAuthnSignatureOverrides = {
+			eip7212WebAuthnPrecompileVerifier:
+				ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifier:
+				ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+			safe4337ModuleAddress:
+				ExperimentalSafeMultiChainSigAccount.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+			...overrides,
+		};
+        if (userOperationsToSign.length === 1) {
+            return [
+                SafeAccount.formatSignaturesToUseroperationSignature(
+                    signerSignaturePairs,
+                    {
+                        ...resolvedOverrides,
+                        isMultiChainSignature: true,
+                    },
+                ),
+            ];
+        }
         const userOperationsHashes: string[] = [];
         userOperationsToSign.forEach(
             (userOperationsToSign, _index) => {
@@ -613,7 +635,7 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
                     {
                         validAfter: userOperationsToSign.validAfter,
                         validUntil: userOperationsToSign.validUntil,
-                        safe4337ModuleAddress: overrides.safe4337ModuleAddress,
+                        safe4337ModuleAddress: resolvedOverrides.safe4337ModuleAddress,
                     },
                 );
                 userOperationsHashes.push(userOperationHash);
@@ -626,7 +648,7 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
                     SafeAccount.formatSignaturesToUseroperationSignature(
                         signerSignaturePairs,
                         {
-                            ...overrides,
+                            ...resolvedOverrides,
                             isMultiChainSignature:true,
                             multiChainMerkleProof: proofs[index],
                         },

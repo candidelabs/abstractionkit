@@ -11,9 +11,10 @@
 	"unpkg": "dist/index.umd.js",
 	"types": "dist/index.d.ts",
 	"scripts": {
-		"build": "rimraf dist && microbundle --tsconfig tsconfig.json --no-sourcemap",
-		"clean": "rimraf dist",
-		"test": "jest --verbose"
+		"build":   "rimraf dist && microbundle --tsconfig tsconfig.json --no-sourcemap",
+		"prepare": "rimraf dist && microbundle --tsconfig tsconfig.json --no-sourcemap",
+		"clean":   "rimraf dist",
+		"test":    "jest --verbose"
 	},
 	"repository": {
 		"type": "git",
