@@ -2,6 +2,7 @@ import type {
 	UserOperationV6,
 	UserOperationV7,
 	UserOperationV8,
+	UserOperationV9,
 	GasEstimationResult,
 	UserOperationByHashResult,
 	UserOperationReceipt,
@@ -98,7 +99,7 @@ export class Bundler {
 	 * @returns Gas estimation with callGasLimit, preVerificationGas, and verificationGasLimit
 	 */
 	async estimateUserOperationGas(
-		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
+		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV8 | UserOperationV9,
 		entrypointAddress: string,
 		state_override_set?: StateOverrideSet,
 	): Promise<GasEstimationResult> {
@@ -145,7 +146,7 @@ export class Bundler {
 	 * @returns The UserOperation hash
 	 */
 	async sendUserOperation(
-		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV8,
+		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV8 | UserOperationV9,
 		entrypointAddress: string,
 	): Promise<string> {
 		try {

@@ -554,6 +554,7 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 		userOperationsToSign: UserOperationToSign[],
 		overrides: {
 			safe4337ModuleAddress?: string;
+			entrypointAddress?: string;
 		} = {},
     ): {
         domain: MultiChainSignatureMerkleTreeRootTypedDataDomain,
@@ -578,6 +579,7 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
                         validAfter: userOperationsToSign.validAfter,
                         validUntil: userOperationsToSign.validUntil,
                         safe4337ModuleAddress,
+                        entrypointAddress: overrides.entrypointAddress,
                     },
                 );
                 userOperationsHashes.push(userOperationHash);
