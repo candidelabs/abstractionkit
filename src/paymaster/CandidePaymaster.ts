@@ -452,7 +452,7 @@ export class CandidePaymaster extends Paymaster {
 		}
 
 		const applyMultiplier = (value: bigint, multiplier?: number): bigint =>
-			value + (value * BigInt(multiplier ?? 0)) / 100n;
+			value + (value * BigInt(Math.round((multiplier ?? 0) * 100))) / 10000n;
 
 		userOp.preVerificationGas = overrides.preVerificationGas
 			?? applyMultiplier(preVerificationGas, overrides.preVerificationGasPercentageMultiplier ?? 5);
