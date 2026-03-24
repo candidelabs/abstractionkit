@@ -142,6 +142,8 @@ export interface CaliburCreateUserOperationOverrides {
 export interface CaliburSignatureOverrides {
 	/** Hook data to append to the signature (default: "0x" = empty) */
 	hookData?: string;
+	/** Key hash of a registered secondary key. If omitted, the root key hash is used. */
+	keyHash?: string;
 }
 
 /**

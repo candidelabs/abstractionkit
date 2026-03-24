@@ -540,107 +540,82 @@ export class Calibur7702Account extends SmartAccount
 	}
 
 	/**
-	 * Sign a UserOperation with the EOA's root private key.
+	 * Sign a UserOperation with a private key.
 	 * Computes the UserOperation hash and wraps the ECDSA signature in
 	 * Calibur's format: `abi.encode(keyHash, ecdsaSig, hookData)`.
 	 *
-	 * Accepts either a hex-encoded private key string or a signer callback
-	 * `(hash: string) => Promise<string>` for use with viem, ethers Signers,
-	 * hardware wallets, or MPC signers.
+	 * By default signs with the root key. To sign with a registered
+	 * secondary key, pass its key hash via `overrides.keyHash`.
 	 *
 	 * @param userOperation - The UserOperation to sign
-	 * @param signer - Hex-encoded private key or a signing function
+	 * @param privateKey - Hex-encoded private key
 	 * @param chainId - Target chain ID
-	 * @param overrides - Optional signature overrides (e.g., hookData)
-	 * @returns Hex-encoded wrapped signature (or a Promise if using a signer callback)
+	 * @param overrides - Optional overrides (keyHash for secondary keys, hookData)
+	 * @returns Hex-encoded wrapped signature
+	 *
+	 * @example
+	 * // Sign with root key
+	 * userOp.signature = account.signUserOperation(userOp, privateKey, chainId);
+	 *
+	 * // Sign with a registered secondary key
+	 * userOp.signature = account.signUserOperation(userOp, privateKey, chainId, { keyHash });
 	 */
 	public signUserOperation(
 		userOperation: UserOperationV8,
-		signer: string,
-		chainId: bigint,
-		overrides?: CaliburSignatureOverrides,
-	): string;
-	public signUserOperation(
-		userOperation: UserOperationV8,
-		signer: SignerFunction,
-		chainId: bigint,
-		overrides?: CaliburSignatureOverrides,
-	): Promise<string>;
-	public signUserOperation(
-		userOperation: UserOperationV8,
-		signer: string | SignerFunction,
+		privateKey: string,
 		chainId: bigint,
 		overrides: CaliburSignatureOverrides = {},
-	): string | Promise<string> {
+	): string {
 		const userOperationHash = createUserOperationHash(
 			userOperation,
 			this.entrypointAddress,
 			chainId,
 		);
+		const keyHash = overrides.keyHash ?? ROOT_KEY_HASH;
 		const hookData = overrides.hookData ?? "0x";
-
-		if (typeof signer === "string") {
-			const wallet = new Wallet(signer);
-			const ecdsaSig = wallet.signingKey.sign(userOperationHash).serialized;
-			return Calibur7702Account.wrapSignature(ROOT_KEY_HASH, ecdsaSig, hookData);
-		}
-
-		return signer(userOperationHash).then((ecdsaSig) =>
-			Calibur7702Account.wrapSignature(ROOT_KEY_HASH, ecdsaSig, hookData)
-		);
+		const wallet = new Wallet(privateKey);
+		const ecdsaSig = wallet.signingKey.sign(userOperationHash).serialized;
+		return Calibur7702Account.wrapSignature(keyHash, ecdsaSig, hookData);
 	}
 
 	/**
-	 * Sign a UserOperation with a registered secp256k1 secondary key.
-	 * Computes the UserOperation hash and wraps the ECDSA signature in
+	 * Sign a UserOperation with an external signer (viem, ethers Signer,
+	 * hardware wallet, MPC signer, etc.).
+	 * Computes the UserOperation hash and wraps the returned signature in
 	 * Calibur's format: `abi.encode(keyHash, ecdsaSig, hookData)`.
 	 *
-	 * Accepts either a hex-encoded private key string or a signer callback.
+	 * By default signs with the root key. To sign with a registered
+	 * secondary key, pass its key hash via `overrides.keyHash`.
 	 *
 	 * @param userOperation - The UserOperation to sign
-	 * @param signer - Hex-encoded private key or a signing function
+	 * @param signer - Async signing function: `(hash: string) => Promise<string>`
 	 * @param chainId - Target chain ID
-	 * @param keyHash - The key hash of the registered key (from {@link getKeyHash})
-	 * @param overrides - Optional signature overrides (e.g., hookData)
-	 * @returns Hex-encoded wrapped signature (or a Promise if using a signer callback)
+	 * @param overrides - Optional overrides (keyHash for secondary keys, hookData)
+	 * @returns Promise resolving to the hex-encoded wrapped signature
+	 *
+	 * @example
+	 * // Sign with a viem wallet client
+	 * userOp.signature = await account.signUserOperationWithSigner(
+	 *   userOp,
+	 *   (hash) => walletClient.signMessage({ message: { raw: hash } }),
+	 *   chainId,
+	 * );
 	 */
-	public signUserOperationWithKey(
-		userOperation: UserOperationV8,
-		signer: string,
-		chainId: bigint,
-		keyHash: string,
-		overrides?: CaliburSignatureOverrides,
-	): string;
-	public signUserOperationWithKey(
+	public async signUserOperationWithSigner(
 		userOperation: UserOperationV8,
 		signer: SignerFunction,
 		chainId: bigint,
-		keyHash: string,
-		overrides?: CaliburSignatureOverrides,
-	): Promise<string>;
-	public signUserOperationWithKey(
-		userOperation: UserOperationV8,
-		signer: string | SignerFunction,
-		chainId: bigint,
-		keyHash: string,
 		overrides: CaliburSignatureOverrides = {},
-	): string | Promise<string> {
+	): Promise<string> {
 		const userOperationHash = createUserOperationHash(
 			userOperation,
 			this.entrypointAddress,
 			chainId,
 		);
+		const keyHash = overrides.keyHash ?? ROOT_KEY_HASH;
 		const hookData = overrides.hookData ?? "0x";
-
-		if (typeof signer === "string") {
-			const wallet = new Wallet(signer);
-			const ecdsaSig = wallet.signingKey.sign(userOperationHash).serialized;
-			return Calibur7702Account.wrapSignature(keyHash, ecdsaSig, hookData);
-		}
-
-		return signer(userOperationHash).then((ecdsaSig) =>
-			Calibur7702Account.wrapSignature(keyHash, ecdsaSig, hookData)
-		);
+		const ecdsaSig = await signer(userOperationHash);
+		return Calibur7702Account.wrapSignature(keyHash, ecdsaSig, hookData);
 	}
 
 	/**
