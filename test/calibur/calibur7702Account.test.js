@@ -507,9 +507,9 @@ describe('Calibur7702Account', () => {
         ).rejects.toThrow("providerRpc");
     });
 
-    // ─── signUserOperationWithKey ────────────────────────────────────────
+    // ─── signUserOperation with keyHash ─────────────────────────────────
 
-    test('signUserOperationWithKey wraps signature with provided keyHash', () => {
+    test('signUserOperation with keyHash wraps signature with provided keyHash', () => {
         if (!signingKey) return;
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const keyHash = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
@@ -525,13 +525,13 @@ describe('Calibur7702Account', () => {
             eip7702Auth: null,
         };
 
-        const sig = account.signUserOperationWithKey(userOp, signingKey, 11155111n, keyHash);
+        const sig = account.signUserOperation(userOp, signingKey, 11155111n, { keyHash });
         const decoded = abiCoder.decode(["bytes32", "bytes", "bytes"], sig);
         expect(decoded[0]).toBe(keyHash);
         expect(decoded[2]).toBe("0x"); // default hookData
     });
 
-    test('signUserOperationWithKey with hookData', () => {
+    test('signUserOperation with keyHash and hookData', () => {
         if (!signingKey) return;
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const keyHash = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
@@ -548,13 +548,13 @@ describe('Calibur7702Account', () => {
             eip7702Auth: null,
         };
 
-        const sig = account.signUserOperationWithKey(userOp, signingKey, 11155111n, keyHash, { hookData });
+        const sig = account.signUserOperation(userOp, signingKey, 11155111n, { keyHash, hookData });
         const decoded = abiCoder.decode(["bytes32", "bytes", "bytes"], sig);
         expect(decoded[0]).toBe(keyHash);
         expect(decoded[2]).toBe(hookData);
     });
 
-    test('signUserOperationWithKey produces different sig than signUserOperation for same userOp', () => {
+    test('signUserOperation with keyHash produces different sig than without for same userOp', () => {
         if (!signingKey) return;
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const keyHash = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
@@ -571,7 +571,7 @@ describe('Calibur7702Account', () => {
         };
 
         const rootSig = account.signUserOperation(userOp, signingKey, 11155111n);
-        const keySig = account.signUserOperationWithKey(userOp, signingKey, 11155111n, keyHash);
+        const keySig = account.signUserOperation(userOp, signingKey, 11155111n, { keyHash });
 
         // Same ECDSA signature bytes (same key, same hash), but different keyHash wrapper
         const rootDecoded = abiCoder.decode(["bytes32", "bytes", "bytes"], rootSig);
@@ -683,9 +683,9 @@ describe('Calibur7702Account', () => {
         expect(hash).toBe(expected);
     });
 
-    // ─── Signer callback overloads ──────────────────────────────────────
+    // ─── signUserOperationWithSigner ────────────────────────────────────
 
-    test('signUserOperation with signer callback returns Promise', async () => {
+    test('signUserOperationWithSigner produces same result as signUserOperation', async () => {
         if (!signingKey) return;
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const wallet = new Wallet(signingKey);
@@ -702,19 +702,17 @@ describe('Calibur7702Account', () => {
             eip7702Auth: null,
         };
 
-        // Signer callback
         const signerFn = async (hash) => {
             return wallet.signingKey.sign(hash).serialized;
         };
 
-        const sigFromCallback = await account.signUserOperation(userOp, signerFn, 11155111n);
+        const sigFromSigner = await account.signUserOperationWithSigner(userOp, signerFn, 11155111n);
         const sigFromKey = account.signUserOperation(userOp, signingKey, 11155111n);
 
-        // Both should produce identical signatures
-        expect(sigFromCallback).toBe(sigFromKey);
+        expect(sigFromSigner).toBe(sigFromKey);
     });
 
-    test('signUserOperationWithKey with signer callback returns Promise', async () => {
+    test('signUserOperationWithSigner with keyHash produces same result as signUserOperation with keyHash', async () => {
         if (!signingKey) return;
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const wallet = new Wallet(signingKey);
@@ -733,10 +731,10 @@ describe('Calibur7702Account', () => {
 
         const signerFn = async (hash) => wallet.signingKey.sign(hash).serialized;
 
-        const sigFromCallback = await account.signUserOperationWithKey(userOp, signerFn, 11155111n, keyHash);
-        const sigFromKey = account.signUserOperationWithKey(userOp, signingKey, 11155111n, keyHash);
+        const sigFromSigner = await account.signUserOperationWithSigner(userOp, signerFn, 11155111n, { keyHash });
+        const sigFromKey = account.signUserOperation(userOp, signingKey, 11155111n, { keyHash });
 
-        expect(sigFromCallback).toBe(sigFromKey);
+        expect(sigFromSigner).toBe(sigFromKey);
     });
 
     // ─── createAndSignEip7702DelegationAuthorization callback ────────────
