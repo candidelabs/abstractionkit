@@ -14,8 +14,6 @@ import {
     WebauthnPublicKey,
 } from "./types";
 
-import { Safe_L2_V1_5_0 } from "src/constants";
-
 import { UserOperationV9, MetaTransaction, OnChainIdentifierParamsType } from "../../types";
 import { EIP712_MULTI_CHAIN_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants";
 import { generateMerkleProofs } from "./MerkleTree";
@@ -71,34 +69,9 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
             {
                 onChainIdentifierParams: overrides.onChainIdentifierParams,
                 onChainIdentifier: overrides.onChainIdentifier,
-                safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0
+                safeAccountSingleton: overrides.safeAccountSingleton,
             }
         );
-	}
-
-	/**
-	 * Calculate the deterministic proxy address from the initializer calldata.
-	 * Uses the Safe v1.5.0 singleton init hash by default.
-	 *
-	 * @param initializerCallData - The encoded initializer calldata for the proxy
-	 * @param overrides - Override default nonce, factory address, and singleton init hash
-	 * @returns The deterministic proxy address
-	 */
-	public static createProxyAddress(
-		initializerCallData: string,
-		overrides: {
-			c2Nonce?: bigint;
-			safeFactoryAddress?: string;
-			singletonInitHash?: string;
-		} = {},
-	): string {
-		const modOverrides = { ...overrides,
-			singletonInitHash: overrides.singletonInitHash??Safe_L2_V1_5_0.singletonInitHash,
-		};
-		return SafeAccount.createProxyAddress(
-			initializerCallData,
-			modOverrides
-		);
 	}
 
 	/**
@@ -112,7 +85,6 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 		overrides: InitCodeOverrides = {},
 	): string {
        const modOverrides = { ...overrides,
-        	safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
 			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifierForSharedSigner: overrides.eip7212WebAuthnContractVerifierForSharedSigner??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
        };
@@ -164,7 +136,6 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 			}
 		}
         const modOverrides = { ...overrides,
-            safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
 			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifierForSharedSigner: overrides.eip7212WebAuthnContractVerifierForSharedSigner??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
         };
@@ -330,7 +301,6 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 		overrides: InitCodeOverrides = {},
 	): [string, string] {
      	const modOverrides = { ...overrides,
-            safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
 			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifierForSharedSigner: overrides.eip7212WebAuthnContractVerifierForSharedSigner??ExperimentalSafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
         };
