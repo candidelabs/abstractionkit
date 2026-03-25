@@ -450,8 +450,21 @@ function bigintToBytes(bi: bigint){
 function parseRawSignature(rawSig: string): { yParity: 0 | 1; r: bigint; s: bigint } {
     const sig = rawSig.startsWith("0x") ? rawSig.slice(2) : rawSig;
     const r = BigInt("0x" + sig.slice(0, 64));
+
+    if (sig.length === 128) {
+        // EIP-2098 compact signature (64 bytes): r (32) + yParity||s (32)
+        const yParityAndS = BigInt("0x" + sig.slice(64, 128));
+        const yParity = Number((yParityAndS >> 255n) & 1n) as 0 | 1;
+        const s = yParityAndS & ((1n << 255n) - 1n);
+        return { yParity, r, s };
+    }
+
+    // Standard 65-byte signature: r (32) + s (32) + v (1)
     const s = BigInt("0x" + sig.slice(64, 128));
     const v = parseInt(sig.slice(128, 130), 16);
+    if (v !== 0 && v !== 1 && v !== 27 && v !== 28) {
+        throw new RangeError(`invalid signature v value: ${v}`);
+    }
     const yParity = (v >= 27 ? v - 27 : v) as 0 | 1;
     return { yParity, r, s };
 }
