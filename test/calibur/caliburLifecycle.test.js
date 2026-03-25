@@ -9,7 +9,7 @@ jest.setTimeout(300000);
 
 // ─── Configuration ──────────────────────────────────────────────────────
 // All config comes from .env — see .env.example for required variables.
-const chainId = BigInt(process.env.CHAIN_ID);
+let chainId;
 const providerRpc = process.env.JSON_RPC_NODE_PROVIDER;
 const bundlerRpc = process.env.BUNDLER_URL;
 const eoaPrivateKey = process.env.PRIVATE_KEY1;
@@ -92,11 +92,12 @@ async function sendAndWait(acct, userOp, bRpc) {
 describe('Calibur7702Account Sepolia Lifecycle', () => {
 
     beforeAll(() => {
-        if (!providerRpc || !bundlerRpc || !eoaPrivateKey || !eoaAddress) {
+        if (!process.env.CHAIN_ID || !providerRpc || !bundlerRpc || !eoaPrivateKey || !eoaAddress) {
             throw new Error(
                 'Missing required env vars: CHAIN_ID, JSON_RPC_NODE_PROVIDER, BUNDLER_URL, PRIVATE_KEY1, PUBLIC_ADDRESS1. See .env.example.'
             );
         }
+        chainId = BigInt(process.env.CHAIN_ID);
     });
 
     // ─── 2.1: EIP-7702 delegation + basic transfer ─────────────────────
@@ -309,7 +310,8 @@ describe('Calibur7702Account Sepolia Lifecycle', () => {
 
     test('2.9 expired key is rejected with validation error', async () => {
         // Wait for the short-lived key to expire
-        await new Promise(resolve => setTimeout(resolve, 15000));
+        // Wait well past the 10s key TTL to ensure expiry (extra margin for block times)
+        await new Promise(resolve => setTimeout(resolve, 25000));
 
         const userOp = await account.createUserOperation(
             [{ to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0n, data: '0x' }],

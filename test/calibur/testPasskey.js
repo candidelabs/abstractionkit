@@ -2,20 +2,21 @@ const ak = require('../../dist/index.umd');
 const crypto = require('crypto');
 require('dotenv').config();
 
-const chainId = BigInt(process.env.CHAIN_ID);
 const providerRpc = process.env.JSON_RPC_NODE_PROVIDER;
 const bundlerRpc = process.env.BUNDLER_URL;
-const entryPointV9 = "0x433709009B8330FDa32311DF1C2AFA402eD8D009";
-const caliburV9Singleton = "0x71032285A847c4311Eb7ec2E7A636aB94A9805Aa";
+const entryPointV9 = ak.ENTRYPOINT_V9;
+const caliburV9Singleton = ak.CALIBUR_CANDIDE_V0_1_0_SINGLETON_ADDRESS;
 
 const eoaPrivateKey = process.env.PRIVATE_KEY1;
 const eoaAddress = process.env.PUBLIC_ADDRESS1;
 
-if (!providerRpc || !bundlerRpc || !eoaPrivateKey || !eoaAddress) {
+if (!process.env.CHAIN_ID || !providerRpc || !bundlerRpc || !eoaPrivateKey || !eoaAddress) {
     console.error('Missing required env vars: CHAIN_ID, JSON_RPC_NODE_PROVIDER, BUNDLER_URL, PRIVATE_KEY1, PUBLIC_ADDRESS1');
     console.error('Copy .env.example to .env and fill in the values.');
     process.exit(1);
 }
+
+const chainId = BigInt(process.env.CHAIN_ID);
 
 // Generate a P256 key pair for the passkey
 const p256KeyPair = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
@@ -102,6 +103,9 @@ async function main() {
         bundlerRpc,
         {
             dummySignature: dummyWebAuthnSig,
+            // TODO: Remove once bundler gas estimation handles WebAuthn
+            // signatures accurately. Currently underestimates due to
+            // P-256 verification overhead in IAccountExecute.
             verificationGasLimit: 500000n,
         },
     );

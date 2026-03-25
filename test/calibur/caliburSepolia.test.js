@@ -3,7 +3,7 @@ require('dotenv').config();
 
 jest.setTimeout(300000);
 
-const chainId = BigInt(process.env.CHAIN_ID);
+let chainId;
 const providerRpc = process.env.JSON_RPC_NODE_PROVIDER;
 const bundlerRpc = process.env.BUNDLER_URL;
 const eoaPrivateKey = process.env.PRIVATE_KEY1;
@@ -12,11 +12,12 @@ const eoaAddress = process.env.PUBLIC_ADDRESS1;
 describe('Calibur7702Account on Sepolia', () => {
 
     beforeAll(() => {
-        if (!providerRpc || !bundlerRpc || !eoaPrivateKey || !eoaAddress) {
+        if (!process.env.CHAIN_ID || !providerRpc || !bundlerRpc || !eoaPrivateKey || !eoaAddress) {
             throw new Error(
                 'Missing required env vars: CHAIN_ID, JSON_RPC_NODE_PROVIDER, BUNDLER_URL, PRIVATE_KEY1, PUBLIC_ADDRESS1'
             );
         }
+        chainId = BigInt(process.env.CHAIN_ID);
     });
 
     test('send 0-value transfer via Calibur 7702 account', async () => {
