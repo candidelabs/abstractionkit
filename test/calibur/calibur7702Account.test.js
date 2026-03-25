@@ -5,7 +5,9 @@ require('dotenv').config();
 const abiCoder = AbiCoder.defaultAbiCoder();
 
 // Signing tests need a private key — any valid secp256k1 key works.
-const signingKey = process.env.PRIVATE_KEY1;
+// Falls back to a well-known test key so tests run without .env.
+const signingKey = process.env.PRIVATE_KEY1 ||
+    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
 describe('Calibur7702Account', () => {
 
@@ -197,7 +199,7 @@ describe('Calibur7702Account', () => {
     // ─── signUserOperation ───────────────────────────────────────────────
 
     test('signUserOperation produces abi.encode(ROOT_KEY_HASH, sig, hookData)', () => {
-        if (!signingKey) throw new Error('PRIVATE_KEY1 env var required for signing tests');
+
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const privateKey = signingKey;
 
@@ -231,7 +233,7 @@ describe('Calibur7702Account', () => {
     });
 
     test('signUserOperation with hookData', () => {
-        if (!signingKey) throw new Error('PRIVATE_KEY1 env var required for signing tests');
+
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const privateKey = signingKey;
 
@@ -505,7 +507,7 @@ describe('Calibur7702Account', () => {
     // ─── signUserOperation with keyHash ─────────────────────────────────
 
     test('signUserOperation with keyHash wraps signature with provided keyHash', () => {
-        if (!signingKey) return;
+
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const keyHash = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
 
@@ -527,7 +529,7 @@ describe('Calibur7702Account', () => {
     });
 
     test('signUserOperation with keyHash and hookData', () => {
-        if (!signingKey) return;
+
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const keyHash = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
         const hookData = "0xdeadbeef";
@@ -550,7 +552,7 @@ describe('Calibur7702Account', () => {
     });
 
     test('signUserOperation with keyHash produces different sig than without for same userOp', () => {
-        if (!signingKey) return;
+
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const keyHash = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
 
@@ -603,7 +605,7 @@ describe('Calibur7702Account', () => {
     });
 
     test('wrapSignature output matches signUserOperation output for same inputs', () => {
-        if (!signingKey) return;
+
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
 
         const userOp = {
@@ -681,7 +683,7 @@ describe('Calibur7702Account', () => {
     // ─── signUserOperationWithSigner ────────────────────────────────────
 
     test('signUserOperationWithSigner produces same result as signUserOperation', async () => {
-        if (!signingKey) return;
+
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const wallet = new Wallet(signingKey);
 
@@ -708,7 +710,7 @@ describe('Calibur7702Account', () => {
     });
 
     test('signUserOperationWithSigner with keyHash produces same result as signUserOperation with keyHash', async () => {
-        if (!signingKey) return;
+
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const wallet = new Wallet(signingKey);
         const keyHash = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
@@ -735,7 +737,7 @@ describe('Calibur7702Account', () => {
     // ─── createAndSignEip7702DelegationAuthorization callback ────────────
 
     test('createAndSignEip7702DelegationAuthorization with signer callback', async () => {
-        if (!signingKey) return;
+
         const wallet = new Wallet(signingKey);
 
         const signerFn = async (hash) => wallet.signingKey.sign(hash).serialized;
@@ -823,7 +825,7 @@ describe('Calibur7702Account', () => {
     });
 
     test('v0.9 signUserOperation produces valid signature with v0.9 hash', () => {
-        if (!signingKey) return;
+
 
         const accountV8 = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const accountV9 = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", {
@@ -921,7 +923,7 @@ describe('Calibur7702Account', () => {
         const code = '0xef0100' + delegatee.slice(2).toLowerCase();
         mockFetchWithCode(code);
         const account = new ak.Calibur7702Account('0x1111111111111111111111111111111111111111');
-        const result = await account.isDelegated('http://localhost');
+        const result = await account.isDelegatedToThisAccount('http://localhost');
         expect(result).toBe(true);
     });
 
@@ -929,14 +931,14 @@ describe('Calibur7702Account', () => {
         const code = '0xef0100' + '2222222222222222222222222222222222222222';
         mockFetchWithCode(code);
         const account = new ak.Calibur7702Account('0x1111111111111111111111111111111111111111');
-        const result = await account.isDelegated('http://localhost');
+        const result = await account.isDelegatedToThisAccount('http://localhost');
         expect(result).toBe(false);
     });
 
     test('isDelegated returns false when not delegated', async () => {
         mockFetchWithCode('0x');
         const account = new ak.Calibur7702Account('0x1111111111111111111111111111111111111111');
-        const result = await account.isDelegated('http://localhost');
+        const result = await account.isDelegatedToThisAccount('http://localhost');
         expect(result).toBe(false);
     });
 
@@ -947,7 +949,7 @@ describe('Calibur7702Account', () => {
         const account = new ak.Calibur7702Account('0x1111111111111111111111111111111111111111', {
             delegateeAddress: customDelegatee,
         });
-        const result = await account.isDelegated('http://localhost');
+        const result = await account.isDelegatedToThisAccount('http://localhost');
         expect(result).toBe(true);
     });
 });
