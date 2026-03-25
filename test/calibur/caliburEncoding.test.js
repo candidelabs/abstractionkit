@@ -9,8 +9,9 @@ const ENTRYPOINT_V9 = "0x433709009B8330FDa32311DF1C2AFA402eD8D009";
 const ROOT_KEY_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 // Tests 1.6 and 1.13 need a private key for deterministic ECDSA signing.
-// Reads from PRIVATE_KEY1 in .env — any valid secp256k1 key works.
-const signingKey = process.env.PRIVATE_KEY1;
+// Falls back to a well-known test key so tests run without .env.
+const signingKey = process.env.PRIVATE_KEY1 ||
+    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
 describe('Calibur ABI Encoding Correctness', () => {
 
