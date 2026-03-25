@@ -102,6 +102,9 @@ export class Calibur7702Account extends SmartAccount
 	 */
 	public static createDummyWebAuthnSignature(keyHash: string): string {
 		const abiCoder = AbiCoder.defaultAbiCoder();
+		const dummyClientDataJSON = '{"type":"webauthn.get","challenge":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","origin":"https://example.com","crossOrigin":false}';
+		const challengeIndex = BigInt(dummyClientDataJSON.indexOf('"challenge":"'));
+		const typeIndex = BigInt(dummyClientDataJSON.indexOf('"type":"webauthn.get"'));
 		return abiCoder.encode(
 			["bytes32", "bytes", "bytes"],
 			[
@@ -110,9 +113,9 @@ export class Calibur7702Account extends SmartAccount
 					["(bytes,string,uint256,uint256,uint256,uint256)"],
 					[[
 						"0x49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000000",
-						'{"type":"webauthn.get","challenge":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","origin":"https://example.com","crossOrigin":false}',
-						36n,
-						8n,
+						dummyClientDataJSON,
+						challengeIndex,
+						typeIndex,
 						BigInt("0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0"),
 						BigInt("0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0"),
 					]],
@@ -298,6 +301,15 @@ export class Calibur7702Account extends SmartAccount
 			eip7702AuthNonce = overrides.eip7702Auth.nonce ?? null;
 		}
 
+		// When eip7702Auth is provided, check if already delegated in parallel.
+		// If already delegated to the target, skip the authorization.
+		let skipEip7702Auth = false;
+		let delegationCheckOp: Promise<string | null> | null = null;
+		if (overrides.eip7702Auth != null && providerRpc != null) {
+			delegationCheckOp = getDelegatedAddress(this.accountAddress, providerRpc)
+				.catch(() => null);
+		}
+
 		if (overrides.eip7702Auth != null && eip7702AuthNonce == null) {
 			let eip7702AuthNonceOp;
 			if (providerRpc != null) {
@@ -314,30 +326,41 @@ export class Calibur7702Account extends SmartAccount
 				);
 			}
 
-			if (gasPriceOp != null && nonceOp != null) {
-				await Promise.all(
-					[eip7702AuthNonceOp, nonceOp, gasPriceOp]
-				).then((values) => {
-					eip7702AuthNonce = BigInt(values[0] as string);
-					nonce = values[1];
-					[maxFeePerGas, maxPriorityFeePerGas] = values[2];
-				});
-			} else if (gasPriceOp != null) {
-				await Promise.all(
-					[eip7702AuthNonceOp, gasPriceOp]
-				).then((values) => {
-					eip7702AuthNonce = BigInt(values[0] as string);
-					[maxFeePerGas, maxPriorityFeePerGas] = values[1];
-				});
-			} else if (nonceOp != null) {
-				await Promise.all(
-					[eip7702AuthNonceOp, nonceOp]
-				).then((values) => {
-					eip7702AuthNonce = BigInt(values[0] as string);
-					nonce = values[1];
-				});
-			} else {
-				eip7702AuthNonce = BigInt(await eip7702AuthNonceOp as string);
+			const ops: Promise<any>[] = [eip7702AuthNonceOp];
+			if (nonceOp != null) ops.push(nonceOp);
+			if (gasPriceOp != null) ops.push(gasPriceOp);
+			if (delegationCheckOp != null) ops.push(delegationCheckOp);
+
+			const values = await Promise.all(ops);
+			let idx = 0;
+			eip7702AuthNonce = BigInt(values[idx++] as string);
+			if (nonceOp != null) nonce = values[idx++];
+			if (gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++];
+			if (delegationCheckOp != null) {
+				const delegatedTo = values[idx++] as string | null;
+				if (delegatedTo != null &&
+					delegatedTo.toLowerCase() === (eip7702AuthAddress as string).toLowerCase()) {
+					skipEip7702Auth = true;
+				}
+			}
+		} else if (overrides.eip7702Auth != null) {
+			const ops: Promise<any>[] = [];
+			if (nonceOp != null) ops.push(nonceOp);
+			if (gasPriceOp != null) ops.push(gasPriceOp);
+			if (delegationCheckOp != null) ops.push(delegationCheckOp);
+
+			if (ops.length > 0) {
+				const values = await Promise.all(ops);
+				let idx = 0;
+				if (nonceOp != null) nonce = values[idx++];
+				if (gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++];
+				if (delegationCheckOp != null) {
+					const delegatedTo = values[idx++] as string | null;
+					if (delegatedTo != null &&
+						delegatedTo.toLowerCase() === (eip7702AuthAddress as string).toLowerCase()) {
+						skipEip7702Auth = true;
+					}
+				}
 			}
 		} else {
 			if (gasPriceOp != null && nonceOp != null) {
@@ -385,7 +408,7 @@ export class Calibur7702Account extends SmartAccount
 
 		const pmFields = overrides.paymasterFields;
 		let userOperation: UserOperationV8;
-		if (overrides.eip7702Auth != null) {
+		if (overrides.eip7702Auth != null && !skipEip7702Auth) {
 			const yParity = overrides.eip7702Auth.yParity ?? "0x0";
 			if (
 				yParity != "0x0" && yParity != "0x00" &&
@@ -473,7 +496,9 @@ export class Calibur7702Account extends SmartAccount
 				preVerificationGas = BigInt(estimation.preVerificationGas);
 				verificationGasLimit = BigInt(estimation.verificationGasLimit);
 				callGasLimit = BigInt(estimation.callGasLimit);
-				verificationGasLimit += 55_000n;
+				// Safety margin for P-256/WebAuthn signature verification overhead
+			// that the bundler's simulation may underestimate.
+			verificationGasLimit += 55_000n;
 
 				userOperation.maxFeePerGas = inputMaxFeePerGas;
 				userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas;
@@ -900,7 +925,7 @@ export class Calibur7702Account extends SmartAccount
 	 * @param providerRpc - JSON-RPC endpoint
 	 * @returns True if the account is delegated to `this.delegateeAddress`
 	 */
-	public async isDelegated(providerRpc: string): Promise<boolean> {
+	public async isDelegatedToThisAccount(providerRpc: string): Promise<boolean> {
 		const address = await getDelegatedAddress(this.accountAddress, providerRpc);
 		if (address === null) return false;
 		return address.toLowerCase() === this.delegateeAddress.toLowerCase();
@@ -1082,36 +1107,55 @@ export class Calibur7702Account extends SmartAccount
 			);
 		}
 
-		const count = Number(BigInt(countResult));
-		const keys: CaliburKey[] = [];
+		// Non-delegated accounts return "0x" which can't be converted to BigInt.
+		if (countResult === "0x" || countResult === "0x0") {
+			return [];
+		}
 
+		const count = Number(BigInt(countResult));
+		if (count === 0) return [];
+
+		// Batch all keyAt calls in parallel
+		const keyAtPromises: Promise<any>[] = [];
 		for (let i = 0; i < count; i++) {
 			const keyAtCallData = KEY_AT_SELECTOR + abiCoder.encode(
 				["uint256"],
 				[i],
 			).slice(2);
 
-			const keyResult = await sendJsonRpcRequest(
-				providerRpc,
-				"eth_call",
-				[
-					{
-						from: ZeroAddress,
-						to: this.accountAddress,
-						data: keyAtCallData,
-					},
-					"latest",
-				],
+			keyAtPromises.push(
+				sendJsonRpcRequest(
+					providerRpc,
+					"eth_call",
+					[
+						{
+							from: ZeroAddress,
+							to: this.accountAddress,
+							data: keyAtCallData,
+						},
+						"latest",
+					],
+				),
 			);
+		}
 
-			if (typeof keyResult === "string") {
-				const decoded = abiCoder.decode(["(uint8,bytes)"], keyResult);
-				const keyTuple = decoded[0] as [number, string];
-				keys.push({
-					keyType: Number(keyTuple[0]) as CaliburKeyType,
-					publicKey: keyTuple[1] as string,
-				});
+		const keyResults = await Promise.all(keyAtPromises);
+		const keys: CaliburKey[] = [];
+
+		for (let i = 0; i < keyResults.length; i++) {
+			const keyResult = keyResults[i];
+			if (typeof keyResult !== "string") {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					`Unexpected response from keyAt(${i}) call on ${this.accountAddress}`,
+				);
 			}
+			const decoded = abiCoder.decode(["(uint8,bytes)"], keyResult);
+			const keyTuple = decoded[0] as [number, string];
+			keys.push({
+				keyType: Number(keyTuple[0]) as CaliburKeyType,
+				publicKey: keyTuple[1] as string,
+			});
 		}
 
 		return keys;
