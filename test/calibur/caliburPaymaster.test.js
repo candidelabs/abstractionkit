@@ -8,7 +8,7 @@ const abiCoder = AbiCoder.defaultAbiCoder();
 jest.setTimeout(300000);
 
 // ─── Configuration ──────────────────────────────────────────────────────
-const chainId = BigInt(process.env.CHAIN_ID);
+let chainId;
 const providerRpc = process.env.JSON_RPC_NODE_PROVIDER;
 const bundlerRpc = process.env.BUNDLER_URL;
 const paymasterRpc = process.env.PAYMASTER_RPC;
@@ -85,11 +85,12 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
     let paymaster;
 
     beforeAll(() => {
-        if (!providerRpc || !bundlerRpc || !paymasterRpc) {
+        if (!process.env.CHAIN_ID || !providerRpc || !bundlerRpc || !paymasterRpc) {
             throw new Error(
                 'Missing required env vars: CHAIN_ID, JSON_RPC_NODE_PROVIDER, BUNDLER_URL, PAYMASTER_RPC. See .env.example.'
             );
         }
+        chainId = BigInt(process.env.CHAIN_ID);
         paymaster = new ak.CandidePaymaster(paymasterRpc);
     });
 
@@ -145,7 +146,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         expect(receipt1.success).toBe(true);
 
         // Verify delegation is set to the v0.8 default singleton
-        const delegated = await account.isDelegated(providerRpc);
+        const delegated = await account.isDelegatedToThisAccount(providerRpc);
         expect(delegated).toBe(true);
 
         // --- Second UserOp: transfer on already-delegated account ---
@@ -397,7 +398,7 @@ describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
         paymaster = new ak.CandidePaymaster(paymasterRpc);
 
         // Ensure the account is delegated to the v0.8 default singleton.
-        const isDelegated = await account.isDelegated(providerRpc);
+        const isDelegated = await account.isDelegatedToThisAccount(providerRpc);
         if (!isDelegated) {
             console.log('Account not delegated to v0.8 singleton, delegating...');
             const delegateOp = await account.createUserOperation(
