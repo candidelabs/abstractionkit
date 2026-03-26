@@ -952,4 +952,71 @@ describe('Calibur7702Account', () => {
         const result = await account.isDelegatedToThisAccount('http://localhost');
         expect(result).toBe(true);
     });
+
+    // ─── createRevokeDelegationTransaction ──────────────────────────────
+
+    describe('createRevokeDelegationTransaction', () => {
+
+        afterEach(() => {
+            mockFetch.mockReset();
+            mockFetch.mockImplementation((...args) => realFetch(...args));
+        });
+
+        function mockFetchWithCode(code) {
+            mockFetch.mockImplementationOnce(() =>
+                Promise.resolve({
+                    json: async () => ({ jsonrpc: '2.0', id: 1, result: code }),
+                })
+            );
+        }
+
+        test('produces a SET_CODE_TX_TYPE (0x04) raw transaction', async () => {
+            const account = new ak.Calibur7702Account('0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045');
+
+            // Mock getDelegatedAddress: returns Calibur singleton via EIP-7702 code prefix
+            const delegatee = '0x000000009B1D0aF20D8C6d0A44e162d11F9b8f00';
+            const code = '0xef0100' + delegatee.slice(2).toLowerCase();
+            mockFetchWithCode(code);
+
+            // Provide all overrides so no additional RPC calls are needed
+            const rawTx = await account.createRevokeDelegationTransaction(
+                signingKey,
+                'http://localhost',
+                {
+                    nonce: 5n,
+                    maxFeePerGas: 1000000000n,
+                    maxPriorityFeePerGas: 100000000n,
+                    chainId: 11155111n,
+                },
+            );
+
+            // SET_CODE_TX_TYPE = 0x04
+            expect(rawTx.startsWith('0x04')).toBe(true);
+            // Should be a valid hex string
+            expect(/^0x04[0-9a-f]+$/i.test(rawTx)).toBe(true);
+        });
+
+        test('throws when account is not delegated', async () => {
+            const account = new ak.Calibur7702Account('0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045');
+
+            // Non-delegated EOA returns '0x'
+            mockFetchWithCode('0x');
+
+            await expect(
+                account.createRevokeDelegationTransaction(signingKey, 'http://localhost')
+            ).rejects.toThrow('Account is not delegated');
+        });
+
+        test('throws when delegated to a different address', async () => {
+            const account = new ak.Calibur7702Account('0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045');
+
+            // Delegated to a different contract
+            const code = '0xef0100' + '0000000000000000000000000000000000000001';
+            mockFetchWithCode(code);
+
+            await expect(
+                account.createRevokeDelegationTransaction(signingKey, 'http://localhost')
+            ).rejects.toThrow('Account is delegated to a different address');
+        });
+    });
 });

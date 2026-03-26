@@ -470,4 +470,56 @@ describe('Calibur ABI Encoding Correctness', () => {
         expect(decoded1[1]).toBe(decoded2[1]); // same ECDSA sig
         expect(decoded1[2]).not.toBe(decoded2[2]); // different hookData
     });
+
+    // ─── Test 1.14: createRevokeAllKeysMetaTransactions returns revoke txs for all keys
+
+    test('1.14 createRevokeAllKeysMetaTransactions returns revoke tx for each registered key', async () => {
+        const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+
+        // Mock listKeys to return two keys
+        const secp256k1Key = ak.Calibur7702Account.createSecp256k1Key(
+            "0x1234567890abcdef1234567890abcdef12345678"
+        );
+        const webAuthnKey = ak.Calibur7702Account.createWebAuthnP256Key(
+            123456789n,
+            987654321n,
+        );
+
+        account.listKeys = jest.fn().mockResolvedValue([secp256k1Key, webAuthnKey]);
+
+        const txs = await account.createRevokeAllKeysMetaTransactions("http://mock-rpc");
+
+        expect(txs).toHaveLength(2);
+
+        // Each tx should be a revoke(bytes32) call to address(0)
+        const REVOKE_SELECTOR = "0xb75c7dc6";
+        const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+        for (let i = 0; i < txs.length; i++) {
+            expect(txs[i].to).toBe(ZERO_ADDRESS);
+            expect(txs[i].value).toBe(0n);
+            expect(txs[i].data.startsWith(REVOKE_SELECTOR)).toBe(true);
+        }
+
+        // Verify key hashes match
+        const keyHash0 = ak.Calibur7702Account.getKeyHash(secp256k1Key);
+        const keyHash1 = ak.Calibur7702Account.getKeyHash(webAuthnKey);
+
+        const decoded0 = abiCoder.decode(["bytes32"], "0x" + txs[0].data.slice(10));
+        const decoded1 = abiCoder.decode(["bytes32"], "0x" + txs[1].data.slice(10));
+
+        expect(decoded0[0]).toBe(keyHash0);
+        expect(decoded1[0]).toBe(keyHash1);
+    });
+
+    test('1.15 createRevokeAllKeysMetaTransactions returns empty array when no keys registered', async () => {
+        const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+
+        account.listKeys = jest.fn().mockResolvedValue([]);
+
+        const txs = await account.createRevokeAllKeysMetaTransactions("http://mock-rpc");
+
+        expect(txs).toHaveLength(0);
+        expect(Array.isArray(txs)).toBe(true);
+    });
 });
