@@ -1,5 +1,3 @@
-import * as fetchImport from "isomorphic-unfetch";
-
 import { AbiCoder } from "ethers";
 
 import {
@@ -52,7 +50,6 @@ export async function shareTenderlySimulationAndCreateLink(
         'X-Access-Key': tenderlyAccessKey
     };
     
-    const fetch = fetchImport.default || fetchImport;
 	const requestOptions: RequestInit = {
 		method: "POST",
 		headers, 
