@@ -1,5 +1,3 @@
-import * as fetchImport from "isomorphic-unfetch";
-
 import { id, AbiCoder, keccak256, JsonRpcProvider, solidityPacked, getAddress } from "ethers";
 
 import {
@@ -388,7 +386,6 @@ export async function sendJsonRpcRequest(
     headers: Record<string, string> = { "Content-Type": "application/json" },
     paramsKeyName: string = "params",
 ): Promise<JsonRpcResult> {
-	const fetch = fetchImport.default || fetchImport;
 	const raw = JSON.stringify(
 		{
 			method: method,
