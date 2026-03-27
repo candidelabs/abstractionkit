@@ -53,6 +53,8 @@ export interface PrependTokenPaymasterApproveAccount {
 export interface BasePaymasterUserOperationOverrides {
 	/** set the entrypoint address intead of determining it from the useroperation structure.*/
 	entrypoint?: string;
+	/** When true, prepend an approve(0) call before the actual token approval. Required for tokens like USDT that don't allow changing a non-zero allowance directly. */
+	resetApproval?: boolean;
 }
 
 /**

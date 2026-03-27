@@ -33,6 +33,19 @@ const UINT256_MAX = 115792089237316195423570985008687907853269984665640564039457
 const TOKEN_APPROVE_AMOUNT_MULTIPLIER = 2n;
 
 /**
+ * ERC-20 tokens that require resetting their allowance to 0 before setting a
+ * new approval amount (e.g. USDT on mainnet).
+ * Addresses are stored lowercase for case-insensitive comparison.
+ *
+ * If you encounter a token with this behavior that is not listed here,
+ * please open an issue at https://github.com/candidelabs/abstractionkit/issues
+ * or use the `resetApproval` override as a workaround.
+ */
+const TOKENS_REQUIRING_ALLOWANCE_RESET: string[] = [
+	"0xdac17f958d2ee523a2206206994597c13d831ec7", // USDT (Ethereum mainnet)
+];
+
+/**
  * Client for the Candide Paymaster service.
  * Supports both gas sponsorship (sponsor paymaster) and ERC-20 token payment for gas (token paymaster).
  * Auto-initializes on first use by fetching supported tokens and metadata from the paymaster RPC.
@@ -593,12 +606,24 @@ export class CandidePaymaster extends Paymaster {
 			this.setDummyPaymasterFields(userOperation, epData);
 			// Prepend an infinite approval and re-estimate UserOperation gas limits (a later rational allowance will be calculated and replace the infinite one)
 			const oldCallData = userOperation.callData;
+			const requiresAllowanceReset = overrides?.resetApproval
+				?? TOKENS_REQUIRING_ALLOWANCE_RESET.includes(
+					tokenAddress.toLowerCase(),
+				);
 			let callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
 				userOperation.callData,
 				tokenAddress,
 				epData.paymasterMetadata.address,
 				UINT256_MAX,
 			);
+			if (requiresAllowanceReset) {
+				callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
+					callDataWithApprove,
+					tokenAddress,
+					epData.paymasterMetadata.address,
+					0n,
+				);
+			}
 			userOperation.callData = callDataWithApprove;
 
 			await this.estimateAndApplyGasLimits(userOperation, bundlerRpc, entrypoint, overrides ?? {});
@@ -614,6 +639,14 @@ export class CandidePaymaster extends Paymaster {
 				epData.paymasterMetadata.address,
 				approveAmount,
 			);
+			if (requiresAllowanceReset) {
+				callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
+					callDataWithApprove,
+					tokenAddress,
+					epData.paymasterMetadata.address,
+					0n,
+				);
+			}
 			userOperation.callData = callDataWithApprove;
 
 			const _overrides = { ...(overrides || {}),
