@@ -994,12 +994,18 @@ export class Calibur7702Account extends SmartAccount
 			);
 		}
 
-		if (ops.length > 0) await Promise.all(ops);
+		await Promise.all(ops);
 
 		const txNonce = overrides.nonce ?? results.nonce ?? 0n;
 		const maxFeePerGas = overrides.maxFeePerGas ?? results.maxFeePerGas ?? 0n;
 		const maxPriorityFeePerGas = overrides.maxPriorityFeePerGas ?? results.maxPriorityFeePerGas ?? 0n;
 		const chainId = overrides.chainId ?? results.chainId ?? 0n;
+		if (chainId === 0n) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"chainId could not be determined. Pass it via overrides.chainId.",
+			);
+		}
 
 		// Authorization nonce = txNonce + 1 by default
 		// (tx nonce is incremented before authorization processing in EIP-7702)
