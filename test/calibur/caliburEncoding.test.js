@@ -179,7 +179,6 @@ describe('Calibur ABI Encoding Correctness', () => {
     // ─── Test 1.6: Wrapped signature structure ──────────────────────────
 
     test('1.6 wrapped signature matches abi.encode(bytes32, bytes, bytes)', () => {
-        if (!signingKey) throw new Error('PRIVATE_KEY1 env var required for signing tests');
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const privateKey = signingKey;
 
@@ -426,7 +425,6 @@ describe('Calibur ABI Encoding Correctness', () => {
     // ─── Test 1.13: hookData is NOT part of signed hash (OZ L-10, Cantina 3.3.3) ──
 
     test('1.13 (OZ L-10) hookData is not part of the signed UserOp hash', () => {
-        if (!signingKey) throw new Error('PRIVATE_KEY1 env var required for signing tests');
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
         const privateKey = signingKey;
 

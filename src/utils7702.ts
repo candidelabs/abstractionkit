@@ -442,13 +442,18 @@ function bigintToBytes(bi: bigint){
 
 
 /**
- * Parse a raw 65-byte ECDSA signature into its components.
- * Supports both standard (r + s + v) and EIP-2098 compact formats.
- * @param rawSig - The raw signature as a hex string (130 or 132 hex chars after 0x)
+ * Parse a raw ECDSA signature into its components.
+ * Supports standard 65-byte (r + s + v) and EIP-2098 64-byte compact formats.
+ * @param rawSig - Hex string: 128 chars (EIP-2098 compact), or 130/132 chars (standard with 0x prefix)
  * @returns An object with yParity (0 or 1), r, and s components
  */
 function parseRawSignature(rawSig: string): { yParity: 0 | 1; r: bigint; s: bigint } {
     const sig = rawSig.startsWith("0x") ? rawSig.slice(2) : rawSig;
+    if (sig.length !== 128 && sig.length !== 130) {
+        throw new RangeError(
+            `invalid signature length: expected 128 (EIP-2098 compact) or 130 (standard) hex chars, got ${sig.length}`
+        );
+    }
     const r = BigInt("0x" + sig.slice(0, 64));
 
     if (sig.length === 128) {

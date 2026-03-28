@@ -88,7 +88,7 @@ describe('Calibur7702Account ExperimentalAllowAllParallelPaymaster', () => {
         }
         chainId = BigInt(process.env.CHAIN_ID);
         account = new ak.Calibur7702Account(eoaAddress, {
-            entrypointAddress: ak.ak.ENTRYPOINT_V9,
+            entrypointAddress: ak.ENTRYPOINT_V9,
             delegateeAddress: ak.CALIBUR_CANDIDE_V0_1_0_SINGLETON_ADDRESS,
         });
         allowAllPaymaster = new ak.ExperimentalAllowAllParallelPaymaster();
