@@ -37,6 +37,9 @@
 		"access": "public",
 		"tag": "latest"
 	},
+	"engines": {
+		"node": ">=18"
+	},
 	"dependencies": {
 		"ethers": "^6.13.2"
 	},
