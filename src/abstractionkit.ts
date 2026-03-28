@@ -3,26 +3,29 @@ export { Simple7702Account } from "./account/simple/Simple7702Account";
 export { Simple7702AccountV09 } from "./account/simple/Simple7702AccountV09";
 export { ExperimentalSafeMultiChainSigAccount } from "./account/Safe/SafeMultiChainSigAccount";
 export { Calibur7702Account } from "./account/Calibur/Calibur7702Account";
-export {
-	CaliburKeyType, CaliburKey, CaliburKeySettings, CaliburKeySettingsResult,
+export { CaliburKeyType } from "./account/Calibur/types";
+export type {
+	CaliburKey, CaliburKeySettings, CaliburKeySettingsResult,
 	WebAuthnSignatureData, CaliburCreateUserOperationOverrides,
 	CaliburSignatureOverrides, SignerFunction,
 } from "./account/Calibur/types";
 export {
 	SocialRecoveryModule,
-	RecoveryRequest,
 	SocialRecoveryModuleGracePeriodSelector,
-	RecoverySignaturePair,
-    RecoveryRequestTypedDataDomain,
-    RecoveryRequestTypedMessageValue,
     EXECUTE_RECOVERY_PRIMARY_TYPE,
     EIP712_RECOVERY_MODULE_TYPE
 } from "./account/Safe/modules/SocialRecoveryModule";
+export type {
+	RecoveryRequest,
+	RecoverySignaturePair,
+    RecoveryRequestTypedDataDomain,
+    RecoveryRequestTypedMessageValue,
+} from "./account/Safe/modules/SocialRecoveryModule";
 export {
 	AllowanceModule,
-	Allowance,
 	ALLOWANCE_MODULE_V0_1_0_ADDRESS,
 } from "./account/Safe/modules/AllowanceModule";
+export type { Allowance } from "./account/Safe/modules/AllowanceModule";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
 export { SafeAccountV0_3_0 } from "./account/Safe/SafeAccountV0_3_0";
 export { SafeAccountV1_5_0_M_0_3_0 } from "./account/Safe/SafeAccountV1_5_0_M_0_3_0";
@@ -49,11 +52,11 @@ export {
 	calculateUserOperationMaxGasCost,
 	sendJsonRpcRequest,
     fetchGasPrice,
-    DepositInfo,
     getDepositInfo,
     getBalanceOf,
     getDelegatedAddress,
 } from "./utils";
+export type { DepositInfo } from "./utils";
 
 export {
     shareTenderlySimulationAndCreateLink,
@@ -74,34 +77,36 @@ export {
     createAndSignEip7702DelegationAuthorization,
     createEip7702DelegationAuthorizationHash,
     signHash,
-    Authorization7702Hex,
-    Authorization7702,
 } from "./utils7702";
+export type { Authorization7702Hex, Authorization7702 } from "./utils7702";
 
 export {
+	SafeModuleExecutorFunctionSelector,
+	EOADummySignerSignaturePair,
+	WebauthnDummySignerSignaturePair,
+} from "./account/Safe/types";
+export type {
 	CreateUserOperationV6Overrides,
 	CreateUserOperationV7Overrides,
 	CreateUserOperationV9Overrides,
 	ECDSAPublicAddress,
 	InitCodeOverrides,
-	SafeModuleExecutorFunctionSelector,
 	SafeUserOperationTypedDataDomain,
 	WebauthnPublicKey,
-	EOADummySignerSignaturePair,
-	WebauthnDummySignerSignaturePair,
 	WebauthnSignatureData,
 	SignerSignaturePair,
 	Signer,
 } from "./account/Safe/types";
 
-export {
+export type {
 	CandidePaymasterContext,
 	PrependTokenPaymasterApproveAccount,
 	AnyUserOperation,
 	SameUserOp,
 } from "./paymaster/types";
 
-export {
+export { Operation, GasOption, PolygonChain } from "./types";
+export type {
 	UserOperationV6,
 	UserOperationV7,
 	UserOperationV8,
@@ -116,12 +121,9 @@ export {
 	UserOperationReceiptResult,
 	JsonRpcError,
 	StateOverrideSet,
-	Operation,
 	MetaTransaction,
-    GasOption,
     SponsorMetadata,
-    PolygonChain,
-    ParallelPaymasterInitValues
+    ParallelPaymasterInitValues,
 } from "./types";
 
 export {
@@ -141,6 +143,14 @@ export {
     ENTRYPOINT_V9,
 } from "./constants";
 
-export * from "./account/Safe/safeMessage";
+export {
+    SAFE_MESSAGE_PRIMARY_TYPE,
+    SAFE_MESSAGE_MODULE_TYPE,
+    getSafeMessageEip712Data,
+} from "./account/Safe/safeMessage";
+export type {
+    SafeMessageTypedDataDomain,
+    SafeMessageTypedMessageValue,
+} from "./account/Safe/safeMessage";
 
 export { AbstractionKitError } from "./errors";

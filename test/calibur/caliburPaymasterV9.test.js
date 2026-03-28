@@ -16,6 +16,13 @@ const eoaPrivateKey = process.env.PRIVATE_KEY1;
 const eoaAddress = process.env.PUBLIC_ADDRESS1;
 const erc20TokenAddress = process.env.ERC20_TOKEN_ADDRESS;
 
+const ENTRYPOINT_V9 = ak.ENTRYPOINT_V9;
+const CALIBUR_V9_SINGLETON = ak.CALIBUR_CANDIDE_V0_1_0_SINGLETON_ADDRESS;
+
+// v0.9 UserOps share the same shape as v0.8 (eip7702Auth field), so the
+// paymaster's auto-detection resolves to v0.8. Pass entrypoint explicitly.
+const PM_V9 = { entrypoint: ENTRYPOINT_V9 };
+
 // ─── Helpers ────────────────────────────────────────────────────────────
 
 function generateFreshEOA() {
@@ -78,9 +85,16 @@ async function sendAndWait(acct, userOp, bRpc) {
     return receipt;
 }
 
+function createV9Account(address) {
+    return new ak.Calibur7702Account(address, {
+        entrypointAddress: ENTRYPOINT_V9,
+        delegateeAddress: CALIBUR_V9_SINGLETON,
+    });
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────
 
-describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
+describe('Calibur7702Account Sponsor Paymaster (v0.9 / EntryPoint v9)', () => {
 
     let paymaster;
 
@@ -94,20 +108,20 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         paymaster = new ak.CandidePaymaster(paymasterRpc);
     });
 
-    // ─── 4.1: Paymaster supports EntryPoint v0.8 ─────────────────────────
+    // ─── 6.1: Paymaster supports EntryPoint v0.9 ─────────────────────────
 
-    test('4.1 paymaster supports EntryPoint v0.8', async () => {
+    test('6.1 paymaster supports EntryPoint v0.9', async () => {
         const entrypoints = await paymaster.getSupportedEntrypoints();
         expect(entrypoints.map(e => e.toLowerCase())).toContain(
-            ak.ENTRYPOINT_V8.toLowerCase()
+            ENTRYPOINT_V9.toLowerCase()
         );
     });
 
-    // ─── 4.2: Sponsored delegation + transfer (fresh EOA) ────────────────
+    // ─── 6.2: Sponsored delegation + transfer (fresh EOA) ────────────────
 
-    test('4.2 sponsored delegation + transfer, then second tx on same account', async () => {
+    test('6.2 sponsored delegation + transfer, then second tx on same account', async () => {
         const eoa = generateFreshEOA();
-        const account = new ak.Calibur7702Account(eoa.address);
+        const account = createV9Account(eoa.address);
 
         // --- First UserOp: delegate + transfer ---
         const userOp = await account.createUserOperation(
@@ -118,9 +132,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         );
 
         const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
-            account,
-            userOp,
-            bundlerRpc,
+            userOp, bundlerRpc, undefined, PM_V9,
         );
 
         // Verify paymaster fields
@@ -145,7 +157,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         expect(receipt1).not.toBeNull();
         expect(receipt1.success).toBe(true);
 
-        // Verify delegation is set to the v0.8 default singleton
+        // Verify delegation is set to the v0.9 singleton
         const delegated = await account.isDelegatedToThisAccount(providerRpc);
         expect(delegated).toBe(true);
 
@@ -157,9 +169,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         );
 
         const [sponsoredOp2] = await paymaster.createSponsorPaymasterUserOperation(
-            account,
-            userOp2,
-            bundlerRpc,
+            userOp2, bundlerRpc, undefined, PM_V9,
         );
 
         sponsoredOp2.signature = account.signUserOperation(sponsoredOp2, eoa.privateKey, chainId);
@@ -167,11 +177,11 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         expect(receipt2.success).toBe(true);
     });
 
-    // ─── 4.3: Sponsored batch transaction (fresh EOA) ────────────────────
+    // ─── 6.3: Sponsored batch transaction (fresh EOA) ────────────────────
 
-    test('4.3 sponsored batch transaction', async () => {
+    test('6.3 sponsored batch transaction', async () => {
         const eoa = generateFreshEOA();
-        const account = new ak.Calibur7702Account(eoa.address);
+        const account = createV9Account(eoa.address);
 
         const userOp = await account.createUserOperation(
             [
@@ -184,9 +194,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         );
 
         const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
-            account,
-            userOp,
-            bundlerRpc,
+            userOp, bundlerRpc, undefined, PM_V9,
         );
 
         sponsoredOp.eip7702Auth = ak.createAndSignEip7702DelegationAuthorization(
@@ -201,11 +209,11 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         expect(receipt.success).toBe(true);
     });
 
-    // ─── 4.4: Sponsored passkey registration + passkey-signed tx ─────────
+    // ─── 6.4: Sponsored passkey registration + passkey-signed tx ─────────
 
-    test('4.4 sponsored passkey registration then passkey-signed tx', async () => {
+    test('6.4 sponsored passkey registration then passkey-signed tx', async () => {
         const eoa = generateFreshEOA();
-        const account = new ak.Calibur7702Account(eoa.address);
+        const account = createV9Account(eoa.address);
 
         // First: delegate the account
         const delegateOp = await account.createUserOperation(
@@ -216,9 +224,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         );
 
         const [sponsoredDelegateOp] = await paymaster.createSponsorPaymasterUserOperation(
-            account,
-            delegateOp,
-            bundlerRpc,
+            delegateOp, bundlerRpc, undefined, PM_V9,
         );
 
         sponsoredDelegateOp.eip7702Auth = ak.createAndSignEip7702DelegationAuthorization(
@@ -245,9 +251,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
 
         const regOp = await account.createUserOperation(registerTxs, providerRpc, bundlerRpc);
         const [sponsoredRegOp] = await paymaster.createSponsorPaymasterUserOperation(
-            account,
-            regOp,
-            bundlerRpc,
+            regOp, bundlerRpc, undefined, PM_V9,
         );
 
         sponsoredRegOp.signature = account.signUserOperation(sponsoredRegOp, eoa.privateKey, chainId);
@@ -267,9 +271,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         );
 
         const [sponsoredPasskeyOp] = await paymaster.createSponsorPaymasterUserOperation(
-            account,
-            passkeyOp,
-            bundlerRpc,
+            passkeyOp, bundlerRpc, undefined, PM_V9,
         );
 
         const userOpHash = account.getUserOperationHash(sponsoredPasskeyOp, chainId);
@@ -281,11 +283,11 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         expect(passkeyReceipt.success).toBe(true);
     });
 
-    // ─── 4.5: Sponsored key revocation ───────────────────────────────────
+    // ─── 6.5: Sponsored key revocation ───────────────────────────────────
 
-    test('4.5 sponsored key revocation', async () => {
+    test('6.5 sponsored key revocation', async () => {
         const eoa = generateFreshEOA();
-        const account = new ak.Calibur7702Account(eoa.address);
+        const account = createV9Account(eoa.address);
 
         // Delegate
         const delegateOp = await account.createUserOperation(
@@ -295,9 +297,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
             { eip7702Auth: { chainId } },
         );
         const [sponsoredDelegateOp] = await paymaster.createSponsorPaymasterUserOperation(
-            account,
-            delegateOp,
-            bundlerRpc,
+            delegateOp, bundlerRpc, undefined, PM_V9,
         );
         sponsoredDelegateOp.eip7702Auth = ak.createAndSignEip7702DelegationAuthorization(
             BigInt(sponsoredDelegateOp.eip7702Auth.chainId),
@@ -320,9 +320,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         });
         const regOp = await account.createUserOperation(registerTxs, providerRpc, bundlerRpc);
         const [sponsoredRegOp] = await paymaster.createSponsorPaymasterUserOperation(
-            account,
-            regOp,
-            bundlerRpc,
+            regOp, bundlerRpc, undefined, PM_V9,
         );
         sponsoredRegOp.signature = account.signUserOperation(sponsoredRegOp, eoa.privateKey, chainId);
         await sendAndWait(account, sponsoredRegOp, bundlerRpc);
@@ -333,9 +331,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         const revokeTx = ak.Calibur7702Account.createRevokeKeyMetaTransaction(keyHash);
         const revokeOp = await account.createUserOperation([revokeTx], providerRpc, bundlerRpc);
         const [sponsoredRevokeOp] = await paymaster.createSponsorPaymasterUserOperation(
-            account,
-            revokeOp,
-            bundlerRpc,
+            revokeOp, bundlerRpc, undefined, PM_V9,
         );
         sponsoredRevokeOp.signature = account.signUserOperation(
             sponsoredRevokeOp, eoa.privateKey, chainId,
@@ -346,11 +342,11 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         expect(await account.isKeyRegistered(providerRpc, keyHash)).toBe(false);
     });
 
-    // ─── 4.6: Sponsor metadata is returned ───────────────────────────────
+    // ─── 6.6: Sponsor metadata is returned ───────────────────────────────
 
-    test('4.6 sponsor metadata is returned', async () => {
+    test('6.6 sponsor metadata is returned', async () => {
         const eoa = generateFreshEOA();
-        const account = new ak.Calibur7702Account(eoa.address);
+        const account = createV9Account(eoa.address);
 
         const userOp = await account.createUserOperation(
             [{ to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0n, data: '0x' }],
@@ -360,9 +356,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         );
 
         const [sponsoredOp, sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
-            account,
-            userOp,
-            bundlerRpc,
+            userOp, bundlerRpc, undefined, PM_V9,
         );
 
         expect(sponsoredOp.paymaster).toBeTruthy();
@@ -370,19 +364,17 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
     });
 });
 
-// ─── Token Paymaster Tests ──────────────────────────────────────────────
+// ─── Token Paymaster Tests (v0.9) ───────────────────────────────────────
 // Requires: PRIVATE_KEY1, PUBLIC_ADDRESS1, ERC20_TOKEN_ADDRESS in .env
 // The EOA must hold a balance of the configured ERC-20 token.
-// NOTE: These tests depend on a fix to createTokenPaymasterUserOperation
-// to use a sufficient approve multiplier (see CandidePaymaster.ts).
 
-describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
+describe('Calibur7702Account Token Paymaster (v0.9 / EntryPoint v9)', () => {
 
     let account;
     let paymaster;
 
     beforeAll(async () => {
-        if (!providerRpc || !bundlerRpc || !paymasterRpc || !eoaPrivateKey || !eoaAddress) {
+        if (!process.env.CHAIN_ID || !providerRpc || !bundlerRpc || !paymasterRpc || !eoaPrivateKey || !eoaAddress) {
             throw new Error(
                 'Missing required env vars: CHAIN_ID, JSON_RPC_NODE_PROVIDER, BUNDLER_URL, PAYMASTER_RPC, PRIVATE_KEY1, PUBLIC_ADDRESS1.'
             );
@@ -394,13 +386,14 @@ describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
             );
         }
 
-        account = new ak.Calibur7702Account(eoaAddress);
+        chainId = BigInt(process.env.CHAIN_ID);
+        account = createV9Account(eoaAddress);
         paymaster = new ak.CandidePaymaster(paymasterRpc);
 
-        // Ensure the account is delegated to the v0.8 default singleton.
+        // Ensure the account is delegated to the v0.9 singleton.
         const isDelegated = await account.isDelegatedToThisAccount(providerRpc);
         if (!isDelegated) {
-            console.log('Account not delegated to v0.8 singleton, delegating...');
+            console.log('Account not delegated to v0.9 singleton, delegating...');
             const delegateOp = await account.createUserOperation(
                 [{ to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0n, data: '0x' }],
                 providerRpc,
@@ -408,9 +401,7 @@ describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
                 { eip7702Auth: { chainId } },
             );
             const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
-                account,
-                delegateOp,
-                bundlerRpc,
+                delegateOp, bundlerRpc, undefined, PM_V9,
             );
             sponsoredOp.eip7702Auth = ak.createAndSignEip7702DelegationAuthorization(
                 BigInt(sponsoredOp.eip7702Auth.chainId),
@@ -425,9 +416,9 @@ describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
         }
     });
 
-    // ─── 5.1: Token paymaster supports the configured token ─────────────
+    // ─── 7.1: Token paymaster supports the configured token ─────────────
 
-    test('5.1 token paymaster supports the configured ERC-20 token', async () => {
+    test('7.1 token paymaster supports the configured ERC-20 token', async () => {
         const isSupported = await paymaster.isSupportedERC20Token(
             erc20TokenAddress,
             account.entrypointAddress,
@@ -443,9 +434,9 @@ describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
         expect(tokenData.decimals).toBeGreaterThan(0);
     });
 
-    // ─── 5.2: Transfer paid with ERC-20 token ───────────────────────────
+    // ─── 7.2: Transfer paid with ERC-20 token ───────────────────────────
 
-    test('5.2 transfer paid with ERC-20 token', async () => {
+    test('7.2 transfer paid with ERC-20 token', async () => {
         const userOp = await account.createUserOperation(
             [{ to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0n, data: '0x' }],
             providerRpc,
@@ -453,10 +444,7 @@ describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
         );
 
         const tokenOp = await paymaster.createTokenPaymasterUserOperation(
-            account,
-            userOp,
-            erc20TokenAddress,
-            bundlerRpc,
+            account, userOp, erc20TokenAddress, bundlerRpc, PM_V9,
         );
 
         // Verify paymaster fields
@@ -480,9 +468,9 @@ describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
         expect(receipt.success).toBe(true);
     });
 
-    // ─── 5.3: Batch transaction paid with ERC-20 token ──────────────────
+    // ─── 7.3: Batch transaction paid with ERC-20 token ──────────────────
 
-    test('5.3 batch transaction paid with ERC-20 token', async () => {
+    test('7.3 batch transaction paid with ERC-20 token', async () => {
         const userOp = await account.createUserOperation(
             [
                 { to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0n, data: '0x' },
@@ -493,10 +481,7 @@ describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
         );
 
         const tokenOp = await paymaster.createTokenPaymasterUserOperation(
-            account,
-            userOp,
-            erc20TokenAddress,
-            bundlerRpc,
+            account, userOp, erc20TokenAddress, bundlerRpc, PM_V9,
         );
 
         // Should have 3 calls: approve + 2 original
@@ -511,9 +496,9 @@ describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
         expect(receipt.success).toBe(true);
     });
 
-    // ─── 5.4: Gas cost estimation in ERC-20 tokens ──────────────────────
+    // ─── 7.4: Gas cost estimation in ERC-20 tokens ──────────────────────
 
-    test('5.4 gas cost estimation in ERC-20 tokens', async () => {
+    test('7.4 gas cost estimation in ERC-20 tokens', async () => {
         const userOp = await account.createUserOperation(
             [{ to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0n, data: '0x' }],
             providerRpc,
@@ -521,16 +506,15 @@ describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
         );
 
         const maxCost = await paymaster.calculateUserOperationErc20TokenMaxGasCost(
-            account,
             userOp,
             erc20TokenAddress,
         );
         expect(maxCost).toBeGreaterThan(0n);
     });
 
-    // ─── 5.5: Exchange rate is fetchable ─────────────────────────────────
+    // ─── 7.5: Exchange rate is fetchable ─────────────────────────────────
 
-    test('5.5 exchange rate is fetchable for the token', async () => {
+    test('7.5 exchange rate is fetchable for the token', async () => {
         const exchangeRate = await paymaster.fetchTokenPaymasterExchangeRate(
             erc20TokenAddress,
             account.entrypointAddress,
@@ -538,9 +522,9 @@ describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
         expect(exchangeRate).toBeGreaterThan(0n);
     });
 
-    // ─── 5.6: Unsupported token is rejected ─────────────────────────────
+    // ─── 7.6: Unsupported token is rejected ─────────────────────────────
 
-    test('5.6 unsupported token address is rejected', async () => {
+    test('7.6 unsupported token address is rejected', async () => {
         const fakeToken = "0x0000000000000000000000000000000000000001";
         const isSupported = await paymaster.isSupportedERC20Token(
             fakeToken, account.entrypointAddress,

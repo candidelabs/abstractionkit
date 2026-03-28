@@ -1,4 +1,4 @@
-const accountAbstractionkit = require('../../dist/index.umd');
+const accountAbstractionkit = require('../../dist/index.cjs');
 const ethers = require('ethers')
 require('dotenv').config()
 
