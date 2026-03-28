@@ -1,4 +1,4 @@
-const ak = require('../../dist/index.umd');
+const ak = require('../../dist/index.cjs');
 const { AbiCoder, keccak256, Wallet, solidityPacked } = require('ethers');
 require('dotenv').config();
 

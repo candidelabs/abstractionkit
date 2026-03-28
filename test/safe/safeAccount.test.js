@@ -1,4 +1,4 @@
-const accountAbstractionkit = require('../../dist/index.umd');
+const accountAbstractionkit = require('../../dist/index.cjs');
 require('dotenv').config()
 
 jest.setTimeout(300000);

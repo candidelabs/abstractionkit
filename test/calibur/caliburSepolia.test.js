@@ -1,4 +1,4 @@
-const ak = require('../../dist/index.umd');
+const ak = require('../../dist/index.cjs');
 require('dotenv').config();
 
 jest.setTimeout(300000);
