@@ -379,8 +379,8 @@ describe('Calibur7702Account Sepolia Lifecycle', () => {
         const nonce = await account.getNonce(providerRpc);
         expect(nonce).toBeGreaterThan(0n);
 
-        // listKeys returns an array
-        const keys = await account.listKeys(providerRpc);
+        // getKeys returns an array
+        const keys = await account.getKeys(providerRpc);
         expect(Array.isArray(keys)).toBe(true);
 
         // Root key settings: isAdmin=true, expiration=0, hook=ZeroAddress

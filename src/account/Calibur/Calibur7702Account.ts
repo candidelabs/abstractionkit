@@ -896,7 +896,7 @@ export class Calibur7702Account extends SmartAccount
 	public async createRevokeAllKeysMetaTransactions(
 		providerRpc: string,
 	): Promise<SimpleMetaTransaction[]> {
-		const keys = await this.listKeys(providerRpc);
+		const keys = await this.getKeys(providerRpc);
 		return keys.map((key) => {
 			const keyHash = Calibur7702Account.getKeyHash(key);
 			return Calibur7702Account.createRevokeKeyMetaTransaction(keyHash);
@@ -1242,23 +1242,29 @@ export class Calibur7702Account extends SmartAccount
 	}
 
 	/**
-	 * List all keys registered on this account.
+	 * Get all keys registered on this account.
 	 * Iterates `keyCount()` + `keyAt(i)` to enumerate all keys.
 	 *
 	 * @param providerRpc - JSON-RPC endpoint
 	 * @param overrides - Optional overrides
-	 * @param overrides.blockNumber - Block number to query at (defaults to "latest").
-	 *        Pass a specific block to ensure all reads are consistent.
+	 * @param overrides.blockNumber - Block number to query at. If omitted,
+	 *        fetches the current block number once and uses it for all reads.
 	 * @returns Array of registered {@link CaliburKey}s
 	 */
-	public async listKeys(
+	public async getKeys(
 		providerRpc: string,
 		overrides: { blockNumber?: bigint } = {},
 	): Promise<CaliburKey[]> {
 		const abiCoder = AbiCoder.defaultAbiCoder();
-		const blockTag = overrides.blockNumber != null
-			? "0x" + overrides.blockNumber.toString(16)
-			: "latest";
+		let blockTag: string;
+		if (overrides.blockNumber != null) {
+			blockTag = "0x" + overrides.blockNumber.toString(16);
+		} else {
+			const blockHex = await sendJsonRpcRequest(
+				providerRpc, "eth_blockNumber", [],
+			) as string;
+			blockTag = blockHex;
+		}
 
 		// Get key count
 		const countResult = await sendJsonRpcRequest(
