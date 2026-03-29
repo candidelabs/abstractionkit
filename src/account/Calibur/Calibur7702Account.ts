@@ -890,7 +890,7 @@ export class Calibur7702Account extends SmartAccount
 	 * }
 	 *
 	 * // Step 2: Revoke delegation
-	 * const rawTx = await account.createRevokeDelegationTransaction(privateKey, providerRpc);
+	 * const rawTx = await account.createRevokeDelegationRawTransaction(chainId, privateKey, providerRpc);
 	 * ```
 	 */
 	public async createRevokeAllKeysMetaTransactions(
@@ -911,25 +911,28 @@ export class Calibur7702Account extends SmartAccount
 	 * and send the cleanup UserOp, then call this method to revoke delegation.
 	 * This prevents stale keys from reactivating if the EOA re-delegates later.
 	 *
+	 * @param chainId - Target chain ID
 	 * @param eoaPrivateKey - The EOA's private key for signing
-	 * @param providerRpc - JSON-RPC endpoint for nonce, gas price, and chain ID queries
+	 * @param providerRpc - JSON-RPC endpoint for nonce and gas price queries
 	 * @param overrides - Optional overrides for transaction parameters
 	 * @param overrides.nonce - Transaction nonce (fetched from provider if omitted)
 	 * @param overrides.authorizationNonce - EIP-7702 authorization nonce (defaults to txNonce + 1)
 	 * @param overrides.maxFeePerGas - Max fee per gas (fetched from provider if omitted)
 	 * @param overrides.maxPriorityFeePerGas - Max priority fee per gas (fetched if omitted)
 	 * @param overrides.gasLimit - Gas limit (defaults to 60,000)
-	 * @param overrides.chainId - Chain ID (fetched from provider if omitted)
 	 * @returns Hex-encoded signed EIP-7702 type-4 transaction ready for `eth_sendRawTransaction`
 	 * @throws {AbstractionKitError} If the account is not delegated or is delegated to a different address
 	 *
 	 * @example
 	 * ```typescript
-	 * const rawTx = await account.createRevokeDelegationTransaction(privateKey, providerRpc);
+	 * const rawTx = await account.createRevokeDelegationRawTransaction(
+	 *     11155111n, privateKey, providerRpc,
+	 * );
 	 * await sendJsonRpcRequest(providerRpc, "eth_sendRawTransaction", [rawTx]);
 	 * ```
 	 */
-	public async createRevokeDelegationTransaction(
+	public async createRevokeDelegationRawTransaction(
+		chainId: bigint,
 		eoaPrivateKey: string,
 		providerRpc: string,
 		overrides: {
@@ -938,7 +941,6 @@ export class Calibur7702Account extends SmartAccount
 			maxFeePerGas?: bigint;
 			maxPriorityFeePerGas?: bigint;
 			gasLimit?: bigint;
-			chainId?: bigint;
 		} = {},
 	): Promise<string> {
 		// Verify delegation state before revoking
@@ -962,7 +964,6 @@ export class Calibur7702Account extends SmartAccount
 			nonce?: bigint;
 			maxFeePerGas?: bigint;
 			maxPriorityFeePerGas?: bigint;
-			chainId?: bigint;
 		} = {};
 
 		// Build parallel fetch list
@@ -987,25 +988,11 @@ export class Calibur7702Account extends SmartAccount
 			);
 		}
 
-		if (overrides.chainId == null) {
-			ops.push(
-				sendJsonRpcRequest(providerRpc, "eth_chainId", [])
-					.then((v) => { results.chainId = BigInt(v as string); })
-			);
-		}
-
-		await Promise.all(ops);
+		if (ops.length > 0) await Promise.all(ops);
 
 		const txNonce = overrides.nonce ?? results.nonce ?? 0n;
 		const maxFeePerGas = overrides.maxFeePerGas ?? results.maxFeePerGas ?? 0n;
 		const maxPriorityFeePerGas = overrides.maxPriorityFeePerGas ?? results.maxPriorityFeePerGas ?? 0n;
-		const chainId = overrides.chainId ?? results.chainId ?? 0n;
-		if (chainId === 0n) {
-			throw new AbstractionKitError(
-				"BAD_DATA",
-				"chainId could not be determined. Pass it via overrides.chainId.",
-			);
-		}
 
 		// Authorization nonce = txNonce + 1 by default
 		// (tx nonce is incremented before authorization processing in EIP-7702)
