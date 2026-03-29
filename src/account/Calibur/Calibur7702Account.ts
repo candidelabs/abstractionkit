@@ -1246,12 +1246,19 @@ export class Calibur7702Account extends SmartAccount
 	 * Iterates `keyCount()` + `keyAt(i)` to enumerate all keys.
 	 *
 	 * @param providerRpc - JSON-RPC endpoint
+	 * @param overrides - Optional overrides
+	 * @param overrides.blockNumber - Block number to query at (defaults to "latest").
+	 *        Pass a specific block to ensure all reads are consistent.
 	 * @returns Array of registered {@link CaliburKey}s
 	 */
 	public async listKeys(
 		providerRpc: string,
+		overrides: { blockNumber?: bigint } = {},
 	): Promise<CaliburKey[]> {
 		const abiCoder = AbiCoder.defaultAbiCoder();
+		const blockTag = overrides.blockNumber != null
+			? "0x" + overrides.blockNumber.toString(16)
+			: "latest";
 
 		// Get key count
 		const countResult = await sendJsonRpcRequest(
@@ -1263,7 +1270,7 @@ export class Calibur7702Account extends SmartAccount
 					to: this.accountAddress,
 					data: KEY_COUNT_SELECTOR,
 				},
-				"latest",
+				blockTag,
 			],
 		);
 
@@ -1300,7 +1307,7 @@ export class Calibur7702Account extends SmartAccount
 							to: this.accountAddress,
 							data: keyAtCallData,
 						},
-						"latest",
+						blockTag,
 					],
 				),
 			);
