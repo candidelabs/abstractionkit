@@ -474,7 +474,7 @@ describe('Calibur ABI Encoding Correctness', () => {
     test('1.14 createRevokeAllKeysMetaTransactions returns revoke tx for each registered key', async () => {
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
 
-        // Mock listKeys to return two keys
+        // Mock getKeys to return two keys
         const secp256k1Key = ak.Calibur7702Account.createSecp256k1Key(
             "0x1234567890abcdef1234567890abcdef12345678"
         );
@@ -483,7 +483,7 @@ describe('Calibur ABI Encoding Correctness', () => {
             987654321n,
         );
 
-        account.listKeys = jest.fn().mockResolvedValue([secp256k1Key, webAuthnKey]);
+        account.getKeys = jest.fn().mockResolvedValue([secp256k1Key, webAuthnKey]);
 
         const txs = await account.createRevokeAllKeysMetaTransactions("http://mock-rpc");
 
@@ -513,7 +513,7 @@ describe('Calibur ABI Encoding Correctness', () => {
     test('1.15 createRevokeAllKeysMetaTransactions returns empty array when no keys registered', async () => {
         const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
 
-        account.listKeys = jest.fn().mockResolvedValue([]);
+        account.getKeys = jest.fn().mockResolvedValue([]);
 
         const txs = await account.createRevokeAllKeysMetaTransactions("http://mock-rpc");
 
