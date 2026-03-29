@@ -953,9 +953,9 @@ describe('Calibur7702Account', () => {
         expect(result).toBe(true);
     });
 
-    // ─── createRevokeDelegationTransaction ──────────────────────────────
+    // ─── createRevokeDelegationRawTransaction ──────────────────────────
 
-    describe('createRevokeDelegationTransaction', () => {
+    describe('createRevokeDelegationRawTransaction', () => {
 
         afterEach(() => {
             mockFetch.mockReset();
@@ -979,14 +979,14 @@ describe('Calibur7702Account', () => {
             mockFetchWithCode(code);
 
             // Provide all overrides so no additional RPC calls are needed
-            const rawTx = await account.createRevokeDelegationTransaction(
+            const rawTx = await account.createRevokeDelegationRawTransaction(
+                11155111n,
                 signingKey,
                 'http://localhost',
                 {
                     nonce: 5n,
                     maxFeePerGas: 1000000000n,
                     maxPriorityFeePerGas: 100000000n,
-                    chainId: 11155111n,
                 },
             );
 
@@ -1003,7 +1003,7 @@ describe('Calibur7702Account', () => {
             mockFetchWithCode('0x');
 
             await expect(
-                account.createRevokeDelegationTransaction(signingKey, 'http://localhost')
+                account.createRevokeDelegationRawTransaction(11155111n, signingKey, 'http://localhost')
             ).rejects.toThrow('Account is not delegated');
         });
 
@@ -1015,7 +1015,7 @@ describe('Calibur7702Account', () => {
             mockFetchWithCode(code);
 
             await expect(
-                account.createRevokeDelegationTransaction(signingKey, 'http://localhost')
+                account.createRevokeDelegationRawTransaction(11155111n, signingKey, 'http://localhost')
             ).rejects.toThrow('Account is delegated to a different address');
         });
     });
