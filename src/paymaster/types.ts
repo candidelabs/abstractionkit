@@ -23,6 +23,8 @@ export interface CandidePaymasterContext {
 	token?: string;
 	/** Sponsorship policy identifier for the Candide paymaster. */
 	sponsorshipPolicyId?: string;
+	/** Signing phase for parallel signing feature (either 'commit' or 'finalize'). */
+	signingPhase?: 'commit' | 'finalize';
 }
 
 /**

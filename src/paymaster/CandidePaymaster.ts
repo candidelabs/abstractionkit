@@ -538,19 +538,24 @@ export class CandidePaymaster extends Paymaster {
 	/**
 	 * Create a gas-sponsored UserOperation (no token payment required).
 	 *
+	 * @param smartAccount - The smart account instance
 	 * @param userOperation - The UserOperation to sponsor
 	 * @param bundlerRpc - Bundler RPC URL for gas estimation
 	 * @param sponsorshipPolicyId - Optional sponsorship policy ID
 	 * @param overrides - Override entrypoint address
+	 * @param context - Optional additional context to pass to the paymaster RPC
 	 * @returns A tuple of [UserOperation, SponsorMetadata | undefined]
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
 	 */
 	async createSponsorPaymasterUserOperation<T extends AnyUserOperation>(
+		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: T,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
+		context?: CandidePaymasterContext,
 		overrides?: GasPaymasterUserOperationOverrides,
 	): Promise<[SameUserOp<T>, SponsorMetadata | undefined]> {
+		context = {sponsorshipPolicyId, ...(context || {}) };
 		const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(userOperation);
 		await this.ensureInitialized(entrypoint);
 		const epData = this.getEntrypointData(entrypoint);
@@ -559,11 +564,9 @@ export class CandidePaymaster extends Paymaster {
 				`UserOperation for entrypoint ${entrypoint} is not supported`,
 			);
 		}
-		this.setDummyPaymasterFields(userOperation, epData);
-		await this.estimateAndApplyGasLimits(userOperation, bundlerRpc, entrypoint, overrides ?? {});
-		const context: CandidePaymasterContext = {};
-		if (sponsorshipPolicyId && sponsorshipPolicyId.trim().length > 0) {
-			context["sponsorshipPolicyId"] = sponsorshipPolicyId;
+		if (context.signingPhase !== "finalize"){
+			this.setDummyPaymasterFields(userOperation, epData);
+			await this.estimateAndApplyGasLimits(userOperation, bundlerRpc, entrypoint, overrides ?? {});
 		}
 		const _overrides = { ...(overrides || {}),
 			entrypoint: entrypoint,
@@ -584,6 +587,7 @@ export class CandidePaymaster extends Paymaster {
 	 * @param tokenAddress - The ERC-20 token contract address to pay gas with
 	 * @param bundlerRpc - Bundler RPC URL for gas estimation
 	 * @param overrides - Override gas limits and multipliers
+	 * @param context - Optional additional context to pass to the paymaster RPC
 	 * @returns The UserOperation with token approval prepended and paymaster fields set
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the token is not supported
 	 */
@@ -592,69 +596,72 @@ export class CandidePaymaster extends Paymaster {
 		userOperation: T,
 		tokenAddress: string,
 		bundlerRpc: string,
+		context?: CandidePaymasterContext,
 		overrides?: GasPaymasterUserOperationOverrides,
 	): Promise<SameUserOp<T>> {
 		try {
+			context = { token: tokenAddress, ...(context || {}) };
 			const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(userOperation);
 			await this.ensureInitialized(entrypoint);
-			const epData = this.getEntrypointData(entrypoint);
-			if (epData == null) {
-				throw new RangeError(
-					`UserOperation for entrypoint ${entrypoint} is not supported`,
-				);
-			}
-			this.setDummyPaymasterFields(userOperation, epData);
-			// Prepend an infinite approval and re-estimate UserOperation gas limits (a later rational allowance will be calculated and replace the infinite one)
-			const oldCallData = userOperation.callData;
-			const requiresAllowanceReset = overrides?.resetApproval
-				?? TOKENS_REQUIRING_ALLOWANCE_RESET.includes(
-					tokenAddress.toLowerCase(),
-				);
-			let callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
-				userOperation.callData,
-				tokenAddress,
-				epData.paymasterMetadata.address,
-				UINT256_MAX,
-			);
-			if (requiresAllowanceReset) {
-				callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
-					callDataWithApprove,
-					tokenAddress,
+			if (context.signingPhase !== "finalize"){
+				const epData = this.getEntrypointData(entrypoint);
+				if (epData == null) {
+					throw new RangeError(
+						`UserOperation for entrypoint ${entrypoint} is not supported`,
+					);
+				}
+				this.setDummyPaymasterFields(userOperation, epData);
+				// Prepend an infinite approval and re-estimate UserOperation gas limits (a later rational allowance will be calculated and replace the infinite one)
+				const oldCallData = userOperation.callData;
+				const requiresAllowanceReset = overrides?.resetApproval
+					?? TOKENS_REQUIRING_ALLOWANCE_RESET.includes(
+						context.token!.toLowerCase(),
+					);
+				let callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
+					userOperation.callData,
+					context.token!,
 					epData.paymasterMetadata.address,
-					0n,
+					UINT256_MAX,
 				);
-			}
-			userOperation.callData = callDataWithApprove;
+				if (requiresAllowanceReset) {
+					callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
+						callDataWithApprove,
+						context.token!,
+						epData.paymasterMetadata.address,
+						0n,
+					);
+				}
+				userOperation.callData = callDataWithApprove;
 
-			await this.estimateAndApplyGasLimits(userOperation, bundlerRpc, entrypoint, overrides ?? {});
+				await this.estimateAndApplyGasLimits(userOperation, bundlerRpc, entrypoint, overrides ?? {});
 
-			const maxErc20Cost = await this.calculateUserOperationErc20TokenMaxGasCost(
-				userOperation,
-				tokenAddress,
-			);
-			const approveAmount = maxErc20Cost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
-			callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
-				oldCallData,
-				tokenAddress,
-				epData.paymasterMetadata.address,
-				approveAmount,
-			);
-			if (requiresAllowanceReset) {
+				const maxErc20Cost = await this.calculateUserOperationErc20TokenMaxGasCost(
+					userOperation,
+					context.token!,
+				);
+				const approveAmount = maxErc20Cost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
 				callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
-					callDataWithApprove,
-					tokenAddress,
+					oldCallData,
+					context.token!,
 					epData.paymasterMetadata.address,
-					0n,
+					approveAmount,
 				);
+				if (requiresAllowanceReset) {
+					callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
+						callDataWithApprove,
+						context.token!,
+						epData.paymasterMetadata.address,
+						0n,
+					);
+				}
+				userOperation.callData = callDataWithApprove;
 			}
-			userOperation.callData = callDataWithApprove;
-
 			const _overrides = { ...(overrides || {}),
 				entrypoint: entrypoint,
 			};
 			const [resultUserOp] = await this.createPaymasterUserOperation(
 				userOperation,
-				{ token: tokenAddress },
+				context,
 				_overrides,
 			);
 			return resultUserOp;
