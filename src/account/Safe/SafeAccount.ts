@@ -781,15 +781,21 @@ export class SafeAccount extends SmartAccount {
 					.slice(34);
 			}
 			if (useroperation.paymasterData != null) {
-                const PAYMASTER_SIG_MAGIC = '22e325a297439656';
-                if(
-                    overrides.is_v9 &&
-                    useroperation.paymasterData.endsWith(PAYMASTER_SIG_MAGIC)
-                ){
-                    paymasterAndData += PAYMASTER_SIG_MAGIC;
-                }else{
-				    paymasterAndData += useroperation.paymasterData.slice(2);
-                }
+	      const PAYMASTER_SIG_MAGIC = '22e325a297439656';
+	      if(
+	          overrides.is_v9 &&
+	          useroperation.paymasterData.endsWith(PAYMASTER_SIG_MAGIC)
+	      ){
+	          const sigLenHex = useroperation.paymasterData.slice(
+	            useroperation.paymasterData.length - 16 - 4,
+	            useroperation.paymasterData.length - 16
+	          );
+	          const sigLen = parseInt(sigLenHex, 16);
+	          const prefixEnd = useroperation.paymasterData.length - 16 - 4 - sigLen * 2;
+	          paymasterAndData += useroperation.paymasterData.slice(0, prefixEnd).replaceAll("0x", "") + PAYMASTER_SIG_MAGIC;
+	      }else{
+	        paymasterAndData += useroperation.paymasterData.slice(2);
+	      }
 			}
 		}
 		const messageValue: SafeUserOperationV7TypedMessageValue = {
