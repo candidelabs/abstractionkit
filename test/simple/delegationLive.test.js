@@ -105,7 +105,9 @@ describe('EIP-7702 delegation lifecycle (live)', () => {
 
         // Sponsor gas
         const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
-            userOperation, bundlerUrl
+            smartAccount,
+            userOperation,
+            bundlerUrl
         );
         userOperation = sponsoredOp;
 
@@ -156,7 +158,9 @@ describe('EIP-7702 delegation lifecycle (live)', () => {
 
         // Sponsor gas
         const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
-            userOperation, bundlerUrl
+            smartAccount,
+            userOperation,
+            bundlerUrl
         );
         userOperation = sponsoredOp;
 

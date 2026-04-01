@@ -34,7 +34,10 @@ describe('safe account migration', () => {
         )
 
         let [paymasterUserOperation, _sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
-            testUserOperation, bundlerUrl)
+            accountToMigrate,
+            testUserOperation,
+            bundlerUrl
+        )
         testUserOperation = paymasterUserOperation; 
 
         testUserOperation.signature = accountToMigrate.signUserOperation(
@@ -61,7 +64,11 @@ describe('safe account migration', () => {
         )
         
         const [paymasterUserOperation2, _sponsorMetadata2] = await paymaster.createSponsorPaymasterUserOperation(
-            migrateUserOperation, bundlerUrl)
+            accountToMigrate,
+            migrateUserOperation,
+            bundlerUrl
+        )
+
         migrateUserOperation = paymasterUserOperation2;
 
         migrateUserOperation.signature = accountToMigrate.signUserOperation(
@@ -97,7 +104,10 @@ describe('safe account migration', () => {
         )
         
         const [paymasterUserOperation3, _sponsorMetadata3] = await paymaster.createSponsorPaymasterUserOperation(
-            afterMigrationUserOperation, bundlerUrl)
+            migratedAccount,
+            afterMigrationUserOperation,
+            bundlerUrl
+        )
         afterMigrationUserOperation = paymasterUserOperation3;
 
         afterMigrationUserOperation.signature = migratedAccount.signUserOperation(

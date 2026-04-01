@@ -117,6 +117,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         );
 
         const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
+            account,
             userOp,
             bundlerRpc,
         );
@@ -155,6 +156,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         );
 
         const [sponsoredOp2] = await paymaster.createSponsorPaymasterUserOperation(
+            account,
             userOp2,
             bundlerRpc,
         );
@@ -181,6 +183,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         );
 
         const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
+            account,
             userOp,
             bundlerRpc,
         );
@@ -212,6 +215,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         );
 
         const [sponsoredDelegateOp] = await paymaster.createSponsorPaymasterUserOperation(
+            account,
             delegateOp,
             bundlerRpc,
         );
@@ -240,7 +244,9 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
 
         const regOp = await account.createUserOperation(registerTxs, providerRpc, bundlerRpc);
         const [sponsoredRegOp] = await paymaster.createSponsorPaymasterUserOperation(
-            regOp, bundlerRpc,
+            account,
+            regOp,
+            bundlerRpc,
         );
 
         sponsoredRegOp.signature = account.signUserOperation(sponsoredRegOp, eoa.privateKey, chainId);
@@ -260,7 +266,9 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         );
 
         const [sponsoredPasskeyOp] = await paymaster.createSponsorPaymasterUserOperation(
-            passkeyOp, bundlerRpc,
+            account,
+            passkeyOp,
+            bundlerRpc,
         );
 
         const userOpHash = account.getUserOperationHash(sponsoredPasskeyOp, chainId);
@@ -286,7 +294,9 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
             { eip7702Auth: { chainId } },
         );
         const [sponsoredDelegateOp] = await paymaster.createSponsorPaymasterUserOperation(
-            delegateOp, bundlerRpc,
+            account,
+            delegateOp,
+            bundlerRpc,
         );
         sponsoredDelegateOp.eip7702Auth = ak.createAndSignEip7702DelegationAuthorization(
             BigInt(sponsoredDelegateOp.eip7702Auth.chainId),
@@ -309,7 +319,9 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         });
         const regOp = await account.createUserOperation(registerTxs, providerRpc, bundlerRpc);
         const [sponsoredRegOp] = await paymaster.createSponsorPaymasterUserOperation(
-            regOp, bundlerRpc,
+            account,
+            regOp,
+            bundlerRpc,
         );
         sponsoredRegOp.signature = account.signUserOperation(sponsoredRegOp, eoa.privateKey, chainId);
         await sendAndWait(account, sponsoredRegOp, bundlerRpc);
@@ -320,7 +332,9 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         const revokeTx = ak.Calibur7702Account.createRevokeKeyMetaTransaction(keyHash);
         const revokeOp = await account.createUserOperation([revokeTx], providerRpc, bundlerRpc);
         const [sponsoredRevokeOp] = await paymaster.createSponsorPaymasterUserOperation(
-            revokeOp, bundlerRpc,
+            account,
+            revokeOp,
+            bundlerRpc,
         );
         sponsoredRevokeOp.signature = account.signUserOperation(
             sponsoredRevokeOp, eoa.privateKey, chainId,
@@ -345,6 +359,7 @@ describe('Calibur7702Account Sponsor Paymaster (v0.8 defaults)', () => {
         );
 
         const [sponsoredOp, sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
+            account,
             userOp,
             bundlerRpc,
         );
@@ -392,7 +407,9 @@ describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
                 { eip7702Auth: { chainId } },
             );
             const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
-                delegateOp, bundlerRpc,
+                account,
+                delegateOp,
+                bundlerRpc,
             );
             sponsoredOp.eip7702Auth = ak.createAndSignEip7702DelegationAuthorization(
                 BigInt(sponsoredOp.eip7702Auth.chainId),
@@ -503,6 +520,7 @@ describe('Calibur7702Account Token Paymaster (v0.8 defaults)', () => {
         );
 
         const maxCost = await paymaster.calculateUserOperationErc20TokenMaxGasCost(
+            account,
             userOp,
             erc20TokenAddress,
         );
