@@ -136,14 +136,9 @@ export class CandidePaymaster extends Paymaster {
 		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: AnyUserOperation,
 	): string {
-		// We do these equality checks instead of just returning smartAccount.entrypointAddress
-		// to handle cases where the account may be using a custom entrypoint address
-		// or if the EP address is not set in the account instance
-		const accountEPAddress = smartAccount.entrypointAddress.toString().toLowerCase();
-		if (accountEPAddress == ENTRYPOINT_V6.toLowerCase()) return ENTRYPOINT_V6;
-		if (accountEPAddress == ENTRYPOINT_V7.toLowerCase()) return ENTRYPOINT_V7;
-		if (accountEPAddress == ENTRYPOINT_V8.toLowerCase()) return ENTRYPOINT_V8;
-		if (accountEPAddress == ENTRYPOINT_V9.toLowerCase()) return ENTRYPOINT_V9;
+		if (smartAccount.entrypointAddress != null && smartAccount.entrypointAddress.trim() !== "") {
+			return smartAccount.entrypointAddress;
+		}
 		if ("initCode" in userOperation) return ENTRYPOINT_V6;
 		else if ("eip7702Auth" in userOperation) return ENTRYPOINT_V8;
 		else return ENTRYPOINT_V7;
