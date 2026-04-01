@@ -332,12 +332,12 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 	): Promise<UserOperationV9> {
 		const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
 		if(
-            parallelPaymasterInitValues != null &&
-            parallelPaymasterInitValues.paymasterData != "0x22e325a297439656"
-        ){
-            throw new RangeError(
-                "Invalid paymasterData override, the only valid value is 0x22e325a297439656."
-            );
+      parallelPaymasterInitValues != null &&
+			!parallelPaymasterInitValues.paymasterData.endsWith("22e325a297439656")
+    ){
+      throw new RangeError(
+          "Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'"
+      );
 		}		
         const [userOperation, factoryAddress, factoryData] =
 			await this.createBaseUserOperationAndFactoryAddressAndFactoryData(
