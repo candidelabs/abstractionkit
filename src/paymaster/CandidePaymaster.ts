@@ -1,9 +1,6 @@
 import { Paymaster } from "./Paymaster";
 import { calculateUserOperationMaxGasCost, sendJsonRpcRequest } from "../utils";
 import {
-	UserOperationV6,
-	UserOperationV7,
-	UserOperationV8,
 	SupportedERC20TokensAndMetadata,
 	SupportedERC20TokensAndMetadataWithExchangeRate,
 	PmUserOperationV8Result,
@@ -19,11 +16,11 @@ import {
 	PrependTokenPaymasterApproveAccount,
 	GasPaymasterUserOperationOverrides,
 	AnyUserOperation,
-	SameUserOp,
+	SameUserOp, SmartAccountWithEntrypoint,
 } from "./types";
 import { Bundler } from "src/Bundler";
 import { AbstractionKitError, ensureError } from "src/errors";
-import { ENTRYPOINT_V8, ENTRYPOINT_V7, ENTRYPOINT_V6 } from "src/constants";
+import {ENTRYPOINT_V8, ENTRYPOINT_V7, ENTRYPOINT_V6, ENTRYPOINT_V9} from "src/constants";
 
 /** Buffer added to verificationGasLimit for paymasterAndData verification overhead */
 const PAYMASTER_V06_VERIFICATION_OVERHEAD = 40000n;
@@ -136,15 +133,20 @@ export class CandidePaymaster extends Paymaster {
 	 * V6 ops have `initCode`, V8 ops have `eip7702Auth`, V7 is the default.
 	 */
 	private resolveEntrypoint(
+		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: AnyUserOperation,
 	): string {
-		if ("initCode" in userOperation) {
-			return ENTRYPOINT_V6;
-		} else if ("eip7702Auth" in userOperation) {
-			return ENTRYPOINT_V8;
-		} else {
-			return ENTRYPOINT_V7;
-		}
+		// We do these equality checks instead of just returning smartAccount.entrypointAddress
+		// to handle cases where the account may be using a custom entrypoint address
+		// or if the EP address is not set in the account instance
+		const accountEPAddress = smartAccount.entrypointAddress.toString().toLowerCase();
+		if (accountEPAddress == ENTRYPOINT_V6.toLowerCase()) return ENTRYPOINT_V6;
+		if (accountEPAddress == ENTRYPOINT_V7.toLowerCase()) return ENTRYPOINT_V7;
+		if (accountEPAddress == ENTRYPOINT_V8.toLowerCase()) return ENTRYPOINT_V8;
+		if (accountEPAddress == ENTRYPOINT_V9.toLowerCase()) return ENTRYPOINT_V9;
+		if ("initCode" in userOperation) return ENTRYPOINT_V6;
+		else if ("eip7702Auth" in userOperation) return ENTRYPOINT_V8;
+		else return ENTRYPOINT_V7;
 	}
 
 	/**
@@ -506,13 +508,14 @@ export class CandidePaymaster extends Paymaster {
 	// ── Core paymaster method (private) ──────────────────────────────
 
 	private async createPaymasterUserOperation<T extends AnyUserOperation>(
+		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: T,
 		context: CandidePaymasterContext = {},
 		overrides: GasPaymasterUserOperationOverrides = {},
 	): Promise<[SameUserOp<T>, SponsorMetadata | undefined]> {
 		const userOp = { ...userOperation };
 		try {
-			const entrypoint = overrides.entrypoint ?? this.resolveEntrypoint(userOp);
+			const entrypoint = overrides.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
 			const chainId = await this.getChainId();
 			const jsonRpcResult = await sendJsonRpcRequest(
 				this.rpcUrl,
@@ -548,7 +551,7 @@ export class CandidePaymaster extends Paymaster {
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
 	 */
 	async createSponsorPaymasterUserOperation<T extends AnyUserOperation>(
-		smartAccount: PrependTokenPaymasterApproveAccount,
+		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: T,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
@@ -556,7 +559,7 @@ export class CandidePaymaster extends Paymaster {
 		overrides?: GasPaymasterUserOperationOverrides,
 	): Promise<[SameUserOp<T>, SponsorMetadata | undefined]> {
 		context = {sponsorshipPolicyId, ...(context || {}) };
-		const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(userOperation);
+		const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(smartAccount, userOperation);
 		await this.ensureInitialized(entrypoint);
 		const epData = this.getEntrypointData(entrypoint);
 		if (epData == null) {
@@ -572,6 +575,7 @@ export class CandidePaymaster extends Paymaster {
 			entrypoint: entrypoint,
 		};
 		return await this.createPaymasterUserOperation(
+			smartAccount,
 			userOperation,
 			context,
 			_overrides,
@@ -601,7 +605,7 @@ export class CandidePaymaster extends Paymaster {
 	): Promise<SameUserOp<T>> {
 		try {
 			context = { token: tokenAddress, ...(context || {}) };
-			const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(userOperation);
+			const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(smartAccount, userOperation);
 			await this.ensureInitialized(entrypoint);
 			if (context.signingPhase !== "finalize"){
 				const epData = this.getEntrypointData(entrypoint);
@@ -636,6 +640,7 @@ export class CandidePaymaster extends Paymaster {
 				await this.estimateAndApplyGasLimits(userOperation, bundlerRpc, entrypoint, overrides ?? {});
 
 				const maxErc20Cost = await this.calculateUserOperationErc20TokenMaxGasCost(
+					smartAccount,
 					userOperation,
 					context.token!,
 				);
@@ -660,6 +665,7 @@ export class CandidePaymaster extends Paymaster {
 				entrypoint: entrypoint,
 			};
 			const [resultUserOp] = await this.createPaymasterUserOperation(
+				smartAccount,
 				userOperation,
 				context,
 				_overrides,
@@ -682,6 +688,7 @@ export class CandidePaymaster extends Paymaster {
 	 * Calculate the maximum ERC-20 token cost for a UserOperation's gas.
 	 * Uses the token's exchange rate from the paymaster to convert from wei.
 	 *
+	 * @param smartAccount - The smart account instance
 	 * @param userOperation - The UserOperation to calculate the cost for
 	 * @param erc20TokenAddress - The ERC-20 token contract address
 	 * @param overrides - Optional entrypoint override
@@ -689,12 +696,13 @@ export class CandidePaymaster extends Paymaster {
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the token is not supported
 	 */
 	async calculateUserOperationErc20TokenMaxGasCost(
-		userOperation: UserOperationV8 | UserOperationV7 | UserOperationV6,
+		smartAccount: SmartAccountWithEntrypoint,
+		userOperation: AnyUserOperation,
 		erc20TokenAddress: string,
 		overrides: { entrypoint?: string | null } = {},
 	): Promise<bigint> {
 		try {
-			const entrypoint = overrides.entrypoint ?? this.resolveEntrypoint(userOperation);
+			const entrypoint = overrides.entrypoint ?? this.resolveEntrypoint(smartAccount, userOperation);
 			await this.ensureInitialized(entrypoint);
 			const exchangeRate = await this.fetchTokenPaymasterExchangeRate(
 				erc20TokenAddress,

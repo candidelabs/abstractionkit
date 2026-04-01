@@ -27,11 +27,16 @@ export interface CandidePaymasterContext {
 	signingPhase?: 'commit' | 'finalize';
 }
 
+export interface SmartAccountWithEntrypoint {
+	/** The EntryPoint contract address this account targets */
+	readonly entrypointAddress: string;
+}
+
 /**
  * Interface for smart accounts that support prepending an ERC-20 approval
  * to their callData so the token paymaster can collect gas fees.
  */
-export interface PrependTokenPaymasterApproveAccount {
+export interface PrependTokenPaymasterApproveAccount extends SmartAccountWithEntrypoint {
 	/**
 	 * Prepends a token approval call to the existing callData.
 	 * @param callData - The original encoded callData
