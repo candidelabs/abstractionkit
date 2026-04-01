@@ -1708,10 +1708,10 @@ export class SafeAccount extends SmartAccount {
                     const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
                     if(parallelPaymasterInitValues != null){
                         if(
-                            parallelPaymasterInitValues.paymasterData != "0x22e325a297439656"
+                            !parallelPaymasterInitValues.paymasterData.endsWith("22e325a297439656")
                         ){
                             throw new RangeError(
-                                "Invalid paymasterData override, the only valid value is 0x22e325a297439656."
+                                "Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'."
                             );
                         }
                         if(this.entrypointAddress != ENTRYPOINT_V9){
