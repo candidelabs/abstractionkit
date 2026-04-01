@@ -36,7 +36,7 @@ export class ExperimentalAllowAllParallelPaymaster extends Paymaster {
             paymaster: this.address,
             paymasterVerificationGasLimit: 45_000n,
             paymasterPostOpGasLimit: 45_000n,
-            paymasterData:"0x22e325a297439656" // PAYMASTER_SIG_MAGIC
+            paymasterData:"0x010101010101010101010101010101010101010101010101010101010101011c"+"0020"+"22e325a297439656" // DUMMY SIG + PAYMASTER_SIG_LEN + PAYMASTER_SIG_MAGIC
         };
     }
 
