@@ -784,7 +784,7 @@ export class SafeAccount extends SmartAccount {
 	      const PAYMASTER_SIG_MAGIC = '22e325a297439656';
 	      if(
 	          overrides.is_v9 &&
-	          useroperation.paymasterData.endsWith(PAYMASTER_SIG_MAGIC)
+	          useroperation.paymasterData.toLowerCase().endsWith(PAYMASTER_SIG_MAGIC)
 	      ){
 	          const sigLenHex = useroperation.paymasterData.slice(
 	            useroperation.paymasterData.length - 16 - 4,

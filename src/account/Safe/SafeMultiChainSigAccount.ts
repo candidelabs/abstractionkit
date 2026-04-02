@@ -333,7 +333,7 @@ export class ExperimentalSafeMultiChainSigAccount extends SafeAccount {
 		const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
 		if(
       parallelPaymasterInitValues != null &&
-			!parallelPaymasterInitValues.paymasterData.endsWith("22e325a297439656")
+			!parallelPaymasterInitValues.paymasterData.toLowerCase().endsWith("22e325a297439656")
     ){
       throw new RangeError(
           "Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'"
