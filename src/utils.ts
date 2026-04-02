@@ -297,7 +297,7 @@ function baseCreatePackedUserOperationV8V9(
 			const PAYMASTER_SIG_MAGIC = '22e325a297439656';
 			if(
 				is_v9 &&
-				useroperation.paymasterData.endsWith(PAYMASTER_SIG_MAGIC)
+				useroperation.paymasterData.toLowerCase().endsWith(PAYMASTER_SIG_MAGIC)
 			){
 				const sigLenHex = useroperation.paymasterData.slice(
 					useroperation.paymasterData.length - 16 - 4,
