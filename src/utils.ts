@@ -303,7 +303,21 @@ function baseCreatePackedUserOperationV8V9(
 				.slice(34);
 		}
 		if (useroperation.paymasterData != null) {
-			paymasterAndData += useroperation.paymasterData.slice(2);
+			const PAYMASTER_SIG_MAGIC = '22e325a297439656';
+			if(
+				is_v9 &&
+				useroperation.paymasterData.endsWith(PAYMASTER_SIG_MAGIC)
+			){
+				const sigLenHex = useroperation.paymasterData.slice(
+					useroperation.paymasterData.length - 16 - 4,
+					useroperation.paymasterData.length - 16
+				);
+				const sigLen = parseInt(sigLenHex, 16);
+				const prefixEnd = useroperation.paymasterData.length - 16 - 4 - sigLen * 2;
+				paymasterAndData += useroperation.paymasterData.slice(0, prefixEnd).replaceAll("0x", "") + PAYMASTER_SIG_MAGIC;
+			}else{
+				paymasterAndData += useroperation.paymasterData.slice(2);
+			}
 		}
 	}
 
