@@ -957,13 +957,11 @@ describe('Calibur7702Account', () => {
 
     describe('createRevokeDelegationRawTransaction', () => {
 
-        afterEach(() => {
-            mockFetch.mockReset();
-            mockFetch.mockImplementation((...args) => realFetch(...args));
-        });
+        // Derive the EOA address from signingKey so the account matches the signer
+        const signerAddress = new Wallet(signingKey).address;
 
         function mockFetchWithCode(code) {
-            mockFetch.mockImplementationOnce(() =>
+            global.fetch = jest.fn(() =>
                 Promise.resolve({
                     json: async () => ({ jsonrpc: '2.0', id: 1, result: code }),
                 })
@@ -971,7 +969,7 @@ describe('Calibur7702Account', () => {
         }
 
         test('produces a SET_CODE_TX_TYPE (0x04) raw transaction', async () => {
-            const account = new ak.Calibur7702Account('0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045');
+            const account = new ak.Calibur7702Account(signerAddress);
 
             // Mock getDelegatedAddress: returns Calibur singleton via EIP-7702 code prefix
             const delegatee = '0x000000009B1D0aF20D8C6d0A44e162d11F9b8f00';
@@ -997,7 +995,7 @@ describe('Calibur7702Account', () => {
         });
 
         test('throws when account is not delegated', async () => {
-            const account = new ak.Calibur7702Account('0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045');
+            const account = new ak.Calibur7702Account(signerAddress);
 
             // Non-delegated EOA returns '0x'
             mockFetchWithCode('0x');
@@ -1008,7 +1006,7 @@ describe('Calibur7702Account', () => {
         });
 
         test('throws when delegated to a different address', async () => {
-            const account = new ak.Calibur7702Account('0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045');
+            const account = new ak.Calibur7702Account(signerAddress);
 
             // Delegated to a different contract
             const code = '0xef0100' + '0000000000000000000000000000000000000001';
@@ -1017,6 +1015,14 @@ describe('Calibur7702Account', () => {
             await expect(
                 account.createRevokeDelegationRawTransaction(11155111n, signingKey, 'http://localhost')
             ).rejects.toThrow('Account is delegated to a different address');
+        });
+
+        test('throws when private key does not match account address', async () => {
+            const account = new ak.Calibur7702Account('0x0000000000000000000000000000000000000001');
+
+            await expect(
+                account.createRevokeDelegationRawTransaction(11155111n, signingKey, 'http://localhost')
+            ).rejects.toThrow('eoaPrivateKey does not match accountAddress');
         });
     });
 });

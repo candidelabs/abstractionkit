@@ -943,6 +943,16 @@ export class Calibur7702Account extends SmartAccount
 			gasLimit?: bigint;
 		} = {},
 	): Promise<string> {
+		// Verify the private key matches this account
+		const signerAddress = new Wallet(eoaPrivateKey).address;
+		if (signerAddress.toLowerCase() !== this.accountAddress.toLowerCase()) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"eoaPrivateKey does not match accountAddress (" +
+					this.accountAddress + ")",
+			);
+		}
+
 		// Verify delegation state before revoking
 		const delegatedTo = await getDelegatedAddress(this.accountAddress, providerRpc);
 		if (delegatedTo === null) {
