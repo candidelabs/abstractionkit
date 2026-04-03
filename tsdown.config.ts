@@ -9,4 +9,7 @@ export default defineConfig({
   sourcemap: false,
   target: 'es2022',
   deps: { neverBundle: ['ethers'] },
+  outputOptions: {
+    globals: { ethers: 'ethers' },
+  },
 })
