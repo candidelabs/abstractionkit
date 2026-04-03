@@ -1,8 +1,3 @@
-// Mock isomorphic-unfetch: default to real implementation, override in specific tests
-const realFetch = jest.requireActual('isomorphic-unfetch');
-const mockFetch = jest.fn((...args) => realFetch(...args));
-jest.mock('isomorphic-unfetch', () => mockFetch);
-
 const ak = require('../../dist/index.umd');
 const { AbiCoder, keccak256, Wallet } = require('ethers');
 require('dotenv').config();
@@ -885,8 +880,10 @@ describe('Calibur7702Account', () => {
 
     // ─── getDelegatedAddress parsing ─────────────────────────────────────
 
+    const originalFetch = global.fetch;
+
     function mockFetchWithCode(code) {
-        mockFetch.mockImplementationOnce(() =>
+        global.fetch = jest.fn(() =>
             Promise.resolve({
                 json: async () => ({ jsonrpc: '2.0', id: 1, result: code }),
             })
@@ -894,8 +891,7 @@ describe('Calibur7702Account', () => {
     }
 
     afterEach(() => {
-        mockFetch.mockReset();
-        mockFetch.mockImplementation((...args) => realFetch(...args));
+        global.fetch = originalFetch;
     });
 
     test('getDelegatedAddress returns address for valid EIP-7702 delegation code', async () => {
