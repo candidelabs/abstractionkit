@@ -18,12 +18,23 @@ import { UserOperationV9, MetaTransaction, OnChainIdentifierParamsType } from ".
 import { EIP712_MULTI_CHAIN_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants";
 import { generateMerkleProofs } from "./MerkleTree";
 import { TypedDataEncoder, Wallet } from "ethers";
+import {
+	DEFAULT_WEB_AUTHN_DAIMO_VERIFIER_V_0_2_1,
+	DEFAULT_WEB_AUTHN_PRECOMPILE_RIP_7951,
+	DEFAULT_WEB_AUTHN_SHARED_SIGNER_V_0_2_1,
+	DEFAULT_WEB_AUTHN_SIGNER_SINGLETON_V_0_2_1,
+	DEFAULT_WEB_AUTHN_SIGNER_FACTORY_V_0_2_1,
+	DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE_V_0_2_1,
+} from "./constants";
 
 /**
  * @class
  * Safe account variant that supports multi-chain signatures via Merkle trees.
  * Allows signing UserOperations for multiple chains with a single signature,
  * using EntryPoint v0.9 and EIP-712 typed data with Merkle proofs.
+ *
+ * Uses Safe Passkey module v0.2.1 WebAuthn verifiers by default.
+ * @see {@link https://github.com/safe-fndn/safe-modules/blob/04e65efbce634e776cc8c1fbe90061f09e09a71b/modules/passkey/CHANGELOG.md?plain=1#L23}
  */
 export class SafeMultiChainSigAccount extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V9;
@@ -31,10 +42,14 @@ export class SafeMultiChainSigAccount extends SafeAccount {
         "0x22939E839e3c0F479B713eAF95e0df128554AEAd";
 	static readonly DEFAULT_SAFE_MODULE_SETUP_ADDRESS =
 		"0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47";
-	static readonly DEFAULT_WEB_AUTHN_PRECOMPILE: string =
-		"0x0000000000000000000000000000000000000100";  // EIP-7951
-	static readonly DEFAULT_WEB_AUTHN_DAIMO_VERIFIER: string =
-		"0xc2b78104907F722DABAc4C69f826a522B2754De4";
+
+	// Safe Passkey module v0.2.1 WebAuthn verifier defaults
+	static readonly DEFAULT_WEB_AUTHN_SHARED_SIGNER: string = DEFAULT_WEB_AUTHN_SHARED_SIGNER_V_0_2_1;
+	static readonly DEFAULT_WEB_AUTHN_SIGNER_SINGLETON: string = DEFAULT_WEB_AUTHN_SIGNER_SINGLETON_V_0_2_1;
+	static readonly DEFAULT_WEB_AUTHN_SIGNER_FACTORY: string = DEFAULT_WEB_AUTHN_SIGNER_FACTORY_V_0_2_1;
+	static readonly DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE = DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE_V_0_2_1;
+	static readonly DEFAULT_WEB_AUTHN_PRECOMPILE: string = DEFAULT_WEB_AUTHN_PRECOMPILE_RIP_7951;
+	static readonly DEFAULT_WEB_AUTHN_DAIMO_VERIFIER: string = DEFAULT_WEB_AUTHN_DAIMO_VERIFIER_V_0_2_1;
 
 	/**
 	 * Create a SafeMultiChainSigAccount instance for an existing or new account.
@@ -79,6 +94,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 		overrides: InitCodeOverrides = {},
 	): string {
        const modOverrides = { ...overrides,
+			webAuthnSharedSigner: overrides.webAuthnSharedSigner??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
 			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifierForSharedSigner: overrides.eip7212WebAuthnContractVerifierForSharedSigner??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
        };
@@ -130,6 +146,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 			}
 		}
         const modOverrides = { ...overrides,
+			webAuthnSharedSigner: overrides.webAuthnSharedSigner??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
 			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifierForSharedSigner: overrides.eip7212WebAuthnContractVerifierForSharedSigner??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
         };
@@ -276,7 +293,8 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 			safe4337ModuleAddress,
 			safeModuleSetupAddress,
 			overrides.multisendContractAddress,
-			overrides.webAuthnSharedSigner,
+			overrides.webAuthnSharedSigner ??
+				SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
 			overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner ??
 				SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
@@ -295,6 +313,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 		overrides: InitCodeOverrides = {},
 	): [string, string] {
      	const modOverrides = { ...overrides,
+			webAuthnSharedSigner: overrides.webAuthnSharedSigner??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
 			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifierForSharedSigner: overrides.eip7212WebAuthnContractVerifierForSharedSigner??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
         };
@@ -637,6 +656,9 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 			...overrides,
 			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+			webAuthnSignerFactory: overrides.webAuthnSignerFactory??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
+			webAuthnSignerSingleton: overrides.webAuthnSignerSingleton??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
+			webAuthnSignerProxyCreationCode: overrides.webAuthnSignerProxyCreationCode??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
 		});
 	}
 
@@ -653,6 +675,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 			...overrides,
 			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+			webAuthnSignerFactory: overrides.webAuthnSignerFactory??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
 		});
 	}
 
@@ -682,6 +705,7 @@ export class SafeMultiChainSigAccount extends SafeAccount {
 			...overrides,
 			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+			webAuthnSignerSingleton: overrides.webAuthnSignerSingleton??SafeMultiChainSigAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
 		});
 	}
 }
