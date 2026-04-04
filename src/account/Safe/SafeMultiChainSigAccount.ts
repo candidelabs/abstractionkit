@@ -33,7 +33,9 @@ import {
  * Allows signing UserOperations for multiple chains with a single signature,
  * using EntryPoint v0.9 and EIP-712 typed data with Merkle proofs.
  *
- * Uses Safe Passkey module v0.2.1 WebAuthn verifiers by default.
+ * Uses Safe Passkey module v0.2.1 WebAuthn verifiers by default,
+ * with the Daimo P256 verifier instead of the FCL P256 verifier
+ * used by the base SafeAccount class.
  * @see {@link https://github.com/safe-fndn/safe-modules/blob/04e65efbce634e776cc8c1fbe90061f09e09a71b/modules/passkey/CHANGELOG.md?plain=1#L23}
  */
 export class SafeMultiChainSigAccountV1 extends SafeAccount {
