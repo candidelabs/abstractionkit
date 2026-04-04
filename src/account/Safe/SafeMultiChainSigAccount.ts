@@ -596,6 +596,12 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier:
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+			webAuthnSignerFactory:
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
+			webAuthnSignerSingleton:
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
+			webAuthnSignerProxyCreationCode:
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
 			safe4337ModuleAddress:
 				SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 			...overrides,
@@ -689,6 +695,9 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			...webAuthnSignatureOverrides,
 			eip7212WebAuthnPrecompileVerifier: webAuthnSignatureOverrides.eip7212WebAuthnPrecompileVerifier??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier: webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+			webAuthnSignerFactory: webAuthnSignatureOverrides.webAuthnSignerFactory??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
+			webAuthnSignerSingleton: webAuthnSignatureOverrides.webAuthnSignerSingleton??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
+			webAuthnSignerProxyCreationCode: webAuthnSignatureOverrides.webAuthnSignerProxyCreationCode??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
 		});
 	}
 
