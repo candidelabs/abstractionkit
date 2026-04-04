@@ -363,8 +363,12 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				{
 					...overrides,
 					isMultiChainSignature: true,
+					webAuthnSharedSigner: overrides.webAuthnSharedSigner??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
 					eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 					eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+					webAuthnSignerFactory: overrides.webAuthnSignerFactory??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
+					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
+					webAuthnSignerProxyCreationCode: overrides.webAuthnSignerProxyCreationCode??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
 				}
 			);
 		if(parallelPaymasterInitValues != null){
