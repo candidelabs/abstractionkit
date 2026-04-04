@@ -1,7 +1,7 @@
 export { SmartAccount } from "./account/SmartAccount";
 export { Simple7702Account } from "./account/simple/Simple7702Account";
 export { Simple7702AccountV09 } from "./account/simple/Simple7702AccountV09";
-export { SafeMultiChainSigAccount } from "./account/Safe/SafeMultiChainSigAccount";
+export { SafeMultiChainSigAccountV1 } from "./account/Safe/SafeMultiChainSigAccount";
 export { Calibur7702Account } from "./account/Calibur/Calibur7702Account";
 export { CaliburKeyType } from "./account/Calibur/types";
 export type {
