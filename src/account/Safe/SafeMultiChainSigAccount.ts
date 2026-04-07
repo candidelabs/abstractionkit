@@ -536,6 +536,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		userOperationsToSignsToSign: UserOperationToSign[],
 		overrides: {
 			safe4337ModuleAddress?: string;
+			entrypointAddress?: string;
 		} = {},
     ): string{
         const data = SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Data(
