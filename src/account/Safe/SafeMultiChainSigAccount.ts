@@ -634,6 +634,8 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
                     signerSignaturePairs,
                     {
                         ...resolvedOverrides,
+                        validAfter: userOperationsToSign[0].validAfter,
+                        validUntil: userOperationsToSign[0].validUntil,
                         isMultiChainSignature: true,
                     },
                 ),
@@ -656,12 +658,14 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
         const [_root, proofs] = generateMerkleProofs(userOperationsHashes);
         const userOpSignatures: string[] = [];
         userOperationsToSign.forEach(
-            (_userOperationsToSign, index) => {
+            (userOperationToSign, index) => {
                 userOpSignatures.push(
                     SafeAccount.formatSignaturesToUseroperationSignature(
                         signerSignaturePairs,
                         {
                             ...resolvedOverrides,
+                            validAfter: userOperationToSign.validAfter,
+                            validUntil: userOperationToSign.validUntil,
                             isMultiChainSignature:true,
                             multiChainMerkleProof: proofs[index],
                         },
