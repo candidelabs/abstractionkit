@@ -95,6 +95,11 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): string {
+       // webAuthnSignerFactory, webAuthnSignerSingleton, and webAuthnSignerProxyCreationCode
+       // are not defaulted here — the init code path only configures the shared signer
+       // and its verifier. Deploying the deterministic verifier proxy and swapping it
+       // for the shared signer happens later in createUserOperation (nonce == 0),
+       // which defaults those fields.
        const modOverrides = { ...overrides,
 			webAuthnSharedSigner: overrides.webAuthnSharedSigner??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
 			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
@@ -147,6 +152,11 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				y = owner.y;
 			}
 		}
+        // webAuthnSignerFactory, webAuthnSignerSingleton, and webAuthnSignerProxyCreationCode
+        // are not defaulted here — the init code path only configures the shared signer
+        // and its verifier. Deploying the deterministic verifier proxy and swapping it
+        // for the shared signer happens later in createUserOperation (nonce == 0),
+        // which defaults those fields.
         const modOverrides = { ...overrides,
 			webAuthnSharedSigner: overrides.webAuthnSharedSigner??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
 			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
@@ -314,7 +324,12 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): [string, string] {
-     	const modOverrides = { ...overrides,
+     	// webAuthnSignerFactory, webAuthnSignerSingleton, and webAuthnSignerProxyCreationCode
+		// are not defaulted here — the init code path only configures the shared signer
+		// and its verifier. Deploying the deterministic verifier proxy and swapping it
+		// for the shared signer happens later in createUserOperation (nonce == 0),
+		// which defaults those fields.
+		const modOverrides = { ...overrides,
 			webAuthnSharedSigner: overrides.webAuthnSharedSigner??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
 			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifierForSharedSigner: overrides.eip7212WebAuthnContractVerifierForSharedSigner??SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
