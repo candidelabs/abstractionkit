@@ -3228,7 +3228,7 @@ function generateOnChainIdentifier(
     project: string,
     platform: "Web" | "Mobile" | "Safe App" | "Widget" = "Web",
     tool: string = "abstractionkit",
-    toolVersion: string = "0.2.39"
+    toolVersion: string = "0.2.41"
 ): string {
     const identifierPrefix = '5afe'; // Safe identifier prefix
     const identifierVersion = '00'; // First version
