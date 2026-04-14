@@ -445,7 +445,7 @@ export class BaseSimple7702Account extends SmartAccount {
             }
 
             // Build array of all parallel operations
-            const ops:Promise<any>[] = [eip7702AuthNonceOp];
+            const ops: Promise<unknown>[] = [eip7702AuthNonceOp];
             if(nonceOp != null) ops.push(nonceOp);
             if(gasPriceOp != null) ops.push(gasPriceOp);
             if(delegationCheckOp != null) ops.push(delegationCheckOp);
@@ -453,8 +453,8 @@ export class BaseSimple7702Account extends SmartAccount {
             const values = await Promise.all(ops);
             let idx = 0;
             eip7702AuthNonce = BigInt(values[idx++] as string);
-            if(nonceOp != null) nonce = values[idx++];
-            if(gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++];
+            if(nonceOp != null) nonce = values[idx++] as bigint | null;
+            if(gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++] as [bigint, bigint];
             if(delegationCheckOp != null){
                 const delegatedTo = values[idx++] as string|null;
                 if(delegatedTo != null &&
@@ -464,7 +464,7 @@ export class BaseSimple7702Account extends SmartAccount {
             }
         }else if(overrides.eip7702Auth != null){
             // eip7702AuthNonce was provided, but still need delegation check + other ops
-            const ops:Promise<any>[] = [];
+            const ops: Promise<unknown>[] = [];
             if(nonceOp != null) ops.push(nonceOp);
             if(gasPriceOp != null) ops.push(gasPriceOp);
             if(delegationCheckOp != null) ops.push(delegationCheckOp);
@@ -472,8 +472,8 @@ export class BaseSimple7702Account extends SmartAccount {
             if(ops.length > 0){
                 const values = await Promise.all(ops);
                 let idx = 0;
-                if(nonceOp != null) nonce = values[idx++];
-                if(gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++];
+                if(nonceOp != null) nonce = values[idx++] as bigint | null;
+                if(gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++] as [bigint, bigint];
                 if(delegationCheckOp != null){
                     const delegatedTo = values[idx++] as string|null;
                     if(delegatedTo != null &&
