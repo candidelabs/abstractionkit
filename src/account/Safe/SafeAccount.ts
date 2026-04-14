@@ -80,7 +80,7 @@ export class SafeAccount extends SmartAccount {
 		"0x445a0683e494ea0c5AF3E83c5159fBE47Cf9e765";
 	static readonly DEFAULT_WEB_AUTHN_PRECOMPILE: string =
 		"0x0000000000000000000000000000000000000000"; //zero address means no precompile
-	static readonly DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE =
+	static readonly DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE: string =
 		"0x61010060405234801561001157600080fd5b506040516101ee3803806101ee83398101604081905261003091610058565b6001600160a01b0390931660805260a09190915260c0526001600160b01b031660e0526100bc565b6000806000806080858703121561006e57600080fd5b84516001600160a01b038116811461008557600080fd5b60208601516040870151606088015192965090945092506001600160b01b03811681146100b157600080fd5b939692955090935050565b60805160a05160c05160e05160ff6100ef60003960006008015260006031015260006059015260006080015260ff6000f3fe608060408190527f00000000000000000000000000000000000000000000000000000000000000003660b681018290527f000000000000000000000000000000000000000000000000000000000000000060a082018190527f00000000000000000000000000000000000000000000000000000000000000008285018190527f00000000000000000000000000000000000000000000000000000000000000009490939192600082376000806056360183885af490503d6000803e8060c3573d6000fd5b503d6000f3fea2646970667358221220ddd9bb059ba7a6497d560ca97aadf4dbf0476f578378554a50d41c6bb654beae64736f6c63430008180033";
 
 	static readonly DEFAULT_MULTISEND_CONTRACT_ADDRESS =
@@ -446,13 +446,13 @@ export class SafeAccount extends SmartAccount {
 			//multisend
 			const decodedCalldata = decodeMultiSendCallData(metaTransaction.data);
 			multiSendCallDataParams =
-				decodedCalldata + encodedApproveMetatransaction.slice(2);
+				encodedApproveMetatransaction + decodedCalldata.slice(2);
 		} else {
 			const encodedCallDataMetaTransaction = encodeMultiSendCallData([
 				metaTransaction,
 			]);
 			multiSendCallDataParams =
-				encodedCallDataMetaTransaction + encodedApproveMetatransaction.slice(2);
+				encodedApproveMetatransaction + encodedCallDataMetaTransaction.slice(2);
 		}
 		const multiSendCallData = createCallData(
 			mutisendSelector,
@@ -781,15 +781,21 @@ export class SafeAccount extends SmartAccount {
 					.slice(34);
 			}
 			if (useroperation.paymasterData != null) {
-                const PAYMASTER_SIG_MAGIC = '22e325a297439656';
-                if(
-                    overrides.is_v9 &&
-                    useroperation.paymasterData.endsWith(PAYMASTER_SIG_MAGIC)
-                ){
-                    paymasterAndData += PAYMASTER_SIG_MAGIC;
-                }else{
-				    paymasterAndData += useroperation.paymasterData.slice(2);
-                }
+	      const PAYMASTER_SIG_MAGIC = '22e325a297439656';
+	      if(
+	          overrides.is_v9 &&
+	          useroperation.paymasterData.toLowerCase().endsWith(PAYMASTER_SIG_MAGIC)
+	      ){
+	          const sigLenHex = useroperation.paymasterData.slice(
+	            useroperation.paymasterData.length - 16 - 4,
+	            useroperation.paymasterData.length - 16
+	          );
+	          const sigLen = parseInt(sigLenHex, 16);
+	          const prefixEnd = useroperation.paymasterData.length - 16 - 4 - sigLen * 2;
+	          paymasterAndData += useroperation.paymasterData.slice(0, prefixEnd).replaceAll("0x", "") + PAYMASTER_SIG_MAGIC;
+	      }else{
+	        paymasterAndData += useroperation.paymasterData.slice(2);
+	      }
 			}
 		}
 		const messageValue: SafeUserOperationV7TypedMessageValue = {
@@ -1702,10 +1708,10 @@ export class SafeAccount extends SmartAccount {
                     const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
                     if(parallelPaymasterInitValues != null){
                         if(
-                            parallelPaymasterInitValues.paymasterData != "0x22e325a297439656"
+                            !parallelPaymasterInitValues.paymasterData.endsWith("22e325a297439656")
                         ){
                             throw new RangeError(
-                                "Invalid paymasterData override, the only valid value is 0x22e325a297439656."
+                                "Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'."
                             );
                         }
                         if(this.entrypointAddress != ENTRYPOINT_V9){
@@ -3222,7 +3228,7 @@ function generateOnChainIdentifier(
     project: string,
     platform: "Web" | "Mobile" | "Safe App" | "Widget" = "Web",
     tool: string = "abstractionkit",
-    toolVersion: string = "0.2.38"
+    toolVersion: string = "0.2.41"
 ): string {
     const identifierPrefix = '5afe'; // Safe identifier prefix
     const identifierVersion = '00'; // First version

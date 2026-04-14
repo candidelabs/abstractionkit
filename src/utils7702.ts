@@ -117,29 +117,61 @@ export function createAndSignLegacyRawTransaction(
 /**
  * Creates and signs an EIP-7702 delegation authorization.
  * The authorization allows an EOA to delegate its code to a specified contract address.
+ *
+ * Accepts either a hex-encoded private key string or a signer callback
+ * `(hash: string) => Promise<string>` for use with viem, ethers Signers,
+ * hardware wallets, or MPC signers.
+ *
  * @param chainId - The chain ID the authorization is valid for.
  * @param address - The contract address to delegate code from.
  * @param nonce - The EOA's nonce at the time of signing.
- * @param eoaPrivateKey - The EOA's private key for signing.
+ * @param signer - The EOA's private key or a signing function that returns a 65-byte signature.
  * @returns The signed authorization with all numeric values as hex strings.
  */
 export function createAndSignEip7702DelegationAuthorization(
     chainId: bigint,
     address: string,
     nonce: bigint,
-    eoaPrivateKey: string
-):Authorization7702Hex {
+    signer: string,
+): Authorization7702Hex;
+export function createAndSignEip7702DelegationAuthorization(
+    chainId: bigint,
+    address: string,
+    nonce: bigint,
+    signer: (hash: string) => Promise<string>,
+): Promise<Authorization7702Hex>;
+export function createAndSignEip7702DelegationAuthorization(
+    chainId: bigint,
+    address: string,
+    nonce: bigint,
+    signer: string | ((hash: string) => Promise<string>),
+): Authorization7702Hex | Promise<Authorization7702Hex> {
     const authHash = createEip7702DelegationAuthorizationHash(
         chainId, address, nonce);
-    const signature = signHash(authHash, eoaPrivateKey);
-    return {
-        chainId:bigintToHex(chainId),
-        address,
-        nonce:bigintToHex(nonce),
-        yParity:bigintToHex(BigInt(signature.yParity)),
-        r: bigintToHex(signature.r),
-        s: bigintToHex(signature.s)
-    };
+
+    if (typeof signer === "string") {
+        const signature = signHash(authHash, signer);
+        return {
+            chainId: bigintToHex(chainId),
+            address,
+            nonce: bigintToHex(nonce),
+            yParity: bigintToHex(BigInt(signature.yParity)),
+            r: bigintToHex(signature.r),
+            s: bigintToHex(signature.s),
+        };
+    }
+
+    return signer(authHash).then((rawSig) => {
+        const sig = parseRawSignature(rawSig);
+        return {
+            chainId: bigintToHex(chainId),
+            address,
+            nonce: bigintToHex(nonce),
+            yParity: bigintToHex(BigInt(sig.yParity)),
+            r: bigintToHex(sig.r),
+            s: bigintToHex(sig.s),
+        };
+    });
 }
 
 /**
@@ -408,6 +440,39 @@ function bigintToBytes(bi: bigint){
     return getBytes(toBeArray(bi))
 }
 
+
+/**
+ * Parse a raw ECDSA signature into its components.
+ * Supports standard 65-byte (r + s + v) and EIP-2098 64-byte compact formats.
+ * @param rawSig - Hex string: 128 chars (EIP-2098 compact), or 130/132 chars (standard with 0x prefix)
+ * @returns An object with yParity (0 or 1), r, and s components
+ */
+function parseRawSignature(rawSig: string): { yParity: 0 | 1; r: bigint; s: bigint } {
+    const sig = rawSig.startsWith("0x") ? rawSig.slice(2) : rawSig;
+    if (sig.length !== 128 && sig.length !== 130) {
+        throw new RangeError(
+            `invalid signature length: expected 128 (EIP-2098 compact) or 130 (standard) hex chars, got ${sig.length}`
+        );
+    }
+    const r = BigInt("0x" + sig.slice(0, 64));
+
+    if (sig.length === 128) {
+        // EIP-2098 compact signature (64 bytes): r (32) + yParity||s (32)
+        const yParityAndS = BigInt("0x" + sig.slice(64, 128));
+        const yParity = Number((yParityAndS >> 255n) & 1n) as 0 | 1;
+        const s = yParityAndS & ((1n << 255n) - 1n);
+        return { yParity, r, s };
+    }
+
+    // Standard 65-byte signature: r (32) + s (32) + v (1)
+    const s = BigInt("0x" + sig.slice(64, 128));
+    const v = parseInt(sig.slice(128, 130), 16);
+    if (v !== 0 && v !== 1 && v !== 27 && v !== 28) {
+        throw new RangeError(`invalid signature v value: ${v}`);
+    }
+    const yParity = (v >= 27 ? v - 27 : v) as 0 | 1;
+    return { yParity, r, s };
+}
 
 /**
  * Converts a bigint to a 0x-prefixed hex string with even-length padding.

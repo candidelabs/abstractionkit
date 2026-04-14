@@ -1,5 +1,3 @@
-import * as fetchImport from "isomorphic-unfetch";
-
 import { id, AbiCoder, keccak256, JsonRpcProvider, solidityPacked, getAddress } from "ethers";
 
 import {
@@ -219,17 +217,6 @@ export function createPackedUserOperationV7(
 	return packedUserOperation;
 }
 
-export function paymasterDataKeccakV9(paymasterAndData: string): string{
-    const PAYMASTER_SIG_MAGIC = '22e325a297439656';
-    const parts = paymasterAndData.split(PAYMASTER_SIG_MAGIC);
-    if(parts.length > 1){
-        return keccak256(solidityPacked(
-            ["bytes", "bytes"], [parts[0], "0x" + PAYMASTER_SIG_MAGIC]));
-    }else{
-        return keccak256(paymasterAndData);
-    }
-}
-
 /**
  * ABI-encode and pack a UserOperation for hashing (EntryPoint v0.9 format).
  *
@@ -305,7 +292,21 @@ function baseCreatePackedUserOperationV8V9(
 				.slice(34);
 		}
 		if (useroperation.paymasterData != null) {
-			paymasterAndData += useroperation.paymasterData.slice(2);
+			const PAYMASTER_SIG_MAGIC = '22e325a297439656';
+			if(
+				is_v9 &&
+				useroperation.paymasterData.toLowerCase().endsWith(PAYMASTER_SIG_MAGIC)
+			){
+				const sigLenHex = useroperation.paymasterData.slice(
+					useroperation.paymasterData.length - 16 - 4,
+					useroperation.paymasterData.length - 16
+				);
+				const sigLen = parseInt(sigLenHex, 16);
+				const prefixEnd = useroperation.paymasterData.length - 16 - 4 - sigLen * 2;
+				paymasterAndData += useroperation.paymasterData.slice(0, prefixEnd).replaceAll("0x", "") + PAYMASTER_SIG_MAGIC;
+			}else{
+				paymasterAndData += useroperation.paymasterData.slice(2);
+			}
 		}
 	}
 
@@ -319,7 +320,7 @@ function baseCreatePackedUserOperationV8V9(
 		accountGasLimits,
 		useroperation.preVerificationGas,
 		gasFees,
-		is_v9?paymasterDataKeccakV9(paymasterAndData):keccak256(paymasterAndData),
+		keccak256(paymasterAndData),
 	];
 
 	const packedUserOperation = abiCoder.encode(
@@ -388,7 +389,6 @@ export async function sendJsonRpcRequest(
     headers: Record<string, string> = { "Content-Type": "application/json" },
     paramsKeyName: string = "params",
 ): Promise<JsonRpcResult> {
-	const fetch = fetchImport.default || fetchImport;
 	const raw = JSON.stringify(
 		{
 			method: method,
@@ -927,7 +927,7 @@ export async function handlefetchGasPrice(
     } else {
         throw new AbstractionKitError(
             "BAD_DATA",
-            "providerRpc cant't be null if maxFeePerGas and " +
+            "providerRpc can't be null if maxFeePerGas and " +
                 "maxPriorityFeePerGas are not overriden",
         );
     }

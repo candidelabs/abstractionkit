@@ -4,17 +4,29 @@
 		"name": "Candidelabs",
 		"url": "https://candide.dev"
 	},
-	"version": "0.2.38",
+	"version": "0.2.41",
 	"description": "Account Abstraction 4337 SDK by Candidelabs",
-	"main": "dist/index.js",
-	"module": "dist/index.m.js",
-	"unpkg": "dist/index.umd.js",
-	"types": "dist/index.d.ts",
+	"main": "dist/index.cjs",
+	"module": "dist/index.mjs",
+	"unpkg": "dist/index.iife.js",
+	"types": "dist/index.d.cts",
+	"exports": {
+		".": {
+			"import": {
+				"types": "./dist/index.d.mts",
+				"default": "./dist/index.mjs"
+			},
+			"require": {
+				"types": "./dist/index.d.cts",
+				"default": "./dist/index.cjs"
+			}
+		}
+	},
 	"scripts": {
-		"build":   "rimraf dist && microbundle --tsconfig tsconfig.json --no-sourcemap",
-		"prepare": "rimraf dist && microbundle --tsconfig tsconfig.json --no-sourcemap",
-		"clean":   "rimraf dist",
-		"test":    "jest --verbose"
+		"build": "tsdown",
+		"prepare": "tsdown",
+		"clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+		"test": "jest --verbose"
 	},
 	"repository": {
 		"type": "git",
@@ -37,15 +49,16 @@
 		"access": "public",
 		"tag": "latest"
 	},
+	"engines": {
+		"node": ">=18"
+	},
 	"dependencies": {
-		"ethers": "^6.13.2",
-		"isomorphic-unfetch": "^3.1.0"
+		"ethers": "^6.13.2"
 	},
 	"devDependencies": {
 		"dotenv": "^16.4.5",
 		"jest": "^29.7.0",
-		"microbundle": "^0.15.1",
-		"rimraf": "^5.0.10",
+		"tsdown": "^0.21.6",
 		"typescript": "^5.1.6"
 	},
 	"packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"

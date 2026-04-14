@@ -90,3 +90,9 @@ export const EIP712_MULTI_CHAIN_OPERATIONS_TYPE = {
 
 /** Default address for the secp256r1 (P-256) precompile used by WebAuthn verification */
 export const DEFAULT_SECP256R1_PRECOMPILE_ADDRESS = "0x0000000000000000000000000000000000000100";
+
+/** Uniswap Calibur singleton v1.0.0 (EntryPoint v0.8) */
+export const CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS = "0x000000009B1D0aF20D8C6d0A44e162d11F9b8f00";
+
+/** Candide Calibur singleton v0.1.0 (EntryPoint v0.9, unaudited) */
+export const CALIBUR_CANDIDE_V0_1_0_SINGLETON_ADDRESS = "0x71032285A847c4311Eb7ec2E7A636aB94A9805Aa";
