@@ -453,7 +453,7 @@ export class BaseSimple7702Account extends SmartAccount {
             const values = await Promise.all(ops);
             let idx = 0;
             eip7702AuthNonce = BigInt(values[idx++] as string);
-            if(nonceOp != null) nonce = values[idx++] as bigint | null;
+            if(nonceOp != null) nonce = values[idx++] as bigint;
             if(gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++] as [bigint, bigint];
             if(delegationCheckOp != null){
                 const delegatedTo = values[idx++] as string|null;
@@ -472,7 +472,7 @@ export class BaseSimple7702Account extends SmartAccount {
             if(ops.length > 0){
                 const values = await Promise.all(ops);
                 let idx = 0;
-                if(nonceOp != null) nonce = values[idx++] as bigint | null;
+                if(nonceOp != null) nonce = values[idx++] as bigint;
                 if(gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++] as [bigint, bigint];
                 if(delegationCheckOp != null){
                     const delegatedTo = values[idx++] as string|null;
