@@ -633,6 +633,8 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 					{
 						...defaultOverrides,
 						...userOperationsToSign[0].overrides,
+						validAfter: userOperationsToSign[0].validAfter,
+						validUntil: userOperationsToSign[0].validUntil,
 						isMultiChainSignature: true,
 					},
 				),
