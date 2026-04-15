@@ -300,6 +300,20 @@ export interface UserOperationToSign {
     validUntil?: bigint;
 }
 
+/** Extends UserOperationToSign with per-operation WebAuthn/module overrides. */
+export interface UserOperationToSignWithOverrides extends UserOperationToSign {
+	overrides?: {
+		isInit?: boolean;
+		webAuthnSharedSigner?: string;
+		eip7212WebAuthnPrecompileVerifier?: string;
+		eip7212WebAuthnContractVerifier?: string;
+		webAuthnSignerFactory?: string;
+		webAuthnSignerSingleton?: string;
+		webAuthnSignerProxyCreationCode?: string;
+		safe4337ModuleAddress?: string;
+	};
+}
+
 /** EIP-712 domain for multi-chain signature Merkle tree root. */
 export interface MultiChainSignatureMerkleTreeRootTypedDataDomain {
 	verifyingContract: string;
