@@ -144,6 +144,10 @@ export type GasEstimationResult = {
 	preVerificationGas: bigint;
 	/** Estimated gas limit for verification step */
 	verificationGasLimit: bigint;
+	/** Paymaster verification gas limit (v0.7+ when a paymaster was attached) */
+	paymasterVerificationGasLimit?: bigint;
+	/** Paymaster post-op gas limit (v0.7+ when a paymaster was attached) */
+	paymasterPostOpGasLimit?: bigint;
 };
 
 /** Result of eth_getUserOperationByHash. Null if not found. */

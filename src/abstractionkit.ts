@@ -38,6 +38,12 @@ export { SafeAccountFactory } from "./factory/SafeAccountFactory";
 export { Bundler } from "./Bundler";
 
 export { CandidePaymaster } from "./paymaster/CandidePaymaster";
+export { Erc7677Paymaster } from "./paymaster/Erc7677Paymaster";
+export type {
+	Erc7677Context,
+	Erc7677PaymasterFields,
+	Erc7677StubDataResult,
+} from "./paymaster/Erc7677Paymaster";
 export { ExperimentalAllowAllParallelPaymaster } from "./paymaster/AllowAllPaymaster";
 
 export { 
