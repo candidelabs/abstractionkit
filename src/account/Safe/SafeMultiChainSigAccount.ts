@@ -12,6 +12,7 @@ import {
     SignerSignaturePair,
     WebAuthnSignatureOverrides,
     WebauthnPublicKey,
+    UserOperationToSignWithOverrides,
 } from "./types";
 
 import { UserOperationV9, MetaTransaction, OnChainIdentifierParamsType } from "../../types";
@@ -603,14 +604,13 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * @returns signature
 	 */
 	public static formatSignaturesToUseroperationsSignatures(
-		userOperationsToSign: UserOperationToSign[],
+		userOperationsToSign: UserOperationToSignWithOverrides[],
 		signerSignaturePairs: SignerSignaturePair[],
-		overrides: WebAuthnSignatureOverrides = {},
 	): string[] {
 		if (userOperationsToSign.length < 1) {
 			throw new RangeError("There should be at least one userOperationsToSign");
 		}
-		const resolvedOverrides: WebAuthnSignatureOverrides = {
+		const defaultOverrides: WebAuthnSignatureOverrides = {
 			eip7212WebAuthnPrecompileVerifier:
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier:
@@ -625,50 +625,57 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 			webAuthnSharedSigner:
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
-			...overrides,
 		};
-        if (userOperationsToSign.length === 1) {
-            return [
-                SafeAccount.formatSignaturesToUseroperationSignature(
-                    signerSignaturePairs,
-                    {
-                        ...resolvedOverrides,
-                        isMultiChainSignature: true,
-                    },
-                ),
-            ];
-        }
-        const userOperationsHashes: string[] = [];
-        userOperationsToSign.forEach(
-            (userOperationsToSign, _index) => {
-                const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
-                    userOperationsToSign.userOperation,
-                    userOperationsToSign.chainId,
-                    {
-                        validAfter: userOperationsToSign.validAfter,
-                        validUntil: userOperationsToSign.validUntil,
-                        safe4337ModuleAddress: resolvedOverrides.safe4337ModuleAddress,
-                    },
-                );
-                userOperationsHashes.push(userOperationHash);
-        });
-        const [_root, proofs] = generateMerkleProofs(userOperationsHashes);
-        const userOpSignatures: string[] = [];
-        userOperationsToSign.forEach(
-            (_userOperationsToSign, index) => {
-                userOpSignatures.push(
-                    SafeAccount.formatSignaturesToUseroperationSignature(
-                        signerSignaturePairs,
-                        {
-                            ...resolvedOverrides,
-                            isMultiChainSignature:true,
-                            multiChainMerkleProof: proofs[index],
-                        },
-                    )
-                );
-        });
-        return userOpSignatures;
-    }
+		if (userOperationsToSign.length === 1) {
+			return [
+				SafeAccount.formatSignaturesToUseroperationSignature(
+					signerSignaturePairs,
+					{
+						...defaultOverrides,
+						...userOperationsToSign[0].overrides,
+						validAfter: userOperationsToSign[0].validAfter,
+						validUntil: userOperationsToSign[0].validUntil,
+						isMultiChainSignature: true,
+					},
+				),
+			];
+		}
+		const userOperationsHashes: string[] = [];
+		userOperationsToSign.forEach(
+			(userOperationToSign, _index) => {
+				const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
+					userOperationToSign.userOperation,
+					userOperationToSign.chainId,
+					{
+						validAfter: userOperationToSign.validAfter,
+						validUntil: userOperationToSign.validUntil,
+						safe4337ModuleAddress:
+							userOperationToSign.overrides?.safe4337ModuleAddress ??
+							defaultOverrides.safe4337ModuleAddress,
+					},
+				);
+				userOperationsHashes.push(userOperationHash);
+			},
+		);
+		const [_root, proofs] = generateMerkleProofs(userOperationsHashes);
+		const userOpSignatures: string[] = [];
+		userOperationsToSign.forEach(
+			(userOperationToSign, index) => {
+				userOpSignatures.push(
+					SafeAccount.formatSignaturesToUseroperationSignature(
+						signerSignaturePairs,
+						{
+							...defaultOverrides,
+							...userOperationToSign.overrides,
+							isMultiChainSignature: true,
+							multiChainMerkleProof: proofs[index],
+						},
+					),
+				);
+			},
+		);
+		return userOpSignatures;
+	}
 
 	public static createWebAuthnSignerVerifierAddress(
 		x: bigint,
