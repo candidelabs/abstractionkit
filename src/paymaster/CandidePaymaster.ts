@@ -16,8 +16,19 @@ import {
 	PrependTokenPaymasterApproveAccount,
 	GasPaymasterUserOperationOverrides,
 	AnyUserOperation,
-	SameUserOp, SmartAccountWithEntrypoint,
+	SameUserOp,
+	SigningPhase,
+	SmartAccountWithEntrypoint,
 } from "./types";
+
+/**
+ * Wire-level context payload sent to the paymaster JSON-RPC. Extends the
+ * public {@link CandidePaymasterContext} with the hoisted `signingPhase` so
+ * callers can set it at the top level of overrides.
+ */
+type WirePaymasterContext = CandidePaymasterContext & {
+	signingPhase?: SigningPhase;
+};
 import { Bundler } from "src/Bundler";
 import { AbstractionKitError, ensureError } from "src/errors";
 import {ENTRYPOINT_V8, ENTRYPOINT_V7, ENTRYPOINT_V6, ENTRYPOINT_V9} from "src/constants";
@@ -502,10 +513,26 @@ export class CandidePaymaster extends Paymaster {
 
 	// ── Core paymaster method (private) ──────────────────────────────
 
+	/**
+	 * Merge a public {@link CandidePaymasterContext} with the hoisted
+	 * `signingPhase` into the wire-level payload forwarded to the paymaster
+	 * JSON-RPC. When `signingPhase` is undefined the field is omitted so the
+	 * default single-step flow is preserved on the wire.
+	 */
+	private buildWireContext(
+		context: CandidePaymasterContext,
+		signingPhase: SigningPhase | undefined,
+	): WirePaymasterContext {
+		if (signingPhase === undefined) {
+			return context;
+		}
+		return { ...context, signingPhase };
+	}
+
 	private async createPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: T,
-		context: CandidePaymasterContext = {},
+		context: WirePaymasterContext = {},
 		overrides: GasPaymasterUserOperationOverrides = {},
 	): Promise<[SameUserOp<T>, SponsorMetadata | undefined]> {
 		try {
@@ -551,7 +578,11 @@ export class CandidePaymaster extends Paymaster {
 		overrides?: GasPaymasterUserOperationOverrides,
 	): Promise<[SameUserOp<T>, SponsorMetadata | undefined]> {
 		const userOp = { ...userOperation } as T;
-		const context: CandidePaymasterContext = {sponsorshipPolicyId, ...(overrides?.context || {}) };
+		const signingPhase = overrides?.signingPhase;
+		const context = this.buildWireContext(
+			{sponsorshipPolicyId, ...(overrides?.context || {})},
+			signingPhase,
+		);
 		const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
 		await this.ensureInitialized(entrypoint);
 		const epData = this.getEntrypointData(entrypoint);
@@ -560,7 +591,7 @@ export class CandidePaymaster extends Paymaster {
 				`UserOperation for entrypoint ${entrypoint} is not supported`,
 			);
 		}
-		if (context.signingPhase !== "finalize"){
+		if (signingPhase !== "finalize"){
 			this.setDummyPaymasterFields(userOp, epData);
 			await this.estimateAndApplyGasLimits(userOp, bundlerRpc, entrypoint, overrides ?? {});
 		}
@@ -596,10 +627,14 @@ export class CandidePaymaster extends Paymaster {
 	): Promise<SameUserOp<T>> {
 		try {
 			const userOp = { ...userOperation } as T;
-			const context: CandidePaymasterContext = { token: tokenAddress, ...(overrides?.context || {}) };
+			const signingPhase = overrides?.signingPhase;
+			const context = this.buildWireContext(
+				{ token: tokenAddress, ...(overrides?.context || {}) },
+				signingPhase,
+			);
 			const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
 			await this.ensureInitialized(entrypoint);
-			if (context.signingPhase !== "finalize"){
+			if (signingPhase !== "finalize"){
 				const epData = this.getEntrypointData(entrypoint);
 				if (epData == null) {
 					throw new RangeError(

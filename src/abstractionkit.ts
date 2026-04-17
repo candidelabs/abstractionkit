@@ -104,6 +104,7 @@ export type {
 	AnyUserOperation,
 	SameUserOp,
 } from "./paymaster/types";
+export { SigningPhase } from "./paymaster/types";
 
 export { Operation, GasOption, PolygonChain } from "./types";
 export type {

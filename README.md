@@ -189,17 +189,19 @@ const response = await smartAccount.sendUserOperation(tokenOp, bundlerRpc);
 
 As of v0.3.0, `CandidePaymasterContext` is passed via the `overrides.context` field on `GasPaymasterUserOperationOverrides`. Previously it was a separate top level argument.
 
+The parallel-signing `signingPhase` is a top-level override, not a context field. Use the exported `SigningPhase` constant to avoid `as const` and get autocomplete.
+
 ```typescript
+import { SigningPhase } from "abstractionkit";
+
 const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
   smartAccount,
   userOp,
   bundlerRpc,
   sponsorshipPolicyId,
   {
-    context: {
-      // For EntryPoint v0.9 parallel signing flows:
-      // signingPhase: "commit" | "finalize",
-    },
+    // EntryPoint v0.9 parallel signing:
+    signingPhase: SigningPhase.Commit, // or SigningPhase.Finalize
     // gas overrides also live here:
     callGasLimitPercentageMultiplier: 110,
   },

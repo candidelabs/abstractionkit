@@ -26,7 +26,7 @@
   // After (0.3.0):
   await paymaster.createSponsorPaymasterUserOperation(smartAccount, userOp, bundlerRpc, sponsorshipPolicyId, overrides);
   ```
-  The `overrides` parameter type is also richer: it now accepts a `context?: CandidePaymasterContext` field for passing `sponsorshipPolicyId` and the new parallel-signing `signingPhase` option through overrides.
+  The `overrides` parameter type is also richer: it now accepts a `context?: CandidePaymasterContext` field (forwarded as-is to the paymaster RPC), a top-level `signingPhase?: SigningPhase` for the new parallel-signing flow, and the existing gas limit / multiplier overrides.
 - **`createPaymasterUserOperation` has been removed.** Use `createSponsorPaymasterUserOperation` or `createTokenPaymasterUserOperation` directly.
 - **CandidePaymaster now uses the `pm_getPaymasterData` JSON-RPC method** internally. Paymaster types have been unified and restructured.
 - **`PaymasterInitValues` renamed to `ParallelPaymasterInitValues`.**
@@ -65,7 +65,24 @@ The wildcard re-export `export * from "./account/Safe/safeMessage"` has been rep
 #### Parallel Paymaster Signing (EntryPoint v0.9)
 
 - **`ExperimentalAllowAllParallelPaymaster`**: an experimental paymaster for the parallel-signing flow.
-- **`signingPhase`** added to `CandidePaymasterContext`, with values `"commit"` and `"finalize"`. Enables parallel-signing flows where owner signing and the paymaster's final signature can happen independently, via the `PAYMASTER_SIG_MAGIC` convention on `paymasterData`. Works with EntryPoint v0.9 only.
+- **`signingPhase`** top-level override on `GasPaymasterUserOperationOverrides`, typed with the exported `SigningPhase` constant (`SigningPhase.Commit` / `SigningPhase.Finalize`). Enables parallel-signing flows where owner signing and the paymaster's final signature can happen independently, via the `PAYMASTER_SIG_MAGIC` convention on `paymasterData`. Works with EntryPoint v0.9 only.
+
+  Migration (only affects callers already on the 0.3.0 parallel-signing flow):
+  ```ts
+  // Before
+  await paymaster.createSponsorPaymasterUserOperation(
+    smartAccount, userOp, bundlerRpc, sponsorshipPolicyId,
+    { context: { signingPhase: "commit" as const } },
+  );
+
+  // After
+  import { SigningPhase } from "abstractionkit";
+  await paymaster.createSponsorPaymasterUserOperation(
+    smartAccount, userOp, bundlerRpc, sponsorshipPolicyId,
+    { signingPhase: SigningPhase.Commit },
+  );
+  ```
+  `signingPhase` is no longer a field on `CandidePaymasterContext`. String literals (`"commit"` / `"finalize"`) still type-check against `SigningPhase`, so the constant is recommended but not required.
 - `CandidePaymaster` supports both v0.9 parallel flows and the existing sequential flow.
 
 #### Safe Accounts

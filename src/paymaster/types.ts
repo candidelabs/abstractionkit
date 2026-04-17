@@ -15,11 +15,28 @@ export type SameUserOp<T extends AnyUserOperation> =
 	UserOperationV6;
 
 /**
+ * Signing phase for the **parallel signing** feature. Only relevant for
+ * EntryPoint v0.9 accounts that use `PAYMASTER_SIG_MAGIC`-aware paymasters.
+ *
+ * Use the {@link SigningPhase} constant for call sites (e.g. `SigningPhase.Commit`)
+ * so TypeScript narrows the literal without needing `as const`.
+ */
+export const SigningPhase = {
+	Commit: 'commit',
+	Finalize: 'finalize',
+} as const;
+
+export type SigningPhase = typeof SigningPhase[keyof typeof SigningPhase];
+
+/**
  * Context passed to the Candide paymaster RPC when requesting sponsorship
  * or ERC-20 token payment for gas.
  *
  * This context is forwarded as the fourth argument to the `pm_getPaymasterData`
- * JSON-RPC call on the Candide paymaster.
+ * JSON-RPC call on the Candide paymaster. It carries `token` and
+ * `sponsorshipPolicyId`. The parallel-signing `signingPhase` is hoisted to
+ * the top-level {@link GasPaymasterUserOperationOverrides.signingPhase} field
+ * and injected into this context internally before the RPC call.
  *
  * @example Sponsored (gasless) UserOperation
  * ```ts
@@ -35,91 +52,12 @@ export type SameUserOp<T extends AnyUserOperation> =
  *   smartAccount, userOp, USDC_ADDRESS, bundlerRpc,
  * );
  * ```
- *
- * @example Parallel signing with `signingPhase` (two-step commit/finalize)
- * ```ts
- * // ── Step 1: COMMIT ──
- * // Request initial paymaster fields with dummy signature.
- * // The paymaster returns gas limits and init paymasterData (ending with
- * // PAYMASTER_SIG_MAGIC) so owners can sign in parallel without waiting
- * // for the final paymaster signature.
- * const [commitOp] = await paymaster.createSponsorPaymasterUserOperation(
- *   smartAccount, userOp, bundlerRpc,
- *   sponsorshipPolicyId,
- *   { signingPhase: "commit" },
- * );
- *
- * // Sign the UserOperation (safe because the UserOp hash is stable —
- * // the PAYMASTER_SIG_MAGIC boundary ensures the hash stays the same
- * // whether init or final paymasterData is used).
- * commitOp.signature = smartAccount.signUserOperation(
- *   commitOp, [signer], chainId,
- * );
- *
- * // ── Step 2: FINALIZE ──
- * // Send the already-signed UserOperation back to the paymaster.
- * // The paymaster replaces the init paymasterData with the final
- * // paymaster signature. Gas estimation is skipped (already done in commit).
- * const [finalOp] = await paymaster.createSponsorPaymasterUserOperation(
- *   smartAccount, commitOp, bundlerRpc,
- *   sponsorshipPolicyId,
- *   { signingPhase: "finalize" },
- * );
- *
- * // Send the finalized UserOperation to the bundler.
- * const response = await smartAccount.sendUserOperation(finalOp, bundlerRpc);
- * ```
  */
 export interface CandidePaymasterContext {
 	/** ERC-20 token address to use for gas payment. Omit for sponsored (gasless) operations. */
 	token?: string;
 	/** Sponsorship policy identifier for the Candide paymaster. */
 	sponsorshipPolicyId?: string;
-	/**
-	 * Signing phase for the **parallel signing** feature. Only relevant for
-	 * EntryPoint v0.9 accounts that use `PAYMASTER_SIG_MAGIC`-aware paymasters.
-	 *
-	 * Parallel signing decouples owner signing from the paymaster's final
-	 * signature. This is useful when multiple owners need to co-sign a
-	 * UserOperation (e.g. multi-sig wallets) or when the signing step happens
-	 * on a separate device/service. Without parallel signing, you would need
-	 * the final paymaster signature before owners can sign, creating a
-	 * sequential dependency.
-	 *
-	 * ## How it works
-	 *
-	 * EntryPoint v0.9 introduces the `PAYMASTER_SIG_MAGIC` convention: when
-	 * computing the UserOperation hash, the `paymasterData` is truncated at
-	 * the magic boundary (`22e325a297439656`). This means the hash is
-	 * identical whether the paymasterData contains the init placeholder or
-	 * the final paymaster signature — so owners can safely sign the
-	 * UserOperation before the paymaster has issued its real signature.
-	 *
-	 * ## Two-phase flow
-	 *
-	 * **`"commit"`** — First call. The paymaster:
-	 *   1. Sets dummy paymaster fields for gas estimation.
-	 *   2. Estimates gas limits via the bundler.
-	 *   3. Returns init `paymasterData` ending with `PAYMASTER_SIG_MAGIC`.
-	 *   After this call, the UserOp is ready for owner signing.
-	 *
-	 * **`"finalize"`** — Second call. The paymaster:
-	 *   1. Skips gas estimation (already done in commit).
-	 *   2. Replaces the init `paymasterData` with the real paymaster signature.
-	 *   After this call, the UserOp is ready to be sent to the bundler.
-	 *
-	 * ## When to use
-	 *
-	 * - Multi-owner accounts where owners sign in parallel on different devices.
-	 * - Flows where the signing step is asynchronous (e.g. hardware wallets,
-	 *   approval queues, cross-chain multi-sig via `SafeMultiChainSigAccount`).
-	 * - Any scenario where you need a stable UserOp hash before the paymaster
-	 *   commits its final signature.
-	 *
-	 * If omitted, the default single-step flow is used: gas estimation,
-	 * paymaster signature, and owner signing all happen sequentially.
-	 */
-	signingPhase?: 'commit' | 'finalize';
 }
 
 export interface SmartAccountWithEntrypoint {
@@ -182,4 +120,74 @@ export interface GasPaymasterUserOperationOverrides extends BasePaymasterUserOpe
 	state_override_set?: StateOverrideSet;
 
 	context?: CandidePaymasterContext;
+
+	/**
+	 * Signing phase for the **parallel signing** feature. Only relevant for
+	 * EntryPoint v0.9 accounts that use `PAYMASTER_SIG_MAGIC`-aware paymasters.
+	 *
+	 * Parallel signing decouples owner signing from the paymaster's final
+	 * signature. This is useful when multiple owners need to co-sign a
+	 * UserOperation (e.g. multi-sig wallets) or when the signing step happens
+	 * on a separate device/service. Without parallel signing, you would need
+	 * the final paymaster signature before owners can sign, creating a
+	 * sequential dependency.
+	 *
+	 * ## How it works
+	 *
+	 * EntryPoint v0.9 introduces the `PAYMASTER_SIG_MAGIC` convention: when
+	 * computing the UserOperation hash, the `paymasterData` is truncated at
+	 * the magic boundary (`22e325a297439656`). The hash is identical whether
+	 * the paymasterData contains the init placeholder or the final paymaster
+	 * signature, so owners can safely sign the UserOperation before the
+	 * paymaster has issued its real signature.
+	 *
+	 * ## Two-phase flow
+	 *
+	 * **`SigningPhase.Commit`** (first call). The paymaster:
+	 *   1. Sets dummy paymaster fields for gas estimation.
+	 *   2. Estimates gas limits via the bundler.
+	 *   3. Returns init `paymasterData` ending with `PAYMASTER_SIG_MAGIC`.
+	 *   After this call, the UserOp is ready for owner signing.
+	 *
+	 * **`SigningPhase.Finalize`** (second call). The paymaster:
+	 *   1. Skips gas estimation (already done in commit).
+	 *   2. Replaces the init `paymasterData` with the real paymaster signature.
+	 *   After this call, the UserOp is ready to be sent to the bundler.
+	 *
+	 * ## When to use
+	 *
+	 * - Multi-owner accounts where owners sign in parallel on different devices.
+	 * - Flows where the signing step is asynchronous (e.g. hardware wallets,
+	 *   approval queues, cross-chain multi-sig via `SafeMultiChainSigAccount`).
+	 * - Any scenario where you need a stable UserOp hash before the paymaster
+	 *   commits its final signature.
+	 *
+	 * If omitted, the default single-step flow is used: gas estimation,
+	 * paymaster signature, and owner signing all happen sequentially.
+	 *
+	 * @example
+	 * ```ts
+	 * import { SigningPhase } from "abstractionkit";
+	 *
+	 * // Step 1: commit. Returns a UserOp with stable hash and init paymasterData.
+	 * const [commitOp] = await paymaster.createSponsorPaymasterUserOperation(
+	 *   smartAccount, userOp, bundlerRpc,
+	 *   sponsorshipPolicyId,
+	 *   { signingPhase: SigningPhase.Commit },
+	 * );
+	 *
+	 * // Owners sign in parallel. The hash is stable across commit/finalize.
+	 * commitOp.signature = smartAccount.signUserOperation(commitOp, [signer], chainId);
+	 *
+	 * // Step 2: finalize. The paymaster replaces the init data with its real signature.
+	 * const [finalOp] = await paymaster.createSponsorPaymasterUserOperation(
+	 *   smartAccount, commitOp, bundlerRpc,
+	 *   sponsorshipPolicyId,
+	 *   { signingPhase: SigningPhase.Finalize },
+	 * );
+	 *
+	 * await smartAccount.sendUserOperation(finalOp, bundlerRpc);
+	 * ```
+	 */
+	signingPhase?: SigningPhase;
 }
