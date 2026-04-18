@@ -148,20 +148,6 @@ export interface PrependTokenPaymasterApproveAccount extends SmartAccountWithEnt
 	): string;
 }
 
-/** Known paymaster provider identifiers for provider-specific features (token quotes, etc.). */
-export type Erc7677Provider = "pimlico" | "candide" | null;
-
-/** Constructor options for {@link Erc7677Paymaster}. */
-export interface Erc7677PaymasterConstructorOptions {
-	/** Chain id as a bigint (e.g. `1n` for mainnet). Avoids a lookup at first use. */
-	chainId?: bigint;
-	/**
-	 * Paymaster provider. `"auto"` (default) detects from the RPC URL.
-	 * Set explicitly to override detection, or `null` to disable provider features.
-	 */
-	provider?: "auto" | Erc7677Provider;
-}
-
 /**
  * Base overrides for paymaster-assisted UserOperation creation.
  * Allows manually specifying the EntryPoint address instead of auto-detection.
