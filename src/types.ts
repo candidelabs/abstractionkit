@@ -144,6 +144,10 @@ export type GasEstimationResult = {
 	preVerificationGas: bigint;
 	/** Estimated gas limit for verification step */
 	verificationGasLimit: bigint;
+	/** Paymaster verification gas limit. Non-standard bundler extension; see `Bundler.estimateUserOperationGas`. */
+	paymasterVerificationGasLimit?: bigint;
+	/** Paymaster post-op gas limit. Non-standard bundler extension; see `Bundler.estimateUserOperationGas`. */
+	paymasterPostOpGasLimit?: bigint;
 };
 
 /** Result of eth_getUserOperationByHash. Null if not found. */
