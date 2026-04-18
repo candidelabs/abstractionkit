@@ -1,6 +1,6 @@
 import { Paymaster } from "./Paymaster";
 import { Bundler } from "../Bundler";
-import { sendJsonRpcRequest } from "../utils";
+import { calculateUserOperationMaxGasCost, sendJsonRpcRequest } from "../utils";
 import { AbstractionKitError, ensureError } from "../errors";
 import {
 	ENTRYPOINT_V6,
@@ -13,10 +13,23 @@ import {
 	AnyUserOperation,
 	SameUserOp,
 	SmartAccountWithEntrypoint,
+	PrependTokenPaymasterApproveAccount,
 	GasPaymasterUserOperationOverrides,
 	Erc7677Provider,
 	Erc7677PaymasterConstructorOptions,
 } from "./types";
+
+/** Max value for uint256 */
+const UINT256_MAX = 115792089237316195423570985008687907853269984665640564039457584007913129639935n;
+/** Multiplier for token approve amount to cover paymasterAndData cost variance */
+const TOKEN_APPROVE_AMOUNT_MULTIPLIER = 2n;
+/**
+ * ERC-20 tokens that require resetting their allowance to 0 before setting a
+ * new approval amount (e.g. USDT on mainnet).
+ */
+const TOKENS_REQUIRING_ALLOWANCE_RESET: string[] = [
+	"0xdac17f958d2ee523a2206206994597c13d831ec7", // USDT (Ethereum mainnet)
+];
 
 /**
  * Opaque context object forwarded to the paymaster RPC as the fourth argument
@@ -86,18 +99,23 @@ export interface Erc7677StubDataResult extends Erc7677PaymasterFields {
  *
  * ## Token paymaster flows
  *
- * For ERC-20 gas payment, the consumer is responsible for:
- *   - Prepending the `approve(paymasterAddress, amount)` call to their
- *     UserOperation's callData *before* passing it to this class.
- *   - Determining the approval amount (typically via a provider-specific
- *     token-quotes endpoint such as Pimlico's `pimlico_getTokenQuotes`).
- *   - Resetting non-zero allowances first when required by the token
- *     (e.g. USDT on Ethereum mainnet).
+ * When `context.token` is set and the smart account implements
+ * `prependTokenPaymasterApproveToCallData`, the class automatically runs the
+ * token paymaster pipeline:
  *
- * @example Sponsored UserOperation (Pimlico)
+ * - **Provider detected** (Candide, Pimlico): fetches exchange rate and
+ *   paymaster address via provider-specific RPC, then handles approval
+ *   prepending, gas estimation, and final paymaster data automatically.
+ * - **No provider, `context.exchangeRate` set**: uses the provided rate;
+ *   paymaster address comes from `pm_getPaymasterStubData`.
+ * - **No provider, no `exchangeRate`**: falls through to the regular
+ *   sponsored flow — the developer is responsible for prepending the
+ *   approval and calculating the amount.
+ *
+ * @example Sponsored UserOperation (Candide)
  * ```ts
- * const paymaster = new Erc7677Paymaster(pimlicoUrl);
- * const [sponsoredOp] = await paymaster.createPaymasterUserOperation(
+ * const paymaster = new Erc7677Paymaster(candideUrl);
+ * const sponsoredOp = await paymaster.createPaymasterUserOperation(
  *   smartAccount,
  *   userOp,
  *   bundlerRpc,
@@ -107,17 +125,25 @@ export interface Erc7677StubDataResult extends Erc7677PaymasterFields {
  * await new Bundler(bundlerRpc).sendUserOperation(sponsoredOp, smartAccount.entrypointAddress);
  * ```
  *
- * @example Token paymaster (Pimlico, USDT)
+ * @example Token paymaster (Candide — automatic, provider auto-detected)
  * ```ts
- * // Consumer prepends approve() to callData and passes the token context.
- * userOp.callData = smartAccount.prependTokenPaymasterApproveToCallData(
- *   userOp.callData, usdtAddress, paymasterAddress, approveAmount,
- * );
- * const [tokenOp] = await paymaster.createPaymasterUserOperation(
+ * const paymaster = new Erc7677Paymaster(candideUrl);
+ * const tokenOp = await paymaster.createPaymasterUserOperation(
  *   smartAccount,
  *   userOp,
  *   bundlerRpc,
  *   { token: usdtAddress },
+ * );
+ * ```
+ *
+ * @example Token paymaster (unknown provider, exchangeRate supplied)
+ * ```ts
+ * const paymaster = new Erc7677Paymaster(customUrl);
+ * const tokenOp = await paymaster.createPaymasterUserOperation(
+ *   smartAccount,
+ *   userOp,
+ *   bundlerRpc,
+ *   { token: usdtAddress, exchangeRate: "1000000000000000000" },
  * );
  * ```
  */
@@ -306,41 +332,32 @@ export class Erc7677Paymaster extends Paymaster {
 				overrides.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
 			const chainIdHex = await this.getChainId(bundlerRpc);
 
-			// Step 1 — stub paymaster data for gas estimation.
-			const stub = await this.getPaymasterStubData(
-				userOp,
-				entrypoint,
-				chainIdHex,
-				context,
-			);
-			this.applyPaymasterFields(userOp, stub);
+			// Token paymaster flow: triggered when context.token is set
+			if (
+				context.token != null &&
+				typeof context.token === "string"
+			) {
+				return this.tokenPaymasterFlow(
+					smartAccount as unknown as PrependTokenPaymasterApproveAccount,
+					userOp,
+					context.token as string,
+					bundlerRpc,
+					entrypoint,
+					chainIdHex,
+					context,
+					overrides,
+				);
+			}
 
-			// Step 2 — gas estimation with the stub paymaster applied. When a
-			// paymaster is attached, v0.7+ bundlers return paymaster gas limits
-			// alongside the execution limits; they supersede the stub's
-			// placeholder values (some providers return paymasterPostOpGasLimit: 0x1).
-			await this.estimateAndApplyGasLimits(
+			// Delegate to the sponsored flow (stub → estimate → final).
+			return this.sponsoredFlow(
 				userOp,
 				bundlerRpc,
 				entrypoint,
-				overrides,
-			);
-
-			// Step 3 — if the stub was already final, we're done.
-			if (stub.isFinal === true) {
-				return userOp as unknown as SameUserOp<T>;
-			}
-
-			// Step 4 — final paymaster data (signature over the fully-populated userOp).
-			const final = await this.getPaymasterData(
-				userOp,
-				entrypoint,
 				chainIdHex,
 				context,
+				overrides,
 			);
-			this.applyPaymasterFields(userOp, final);
-
-			return userOp as unknown as SameUserOp<T>;
 		} catch (err) {
 			const error = ensureError(err);
 			if (error instanceof AbstractionKitError) throw error;
@@ -503,5 +520,284 @@ export class Erc7677Paymaster extends Paymaster {
 		}
 		// entrypoint v9 has no special handling here; kept for future use.
 		void ENTRYPOINT_V9;
+	}
+
+	// ── Provider-specific exchange-rate helpers ──────────────────────────
+
+	/**
+	 * Fetch token exchange rate and paymaster address via Pimlico's
+	 * `pimlico_getTokenQuotes` RPC.
+	 */
+	private async fetchPimlicoTokenQuote(
+		tokenAddress: string,
+		entrypoint: string,
+		chainIdHex: string,
+	): Promise<{ exchangeRate: bigint; paymasterAddress: string }> {
+		const result = await sendJsonRpcRequest(
+			this.rpcUrl,
+			"pimlico_getTokenQuotes",
+			[{ tokens: [tokenAddress] }, entrypoint, chainIdHex],
+		) as { quotes?: Array<{ paymaster: string; token: string; exchangeRate: string }> };
+
+		const quotes = result?.quotes;
+		if (!Array.isArray(quotes) || quotes.length === 0) {
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				`pimlico_getTokenQuotes returned no quotes for token ${tokenAddress}`,
+			);
+		}
+		const quote = quotes.find(
+			(q) => q.token.toLowerCase() === tokenAddress.toLowerCase(),
+		);
+		if (quote == null) {
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				`pimlico_getTokenQuotes did not include token ${tokenAddress}`,
+			);
+		}
+		return {
+			exchangeRate: BigInt(quote.exchangeRate),
+			paymasterAddress: quote.paymaster,
+		};
+	}
+
+	/**
+	 * Fetch token exchange rate and paymaster address via Candide's
+	 * `pm_supportedERC20Tokens` RPC.
+	 */
+	private async fetchCandideTokenQuote(
+		tokenAddress: string,
+		entrypoint: string,
+	): Promise<{ exchangeRate: bigint; paymasterAddress: string }> {
+		const result = await sendJsonRpcRequest(
+			this.rpcUrl,
+			"pm_supportedERC20Tokens",
+			[entrypoint],
+		) as unknown as {
+			tokens: Array<{ address: string; exchangeRate: string }>;
+			paymasterMetadata: { address: string };
+		};
+
+		const token = result.tokens?.find(
+			(t) => t.address.toLowerCase() === tokenAddress.toLowerCase(),
+		);
+		if (token == null) {
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				`${tokenAddress} token is not supported by the Candide paymaster`,
+			);
+		}
+		return {
+			exchangeRate: BigInt(token.exchangeRate),
+			paymasterAddress: result.paymasterMetadata.address,
+		};
+	}
+
+	/**
+	 * Route to the correct provider-specific token quote fetcher.
+	 * Returns `null` when no provider is configured.
+	 */
+	public async fetchProviderTokenQuote(
+		tokenAddress: string,
+		entrypoint: string,
+		chainIdHex: string,
+	): Promise<{ exchangeRate: bigint; paymasterAddress: string } | null> {
+		switch (this.provider) {
+			case "pimlico":
+				return this.fetchPimlicoTokenQuote(tokenAddress, entrypoint, chainIdHex);
+			case "candide":
+				return this.fetchCandideTokenQuote(tokenAddress, entrypoint);
+			default:
+				return null;
+		}
+	}
+
+	// ── Token paymaster flow ────────────────────────────────────────────
+
+	/**
+	 * Internal token paymaster pipeline. Called from `createPaymasterUserOperation`
+	 * when `context.token` is set and the smart account supports approval prepending.
+	 *
+	 * Three cases:
+	 * - **Provider detected**: exchange rate + paymaster address from provider RPC.
+	 * - **No provider, `context.exchangeRate` set**: uses provided rate, paymaster
+	 *   address from stub.
+	 * - **No provider, no rate**: falls through to the regular sponsored flow
+	 *   (developer already handled approval).
+	 */
+	private async tokenPaymasterFlow<T extends AnyUserOperation>(
+		smartAccount: PrependTokenPaymasterApproveAccount,
+		userOp: T,
+		tokenAddress: string,
+		bundlerRpc: string,
+		entrypoint: string,
+		chainIdHex: string,
+		context: Erc7677Context,
+		overrides: GasPaymasterUserOperationOverrides,
+	): Promise<SameUserOp<T>> {
+		// Step 1 — resolve exchange rate + paymaster address.
+		let exchangeRate: bigint;
+		let paymasterAddress: string | null = null;
+
+		const providerQuote = await this.fetchProviderTokenQuote(
+			tokenAddress,
+			entrypoint,
+			chainIdHex,
+		);
+
+		if (providerQuote != null) {
+			// Case A: provider detected.
+			exchangeRate = providerQuote.exchangeRate;
+			paymasterAddress = providerQuote.paymasterAddress;
+		} else if (context.exchangeRate != null) {
+			// Case B: no provider, but exchangeRate in context.
+			// paymasterAddress is resolved from the stub response below.
+			exchangeRate = BigInt(context.exchangeRate as string | bigint);
+		} else {
+			// Case C: no provider, no exchangeRate — fall through to regular flow.
+			return this.sponsoredFlow(
+				userOp,
+				bundlerRpc,
+				entrypoint,
+				chainIdHex,
+				context,
+				overrides,
+			);
+		}
+
+		// Step 2 — stub paymaster data for gas estimation.
+		const stub = await this.getPaymasterStubData(
+			userOp,
+			entrypoint,
+			chainIdHex,
+			context,
+		);
+		this.applyPaymasterFields(userOp, stub);
+
+		// For Case B, resolve paymasterAddress from stub or context override.
+		if (paymasterAddress == null) {
+			if (context.paymasterAddress != null) {
+				paymasterAddress = context.paymasterAddress as string;
+			} else if ("initCode" in userOp && stub.paymasterAndData != null) {
+				// v0.6: extract address from first 20 bytes of paymasterAndData.
+				paymasterAddress = "0x" + stub.paymasterAndData.slice(2, 42);
+			} else if (stub.paymaster != null) {
+				paymasterAddress = stub.paymaster;
+			} else {
+				throw new AbstractionKitError(
+					"PAYMASTER_ERROR",
+					"pm_getPaymasterStubData did not return a paymaster address. " +
+					"Pass paymasterAddress in the context or set a provider.",
+				);
+			}
+		}
+
+		// Step 3 — save original callData, prepend approve(paymaster, UINT256_MAX).
+		const originalCallData = userOp.callData;
+		const requiresAllowanceReset = overrides.resetApproval
+			?? TOKENS_REQUIRING_ALLOWANCE_RESET.includes(tokenAddress.toLowerCase());
+
+		let callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
+			userOp.callData,
+			tokenAddress,
+			paymasterAddress,
+			UINT256_MAX,
+		);
+		if (requiresAllowanceReset) {
+			callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
+				callDataWithApprove,
+				tokenAddress,
+				paymasterAddress,
+				0n,
+			);
+		}
+		userOp.callData = callDataWithApprove;
+
+		// Step 4 — estimate gas limits.
+		await this.estimateAndApplyGasLimits(userOp, bundlerRpc, entrypoint, overrides);
+
+		// Step 5 — calculate real token cost.
+		const maxGasCostWei = calculateUserOperationMaxGasCost(userOp);
+		const tokenCost = (exchangeRate * maxGasCostWei) / (10n ** 18n);
+		const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
+
+		// Step 6 — replace dummy approval with calculated amount on original callData.
+		callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
+			originalCallData,
+			tokenAddress,
+			paymasterAddress,
+			approveAmount,
+		);
+		if (requiresAllowanceReset) {
+			callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
+				callDataWithApprove,
+				tokenAddress,
+				paymasterAddress,
+				0n,
+			);
+		}
+		userOp.callData = callDataWithApprove;
+
+		// Step 7 — if the stub was already final, we're done.
+		if (stub.isFinal === true) {
+			return userOp as unknown as SameUserOp<T>;
+		}
+
+		// Step 8 — final paymaster data (signature over the fully-populated userOp).
+		const final = await this.getPaymasterData(
+			userOp,
+			entrypoint,
+			chainIdHex,
+			context,
+		);
+		this.applyPaymasterFields(userOp, final);
+
+		return userOp as unknown as SameUserOp<T>;
+	}
+
+	/**
+	 * The regular (non-token) sponsored flow: stub → estimate → final.
+	 * Extracted to allow `tokenPaymasterFlow` to fall through to it for Case C.
+	 */
+	private async sponsoredFlow<T extends AnyUserOperation>(
+		userOp: T,
+		bundlerRpc: string,
+		entrypoint: string,
+		chainIdHex: string,
+		context: Erc7677Context,
+		overrides: GasPaymasterUserOperationOverrides,
+	): Promise<SameUserOp<T>> {
+		// Step 1 — stub paymaster data for gas estimation.
+		const stub = await this.getPaymasterStubData(
+			userOp,
+			entrypoint,
+			chainIdHex,
+			context,
+		);
+		this.applyPaymasterFields(userOp, stub);
+
+		// Step 2 — gas estimation with the stub paymaster applied.
+		await this.estimateAndApplyGasLimits(
+			userOp,
+			bundlerRpc,
+			entrypoint,
+			overrides,
+		);
+
+		// Step 3 — if the stub was already final, we're done.
+		if (stub.isFinal === true) {
+			return userOp as unknown as SameUserOp<T>;
+		}
+
+		// Step 4 — final paymaster data (signature over the fully-populated userOp).
+		const final = await this.getPaymasterData(
+			userOp,
+			entrypoint,
+			chainIdHex,
+			context,
+		);
+		this.applyPaymasterFields(userOp, final);
+
+		return userOp as unknown as SameUserOp<T>;
 	}
 }

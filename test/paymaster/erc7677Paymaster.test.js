@@ -62,6 +62,25 @@ const CHAIN_ID_HEX = '0x1';
 const CHAIN_ID = 1n;
 const ENTRYPOINT_V7 = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
 
+/**
+ * Minimal smart account that implements prependTokenPaymasterApproveToCallData.
+ * Tracks calls for assertion purposes.
+ */
+function makeTokenAccount(entrypoint) {
+  const calls = [];
+  return {
+    entrypointAddress: entrypoint,
+    calls,
+    prependTokenPaymasterApproveToCallData(callData, tokenAddress, paymasterAddress, approveAmount) {
+      calls.push({ callData, tokenAddress, paymasterAddress, approveAmount });
+      // Simple simulation: prefix a marker so we can verify the call happened.
+      // In the real code this would re-encode MultiSend calldata.
+      const marker = `approve(${paymasterAddress},${approveAmount.toString(16)})`;
+      return `${callData}::${marker}`;
+    },
+  };
+}
+
 describe('Erc7677Paymaster', () => {
   test('createPaymasterUserOperation runs stub → estimate → final', async () => {
     const server = await makeMockRpcServer({
@@ -295,6 +314,393 @@ describe('Erc7677Paymaster', () => {
       await expect(
         paymaster.sendRPCRequest('nonexistent_method'),
       ).rejects.toThrow(/sendRPCRequest\(nonexistent_method\) failed/);
+    } finally {
+      await server.close();
+    }
+  });
+
+  // ── Token paymaster flow: Case A (Pimlico provider) ─────────────────
+
+  test('Case A: pimlico provider runs full token flow', async () => {
+    const PAYMASTER_ADDR = '0x' + 'aa'.repeat(20);
+    const TOKEN_ADDR = '0x' + 'bb'.repeat(20);
+    const EXCHANGE_RATE = '0xde0b6b3a7640000'; // 1e18
+
+    const server = await makeMockRpcServer({
+      pimlico_getTokenQuotes: () => ({
+        quotes: [{
+          paymaster: PAYMASTER_ADDR,
+          token: TOKEN_ADDR,
+          exchangeRate: EXCHANGE_RATE,
+          postOpGas: '0x1000',
+        }],
+      }),
+      pm_getPaymasterStubData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xstub',
+        paymasterVerificationGasLimit: '0x8000',
+        paymasterPostOpGasLimit: '0x1',
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1000',
+        verificationGasLimit: '0x2000',
+        preVerificationGas: '0x3000',
+        paymasterVerificationGasLimit: '0x9999',
+        paymasterPostOpGasLimit: '0xa000',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xfinaltoken',
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'pimlico' });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+      const userOp = v7UserOp();
+
+      const out = await paymaster.createPaymasterUserOperation(
+        smartAccount,
+        userOp,
+        server.url,
+        { token: TOKEN_ADDR },
+      );
+
+      // Call order: pimlico_getTokenQuotes → stub → estimate → final.
+      const methods = server.calls.map((c) => c.method);
+      expect(methods).toEqual([
+        'pimlico_getTokenQuotes',
+        'pm_getPaymasterStubData',
+        'eth_estimateUserOperationGas',
+        'pm_getPaymasterData',
+      ]);
+
+      // Final paymaster data applied.
+      expect(out.paymasterData).toBe('0xfinaltoken');
+
+      // prependTokenPaymasterApproveToCallData was called (first with MAX, then with calculated).
+      expect(smartAccount.calls.length).toBeGreaterThanOrEqual(2);
+
+      // Input not mutated.
+      expect(userOp.paymasterData).toBe(null);
+    } finally {
+      await server.close();
+    }
+  });
+
+  // ── Token paymaster flow: Case A (Candide provider) ─────────────────
+
+  test('Case A: candide provider runs full token flow', async () => {
+    const PAYMASTER_ADDR = '0x' + 'cc'.repeat(20);
+    const TOKEN_ADDR = '0x' + 'dd'.repeat(20);
+
+    const server = await makeMockRpcServer({
+      pm_supportedERC20Tokens: () => ({
+        tokens: [{ address: TOKEN_ADDR, exchangeRate: '0xde0b6b3a7640000' }],
+        paymasterMetadata: { address: PAYMASTER_ADDR },
+      }),
+      pm_getPaymasterStubData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xstub',
+        paymasterVerificationGasLimit: '0x8000',
+        paymasterPostOpGasLimit: '0xa000',
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1000',
+        verificationGasLimit: '0x2000',
+        preVerificationGas: '0x3000',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xfinalcandide',
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'candide' });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+      const userOp = v7UserOp();
+
+      const out = await paymaster.createPaymasterUserOperation(
+        smartAccount,
+        userOp,
+        server.url,
+        { token: TOKEN_ADDR },
+      );
+
+      // Call order: pm_supportedERC20Tokens → stub → estimate → final.
+      const methods = server.calls.map((c) => c.method);
+      expect(methods).toEqual([
+        'pm_supportedERC20Tokens',
+        'pm_getPaymasterStubData',
+        'eth_estimateUserOperationGas',
+        'pm_getPaymasterData',
+      ]);
+
+      expect(out.paymasterData).toBe('0xfinalcandide');
+      expect(smartAccount.calls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      await server.close();
+    }
+  });
+
+  // ── Token paymaster flow: Case B (exchangeRate in context) ──────────
+
+  test('Case B: no provider, exchangeRate in context runs token flow', async () => {
+    const PAYMASTER_ADDR = '0x' + 'ee'.repeat(20);
+    const TOKEN_ADDR = '0x' + 'ff'.repeat(20);
+
+    const server = await makeMockRpcServer({
+      pm_getPaymasterStubData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xstub',
+        paymasterVerificationGasLimit: '0x8000',
+        paymasterPostOpGasLimit: '0xa000',
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1000',
+        verificationGasLimit: '0x2000',
+        preVerificationGas: '0x3000',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xfinalrate',
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: null });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+      const userOp = v7UserOp();
+
+      const out = await paymaster.createPaymasterUserOperation(
+        smartAccount,
+        userOp,
+        server.url,
+        { token: TOKEN_ADDR, exchangeRate: '0xde0b6b3a7640000' },
+      );
+
+      // No provider-specific RPC call.
+      const methods = server.calls.map((c) => c.method);
+      expect(methods).toEqual([
+        'pm_getPaymasterStubData',
+        'eth_estimateUserOperationGas',
+        'pm_getPaymasterData',
+      ]);
+
+      // Paymaster address from stub was used in approve calls.
+      expect(smartAccount.calls[0].paymasterAddress).toBe(PAYMASTER_ADDR);
+      expect(out.paymasterData).toBe('0xfinalrate');
+    } finally {
+      await server.close();
+    }
+  });
+
+  // ── Token paymaster flow: Case C (fallthrough) ──────────────────────
+
+  test('Case C: no provider, no exchangeRate falls through to sponsored flow', async () => {
+    const PAYMASTER_ADDR = '0x' + '11'.repeat(20);
+    const TOKEN_ADDR = '0x' + '22'.repeat(20);
+
+    const server = await makeMockRpcServer({
+      pm_getPaymasterStubData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xstub',
+        paymasterVerificationGasLimit: '0x8000',
+        paymasterPostOpGasLimit: '0xa000',
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1000',
+        verificationGasLimit: '0x2000',
+        preVerificationGas: '0x3000',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xfinalsponsored',
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: null });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+      const originalCallData = '0xoriginal';
+      const userOp = v7UserOp({ callData: originalCallData });
+
+      const out = await paymaster.createPaymasterUserOperation(
+        smartAccount,
+        userOp,
+        server.url,
+        { token: TOKEN_ADDR }, // no exchangeRate
+      );
+
+      // Regular sponsored flow — no provider RPC, no prependTokenPaymasterApproveToCallData calls.
+      const methods = server.calls.map((c) => c.method);
+      expect(methods).toEqual([
+        'pm_getPaymasterStubData',
+        'eth_estimateUserOperationGas',
+        'pm_getPaymasterData',
+      ]);
+
+      // prependTokenPaymasterApproveToCallData was NOT called.
+      expect(smartAccount.calls.length).toBe(0);
+
+      // context.token was forwarded to paymaster RPCs.
+      expect(server.calls[0].params[3]).toEqual({ token: TOKEN_ADDR });
+      expect(out.paymasterData).toBe('0xfinalsponsored');
+    } finally {
+      await server.close();
+    }
+  });
+
+  // ── Token paymaster flow: USDT allowance reset ──────────────────────
+
+  test('USDT-like token gets approve(0) prepended', async () => {
+    const PAYMASTER_ADDR = '0x' + 'aa'.repeat(20);
+    // Mainnet USDT address (in the TOKENS_REQUIRING_ALLOWANCE_RESET list)
+    const USDT_ADDR = '0xdac17f958d2ee523a2206206994597c13d831ec7';
+
+    const server = await makeMockRpcServer({
+      pimlico_getTokenQuotes: () => ({
+        quotes: [{
+          paymaster: PAYMASTER_ADDR,
+          token: USDT_ADDR,
+          exchangeRate: '0xde0b6b3a7640000',
+        }],
+      }),
+      pm_getPaymasterStubData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xstub',
+        paymasterVerificationGasLimit: '0x8000',
+        paymasterPostOpGasLimit: '0xa000',
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1000',
+        verificationGasLimit: '0x2000',
+        preVerificationGas: '0x3000',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xfinalusdt',
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'pimlico' });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+
+      await paymaster.createPaymasterUserOperation(
+        smartAccount,
+        v7UserOp(),
+        server.url,
+        { token: USDT_ADDR },
+      );
+
+      // Should have approve(0) calls (for reset) in addition to approve(MAX) and approve(calculated).
+      const zeroApproveCalls = smartAccount.calls.filter((c) => c.approveAmount === 0n);
+      expect(zeroApproveCalls.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      await server.close();
+    }
+  });
+
+  // ── Token paymaster flow: resetApproval override ────────────────────
+
+  test('resetApproval override forces approve(0) for non-USDT token', async () => {
+    const PAYMASTER_ADDR = '0x' + 'aa'.repeat(20);
+    const TOKEN_ADDR = '0x' + 'bb'.repeat(20); // Not USDT
+
+    const server = await makeMockRpcServer({
+      pimlico_getTokenQuotes: () => ({
+        quotes: [{
+          paymaster: PAYMASTER_ADDR,
+          token: TOKEN_ADDR,
+          exchangeRate: '0xde0b6b3a7640000',
+        }],
+      }),
+      pm_getPaymasterStubData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xstub',
+        paymasterVerificationGasLimit: '0x8000',
+        paymasterPostOpGasLimit: '0xa000',
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1000',
+        verificationGasLimit: '0x2000',
+        preVerificationGas: '0x3000',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xfinal',
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'pimlico' });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+
+      await paymaster.createPaymasterUserOperation(
+        smartAccount,
+        v7UserOp(),
+        server.url,
+        { token: TOKEN_ADDR },
+        { resetApproval: true },
+      );
+
+      // Should have approve(0) calls even though token is not USDT.
+      const zeroApproveCalls = smartAccount.calls.filter((c) => c.approveAmount === 0n);
+      expect(zeroApproveCalls.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      await server.close();
+    }
+  });
+
+  // ── Token paymaster flow: input not mutated ─────────────────────────
+
+  test('token flow does not mutate the input UserOperation', async () => {
+    const PAYMASTER_ADDR = '0x' + 'aa'.repeat(20);
+    const TOKEN_ADDR = '0x' + 'bb'.repeat(20);
+
+    const server = await makeMockRpcServer({
+      pimlico_getTokenQuotes: () => ({
+        quotes: [{
+          paymaster: PAYMASTER_ADDR,
+          token: TOKEN_ADDR,
+          exchangeRate: '0xde0b6b3a7640000',
+        }],
+      }),
+      pm_getPaymasterStubData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xstub',
+        paymasterVerificationGasLimit: '0x8000',
+        paymasterPostOpGasLimit: '0xa000',
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1000',
+        verificationGasLimit: '0x2000',
+        preVerificationGas: '0x3000',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xfinal',
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'pimlico' });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+      const userOp = v7UserOp();
+      const originalCallData = userOp.callData;
+      const originalPaymasterData = userOp.paymasterData;
+
+      await paymaster.createPaymasterUserOperation(
+        smartAccount,
+        userOp,
+        server.url,
+        { token: TOKEN_ADDR },
+      );
+
+      expect(userOp.callData).toBe(originalCallData);
+      expect(userOp.paymasterData).toBe(originalPaymasterData);
     } finally {
       await server.close();
     }
