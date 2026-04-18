@@ -44,8 +44,16 @@ const CANDIDE_TOKEN_QUOTE_TTL_MS = 45_000;
  *
  * The shape is provider-specific: Candide uses `{ token }` for token paymaster
  * and `{ sponsorshipPolicyId }` for sponsored operations; other providers
- * (Pimlico, Alchemy, Biconomy, …) have their own conventions. Refer to the
+ * (Pimlico, Alchemy, …) have their own conventions. Refer to the
  * paymaster provider's documentation for the exact fields.
+ *
+ * ## Reserved fields consumed by this class (not forwarded to the RPC)
+ *
+ * - `exchangeRate` - token-to-ETH exchange rate as a bigint or hex/decimal
+ *   string, scaled by 10^18 (i.e. the value of 1 ETH expressed in the token's
+ *   smallest unit). Used to calculate the ERC-20 approval amount when no
+ *   provider is auto-detected. Not needed when `provider` is `"pimlico"` or
+ *   `"candide"`; the class fetches the rate from the provider's RPC.
  */
 export type Erc7677Context = Record<string, unknown>;
 
@@ -78,8 +86,7 @@ export interface Erc7677StubDataResult extends Erc7677PaymasterFields {
  * Speaks the [ERC-7677](https://eips.ethereum.org/EIPS/eip-7677) JSON-RPC
  * protocol: `pm_getPaymasterStubData` for gas-estimation stubs and
  * `pm_getPaymasterData` for the final signed paymaster fields. Works with any
- * paymaster provider that implements the standard (Candide, Pimlico, Alchemy,
- * Biconomy, …).
+ * paymaster provider that implements the standard (Candide, Pimlico, Alchemy, …).
  *
  * For Candide-hosted paymasters, {@link CandidePaymaster} is the dedicated
  * client and offers extra features (parallel signing phases, etc.). This
@@ -576,6 +583,10 @@ export class Erc7677Paymaster extends Paymaster {
 	/**
 	 * Fetch token exchange rate and paymaster address via Pimlico's
 	 * `pimlico_getTokenQuotes` RPC.
+	 *
+	 * @returns `exchangeRate` as a bigint scaled by 10^18 (the value of 1 ETH
+	 *   expressed in the token's smallest unit). Used to compute the token
+	 *   approval amount via `(exchangeRate * gasCostWei) / 10^18`.
 	 */
 	private async fetchPimlicoTokenQuote(
 		tokenAddress: string,
@@ -644,6 +655,10 @@ export class Erc7677Paymaster extends Paymaster {
 	/**
 	 * Fetch token exchange rate and paymaster address via Candide's
 	 * `pm_supportedERC20Tokens` RPC.
+	 *
+	 * @returns `exchangeRate` as a bigint scaled by 10^18 (the value of 1 ETH
+	 *   expressed in the token's smallest unit). Used to compute the token
+	 *   approval amount via `(exchangeRate * gasCostWei) / 10^18`.
 	 */
 	private async fetchCandideTokenQuote(
 		tokenAddress: string,

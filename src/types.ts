@@ -144,9 +144,9 @@ export type GasEstimationResult = {
 	preVerificationGas: bigint;
 	/** Estimated gas limit for verification step */
 	verificationGasLimit: bigint;
-	/** Paymaster verification gas limit (v0.7+ when a paymaster was attached) */
+	/** Paymaster verification gas limit. Non-standard bundler extension; see `Bundler.estimateUserOperationGas`. */
 	paymasterVerificationGasLimit?: bigint;
-	/** Paymaster post-op gas limit (v0.7+ when a paymaster was attached) */
+	/** Paymaster post-op gas limit. Non-standard bundler extension; see `Bundler.estimateUserOperationGas`. */
 	paymasterPostOpGasLimit?: bigint;
 };
 

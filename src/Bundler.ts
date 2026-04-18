@@ -124,10 +124,12 @@ export class Bundler {
 				preVerificationGas: BigInt(res.preVerificationGas),
 				verificationGasLimit: BigInt(res.verificationGasLimit),
 			};
-			// EntryPoint v0.7+ bundlers include paymaster gas fields when a
-			// paymaster is attached to the UserOperation. Forward them so
-			// paymaster pipelines (e.g. ERC-7677) don't need to reach past
-			// this wrapper and call eth_estimateUserOperationGas directly.
+			// `paymasterVerificationGasLimit` and `paymasterPostOpGasLimit`
+			// are standard ERC-4337 UserOperation fields but NOT part of the
+			// bundler-spec `GasInfo`. Some bundlers return them as a
+			// non-standard extension when a paymaster is attached; forwarded
+			// here for compatibility. Guarded with `!= null` so spec-compliant
+			// bundlers still work.
 			if (res.paymasterVerificationGasLimit != null) {
 				gasEstimationResult.paymasterVerificationGasLimit = BigInt(
 					res.paymasterVerificationGasLimit,
