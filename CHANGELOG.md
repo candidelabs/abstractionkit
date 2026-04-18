@@ -2,133 +2,112 @@
 
 ## 0.3.0
 
-**This is a major release. The canonical upgrade path is from 0.2.30 (previous stable) to 0.3.0 (current stable).** Versions 0.2.31 through 0.2.41 were experimental pre-releases and are not on the `latest` dist-tag.
-
 ### Breaking Changes
 
 #### Build & Runtime
 
-- **Node.js >= 18 required.** Native `fetch` is now used; `isomorphic-unfetch` has been removed as a dependency.
-- **Build system switched from microbundle to tsdown.** Dist output paths have changed. If you import from a subpath, update your references:
-  - `dist/index.js` -> `dist/index.cjs`
-  - `dist/index.m.js` -> `dist/index.mjs`
-  - `dist/index.umd.js` -> `dist/index.iife.js`
-  - `dist/index.d.ts` -> `dist/index.d.cts`
-  - A proper `exports` map has been added to `package.json` for ESM/CJS resolution, so normal `import { X } from "abstractionkit"` consumers are unaffected.
+- **Node.js >= 18 required** — native `fetch` is now used; `isomorphic-unfetch` has been removed as a dependency.
+- **Build system switched from microbundle to tsdown** — dist output paths have changed:
+  - `dist/index.js` → `dist/index.cjs`
+  - `dist/index.m.js` → `dist/index.mjs`
+  - `dist/index.umd.js` → `dist/index.iife.js`
+  - `dist/index.d.ts` → `dist/index.d.cts`
+  - Proper `exports` map added to `package.json` for ESM/CJS resolution.
 
-#### Paymaster API
+#### API Changes
 
-- **`CandidePaymaster.createSponsorPaymasterUserOperation(...)` signature changed.** The method now takes `smartAccount` as the **first** argument. Migration:
-  ```ts
-  // Before (0.2.30):
-  await paymaster.createSponsorPaymasterUserOperation(userOp, bundlerRpc, sponsorshipPolicyId, overrides);
-
-  // After (0.3.0):
-  await paymaster.createSponsorPaymasterUserOperation(smartAccount, userOp, bundlerRpc, sponsorshipPolicyId, overrides);
-  ```
-  The `overrides` parameter type is also richer: it now accepts a `context?: CandidePaymasterContext` field for passing `sponsorshipPolicyId` and the new parallel-signing `signingPhase` option through overrides.
-- **`createPaymasterUserOperation` has been removed.** Use `createSponsorPaymasterUserOperation` or `createTokenPaymasterUserOperation` directly.
-- **CandidePaymaster now uses the `pm_getPaymasterData` JSON-RPC method** internally. Paymaster types have been unified and restructured.
+- **`signUserOperation` now only accepts a private key.** Use the new `signUserOperationWithSigner` method for external/custom signers.
+- **`createPaymasterUserOperation` removed.** Use `CandidePaymaster` methods directly.
+- **CandidePaymaster migrated to `pm_getPaymasterData` RPC** — paymaster types have been unified and restructured.
 - **`PaymasterInitValues` renamed to `ParallelPaymasterInitValues`.**
 
-#### TypeScript Export Changes (`isolatedModules` compatibility)
-
-Many interfaces and types are now exported with `export type` instead of `export`. This is only breaking if you re-export them yourself with `export { X } from "abstractionkit"`, in which case change to `export type { X }`. Affected identifiers include:
-
-- `RecoveryRequest`, `RecoverySignaturePair`, `RecoveryRequestTypedDataDomain`, `RecoveryRequestTypedMessageValue`
-- `Allowance`
-- `DepositInfo`
-- `Authorization7702Hex`, `Authorization7702`
-- `CandidePaymasterContext`, `PrependTokenPaymasterApproveAccount`
-- `UserOperationV6`, `UserOperationV7`, `UserOperationV8`, `UserOperationV9`, `AbiInputValue`, `JsonRpcParam`, `JsonRpcResponse`, `MetaTransaction`, `StateOverrideSet`, and other non-runtime types from `./types`
-- `CreateUserOperationV6Overrides`, `CreateUserOperationV7Overrides`, `CreateUserOperationV9Overrides`, `ECDSAPublicAddress`, `InitCodeOverrides`, `SafeUserOperationTypedDataDomain`, `WebauthnPublicKey`, `WebauthnSignatureData`, `SignerSignaturePair`, `Signer`
-- `SafeMessageTypedDataDomain`, `SafeMessageTypedMessageValue`
-
-The wildcard re-export `export * from "./account/Safe/safeMessage"` has been replaced with explicit named exports (`SAFE_MESSAGE_PRIMARY_TYPE`, `SAFE_MESSAGE_MODULE_TYPE`, `getSafeMessageEip712Data`).
-
-### New Features
-
-#### New Account Classes
-
-- **`Calibur7702Account`**: full-featured EIP-7702 smart account for EntryPoint v0.8, ported from Uniswap's Calibur. Supports secp256k1, P256, and WebAuthn P256 keys with per-key permissions and expirations. Includes key management (register, revoke, update settings via self-calls), automatic EIP-7702 delegation authoring and checking, and delegation revocation. Also exports `CaliburKeyType` and the `CaliburKey`, `CaliburKeySettings`, `CaliburKeySettingsResult`, `WebAuthnSignatureData`, `CaliburCreateUserOperationOverrides`, `CaliburSignatureOverrides`, and `SignerFunction` types.
-- **`Simple7702AccountV09`**: minimal EIP-7702 account targeting EntryPoint v0.9, with parallel paymaster signing support.
-- **`SafeMultiChainSigAccountV1`**: audited multi-chain signature account. Sign once, replay across chains via a merkle-proof structure. Promoted from experimental.
-- **`SafeAccountV1_5_0_M_0_3_0`**: Safe contract v1.5.0 support with EIP-7951 and the Daimo P256 verifier for WebAuthn.
-
-#### EntryPoint v0.8 and v0.9 Support
-
-- `UserOperationV9` type and `CreateUserOperationV9Overrides` added.
-- `ENTRYPOINT_V6`, `ENTRYPOINT_V7`, `ENTRYPOINT_V8`, `ENTRYPOINT_V9` address constants exported.
-- Bundler, CandidePaymaster, and Tenderly simulation helpers updated to handle all four EntryPoint versions.
-- Entrypoint version resolution has been centralized in `CandidePaymaster`: a new private `resolveEntrypoint` helper reads the target entrypoint from the smart account instance at the top of each public method, replacing the per-method `UserOperation vX.YZ is not supported` checks from 0.2.30. The guard itself is not new, but unsupported-version errors are now surfaced earlier and more consistently.
-
-#### Parallel Paymaster Signing (EntryPoint v0.9)
-
-- **`ExperimentalAllowAllParallelPaymaster`**: an experimental paymaster for the parallel-signing flow.
-- **`signingPhase`** added to `CandidePaymasterContext`, with values `"commit"` and `"finalize"`. Enables parallel-signing flows where owner signing and the paymaster's final signature can happen independently, via the `PAYMASTER_SIG_MAGIC` convention on `paymasterData`. Works with EntryPoint v0.9 only.
-- `CandidePaymaster` supports both v0.9 parallel flows and the existing sequential flow.
-
-#### Safe Accounts
-
-- **`createChangeThresholdMetaTransaction`**, **`createApproveHashMetaTransaction`**, and **`getThreshold`** added to `SafeAccount`. Makes multi-sig threshold management and offchain approval flows first-class.
-- **Auto-prepend `approve(0)`** before setting a new ERC-20 allowance for tokens like USDT that disallow changing a non-zero allowance directly. Opt in via `{ resetApproval: true }` on the token paymaster overrides.
-- **`MerkleTree`** helper utilities added for multi-chain operations.
-
-#### AllowanceModule v1.0.0
-
-- Allowance module updated to v1.0.0. The legacy address is exported as **`ALLOWANCE_MODULE_V0_1_0_ADDRESS`** for migration purposes.
-
-#### Calibur Singleton Addresses
-
-- **`CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS`** and **`CALIBUR_CANDIDE_V0_1_0_SINGLETON_ADDRESS`** exported as constants.
-
-#### EIP-7702 Delegation Helpers
-
-- **`getDelegatedAddress(eoaAddress, nodeRpc)`** utility for checking the current EIP-7702 delegation target of an EOA.
-- **Calibur delegation and key revocation**: `Calibur7702Account.createRevokeKeyMetaTransaction` and `createRevokeAllKeysMetaTransactions` for revoking individual or all registered keys, plus `createRevokeDelegationRawTransaction` for revoking the EIP-7702 delegation itself. Complements automatic delegation checking during UserOperation creation.
-
-#### Utilities and Constants
-
-- **EIP-2098** compact signature support in `parseRawSignature`.
-- **`EIP712_SAFE_OPERATION_PRIMARY_TYPE`** and **`EIP712_MULTI_CHAIN_OPERATIONS_PRIMARY_TYPE`** constants added alongside the existing EIP-712 type constants.
-- **`EIP712_MULTI_CHAIN_OPERATIONS_TYPE`** (previously `EIP712_MULTI_SAFE_OPERATIONS_TYPE`, renamed).
-- New paymaster-type exports: **`AnyUserOperation`**, **`SameUserOp`**.
-
-#### Tenderly
-
-- Tenderly simulation helpers updated to support EntryPoint v0.9 and `IAccountExecute.executeUserOp` callData rewriting.
-
-### Renames
+#### Renames
 
 | Before | After |
 |--------|-------|
 | `ExperimentalSafeMultiChainSigAccount` | `SafeMultiChainSigAccountV1` |
 | `ExperimentalAllowAllPaymaster` | `ExperimentalAllowAllParallelPaymaster` |
 | `EIP712_MULTI_SAFE_OPERATIONS_TYPE` | `EIP712_MULTI_CHAIN_OPERATIONS_TYPE` |
-| `PaymasterInitValues` | `ParallelPaymasterInitValues` |
 | `listKeys` (Calibur) | `getKeys` |
 
-These renames only apply to code built on intermediate experimental versions (0.2.31 through 0.2.41). Code on 0.2.30 does not reference these identifiers.
+#### TypeScript Export Changes
+
+Several interfaces and types are now exported as `export type` instead of `export` for `isolatedModules` compatibility. This is only breaking if you re-export them with `export { X } from "abstractionkit"` — change to `export type { X }`:
+
+- `RecoveryRequest`, `RecoverySignaturePair`, `RecoveryRequestTypedDataDomain`, `RecoveryRequestTypedMessageValue`
+- `Allowance`
+- `DepositInfo`
+- `Authorization7702Hex`, `Authorization7702`
+- `CandidePaymasterContext`, `PrependTokenPaymasterApproveAccount`
+- `UserOperationV6`, `UserOperationV7`, `UserOperationV8`, `AbiInputValue`, `JsonRpcParam`, `JsonRpcResponse`, `MetaTransaction`, `StateOverrideSet`, etc.
+- `SafeMessageTypedDataDomain`, `SafeMessageTypedMessageValue`
+- `SafeUserOperationTypedDataDomain`, `WebauthnPublicKey`, `WebauthnSignatureData`, `SignerSignaturePair`, `Signer`, etc.
+
+The wildcard re-export `export * from "./account/Safe/safeMessage"` has been replaced with explicit named exports.
+
+### New Features
+
+#### EIP-7702 Support
+
+- **`Simple7702Account`** — EIP-7702 account for EntryPoint v0.8.
+- **`Simple7702AccountV09`** — EIP-7702 account for EntryPoint v0.9, with parallel paymaster support.
+- **`Calibur7702Account`** — full-featured EIP-7702 account with WebAuthn/passkey support, key management, delegation auto-checking, and delegation revocation.
+- **`getDelegatedAddress`** utility for checking EIP-7702 delegation status.
+- **EIP-7702 delegation helpers** on `BaseSimple7702Account` (create, sign, and revoke delegation authorizations).
+- **Tenderly simulation support** for EntryPoint v0.9.
+
+#### Safe Accounts
+
+- **`SafeAccountV1_5_0_M_0_3_0`** — Safe contract v1.5.0 support with EIP-7951 and Daimo P256 verifier for WebAuthn.
+- **`SafeMultiChainSigAccountV1`** — multi-chain signature account (audited, promoted from experimental).
+- `createChangeThresholdMetaTransaction`, `createApproveHashMetaTransaction`, and `getThreshold` methods.
+- Auto-prepend `approve(0)` for ERC-20 tokens that require allowance reset before setting a new approval.
+
+#### EntryPoint v0.9
+
+- `UserOperationV9` type added.
+- Version-entrypoint compatibility guard — mismatched UserOperation versions are now caught early.
+- Entrypoint version is now resolved from the account instance.
+
+#### Paymaster
+
+- **`CandidePaymaster` now supports EntryPoint v0.9 and parallel signing flows.**
+- **`ExperimentalAllowAllParallelPaymaster`** for parallel paymaster data flows.
+- **Signing phases** added to the context object, with support in paymaster flows.
+- Parallel paymaster support for `Simple7702AccountV09`.
+
+#### Utilities
+
+- `MerkleTree` helper functions for multi-chain operations.
+- EIP-2098 compact signature support in `parseRawSignature`.
+- `EIP712_SAFE_OPERATION_PRIMARY_TYPE` and `EIP712_MULTI_CHAIN_OPERATIONS_PRIMARY_TYPE` constants.
+- Entrypoint address constants: `ENTRYPOINT_V6`, `ENTRYPOINT_V7`, `ENTRYPOINT_V8`, `ENTRYPOINT_V9`.
+- `CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS` and `CALIBUR_CANDIDE_V0_1_0_SINGLETON_ADDRESS` constants.
+- Legacy `ALLOWANCE_MODULE_V0_1_0_ADDRESS` constant for migration.
 
 ### Bug Fixes
 
-Fixes listed here apply to APIs that already existed at 0.2.30. Bugs that were fixed within new-in-0.3.0 features during their pre-release development are not listed separately; those features are shipped in their final form as part of the "New Features" section.
-
-- **Gas estimation**: fixed gas overrides calculations, BigInt gas scaling, and handling of fractional percentage multipliers in `applyMultiplier`.
-- **SafeAccount multisend**: fixed a bug where token paymaster approvals were prepended after existing calls instead of before them.
-- **WebAuthn passkeys**: fixed compatibility with the v0.2.1 shared-signer contracts when using custom contract addresses.
-- **EIP-7702 utilities**: fixed `CHAIN_ID` BigInt crash in signing helpers and exposed `DEFAULT_DELEGATEE_ADDRESS` as a static property.
-- **Safe v0.3.0 account**: fixed `safeAccountSingleton` forwarding and added missing `webAuthnSignerProxyCreationCode` handling.
-- **CandidePaymaster**: fixed `paymasterMetadata` hex-field normalization in `fetchSupportedERC20TokensAndPaymasterMetadata`; fixed several instances of in-place mutation via aliasing on the user-passed UserOperation.
-- **Constructor forwarding and lifecycle**: fixed unhandled promises, timeout tracking, and constructor argument forwarding across pre-existing classes.
-- **Miscellaneous**: typo fixes in error messages, removal of unused imports and dead guards, unused `safeV06PrevModuleAddress` removed, chainId validation tightened in pre-existing helpers.
+- Fix object mutation via aliasing in `SafeAccountV1_5_0_M_0_3_0` and `CandidePaymaster`.
+- Fix object mutation, infinite recursion, and missing module address in multi-chain leaf hashes.
+- Fix BigInt gas scaling, merkle proof forwarding, entrypoint dispatch, and missing override fields.
+- Fix `CHAIN_ID` BigInt crash.
+- Fix gas overrides calculations.
+- Fix `formatSignaturesToUseroperationsSignatures` overrides and single-op case handling.
+- Fix `paymasterAndData` packing and signing when `PAYMASTER_SIG_MAGIC` is appended (v0.9).
+- Fix fractional percentage multipliers in `applyMultiplier`.
+- Fix normalize `paymasterMetadata` hex fields in `fetchSupportedERC20TokensAndPaymasterMetadata`.
+- Fix multi-chain sig account singleton forwarding, hash overrides, and type safety.
+- Fix constructor forwarding, timeout tracking, and unhandled promises.
+- Fix reverse proof order to match onchain verification order.
+- Fix WebAuthn passkeys v0.2.1 compatibility for custom contract addresses.
+- Fix token approval prepended before existing calls in SafeAccount multisend.
+- Fix `IAccountExecute.executeUserOp` callData rewriting for Tenderly simulation.
+- Fix multi-chain defaults in `formatSignaturesToUseroperationsSignatures`.
 
 ### Internal
 
-- Build system migrated from microbundle to tsdown. Output paths updated (see Breaking Changes).
-- `Simple7702Account` refactored into a `BaseSimple7702Account` pattern to enable the new `Simple7702AccountV09` subclass. No user-facing API changes on `Simple7702Account` itself.
-- Removed `isomorphic-unfetch` and `rimraf` dependencies; `rimraf` replaced with a cross-platform inline Node script.
+- Build system migrated from microbundle to tsdown.
+- Removed `isomorphic-unfetch` and `rimraf` dependencies.
 - Added CI workflow (`.github/workflows/ci.yml`) using yarn.
 - Added `SECURITY.md` with vulnerability reporting policy.
 - Added `prepare` script for GitHub-based installs.
-- Extensive JSDoc coverage added across public methods and types.
