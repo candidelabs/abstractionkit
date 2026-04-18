@@ -280,6 +280,48 @@ describe('Erc7677Paymaster', () => {
     expect(paymaster.provider).toBe(null);
   });
 
+  // ── Entrypoint case-sensitivity ─────────────────────────────────────
+
+  test('lowercase v0.6 entrypoint override applies the +40_000n overhead', async () => {
+    // ENTRYPOINT_V6 is checksummed in constants.ts; user input may be lowercase.
+    const ENTRYPOINT_V6_LOWER = '0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789';
+
+    const server = await makeMockRpcServer({
+      pm_getPaymasterStubData: () => ({
+        paymaster: '0xPaymaster'.padEnd(42, '0'),
+        paymasterData: '0xstub',
+        paymasterVerificationGasLimit: '0x8000',
+        paymasterPostOpGasLimit: '0xa000',
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1000',
+        verificationGasLimit: '0x2000',
+        preVerificationGas: '0x3000',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: '0xPaymaster'.padEnd(42, '0'),
+        paymasterData: '0xfinal',
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID });
+      const out = await paymaster.createPaymasterUserOperation(
+        { entrypointAddress: ENTRYPOINT_V7 },
+        v7UserOp(),
+        server.url,
+        {},
+        { entrypoint: ENTRYPOINT_V6_LOWER },
+      );
+
+      // verificationGasLimit = (0x2000 + 10%) + 40_000n overhead.
+      const baseVgl = 0x2000n + (0x2000n * 1000n) / 10000n;
+      expect(out.verificationGasLimit).toBe(baseVgl + 40_000n);
+    } finally {
+      await server.close();
+    }
+  });
+
   test('explicit provider overrides auto-detection', () => {
     const paymaster = new Erc7677Paymaster('https://api.pimlico.io/v2/sepolia/rpc', { provider: null });
     expect(paymaster.provider).toBe(null);

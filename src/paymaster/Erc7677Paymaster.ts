@@ -462,12 +462,24 @@ export class Erc7677Paymaster extends Paymaster {
 				);
 			}
 			const bundler = new Bundler(bundlerRpc);
-			const priorCallGasLimit = userOp.callGasLimit;
-			const priorVerificationGasLimit = userOp.verificationGasLimit;
-			const priorPreVerificationGas = userOp.preVerificationGas;
 			userOp.callGasLimit = 0n;
 			userOp.verificationGasLimit = 0n;
 			userOp.preVerificationGas = 0n;
+			// Some bundlers reject estimation when fees are set and the sender
+			// has insufficient balance to pay them. Zero them during the
+			// estimate and restore after — same pattern as CandidePaymaster.
+			//
+			// Pimlico is an exception: estimating with maxFeePerGas = 0 makes
+			// its paymaster postOp divide by the fee and revert with
+			// "AA50 postOp reverted: divide by zero". Skip the zeroing for
+			// Pimlico and pass the user-supplied fees through unchanged.
+			const skipFeeZeroing = this.provider === "pimlico";
+			const inputMaxFeePerGas = userOp.maxFeePerGas;
+			const inputMaxPriorityFeePerGas = userOp.maxPriorityFeePerGas;
+			if (!skipFeeZeroing) {
+				userOp.maxFeePerGas = 0n;
+				userOp.maxPriorityFeePerGas = 0n;
+			}
 
 			const estimation = await bundler.estimateUserOperationGas(
 				userOp,
@@ -475,20 +487,19 @@ export class Erc7677Paymaster extends Paymaster {
 				overrides.state_override_set as StateOverrideSet | undefined,
 			);
 
+			if (!skipFeeZeroing) {
+				userOp.maxFeePerGas = inputMaxFeePerGas;
+				userOp.maxPriorityFeePerGas = inputMaxPriorityFeePerGas;
+			}
+
 			if (estimation.preVerificationGas > preVerificationGas) {
 				preVerificationGas = estimation.preVerificationGas;
-			} else {
-				userOp.preVerificationGas = priorPreVerificationGas;
 			}
 			if (estimation.verificationGasLimit > verificationGasLimit) {
 				verificationGasLimit = estimation.verificationGasLimit;
-			} else {
-				userOp.verificationGasLimit = priorVerificationGasLimit;
 			}
 			if (estimation.callGasLimit > callGasLimit) {
 				callGasLimit = estimation.callGasLimit;
-			} else {
-				userOp.callGasLimit = priorCallGasLimit;
 			}
 
 			// Overwrite paymaster gas fields with bundler-reported values when
@@ -550,8 +561,10 @@ export class Erc7677Paymaster extends Paymaster {
 				overrides.callGasLimitPercentageMultiplier ?? 10,
 			);
 
-		if (entrypoint === ENTRYPOINT_V6) {
+		if (entrypoint.toLowerCase() === ENTRYPOINT_V6.toLowerCase()) {
 			// Align with CandidePaymaster: add paymaster verification overhead for v0.6.
+			// Lowercase compare — overrides.entrypoint is arbitrary user input
+			// and ENTRYPOINT_V6 is checksummed.
 			userOp.verificationGasLimit += 40_000n;
 		}
 		// entrypoint v9 has no special handling here; kept for future use.
@@ -695,7 +708,7 @@ export class Erc7677Paymaster extends Paymaster {
 	 * Route to the correct provider-specific token quote fetcher.
 	 * Returns `null` when no provider is configured.
 	 */
-	public async fetchProviderTokenQuote(
+	private async fetchProviderTokenQuote(
 		tokenAddress: string,
 		entrypoint: string,
 		chainIdHex: string,
