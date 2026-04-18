@@ -763,7 +763,21 @@ export class Erc7677Paymaster extends Paymaster {
 		} else if (context.exchangeRate != null) {
 			// Case B: no provider, but exchangeRate in context.
 			// paymasterAddress is resolved from the stub response below.
-			exchangeRate = BigInt(context.exchangeRate as string | bigint);
+			try {
+				exchangeRate = BigInt(context.exchangeRate as string | bigint);
+			} catch (err) {
+				throw new AbstractionKitError(
+					"PAYMASTER_ERROR",
+					`context.exchangeRate could not be parsed as a bigint: ${String(context.exchangeRate)}`,
+					{ cause: ensureError(err) },
+				);
+			}
+			if (exchangeRate <= 0n) {
+				throw new AbstractionKitError(
+					"PAYMASTER_ERROR",
+					`context.exchangeRate must be > 0, got ${exchangeRate}`,
+				);
+			}
 		} else {
 			// Case C: no provider, no exchangeRate — fall through to regular flow.
 			return this.sponsoredFlow(

@@ -820,6 +820,65 @@ describe('Erc7677Paymaster', () => {
     }
   });
 
+  // ── Case B: invalid exchangeRate validation ─────────────────────────
+
+  test('Case B: unparseable exchangeRate throws AbstractionKitError', async () => {
+    const server = await makeMockRpcServer({});
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: null });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+
+      await expect(
+        paymaster.createPaymasterUserOperation(
+          smartAccount,
+          v7UserOp(),
+          server.url,
+          { token: '0x' + 'aa'.repeat(20), exchangeRate: 'not-a-number' },
+        ),
+      ).rejects.toThrow(/exchangeRate could not be parsed/);
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('Case B: zero exchangeRate throws AbstractionKitError', async () => {
+    const server = await makeMockRpcServer({});
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: null });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+
+      await expect(
+        paymaster.createPaymasterUserOperation(
+          smartAccount,
+          v7UserOp(),
+          server.url,
+          { token: '0x' + 'aa'.repeat(20), exchangeRate: 0n },
+        ),
+      ).rejects.toThrow(/exchangeRate must be > 0/);
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('Case B: negative exchangeRate throws AbstractionKitError', async () => {
+    const server = await makeMockRpcServer({});
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: null });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+
+      await expect(
+        paymaster.createPaymasterUserOperation(
+          smartAccount,
+          v7UserOp(),
+          server.url,
+          { token: '0x' + 'aa'.repeat(20), exchangeRate: '-1' },
+        ),
+      ).rejects.toThrow(/exchangeRate must be > 0/);
+    } finally {
+      await server.close();
+    }
+  });
+
   // ── Token paymaster flow: USDT allowance reset ──────────────────────
 
   test('USDT-like token gets approve(0) prepended', async () => {
