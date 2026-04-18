@@ -866,12 +866,11 @@ export class Erc7677Paymaster extends Paymaster {
 		}
 		userOp.callData = callDataWithApprove;
 
-		// Step 7 — if the stub was already final, we're done.
-		if (stub.isFinal === true) {
-			return userOp as unknown as SameUserOp<T>;
-		}
-
-		// Step 8 — final paymaster data (signature over the fully-populated userOp).
+		// Step 7 — final paymaster data (signature over the fully-populated
+		// userOp). The token flow always fetches fresh paymaster data: the
+		// stub's `isFinal` cannot be honored here because callData was mutated
+		// after the stub was generated, so any stub signature is over a
+		// different UserOp hash than the one we're about to return.
 		const final = await this.getPaymasterData(
 			userOp,
 			entrypoint,

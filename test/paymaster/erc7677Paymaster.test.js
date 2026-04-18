@@ -820,6 +820,53 @@ describe('Erc7677Paymaster', () => {
     }
   });
 
+  // ── Token flow ignores stub.isFinal (callData mutates after stub) ──
+
+  test('token flow still calls pm_getPaymasterData even when stub.isFinal is true', async () => {
+    const PAYMASTER_ADDR = '0x' + 'ee'.repeat(20);
+    const TOKEN_ADDR = '0x' + 'ff'.repeat(20);
+
+    const server = await makeMockRpcServer({
+      pm_getPaymasterStubData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xstub',
+        paymasterVerificationGasLimit: '0x8000',
+        paymasterPostOpGasLimit: '0xa000',
+        isFinal: true, // would be unsafe to honor — callData mutates after stub
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1000',
+        verificationGasLimit: '0x2000',
+        preVerificationGas: '0x3000',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xfinal',
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: null });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+
+      const out = await paymaster.createPaymasterUserOperation(
+        smartAccount,
+        v7UserOp(),
+        server.url,
+        { token: TOKEN_ADDR, exchangeRate: '0xde0b6b3a7640000' },
+      );
+
+      // pm_getPaymasterData was called even though the stub claimed isFinal:
+      // the token flow mutates callData, so the stub's signature would be
+      // invalid against the final UserOp hash.
+      const methods = server.calls.map((c) => c.method);
+      expect(methods).toContain('pm_getPaymasterData');
+      expect(out.paymasterData).toBe('0xfinal');
+    } finally {
+      await server.close();
+    }
+  });
+
   // ── Case B: invalid exchangeRate validation ─────────────────────────
 
   test('Case B: unparseable exchangeRate throws AbstractionKitError', async () => {
