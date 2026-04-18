@@ -397,13 +397,15 @@ describe('Erc7677Paymaster', () => {
     const server = await makeMockRpcServer({
       pm_supportedERC20Tokens: () => ({
         tokens: [{ address: TOKEN_ADDR, exchangeRate: '0xde0b6b3a7640000' }],
-        paymasterMetadata: { address: PAYMASTER_ADDR },
-      }),
-      pm_getPaymasterStubData: () => ({
-        paymaster: PAYMASTER_ADDR,
-        paymasterData: '0xstub',
-        paymasterVerificationGasLimit: '0x8000',
-        paymasterPostOpGasLimit: '0xa000',
+        paymasterMetadata: {
+          address: PAYMASTER_ADDR,
+          dummyPaymasterAndData: {
+            paymaster: PAYMASTER_ADDR,
+            paymasterVerificationGasLimit: '0x8000',
+            paymasterPostOpGasLimit: '0xa000',
+            paymasterData: '0xdummydata',
+          },
+        },
       }),
       eth_estimateUserOperationGas: () => ({
         callGasLimit: '0x1000',
@@ -428,17 +430,240 @@ describe('Erc7677Paymaster', () => {
         { token: TOKEN_ADDR },
       );
 
-      // Call order: pm_supportedERC20Tokens → stub → estimate → final.
+      // Call order: pm_supportedERC20Tokens → estimate → final.
+      // No pm_getPaymasterStubData — stub data comes from the cached response.
       const methods = server.calls.map((c) => c.method);
       expect(methods).toEqual([
         'pm_supportedERC20Tokens',
-        'pm_getPaymasterStubData',
         'eth_estimateUserOperationGas',
         'pm_getPaymasterData',
       ]);
 
       expect(out.paymasterData).toBe('0xfinalcandide');
       expect(smartAccount.calls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      await server.close();
+    }
+  });
+
+  // ── Candide sponsored flow: skips pm_getPaymasterStubData ──────────
+
+  test('Candide provider: sponsored flow skips pm_getPaymasterStubData', async () => {
+    const PAYMASTER_ADDR = '0x' + 'cc'.repeat(20);
+
+    const server = await makeMockRpcServer({
+      pm_supportedERC20Tokens: () => ({
+        tokens: [],
+        paymasterMetadata: {
+          address: PAYMASTER_ADDR,
+          dummyPaymasterAndData: {
+            paymaster: PAYMASTER_ADDR,
+            paymasterVerificationGasLimit: '0x8000',
+            paymasterPostOpGasLimit: '0xa000',
+            paymasterData: '0xdummydata',
+          },
+        },
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1000',
+        verificationGasLimit: '0x2000',
+        preVerificationGas: '0x3000',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xfinalsponsored',
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'candide' });
+      const out = await paymaster.createPaymasterUserOperation(
+        { entrypointAddress: ENTRYPOINT_V7 },
+        v7UserOp(),
+        server.url,
+      );
+
+      // Call order: pm_supportedERC20Tokens → estimate → final.
+      // Skips pm_getPaymasterStubData by deriving stub from the cached response.
+      const methods = server.calls.map((c) => c.method);
+      expect(methods).toEqual([
+        'pm_supportedERC20Tokens',
+        'eth_estimateUserOperationGas',
+        'pm_getPaymasterData',
+      ]);
+      expect(out.paymasterData).toBe('0xfinalsponsored');
+    } finally {
+      await server.close();
+    }
+  });
+
+  // ── Candide TTL: token flow re-fetches after 45s ────────────────────
+
+  test('Candide provider: token flow re-fetches pm_supportedERC20Tokens after TTL', async () => {
+    const PAYMASTER_ADDR = '0x' + 'cc'.repeat(20);
+    const TOKEN_ADDR = '0x' + 'dd'.repeat(20);
+
+    const server = await makeMockRpcServer({
+      pm_supportedERC20Tokens: () => ({
+        tokens: [{ address: TOKEN_ADDR, exchangeRate: '0xde0b6b3a7640000' }],
+        paymasterMetadata: {
+          address: PAYMASTER_ADDR,
+          dummyPaymasterAndData: {
+            paymaster: PAYMASTER_ADDR,
+            paymasterVerificationGasLimit: '0x8000',
+            paymasterPostOpGasLimit: '0xa000',
+            paymasterData: '0xdummydata',
+          },
+        },
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1000',
+        verificationGasLimit: '0x2000',
+        preVerificationGas: '0x3000',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xfinal',
+      }),
+    });
+
+    jest.useFakeTimers({ doNotFake: ['setTimeout', 'setInterval', 'setImmediate', 'clearTimeout', 'clearInterval', 'clearImmediate', 'nextTick', 'queueMicrotask'] });
+    jest.setSystemTime(new Date('2024-01-01T00:00:00Z'));
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'candide' });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+
+      // 1st token flow call — fetches pm_supportedERC20Tokens.
+      await paymaster.createPaymasterUserOperation(
+        smartAccount,
+        v7UserOp(),
+        server.url,
+        { token: TOKEN_ADDR },
+      );
+
+      // Advance time past the 45s TTL.
+      jest.setSystemTime(new Date('2024-01-01T00:00:46Z'));
+
+      // 2nd token flow call — TTL expired, should re-fetch.
+      await paymaster.createPaymasterUserOperation(
+        smartAccount,
+        v7UserOp(),
+        server.url,
+        { token: TOKEN_ADDR },
+      );
+
+      const supportedCalls = server.calls.filter((c) => c.method === 'pm_supportedERC20Tokens');
+      expect(supportedCalls.length).toBe(2);
+    } finally {
+      jest.useRealTimers();
+      await server.close();
+    }
+  });
+
+  test('Candide provider: sponsored flow uses cache indefinitely (ignores TTL)', async () => {
+    const PAYMASTER_ADDR = '0x' + 'cc'.repeat(20);
+    const TOKEN_ADDR = '0x' + 'dd'.repeat(20);
+
+    const server = await makeMockRpcServer({
+      pm_supportedERC20Tokens: () => ({
+        tokens: [{ address: TOKEN_ADDR, exchangeRate: '0xde0b6b3a7640000' }],
+        paymasterMetadata: {
+          address: PAYMASTER_ADDR,
+          dummyPaymasterAndData: {
+            paymaster: PAYMASTER_ADDR,
+            paymasterVerificationGasLimit: '0x8000',
+            paymasterPostOpGasLimit: '0xa000',
+            paymasterData: '0xdummydata',
+          },
+        },
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1000',
+        verificationGasLimit: '0x2000',
+        preVerificationGas: '0x3000',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xfinal',
+      }),
+    });
+
+    jest.useFakeTimers({ doNotFake: ['setTimeout', 'setInterval', 'setImmediate', 'clearTimeout', 'clearInterval', 'clearImmediate', 'nextTick', 'queueMicrotask'] });
+    jest.setSystemTime(new Date('2024-01-01T00:00:00Z'));
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'candide' });
+
+      // 1st sponsored call — fetches pm_supportedERC20Tokens for stub data.
+      await paymaster.createPaymasterUserOperation(
+        { entrypointAddress: ENTRYPOINT_V7 },
+        v7UserOp(),
+        server.url,
+      );
+
+      // Advance time far past TTL.
+      jest.setSystemTime(new Date('2024-01-01T01:00:00Z'));
+
+      // 2nd sponsored call — TTL does NOT apply, reuses cache.
+      await paymaster.createPaymasterUserOperation(
+        { entrypointAddress: ENTRYPOINT_V7 },
+        v7UserOp(),
+        server.url,
+      );
+
+      const supportedCalls = server.calls.filter((c) => c.method === 'pm_supportedERC20Tokens');
+      expect(supportedCalls.length).toBe(1);
+    } finally {
+      jest.useRealTimers();
+      await server.close();
+    }
+  });
+
+  // ── Candide: single pm_supportedERC20Tokens call for combined flow ──
+
+  test('Candide provider: only one pm_supportedERC20Tokens call (cached)', async () => {
+    const PAYMASTER_ADDR = '0x' + 'cc'.repeat(20);
+    const TOKEN_ADDR = '0x' + 'dd'.repeat(20);
+
+    const server = await makeMockRpcServer({
+      pm_supportedERC20Tokens: () => ({
+        tokens: [{ address: TOKEN_ADDR, exchangeRate: '0xde0b6b3a7640000' }],
+        paymasterMetadata: {
+          address: PAYMASTER_ADDR,
+          dummyPaymasterAndData: {
+            paymaster: PAYMASTER_ADDR,
+            paymasterVerificationGasLimit: '0x8000',
+            paymasterPostOpGasLimit: '0xa000',
+            paymasterData: '0xdummydata',
+          },
+        },
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1000',
+        verificationGasLimit: '0x2000',
+        preVerificationGas: '0x3000',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xfinal',
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'candide' });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+
+      await paymaster.createPaymasterUserOperation(
+        smartAccount,
+        v7UserOp(),
+        server.url,
+        { token: TOKEN_ADDR },
+      );
+
+      // Token quote + stub data both come from a SINGLE pm_supportedERC20Tokens call.
+      const supportedCalls = server.calls.filter((c) => c.method === 'pm_supportedERC20Tokens');
+      expect(supportedCalls.length).toBe(1);
     } finally {
       await server.close();
     }

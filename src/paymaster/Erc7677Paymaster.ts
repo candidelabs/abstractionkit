@@ -30,6 +30,13 @@ const TOKEN_APPROVE_AMOUNT_MULTIPLIER = 2n;
 const TOKENS_REQUIRING_ALLOWANCE_RESET: string[] = [
 	"0xdac17f958d2ee523a2206206994597c13d831ec7", // USDT (Ethereum mainnet)
 ];
+/**
+ * Time-to-live for cached Candide `pm_supportedERC20Tokens` responses, applied
+ * only when the fetch is initiated for an exchange-rate lookup. Stub-data
+ * lookups (paymaster address + dummyPaymasterAndData) reuse the cache
+ * indefinitely since those fields are effectively static per EP.
+ */
+const CANDIDE_TOKEN_QUOTE_TTL_MS = 45_000;
 
 /**
  * Opaque context object forwarded to the paymaster RPC as the fourth argument
@@ -147,6 +154,26 @@ export interface Erc7677StubDataResult extends Erc7677PaymasterFields {
  * );
  * ```
  */
+/**
+ * Raw shape of Candide's `pm_supportedERC20Tokens` response.
+ * `dummyPaymasterAndData` is a concatenated hex string for EntryPoint v0.6 and
+ * a structured object for v0.7+.
+ */
+interface CandideSupportedResponse {
+	tokens: Array<{ address: string; exchangeRate: string }>;
+	paymasterMetadata: {
+		address: string;
+		dummyPaymasterAndData:
+			| string
+			| {
+				paymaster: string;
+				paymasterVerificationGasLimit: string;
+				paymasterPostOpGasLimit: string;
+				paymasterData: string;
+			};
+	};
+}
+
 export class Erc7677Paymaster extends Paymaster {
 	/** The paymaster JSON-RPC endpoint URL */
 	readonly rpcUrl: string;
@@ -154,6 +181,15 @@ export class Erc7677Paymaster extends Paymaster {
 	private chainId: string | null;
 	/** Detected or explicitly set paymaster provider. `null` means no provider-specific features. */
 	readonly provider: Erc7677Provider;
+	/**
+	 * Cached Candide `pm_supportedERC20Tokens` response, keyed by lowercase
+	 * entrypoint. Used for both token quotes and stub data to avoid a second
+	 * round-trip (`pm_getPaymasterStubData`) for Candide-hosted paymasters.
+	 *
+	 * The cache is indefinite for stub-data lookups but has a TTL for
+	 * exchange-rate lookups — see {@link CANDIDE_TOKEN_QUOTE_TTL_MS}.
+	 */
+	private candideCache = new Map<string, { data: CandideSupportedResponse; fetchedAt: number }>();
 
 	/**
 	 * Detect the paymaster provider from the RPC URL hostname.
@@ -562,6 +598,37 @@ export class Erc7677Paymaster extends Paymaster {
 	}
 
 	/**
+	 * Fetch (and cache) Candide's `pm_supportedERC20Tokens` response for the
+	 * given entrypoint. The response carries both exchange rates and the
+	 * `dummyPaymasterAndData` used for gas estimation, so one round-trip
+	 * suffices for the entire paymaster flow.
+	 *
+	 * @param options.enforceTTL - When true, re-fetches if the cached entry is
+	 *   older than {@link CANDIDE_TOKEN_QUOTE_TTL_MS}. Set by exchange-rate
+	 *   lookups (where staleness matters). Stub-data lookups leave this false
+	 *   and reuse the cache indefinitely — the paymaster address and
+	 *   `dummyPaymasterAndData` are effectively static per paymaster version.
+	 */
+	private async fetchCandideSupportedTokens(
+		entrypoint: string,
+		options: { enforceTTL?: boolean } = {},
+	): Promise<CandideSupportedResponse> {
+		const key = entrypoint.toLowerCase();
+		const cached = this.candideCache.get(key);
+		const isStale = cached != null
+			&& options.enforceTTL === true
+			&& Date.now() - cached.fetchedAt > CANDIDE_TOKEN_QUOTE_TTL_MS;
+		if (cached != null && !isStale) return cached.data;
+		const result = await sendJsonRpcRequest(
+			this.rpcUrl,
+			"pm_supportedERC20Tokens",
+			[entrypoint],
+		) as unknown as CandideSupportedResponse;
+		this.candideCache.set(key, { data: result, fetchedAt: Date.now() });
+		return result;
+	}
+
+	/**
 	 * Fetch token exchange rate and paymaster address via Candide's
 	 * `pm_supportedERC20Tokens` RPC.
 	 */
@@ -569,14 +636,7 @@ export class Erc7677Paymaster extends Paymaster {
 		tokenAddress: string,
 		entrypoint: string,
 	): Promise<{ exchangeRate: bigint; paymasterAddress: string }> {
-		const result = await sendJsonRpcRequest(
-			this.rpcUrl,
-			"pm_supportedERC20Tokens",
-			[entrypoint],
-		) as unknown as {
-			tokens: Array<{ address: string; exchangeRate: string }>;
-			paymasterMetadata: { address: string };
-		};
+		const result = await this.fetchCandideSupportedTokens(entrypoint, { enforceTTL: true });
 
 		const token = result.tokens?.find(
 			(t) => t.address.toLowerCase() === tokenAddress.toLowerCase(),
@@ -591,6 +651,44 @@ export class Erc7677Paymaster extends Paymaster {
 			exchangeRate: BigInt(token.exchangeRate),
 			paymasterAddress: result.paymasterMetadata.address,
 		};
+	}
+
+	/**
+	 * Convert Candide's `dummyPaymasterAndData` metadata into a stub result
+	 * compatible with {@link applyPaymasterFields}. Handles both v0.6
+	 * (concatenated hex string) and v0.7+ (structured) shapes.
+	 */
+	private candideStubFromMetadata(
+		metadata: CandideSupportedResponse["paymasterMetadata"],
+	): Erc7677StubDataResult {
+		const dummy = metadata.dummyPaymasterAndData;
+		if (typeof dummy === "string") {
+			return { paymasterAndData: dummy };
+		}
+		return {
+			paymaster: dummy.paymaster,
+			paymasterData: dummy.paymasterData,
+			paymasterVerificationGasLimit: dummy.paymasterVerificationGasLimit,
+			paymasterPostOpGasLimit: dummy.paymasterPostOpGasLimit,
+		};
+	}
+
+	/**
+	 * Get stub paymaster data. For Candide-hosted paymasters this derives the
+	 * stub from the cached `pm_supportedERC20Tokens` response (no extra
+	 * round-trip). For other providers, falls back to `pm_getPaymasterStubData`.
+	 */
+	private async getStubData(
+		userOperation: AnyUserOperation,
+		entrypoint: string,
+		chainIdHex: string,
+		context: Erc7677Context,
+	): Promise<Erc7677StubDataResult> {
+		if (this.provider === "candide") {
+			const response = await this.fetchCandideSupportedTokens(entrypoint);
+			return this.candideStubFromMetadata(response.paymasterMetadata);
+		}
+		return this.getPaymasterStubData(userOperation, entrypoint, chainIdHex, context);
 	}
 
 	/**
@@ -666,7 +764,10 @@ export class Erc7677Paymaster extends Paymaster {
 		}
 
 		// Step 2 — stub paymaster data for gas estimation.
-		const stub = await this.getPaymasterStubData(
+		// For Candide, this is derived from the cached `pm_supportedERC20Tokens`
+		// response (same RPC call used for the exchange rate above) — no extra
+		// `pm_getPaymasterStubData` round-trip.
+		const stub = await this.getStubData(
 			userOp,
 			entrypoint,
 			chainIdHex,
@@ -768,7 +869,9 @@ export class Erc7677Paymaster extends Paymaster {
 		overrides: GasPaymasterUserOperationOverrides,
 	): Promise<SameUserOp<T>> {
 		// Step 1 — stub paymaster data for gas estimation.
-		const stub = await this.getPaymasterStubData(
+		// Candide-hosted paymasters skip `pm_getPaymasterStubData` and use the
+		// cached `pm_supportedERC20Tokens` response instead.
+		const stub = await this.getStubData(
 			userOp,
 			entrypoint,
 			chainIdHex,
