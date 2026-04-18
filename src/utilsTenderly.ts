@@ -12,7 +12,6 @@ import {
 	AbstractionKitError
 } from "./errors";
 import { sendJsonRpcRequest, createUserOperationHash } from "./utils";
-import { Authorization7702Hex } from "./utils7702";
 
 /**
  * State override mapping for Tenderly simulations.
@@ -313,19 +312,19 @@ export interface BaseUserOperationToSimulate {
 	/** The encoded call data to execute on the account. */
 	callData: string;
 	/** The account nonce. */
-	nonce: bigint;
+	nonce: any;
 	/** The gas limit for the main execution call. */
-	callGasLimit: bigint;
+	callGasLimit: any;
 	/** The gas limit for the verification step. */
-	verificationGasLimit: bigint;
+	verificationGasLimit: any;
 	/** The gas overhead to compensate the bundler. */
-	preVerificationGas: bigint;
+	preVerificationGas: any;
 	/** The maximum fee per gas (EIP-1559). */
-	maxFeePerGas: bigint;
+	maxFeePerGas: any;
 	/** The maximum priority fee per gas (EIP-1559). */
-	maxPriorityFeePerGas: bigint;
+	maxPriorityFeePerGas: any;
 	/** The UserOperation signature. */
-	signature: string;
+	signature: any;
 }
 
 /**
@@ -336,7 +335,7 @@ export interface UserOperationV6ToSimulate extends BaseUserOperationToSimulate {
 	/** The concatenated factory address and factory data, or null if already deployed. */
 	initCode: string | null;
 	/** The concatenated paymaster address and paymaster-specific data. */
-	paymasterAndData: string;
+	paymasterAndData: any;
 }
 
 /**
@@ -349,13 +348,13 @@ export interface UserOperationV7ToSimulate extends BaseUserOperationToSimulate {
 	/** The factory-specific initialization data, or null if already deployed. */
 	factoryData: string | null;
 	/** The paymaster contract address. */
-	paymaster: string | null;
+	paymaster: any;
 	/** The gas limit for paymaster verification. */
-	paymasterVerificationGasLimit: bigint | null;
+	paymasterVerificationGasLimit: any;
 	/** The gas limit for paymaster postOp execution. */
-	paymasterPostOpGasLimit: bigint | null;
+	paymasterPostOpGasLimit: any;
 	/** The paymaster-specific data. */
-	paymasterData: string | null;
+	paymasterData: any;
 }
 
 /**
@@ -369,15 +368,15 @@ export interface UserOperationV8ToSimulate extends BaseUserOperationToSimulate {
 	/** The factory-specific initialization data, or null if already deployed. */
 	factoryData: string | null;
 	/** The paymaster contract address. */
-	paymaster: string | null;
+	paymaster: any;
 	/** The gas limit for paymaster verification. */
-	paymasterVerificationGasLimit: bigint | null;
+	paymasterVerificationGasLimit: any;
 	/** The gas limit for paymaster postOp execution. */
-	paymasterPostOpGasLimit: bigint | null;
+	paymasterPostOpGasLimit: any;
 	/** The paymaster-specific data. */
-	paymasterData: string | null;
+	paymasterData: any;
 	/** The EIP-7702 delegation authorization data. */
-	eip7702Auth: Authorization7702Hex | null;
+    eip7702Auth: any;
 }
 
 /**
@@ -422,7 +421,7 @@ export async function simulateUserOperationCallDataWithTenderlyAndCreateShareLin
         blockNumber,
         stateOverrides
     );
-    const simulationIds = simulation.map(s => s.simulation.id);
+    const simulationIds = simulation.map(s => s.simulation.id) as string[];
     await Promise.all(simulationIds.map(simulationId =>
         shareTenderlySimulationAndCreateLink(
             tenderlyAccountSlug,
@@ -644,7 +643,7 @@ export async function simulateSenderCallDataWithTenderlyAndCreateShareLink(
         blockNumber,
         stateOverrides
     );
-    const simulationIds = simulation.map(s => s.simulation.id);
+    const simulationIds = simulation.map(s => s.simulation.id) as string[];
     await Promise.all(simulationIds.map(simulationId =>
         shareTenderlySimulationAndCreateLink(
             tenderlyAccountSlug,
