@@ -330,7 +330,7 @@ export class Calibur7702Account extends SmartAccount
 				);
 			}
 
-			const ops: Promise<unknown>[] = [eip7702AuthNonceOp];
+			const ops: Promise<any>[] = [eip7702AuthNonceOp];
 			if (nonceOp != null) ops.push(nonceOp);
 			if (gasPriceOp != null) ops.push(gasPriceOp);
 			if (delegationCheckOp != null) ops.push(delegationCheckOp);
@@ -338,8 +338,8 @@ export class Calibur7702Account extends SmartAccount
 			const values = await Promise.all(ops);
 			let idx = 0;
 			eip7702AuthNonce = BigInt(values[idx++] as string);
-			if (nonceOp != null) nonce = values[idx++] as bigint;
-			if (gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++] as [bigint, bigint];
+			if (nonceOp != null) nonce = values[idx++];
+			if (gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++];
 			if (delegationCheckOp != null) {
 				const delegatedTo = values[idx++] as string | null;
 				if (delegatedTo != null &&
@@ -348,7 +348,7 @@ export class Calibur7702Account extends SmartAccount
 				}
 			}
 		} else if (overrides.eip7702Auth != null) {
-			const ops: Promise<unknown>[] = [];
+			const ops: Promise<any>[] = [];
 			if (nonceOp != null) ops.push(nonceOp);
 			if (gasPriceOp != null) ops.push(gasPriceOp);
 			if (delegationCheckOp != null) ops.push(delegationCheckOp);
@@ -356,8 +356,8 @@ export class Calibur7702Account extends SmartAccount
 			if (ops.length > 0) {
 				const values = await Promise.all(ops);
 				let idx = 0;
-				if (nonceOp != null) nonce = values[idx++] as bigint;
-				if (gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++] as [bigint, bigint];
+				if (nonceOp != null) nonce = values[idx++];
+				if (gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++];
 				if (delegationCheckOp != null) {
 					const delegatedTo = values[idx++] as string | null;
 					if (delegatedTo != null &&
@@ -1306,7 +1306,7 @@ export class Calibur7702Account extends SmartAccount
 		if (count === 0) return [];
 
 		// Batch all keyAt calls in parallel
-		const keyAtPromises: Promise<unknown>[] = [];
+		const keyAtPromises: Promise<any>[] = [];
 		for (let i = 0; i < count; i++) {
 			const keyAtCallData = KEY_AT_SELECTOR + abiCoder.encode(
 				["uint256"],
