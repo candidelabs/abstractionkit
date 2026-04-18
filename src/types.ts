@@ -108,7 +108,7 @@ export type ChainIdResult = string;
 export type SupportedEntryPointsResult = string[];
 
 export type SingleTransactionTenderlySimulationResult = {
-    transaction: Record<string, unknown>;
+    transaction: unknown;
     simulation: { id: string } & Record<string, unknown>;
 }
 
