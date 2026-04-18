@@ -73,10 +73,11 @@ function makeTokenAccount(entrypoint) {
     calls,
     prependTokenPaymasterApproveToCallData(callData, tokenAddress, paymasterAddress, approveAmount) {
       calls.push({ callData, tokenAddress, paymasterAddress, approveAmount });
-      // Simple simulation: prefix a marker so we can verify the call happened.
-      // In the real code this would re-encode MultiSend calldata.
+      // Simulate the real prepend semantics: the approve call comes BEFORE
+      // the original callData in execution order (Safe MultiSend / Calibur
+      // BatchedCall / Simple executeBatch all prepend).
       const marker = `approve(${paymasterAddress},${approveAmount.toString(16)})`;
-      return `${callData}::${marker}`;
+      return `${marker}::${callData}`;
     },
   };
 }
