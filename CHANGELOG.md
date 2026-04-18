@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.1
+
+### New Features
+
+- **`Erc7677Paymaster`**: provider-agnostic [ERC-7677](https://eips.ethereum.org/EIPS/eip-7677) paymaster client. Works with any compliant provider (Candide, Pimlico, Alchemy, ...). Auto-detects Candide/Pimlico from the URL and runs the full stub, estimate, and final pipeline in one call. Passing `{ token }` in context triggers the ERC-20 gas flow automatically.
+- `Bundler.estimateUserOperationGas` now forwards `paymasterVerificationGasLimit` and `paymasterPostOpGasLimit` when returned by the bundler.
+
+### Breaking Changes
+
+- **`SafeMultiChainSigAccountV1.formatSignaturesToUseroperationsSignatures`**: the third `overrides` argument has been removed. Overrides are now per-operation via a new optional `overrides` field on each `UserOperationToSignWithOverrides` element of the first argument. Migration: `ops.map(op => ({ ...op, overrides: {...} }))` and drop the third argument.
+
+### Other
+
+- Minor type tightening across Calibur, Simple7702, and Tenderly helpers.
+
 ## 0.3.0
 
 **This is a major release. The canonical upgrade path is from 0.2.30 (previous stable) to 0.3.0 (current stable).** Versions 0.2.31 through 0.2.41 were experimental pre-releases and are not on the `latest` dist-tag.
