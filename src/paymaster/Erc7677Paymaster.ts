@@ -14,16 +14,18 @@ import {
 	SameUserOp,
 	SmartAccountWithEntrypoint,
 	GasPaymasterUserOperationOverrides,
+	Erc7677Provider,
+	Erc7677PaymasterConstructorOptions,
 } from "./types";
 
 /**
  * Opaque context object forwarded to the paymaster RPC as the fourth argument
  * of `pm_getPaymasterStubData` / `pm_getPaymasterData`.
  *
- * The shape is provider-specific: Pimlico uses `{ token }` for token paymaster
- * and `{ sponsorshipPolicyId }` for sponsored operations; Alchemy, Biconomy,
- * and others have their own conventions. Refer to the paymaster provider's
- * documentation for the exact fields.
+ * The shape is provider-specific: Candide uses `{ token }` for token paymaster
+ * and `{ sponsorshipPolicyId }` for sponsored operations; other providers
+ * (Pimlico, Alchemy, Biconomy, …) have their own conventions. Refer to the
+ * paymaster provider's documentation for the exact fields.
  */
 export type Erc7677Context = Record<string, unknown>;
 
@@ -56,12 +58,13 @@ export interface Erc7677StubDataResult extends Erc7677PaymasterFields {
  * Speaks the [ERC-7677](https://eips.ethereum.org/EIPS/eip-7677) JSON-RPC
  * protocol: `pm_getPaymasterStubData` for gas-estimation stubs and
  * `pm_getPaymasterData` for the final signed paymaster fields. Works with any
- * paymaster provider that implements the standard (Pimlico, Alchemy, Biconomy,
- * etc.).
+ * paymaster provider that implements the standard (Candide, Pimlico, Alchemy,
+ * Biconomy, …).
  *
- * For Candide-hosted paymasters, prefer {@link CandidePaymaster}, which uses
- * cached `dummyPaymasterAndData` metadata to skip the stub round-trip and
- * supports parallel signing phases.
+ * For Candide-hosted paymasters, {@link CandidePaymaster} is the dedicated
+ * client and offers extra features (parallel signing phases, etc.). This
+ * generic class is provided so consumers retain the freedom to switch
+ * providers without changing the SDK.
  *
  * ## Flow
  *
@@ -123,19 +126,49 @@ export class Erc7677Paymaster extends Paymaster {
 	readonly rpcUrl: string;
 	/** Cached chain ID (hex string). Passed via constructor or resolved from the bundler at first use. */
 	private chainId: string | null;
+	/** Detected or explicitly set paymaster provider. `null` means no provider-specific features. */
+	readonly provider: Erc7677Provider;
+
+	/**
+	 * Detect the paymaster provider from the RPC URL hostname.
+	 * Returns `null` for unknown hosts or malformed URLs.
+	 *
+	 * Hostname-based (not substring) so that proxies or paths containing a
+	 * provider name (e.g. `https://my-proxy.com/pimlico-compat/...`) are not
+	 * misidentified.
+	 */
+	static detectProvider(rpcUrl: string): Erc7677Provider {
+		let host: string;
+		try {
+			host = new URL(rpcUrl).hostname.toLowerCase();
+		} catch {
+			return null;
+		}
+		if (host === "pimlico.io" || host.endsWith(".pimlico.io")) return "pimlico";
+		if (host === "candide.dev" || host.endsWith(".candide.dev")) return "candide";
+		return null;
+	}
 
 	/**
 	 * @param rpcUrl - Paymaster JSON-RPC endpoint. Can be the same URL as the
-	 *   bundler when the provider bundles both (Pimlico, Alchemy); can also be
-	 *   a separate paymaster-only endpoint.
-	 * @param options.chainId - Optional hex-encoded chain id (e.g. `"0x1"`).
-	 *   When provided, avoids a lookup at first use. Otherwise, resolved from
-	 *   the bundler via `eth_chainId` on the first call.
+	 *   bundler when the provider bundles both (Candide, Pimlico, Alchemy);
+	 *   can also be a separate paymaster-only endpoint.
+	 * @param options
+	 * @param options.chainId - Optional chain id as a bigint (e.g. `1n` for
+	 *   mainnet). When provided, avoids a lookup at first use. Otherwise,
+	 *   resolved from the bundler via `eth_chainId` on the first call.
+	 * @param options.provider - Paymaster provider. `"auto"` (default) detects
+	 *   from the RPC URL. Set explicitly to override, or `null` to disable.
 	 */
-	constructor(rpcUrl: string, options: { chainId?: string } = {}) {
+	constructor(rpcUrl: string, options: Erc7677PaymasterConstructorOptions = {}) {
 		super();
 		this.rpcUrl = rpcUrl;
-		this.chainId = options.chainId ?? null;
+		this.chainId = options.chainId != null ? "0x" + options.chainId.toString(16) : null;
+		if (options.provider === undefined || options.provider === "auto") {
+			this.provider = Erc7677Paymaster.detectProvider(rpcUrl);
+		} else {
+			this.provider = options.provider;
+		}
 	}
 
 	/**
@@ -224,6 +257,29 @@ export class Erc7677Paymaster extends Paymaster {
 	}
 
 	/**
+	 * Send an arbitrary JSON-RPC request through the paymaster endpoint.
+	 * Useful for provider-specific methods that fall outside the ERC-7677 spec.
+	 *
+	 * @param method - The JSON-RPC method name
+	 * @param params - The JSON-RPC params array
+	 * @returns The `result` field from the JSON-RPC response
+	 */
+	async sendRPCRequest(
+		method: string,
+		params: unknown[] = [],
+	): Promise<unknown> {
+		try {
+			return await sendJsonRpcRequest(this.rpcUrl, method, params);
+		} catch (err) {
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				`sendRPCRequest(${method}) failed`,
+				{ cause: ensureError(err) },
+			);
+		}
+	}
+
+	/**
 	 * Runs the full ERC-7677 pipeline and returns a UserOperation with paymaster
 	 * fields populated. The caller is responsible for signing and sending.
 	 *
@@ -262,7 +318,7 @@ export class Erc7677Paymaster extends Paymaster {
 			// Step 2 — gas estimation with the stub paymaster applied. When a
 			// paymaster is attached, v0.7+ bundlers return paymaster gas limits
 			// alongside the execution limits; they supersede the stub's
-			// placeholder values (Pimlico returns paymasterPostOpGasLimit: 0x1).
+			// placeholder values (some providers return paymasterPostOpGasLimit: 0x1).
 			await this.estimateAndApplyGasLimits(
 				userOp,
 				bundlerRpc,
@@ -324,9 +380,9 @@ export class Erc7677Paymaster extends Paymaster {
 
 	/**
 	 * Estimate gas limits via the bundler and apply them (with multipliers).
-	 * Reads paymaster gas fields back from the bundler when present — Pimlico's
-	 * `pm_getPaymasterStubData` returns `paymasterPostOpGasLimit: 0x1` as a
-	 * placeholder; the bundler's estimate has the real value.
+	 * Reads paymaster gas fields back from the bundler when present — some
+	 * providers' `pm_getPaymasterStubData` returns `paymasterPostOpGasLimit: 0x1`
+	 * as a placeholder, relying on the bundler's estimate for the real value.
 	 *
 	 * Mirrors CandidePaymaster.estimateAndApplyGasLimits default multipliers
 	 * (5%/10%/10% on preVerification/verification/call) for consistent UX.

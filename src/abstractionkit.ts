@@ -44,6 +44,11 @@ export type {
 	Erc7677PaymasterFields,
 	Erc7677StubDataResult,
 } from "./paymaster/Erc7677Paymaster";
+export type {
+	Erc7677Provider,
+	Erc7677PaymasterConstructorOptions,
+	GasPaymasterUserOperationOverrides,
+} from "./paymaster/types";
 export { ExperimentalAllowAllParallelPaymaster } from "./paymaster/AllowAllPaymaster";
 
 export { 

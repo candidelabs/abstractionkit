@@ -59,6 +59,7 @@ function v7UserOp(overrides = {}) {
 }
 
 const CHAIN_ID_HEX = '0x1';
+const CHAIN_ID = 1n;
 const ENTRYPOINT_V7 = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
 
 describe('Erc7677Paymaster', () => {
@@ -86,7 +87,7 @@ describe('Erc7677Paymaster', () => {
     });
 
     try {
-      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID_HEX });
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID });
       const smartAccount = { entrypointAddress: ENTRYPOINT_V7 };
       const userOp = v7UserOp();
       const context = { sponsorshipPolicyId: 'sp_test' };
@@ -144,7 +145,7 @@ describe('Erc7677Paymaster', () => {
     });
 
     try {
-      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID_HEX });
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID });
       const out = await paymaster.createPaymasterUserOperation(
         { entrypointAddress: ENTRYPOINT_V7 },
         v7UserOp(),
@@ -180,7 +181,7 @@ describe('Erc7677Paymaster', () => {
     });
 
     try {
-      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID_HEX });
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID });
       const context = { token: '0xUsdt', custom: { nested: 'value' } };
       await paymaster.createPaymasterUserOperation(
         { entrypointAddress: ENTRYPOINT_V7 },
@@ -197,7 +198,7 @@ describe('Erc7677Paymaster', () => {
   test('paymaster RPC error surfaces as AbstractionKitError', async () => {
     const server = await makeMockRpcServer({});
     try {
-      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID_HEX });
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID });
       await expect(
         paymaster.createPaymasterUserOperation(
           { entrypointAddress: ENTRYPOINT_V7 },
@@ -222,6 +223,78 @@ describe('Erc7677Paymaster', () => {
       expect(stub.paymaster).toMatch(/^0xPaymaster/);
       const final = await paymaster.getPaymasterData(userOp, ENTRYPOINT_V7, CHAIN_ID_HEX, {});
       expect(final.paymasterData).toBe('0xfinal');
+    } finally {
+      await server.close();
+    }
+  });
+
+  // ── Provider detection ──────────────────────────────────────────────
+
+  test('auto-detects pimlico provider from URL', () => {
+    const paymaster = new Erc7677Paymaster('https://api.pimlico.io/v2/sepolia/rpc?apikey=test');
+    expect(paymaster.provider).toBe('pimlico');
+  });
+
+  test('auto-detects candide provider from URL', () => {
+    const paymaster = new Erc7677Paymaster('https://api.candide.dev/paymaster/v3/sepolia/xxx');
+    expect(paymaster.provider).toBe('candide');
+  });
+
+  test('auto-detects null for unknown URL', () => {
+    const paymaster = new Erc7677Paymaster('https://custom-rpc.example.com');
+    expect(paymaster.provider).toBe(null);
+  });
+
+  test('auto-detect ignores provider name in path (proxy false-positive)', () => {
+    const paymaster = new Erc7677Paymaster('https://my-proxy.com/pimlico-compat/rpc');
+    expect(paymaster.provider).toBe(null);
+  });
+
+  test('auto-detect ignores provider name in hostname suffix without dot delimiter', () => {
+    // evilpimlico.io ends with "pimlico.io" but is not a pimlico subdomain.
+    const paymaster = new Erc7677Paymaster('https://evilpimlico.io/rpc');
+    expect(paymaster.provider).toBe(null);
+  });
+
+  test('auto-detect handles malformed URL by returning null', () => {
+    const paymaster = new Erc7677Paymaster('not-a-valid-url');
+    expect(paymaster.provider).toBe(null);
+  });
+
+  test('explicit provider overrides auto-detection', () => {
+    const paymaster = new Erc7677Paymaster('https://api.pimlico.io/v2/sepolia/rpc', { provider: null });
+    expect(paymaster.provider).toBe(null);
+  });
+
+  test('explicit provider on non-matching URL', () => {
+    const paymaster = new Erc7677Paymaster('https://custom-proxy.example.com', { provider: 'pimlico' });
+    expect(paymaster.provider).toBe('pimlico');
+  });
+
+  // ── sendRPCRequest ──────────────────────────────────────────────────
+
+  test('sendRPCRequest forwards method and params', async () => {
+    const server = await makeMockRpcServer({
+      custom_method: (params) => ({ echo: params }),
+    });
+    try {
+      const paymaster = new Erc7677Paymaster(server.url);
+      const result = await paymaster.sendRPCRequest('custom_method', ['arg1', 'arg2']);
+      expect(result).toEqual({ echo: ['arg1', 'arg2'] });
+      expect(server.calls[0].method).toBe('custom_method');
+      expect(server.calls[0].params).toEqual(['arg1', 'arg2']);
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('sendRPCRequest wraps errors as AbstractionKitError', async () => {
+    const server = await makeMockRpcServer({});
+    try {
+      const paymaster = new Erc7677Paymaster(server.url);
+      await expect(
+        paymaster.sendRPCRequest('nonexistent_method'),
+      ).rejects.toThrow(/sendRPCRequest\(nonexistent_method\) failed/);
     } finally {
       await server.close();
     }
