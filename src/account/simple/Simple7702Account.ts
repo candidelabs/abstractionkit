@@ -782,7 +782,7 @@ export class BaseSimple7702Account extends SmartAccount {
         signer: AkSigner,
         chainId: bigint,
     ): Promise<string> {
-        pickScheme(signer, BaseSimple7702Account.ACCEPTED_SIGNING_SCHEMES, {
+        const scheme = pickScheme(signer, BaseSimple7702Account.ACCEPTED_SIGNING_SCHEMES, {
             accountName: "Simple7702 (raw ECDSA over userOpHash)",
             signerIndex: 0,
         });
@@ -791,7 +791,7 @@ export class BaseSimple7702Account extends SmartAccount {
             this.entrypointAddress,
             chainId,
         ) as `0x${string}`;
-        return invokeSigner(signer, "hash", { hash });
+        return invokeSigner(signer, scheme, { hash });
     }
 
     /**

@@ -707,13 +707,13 @@ describe('Calibur7702Account', () => {
         expect(authFromCallback.s).toBe(authFromKey.s);
     });
 
-    // ─── SignerFunction export ──────────────────────────────────────────
+    // ─── ExternalSigner adapter exports ─────────────────────────────────
 
-    test('SignerFunction type is exported (runtime check via typeof)', () => {
-        // SignerFunction is a type alias, so it doesn't exist at runtime.
-        // We verify the pattern works by creating one and using it.
-        const fn = async (hash) => "0x" + "00".repeat(65);
-        expect(typeof fn).toBe('function');
+    test('ExternalSigner adapters are exported at runtime', () => {
+        expect(typeof ak.fromPrivateKey).toBe('function');
+        expect(typeof ak.fromViem).toBe('function');
+        expect(typeof ak.fromEthersWallet).toBe('function');
+        expect(typeof ak.fromViemWalletClient).toBe('function');
     });
 
     // ─── CaliburKeySettingsResult ────────────────────────────────────────

@@ -601,22 +601,29 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				{ merkleTreeRoot: root },
 			) as `0x${string}`;
 
+			// Preflight: validate + checksum every signer's address before
+			// calling any signer. Catches malformed addresses offline
+			// instead of after an external signer has been prompted.
+			const normalizedAddresses = signers.map((signer) =>
+				getAddress(signer.address),
+			);
+
 			// Merkle root is opaque; signTypedData has nothing meaningful to
 			// display, so we require raw-hash signing.
-			for (const signer of signers) {
+			signers.forEach((signer, i) => {
 				pickScheme(signer, ["hash"], {
 					accountName: "SafeMultiChainSigAccountV1 (multi-op Merkle root)",
-					signerIndex: 0,
+					signerIndex: i,
 				});
-			}
+			});
 			const signatures = await Promise.all(
 				signers.map((signer) =>
 					invokeSigner(signer, "hash", { hash: merkleTreeRootHash }),
 				),
 			);
 			const signerSignaturePairs: SignerSignaturePair[] = signers.map(
-				(signer, i) => ({
-					signer: getAddress(signer.address),
+				(_signer, i) => ({
+					signer: normalizedAddresses[i],
 					signature: signatures[i],
 				}),
 			);

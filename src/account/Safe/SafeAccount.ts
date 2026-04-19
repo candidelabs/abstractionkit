@@ -1978,6 +1978,14 @@ export class SafeAccount extends SmartAccount {
 			message: typedDataRaw.messageValue as Record<string, unknown>,
 		};
 
+		// Preflight: validate + checksum every signer's address before
+		// calling any signer. Catches malformed addresses offline instead
+		// of after an external signer (HSM, hardware wallet) has already
+		// been prompted.
+		const normalizedAddresses = signers.map((signer) =>
+			getAddress(signer.address),
+		);
+
 		// Offline capability check: throws with an actionable message if
 		// any signer can't produce what Safe accepts.
 		const schemes = signers.map((signer, signerIndex) =>
@@ -1994,7 +2002,7 @@ export class SafeAccount extends SmartAccount {
 		);
 
 		const signerSignaturePairs = signatures.map((signature, i) => ({
-			signer: getAddress(signers[i].address),
+			signer: normalizedAddresses[i],
 			signature,
 		}));
 

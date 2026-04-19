@@ -638,7 +638,7 @@ export class Calibur7702Account extends SmartAccount
 		chainId: bigint,
 		overrides: CaliburSignatureOverrides = {},
 	): Promise<string> {
-		pickScheme(signer, Calibur7702Account.ACCEPTED_SIGNING_SCHEMES, {
+		const scheme = pickScheme(signer, Calibur7702Account.ACCEPTED_SIGNING_SCHEMES, {
 			accountName: "Calibur (raw ECDSA over userOpHash)",
 			signerIndex: 0,
 		});
@@ -647,7 +647,7 @@ export class Calibur7702Account extends SmartAccount
 			this.entrypointAddress,
 			chainId,
 		) as `0x${string}`;
-		const signature = await invokeSigner(signer, "hash", { hash });
+		const signature = await invokeSigner(signer, scheme, { hash });
 		const keyHash = overrides.keyHash ?? ROOT_KEY_HASH;
 		const hookData = overrides.hookData ?? "0x";
 		return Calibur7702Account.wrapSignature(keyHash, signature, hookData);
