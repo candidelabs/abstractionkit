@@ -8,6 +8,7 @@ import {
     SafeUserOperationV6TypedMessageValue,
 	SignerSignaturePair,
 } from "./types";
+import type { SignerFunction } from "../Calibur/types";
 
 import { UserOperationV6, MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet } from "../../types";
 import { ENTRYPOINT_V6 } from "src/constants";
@@ -493,5 +494,38 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			this.safe4337ModuleAddress,
 			overrides
 		)
+	}
+
+	/**
+	 * Sign a UserOperation with an external signer.
+	 * See {@link SafeAccountV0_3_0.signUserOperationWithSigner} for full
+	 * documentation and examples.
+	 */
+	public async signUserOperationWithSigner(
+		useroperation: UserOperationV6,
+		signer: SignerFunction,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+		} = {},
+	): Promise<string> {
+		const userOperationEip712Hash =
+			SafeAccountV0_2_0.getUserOperationEip712Hash(
+				useroperation,
+				chainId,
+				{
+					entrypointAddress: this.entrypointAddress,
+					safe4337ModuleAddress: this.safe4337ModuleAddress,
+					...overrides,
+				},
+			);
+
+		const signature = await signer(userOperationEip712Hash);
+
+		return SafeAccount.formatEip712SingleSignatureToUseroperationSignature(
+			signature,
+			overrides,
+		);
 	}
 }

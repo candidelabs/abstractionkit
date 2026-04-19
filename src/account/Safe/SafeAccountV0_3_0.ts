@@ -8,6 +8,7 @@ import {
     SafeAccountSingleton,
 	SignerSignaturePair,
 } from "./types";
+import type { SignerFunction } from "../Calibur/types";
 
 import { UserOperationV7, MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet } from "../../types";
 import { ENTRYPOINT_V7, Safe_L2_V1_4_1 } from "src/constants";
@@ -397,6 +398,82 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			this.safe4337ModuleAddress,
 			overrides
 		)
+	}
+
+	/**
+	 * Sign a UserOperation with an external signer (viem, ethers Signer,
+	 * hardware wallet, MPC signer, Uint8Array-based key, etc.).
+	 *
+	 * Computes the Safe EIP-712 hash, passes it to the provided async
+	 * callback, and wraps the returned ECDSA signature in the Safe 4337
+	 * module's expected format (validAfter ‖ validUntil ‖ signature).
+	 *
+	 * This method never receives or handles the private key itself — only
+	 * the opaque signing callback. This is important for integrations that
+	 * keep keys in non-exportable storage (HSMs, secure enclaves, passkey
+	 * providers) or as non-string types (Uint8Array) that can be zeroed
+	 * after use.
+	 *
+	 * @param useroperation - The UserOperation to sign
+	 * @param signer - Async signing function: receives the EIP-712 hash as a
+	 *   hex string (`0x`-prefixed, 32 bytes) and must return the 65-byte ECDSA
+	 *   signature as a hex string (`0x`-prefixed, `r ‖ s ‖ v`).
+	 * @param chainId - Target chain ID
+	 * @param overrides - Override validAfter and validUntil timestamps
+	 * @returns Promise resolving to the formatted signature string ready to
+	 *   set on the UserOperation
+	 *
+	 * @example
+	 * // Sign with a Uint8Array private key via \@noble/curves
+	 * import { secp256k1 } from "\@noble/curves/secp256k1";
+	 *
+	 * userOp.signature = await smartAccount.signUserOperationWithSigner(
+	 *   userOp,
+	 *   async (hash) => {
+	 *     const { r, s, recovery } = secp256k1.sign(
+	 *       hash.slice(2), privateKeyBytes, { lowS: true },
+	 *     );
+	 *     const v = recovery === 1 ? "1c" : "1b";
+	 *     return "0x" + r.toString(16).padStart(64, "0")
+	 *                  + s.toString(16).padStart(64, "0") + v;
+	 *   },
+	 *   chainId,
+	 * );
+	 *
+	 * @example
+	 * // Sign with an ethers Signer
+	 * userOp.signature = await smartAccount.signUserOperationWithSigner(
+	 *   userOp,
+	 *   (hash) => ethersSigner.signMessage(ethers.getBytes(hash)),
+	 *   chainId,
+	 * );
+	 */
+	public async signUserOperationWithSigner(
+		useroperation: UserOperationV7,
+		signer: SignerFunction,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+		} = {},
+	): Promise<string> {
+		const userOperationEip712Hash =
+			SafeAccountV0_3_0.getUserOperationEip712Hash(
+				useroperation,
+				chainId,
+				{
+					entrypointAddress: this.entrypointAddress,
+					safe4337ModuleAddress: this.safe4337ModuleAddress,
+					...overrides,
+				},
+			);
+
+		const signature = await signer(userOperationEip712Hash);
+
+		return SafeAccount.formatEip712SingleSignatureToUseroperationSignature(
+			signature,
+			overrides,
+		);
 	}
 }
 
