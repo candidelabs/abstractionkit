@@ -53,6 +53,7 @@ import {
 	SafeUserOperationTypedDataDomain,
 	SafeUserOperationV6TypedMessageValue,
 	SafeUserOperationV7TypedMessageValue,
+	SafeUserOperationV9TypedMessageValue,
 	SignerSignaturePair,
 	WebauthnSignatureData,
 	SafeModuleExecutorFunctionSelector,
@@ -599,7 +600,10 @@ export class SafeAccount extends SmartAccount {
 	): {
         domain: SafeUserOperationTypedDataDomain,
         types:Record<string, {name: string;type: string;}[]>,
-        messageValue: SafeUserOperationV6TypedMessageValue | SafeUserOperationV6TypedMessageValue
+        messageValue:
+            | SafeUserOperationV6TypedMessageValue
+            | SafeUserOperationV7TypedMessageValue
+            | SafeUserOperationV9TypedMessageValue
     }  {
 		if ("initCode" in useroperation) {
 			const data = SafeAccount.getUserOperationEip712Data_V6(
@@ -918,7 +922,7 @@ export class SafeAccount extends SmartAccount {
     ): {
         domain: SafeUserOperationTypedDataDomain,
         types:Record<string, {name: string;type: string;}[]>,
-        messageValue: SafeUserOperationV6TypedMessageValue
+        messageValue: SafeUserOperationV9TypedMessageValue
     } {
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??
@@ -1935,7 +1939,7 @@ export class SafeAccount extends SmartAccount {
 	 * @returns formatted signature
 	 */
 	public static async baseSignUserOperationWithSigners<
-		T extends UserOperationV6 | UserOperationV7,
+		T extends UserOperationV6 | UserOperationV7 | UserOperationV9,
 	>(
 		useroperation: T,
 		signers: ReadonlyArray<AkSigner>,
@@ -1975,7 +1979,10 @@ export class SafeAccount extends SmartAccount {
 			domain: typedDataRaw.domain as TypedData["domain"],
 			types: primaryTypes,
 			primaryType: EIP712_SAFE_OPERATION_PRIMARY_TYPE,
-			message: typedDataRaw.messageValue as Record<string, unknown>,
+			// SafeUserOperationVxTypedMessageValue has fixed fields, not an
+			// index signature, so TS rejects a direct cast to Record. Route
+			// through `unknown` to acknowledge the structural conversion.
+			message: typedDataRaw.messageValue as unknown as Record<string, unknown>,
 		};
 
 		// Preflight: validate + checksum every signer's address before
