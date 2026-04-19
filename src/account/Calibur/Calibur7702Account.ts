@@ -5,6 +5,8 @@ import {
 	getDelegatedAddress, getFunctionSelector, handlefetchGasPrice, sendJsonRpcRequest
 } from "../../utils";
 import { UserOperationV8 } from "src/types";
+import { Signer as AkSigner, SigningScheme } from "src/signer/types";
+import { pickScheme, invokeSigner } from "src/signer/negotiate";
 import { AbstractionKitError } from "src/errors";
 import {
 	Authorization7702Hex, bigintToHex,
@@ -19,7 +21,7 @@ import { PrependTokenPaymasterApproveAccount } from "src/paymaster/types";
 import {
 	CaliburKeyType, CaliburKey, CaliburKeySettings, CaliburKeySettingsResult,
 	WebAuthnSignatureData, CaliburCreateUserOperationOverrides,
-	CaliburSignatureOverrides, SignerFunction,
+	CaliburSignatureOverrides,
 } from "./types";
 
 
@@ -608,43 +610,47 @@ export class Calibur7702Account extends SmartAccount
 	}
 
 	/**
-	 * Sign a UserOperation with an external signer (viem, ethers Signer,
-	 * hardware wallet, MPC signer, etc.).
-	 * Computes the UserOperation hash and wraps the returned signature in
-	 * Calibur's format: `abi.encode(keyHash, ecdsaSig, hookData)`.
+	 * Schemes Calibur accepts from a Signer. Only raw-hash ECDSA, since
+	 * the account verifies a plain signature over the userOp hash, then
+	 * wraps with `(keyHash, signature, hookData)`.
+	 */
+	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = ["hash"];
+
+	/**
+	 * Sign a UserOperation using an {@link ExternalSigner}. Calibur only
+	 * accepts raw-hash ECDSA; signers without `signHash` fail offline with
+	 * an actionable error.
 	 *
-	 * By default signs with the root key. To sign with a registered
-	 * secondary key, pass its key hash via `overrides.keyHash`.
-	 *
-	 * @param userOperation - The UserOperation to sign
-	 * @param signer - Async signing function: `(hash: string) => Promise<string>`
-	 * @param chainId - Target chain ID
-	 * @param overrides - Optional overrides (keyHash for secondary keys, hookData)
-	 * @returns Promise resolving to the hex-encoded wrapped signature
+	 * For signing with a raw private-key string, use the sync
+	 * {@link signUserOperation} method, or wrap explicitly with
+	 * `fromPrivateKey(pk)`. For secondary (non-root) keys, pass the key
+	 * hash via `overrides.keyHash`.
 	 *
 	 * @example
-	 * // Sign with a viem wallet client
+	 * import { fromViem, fromEthersWallet } from "abstractionkit";
 	 * userOp.signature = await account.signUserOperationWithSigner(
-	 *   userOp,
-	 *   (hash) => walletClient.signMessage({ message: { raw: hash } }),
-	 *   chainId,
+	 *   userOp, fromViem(privateKeyToAccount(pk)), chainId,
 	 * );
 	 */
 	public async signUserOperationWithSigner(
 		userOperation: UserOperationV8,
-		signer: SignerFunction,
+		signer: AkSigner,
 		chainId: bigint,
 		overrides: CaliburSignatureOverrides = {},
 	): Promise<string> {
-		const userOperationHash = createUserOperationHash(
+		pickScheme(signer, Calibur7702Account.ACCEPTED_SIGNING_SCHEMES, {
+			accountName: "Calibur (raw ECDSA over userOpHash)",
+			signerIndex: 0,
+		});
+		const hash = createUserOperationHash(
 			userOperation,
 			this.entrypointAddress,
 			chainId,
-		);
+		) as `0x${string}`;
+		const signature = await invokeSigner(signer, "hash", { hash });
 		const keyHash = overrides.keyHash ?? ROOT_KEY_HASH;
 		const hookData = overrides.hookData ?? "0x";
-		const ecdsaSig = await signer(userOperationHash);
-		return Calibur7702Account.wrapSignature(keyHash, ecdsaSig, hookData);
+		return Calibur7702Account.wrapSignature(keyHash, signature, hookData);
 	}
 
 	/**

@@ -680,59 +680,9 @@ describe('Calibur7702Account', () => {
         expect(hash).toBe(expected);
     });
 
-    // ─── signUserOperationWithSigner ────────────────────────────────────
-
-    test('signUserOperationWithSigner produces same result as signUserOperation', async () => {
-
-        const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
-        const wallet = new Wallet(signingKey);
-
-        const userOp = {
-            sender: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
-            nonce: 0n, callData: "0x", callGasLimit: 100000n,
-            verificationGasLimit: 100000n, preVerificationGas: 50000n,
-            maxFeePerGas: 1000000000n, maxPriorityFeePerGas: 1000000000n,
-            signature: "0x",
-            factory: null, factoryData: null,
-            paymaster: null, paymasterVerificationGasLimit: null,
-            paymasterPostOpGasLimit: null, paymasterData: null,
-            eip7702Auth: null,
-        };
-
-        const signerFn = async (hash) => {
-            return wallet.signingKey.sign(hash).serialized;
-        };
-
-        const sigFromSigner = await account.signUserOperationWithSigner(userOp, signerFn, 11155111n);
-        const sigFromKey = account.signUserOperation(userOp, signingKey, 11155111n);
-
-        expect(sigFromSigner).toBe(sigFromKey);
-    });
-
-    test('signUserOperationWithSigner with keyHash produces same result as signUserOperation with keyHash', async () => {
-
-        const account = new ak.Calibur7702Account("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
-        const wallet = new Wallet(signingKey);
-        const keyHash = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
-
-        const userOp = {
-            sender: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
-            nonce: 0n, callData: "0x", callGasLimit: 0n,
-            verificationGasLimit: 0n, preVerificationGas: 0n,
-            maxFeePerGas: 0n, maxPriorityFeePerGas: 0n, signature: "0x",
-            factory: null, factoryData: null,
-            paymaster: null, paymasterVerificationGasLimit: null,
-            paymasterPostOpGasLimit: null, paymasterData: null,
-            eip7702Auth: null,
-        };
-
-        const signerFn = async (hash) => wallet.signingKey.sign(hash).serialized;
-
-        const sigFromSigner = await account.signUserOperationWithSigner(userOp, signerFn, 11155111n, { keyHash });
-        const sigFromKey = account.signUserOperation(userOp, signingKey, 11155111n, { keyHash });
-
-        expect(sigFromSigner).toBe(sigFromKey);
-    });
+    // Equivalence tests for the new signUserOperationWithSigner API live in
+    // test/signer/signer.test.js; they verify against a reference signature
+    // computed from ethers primitives.
 
     // ─── createAndSignEip7702DelegationAuthorization callback ────────────
 

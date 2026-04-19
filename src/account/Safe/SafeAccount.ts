@@ -17,6 +17,7 @@ import {
 	ENTRYPOINT_V7,
 	EIP712_SAFE_OPERATION_V7_TYPE,
 	EIP712_SAFE_OPERATION_V6_TYPE,
+	EIP712_SAFE_OPERATION_PRIMARY_TYPE,
     ENTRYPOINT_V9,
 } from "../../constants";
 import {
@@ -63,6 +64,8 @@ import {
     SafeAccountSingleton,
 } from "./types";
 import { decodeMultiSendCallData, encodeMultiSendCallData } from "./multisend";
+import { Signer as AkSigner, SigningScheme, TypedData } from "src/signer/types";
+import { pickScheme, invokeSigner } from "src/signer/negotiate";
 import { AbstractionKitError, ensureError } from "src/errors";
 import { Bundler } from "src/Bundler";
 import { SendUseroperationResponse } from "../SendUseroperationResponse";
@@ -1898,6 +1901,109 @@ export class SafeAccount extends SmartAccount {
 				validAfter,
 				validUntil,
                 isMultiChainSignature:overrides.isMultiChainSignature
+			},
+		);
+	}
+
+	/**
+	 * Schemes Safe accepts from a {@link Signer}, in preference order.
+	 * `typedData` is preferred because wallets can display structured fields
+	 * rather than a hex blob; `hash` is accepted as a fallback for signers
+	 * that only support raw ECDSA.
+	 */
+	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = [
+		"typedData",
+		"hash",
+	];
+
+	/**
+	 * Sign a UserOperation using one or more {@link Signer}s. This is the
+	 * capability-oriented signing path: each signer declares what it can do
+	 * (`signHash`, `signTypedData`, both) and the account picks the best
+	 * match per signer. Incompatible signers fail offline with an actionable
+	 * error rather than a silent bundler rejection.
+	 *
+	 * Signers are invoked in parallel. For interactive wallets that share a
+	 * popup session, sequence the prompts inside your Signer implementation.
+	 *
+	 * @param useroperation - UserOperation to sign
+	 * @param signers - Signer instances (`fromViem(account)`, `fromEthersWallet(wallet)`, etc.)
+	 * @param chainId - target chain id
+	 * @param entrypointAddress - target EntryPoint
+	 * @param safe4337ModuleAddress - Safe 4337 module
+	 * @param overrides - optional validAfter / validUntil / multi-chain flag
+	 * @returns formatted signature
+	 */
+	public static async baseSignUserOperationWithSigners<
+		T extends UserOperationV6 | UserOperationV7,
+	>(
+		useroperation: T,
+		signers: ReadonlyArray<AkSigner>,
+		chainId: bigint,
+		entrypointAddress: string,
+		safe4337ModuleAddress: string,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			isMultiChainSignature?: boolean;
+		} = {},
+	): Promise<string> {
+		const validAfter = overrides.validAfter ?? 0n;
+		const validUntil = overrides.validUntil ?? 0n;
+
+		if (signers.length < 1) {
+			throw new RangeError("There should be at least one signer");
+		}
+
+		const typedDataRaw = SafeAccount.getUserOperationEip712Data(
+			useroperation,
+			chainId,
+			{ validAfter, validUntil, entrypointAddress, safe4337ModuleAddress },
+		);
+		const userOpHash = TypedDataEncoder.hash(
+			typedDataRaw.domain,
+			typedDataRaw.types,
+			typedDataRaw.messageValue,
+		) as `0x${string}`;
+
+		// Strip EIP712Domain; every downstream signTypedData API rejects it
+		// when it appears alongside the primary type.
+		const { EIP712Domain: _drop, ...primaryTypes } = typedDataRaw.types as Record<
+			string, { name: string; type: string }[]
+		>;
+		const typedData: TypedData = {
+			domain: typedDataRaw.domain as TypedData["domain"],
+			types: primaryTypes,
+			primaryType: EIP712_SAFE_OPERATION_PRIMARY_TYPE,
+			message: typedDataRaw.messageValue as Record<string, unknown>,
+		};
+
+		// Offline capability check: throws with an actionable message if
+		// any signer can't produce what Safe accepts.
+		const schemes = signers.map((signer, signerIndex) =>
+			pickScheme(signer, SafeAccount.ACCEPTED_SIGNING_SCHEMES, {
+				accountName: "Safe (EIP-712 or raw hash over SafeOp digest)",
+				signerIndex,
+			}),
+		);
+
+		const signatures = await Promise.all(
+			signers.map((signer, i) =>
+				invokeSigner(signer, schemes[i], { hash: userOpHash, typedData }),
+			),
+		);
+
+		const signerSignaturePairs = signatures.map((signature, i) => ({
+			signer: getAddress(signers[i].address),
+			signature,
+		}));
+
+		return SafeAccount.formatSignaturesToUseroperationSignature(
+			signerSignaturePairs,
+			{
+				validAfter,
+				validUntil,
+				isMultiChainSignature: overrides.isMultiChainSignature,
 			},
 		);
 	}

@@ -16,9 +16,11 @@ import {
 } from "./types";
 
 import { UserOperationV9, MetaTransaction, OnChainIdentifierParamsType } from "../../types";
+import { Signer as AkSigner } from "src/signer/types";
+import { pickScheme, invokeSigner } from "src/signer/negotiate";
 import { EIP712_MULTI_CHAIN_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants";
 import { generateMerkleProofs } from "./MerkleTree";
-import { TypedDataEncoder, Wallet } from "ethers";
+import { getAddress, TypedDataEncoder, Wallet } from "ethers";
 import {
 	DEFAULT_WEB_AUTHN_DAIMO_VERIFIER_V_0_2_1,
 	DEFAULT_WEB_AUTHN_PRECOMPILE_RIP_7951,
@@ -442,6 +444,34 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	}
 
 	/**
+	 * Sign a single UserOperation for multi-chain using one or more
+	 * {@link AkSigner} instances. See
+	 * {@link SafeAccountV0_3_0.signUserOperationWithSigners} for the full
+	 * design rationale. Sets the multi-chain flag automatically.
+	 */
+	public signUserOperationWithSigners(
+		userOperation: UserOperationV9,
+		signers: ReadonlyArray<AkSigner>,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+		} = {},
+	): Promise<string> {
+		return SafeAccount.baseSignUserOperationWithSigners(
+			userOperation,
+			signers,
+			chainId,
+			this.entrypointAddress,
+			this.safe4337ModuleAddress,
+			{
+				...overrides,
+				isMultiChainSignature: true,
+			},
+		);
+	}
+
+	/**
 	 * sign a list of useroperations - multi chain signature
 	 * @param useroperation - useroperation to sign
 	 * @param privateKeys - for the signers
@@ -524,6 +554,101 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
                 }
             )];
         }
+	}
+
+	/**
+	 * Sign a list of UserOperations with a single multi-chain signature, using
+	 * {@link AkSigner} instances (viem, ethers, hardware wallet, HSM, MPC,
+	 * Uint8Array-only). Each signer signs the Merkle root of the UserOperation
+	 * EIP-712 hashes via raw-hash signing. `signTypedData` isn't exposed here
+	 * because the Merkle root is opaque and has no meaningful typed-data
+	 * display.
+	 *
+	 * @param userOperationsToSign - UserOperations + chain IDs + validity windows
+	 * @param signers - one Signer per owner (any order; sorted by address on-chain)
+	 * @returns one signature per input UserOperation, in the same order
+	 */
+	public async signUserOperationsWithSigners(
+		userOperationsToSign: UserOperationToSign[],
+		signers: ReadonlyArray<AkSigner>,
+	): Promise<string[]> {
+		if (userOperationsToSign.length < 1) {
+			throw new RangeError("There should be at least one userOperationsToSign");
+		}
+		if (signers.length < 1) {
+			throw new RangeError("There should be at least one signer");
+		}
+		if (userOperationsToSign.length > 1) {
+			const userOperationsHashes: string[] = [];
+			userOperationsToSign.forEach((uopToSign) => {
+				const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
+					uopToSign.userOperation,
+					uopToSign.chainId,
+					{
+						validAfter: uopToSign.validAfter,
+						validUntil: uopToSign.validUntil,
+						safe4337ModuleAddress: this.safe4337ModuleAddress,
+						entrypointAddress: this.entrypointAddress,
+					},
+				);
+				userOperationsHashes.push(userOperationHash);
+			});
+			const [root, proofs] = generateMerkleProofs(userOperationsHashes);
+
+			const merkleTreeRootHash = TypedDataEncoder.hash(
+				{ verifyingContract: this.safe4337ModuleAddress },
+				EIP712_MULTI_CHAIN_OPERATIONS_TYPE,
+				{ merkleTreeRoot: root },
+			) as `0x${string}`;
+
+			// Merkle root is opaque; signTypedData has nothing meaningful to
+			// display, so we require raw-hash signing.
+			for (const signer of signers) {
+				pickScheme(signer, ["hash"], {
+					accountName: "SafeMultiChainSigAccountV1 (multi-op Merkle root)",
+					signerIndex: 0,
+				});
+			}
+			const signatures = await Promise.all(
+				signers.map((signer) =>
+					invokeSigner(signer, "hash", { hash: merkleTreeRootHash }),
+				),
+			);
+			const signerSignaturePairs: SignerSignaturePair[] = signers.map(
+				(signer, i) => ({
+					signer: getAddress(signer.address),
+					signature: signatures[i],
+				}),
+			);
+
+			const userOpSignatures: string[] = [];
+			userOperationsToSign.forEach((uopToSign, index) => {
+				userOpSignatures.push(
+					SafeAccount.formatSignaturesToUseroperationSignature(
+						signerSignaturePairs,
+						{
+							validAfter: uopToSign.validAfter,
+							validUntil: uopToSign.validUntil,
+							isMultiChainSignature: true,
+							multiChainMerkleProof: proofs[index],
+						},
+					),
+				);
+			});
+			return userOpSignatures;
+		} else {
+			return [
+				await this.signUserOperationWithSigners(
+					userOperationsToSign[0].userOperation,
+					signers,
+					userOperationsToSign[0].chainId,
+					{
+						validUntil: userOperationsToSign[0].validUntil,
+						validAfter: userOperationsToSign[0].validAfter,
+					},
+				),
+			];
+		}
 	}
 
 	/**

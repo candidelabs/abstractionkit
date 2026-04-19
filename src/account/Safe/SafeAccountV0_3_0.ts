@@ -10,6 +10,7 @@ import {
 } from "./types";
 
 import { UserOperationV7, MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet } from "../../types";
+import { Signer as AkSigner } from "src/signer/types";
 import { ENTRYPOINT_V7, Safe_L2_V1_4_1 } from "src/constants";
 
 /**
@@ -397,6 +398,57 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			this.safe4337ModuleAddress,
 			overrides
 		)
+	}
+
+	/**
+	 * Sign a UserOperation using one or more {@link ExternalSigner} instances.
+	 * Capability-oriented entry point: each Signer declares what it can do
+	 * (`signHash`, `signTypedData`, both) and the account picks the best
+	 * match per signer. Incompatible signers fail offline with an actionable
+	 * error — no silent bundler rejections.
+	 *
+	 * This method is for external signers only (viem, ethers, hardware
+	 * wallets, MPC, HSMs, Uint8Array-only signers). If you just have a raw
+	 * private-key string, use the sync {@link signUserOperation} method
+	 * instead, or wrap explicitly with `fromPrivateKey(pk)`.
+	 *
+	 * Prebuilt adapters: `fromViem`, `fromEthersWallet`,
+	 * `fromViemWalletClient`, `fromPrivateKey`. Custom signers just need to
+	 * match the `ExternalSigner` shape.
+	 *
+	 * @example
+	 * import { fromViem } from "abstractionkit";
+	 * import { privateKeyToAccount } from "viem/accounts";
+	 *
+	 * const signer = fromViem(privateKeyToAccount(pk));
+	 * userOp.signature = await account.signUserOperationWithSigners(
+	 *   userOp, [signer], chainId,
+	 * );
+	 *
+	 * @param useroperation - UserOperation to sign
+	 * @param signers - one ExternalSigner per owner (any order)
+	 * @param chainId - target chain ID
+	 * @param overrides - optional validAfter / validUntil / multi-chain flag
+	 * @returns Promise resolving to the formatted signature string
+	 */
+	public signUserOperationWithSigners(
+		useroperation: UserOperationV7,
+		signers: ReadonlyArray<AkSigner>,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			isMultiChainSignature?: boolean;
+		} = {},
+	): Promise<string> {
+		return SafeAccount.baseSignUserOperationWithSigners(
+			useroperation,
+			signers,
+			chainId,
+			this.entrypointAddress,
+			this.safe4337ModuleAddress,
+			overrides,
+		);
 	}
 }
 

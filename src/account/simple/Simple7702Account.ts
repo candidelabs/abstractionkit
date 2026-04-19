@@ -6,6 +6,8 @@ import {
     sendJsonRpcRequest
 } from "../../utils";
 import { GasOption, PolygonChain, StateOverrideSet, UserOperationV8, UserOperationV9 } from "src/types";
+import { Signer as AkSigner, SigningScheme } from "src/signer/types";
+import { pickScheme, invokeSigner } from "src/signer/negotiate";
 import { AbstractionKitError } from "src/errors";
 import {
     Authorization7702Hex, bigintToHex,
@@ -760,7 +762,38 @@ export class BaseSimple7702Account extends SmartAccount {
 		const wallet = new Wallet(privateKey);
         return wallet.signingKey.sign(userOperationHash).serialized;
 	}
-    
+
+    /**
+     * Schemes Simple7702 accepts from a Signer. Only raw-hash ECDSA, since
+     * the delegatee verifies a plain signature over the userOp hash.
+     */
+    public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = ["hash"];
+
+    /**
+     * Sign a UserOperation with an {@link AkSigner}. Signer must implement
+     * `signHash`, since Simple7702 only verifies raw ECDSA over the userOp
+     * hash. JSON-RPC wallets and anything that only provides `signTypedData`
+     * fail offline with a specific error.
+     */
+    protected async baseSignUserOperationWithSigner<
+        T extends UserOperationV8 | UserOperationV9,
+    >(
+        useroperation: T,
+        signer: AkSigner,
+        chainId: bigint,
+    ): Promise<string> {
+        pickScheme(signer, BaseSimple7702Account.ACCEPTED_SIGNING_SCHEMES, {
+            accountName: "Simple7702 (raw ECDSA over userOpHash)",
+            signerIndex: 0,
+        });
+        const hash = createUserOperationHash(
+            useroperation,
+            this.entrypointAddress,
+            chainId,
+        ) as `0x${string}`;
+        return invokeSigner(signer, "hash", { hash });
+    }
+
     /**
 	 * Submit a signed UserOperation to a bundler for on-chain inclusion.
 	 * @param userOperation - The signed UserOperation to submit
@@ -974,6 +1007,23 @@ export class Simple7702Account extends BaseSimple7702Account {
 		chainId: bigint,
     ): string {
         return this.baseSignUserOperation(useroperation, privateKey, chainId);
+    }
+
+    /**
+     * Sign a {@link UserOperationV8} using an {@link ExternalSigner}.
+     * Simple7702 only accepts raw-hash ECDSA; signers without `signHash`
+     * fail offline with an actionable error.
+     *
+     * For signing with a raw private-key string, use the sync
+     * {@link signUserOperation} method, or wrap explicitly with
+     * `fromPrivateKey(pk)`.
+     */
+    public async signUserOperationWithSigner(
+        useroperation: UserOperationV8,
+        signer: AkSigner,
+        chainId: bigint,
+    ): Promise<string> {
+        return this.baseSignUserOperationWithSigner(useroperation, signer, chainId);
     }
 
     /**

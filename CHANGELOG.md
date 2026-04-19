@@ -1,5 +1,61 @@
 # Changelog
 
+## [Unreleased]
+
+### New Features
+
+- **`signUserOperationWithSigner(s)` + `ExternalSigner` (capability-oriented signing API)**: new async method on every account class for integrating viem, ethers Signers, hardware wallets, HSMs, MPC, WebAuthn, or Uint8Array-only signers without passing raw private keys. Each account declares its accepted schemes via a static `ACCEPTED_SIGNING_SCHEMES: ReadonlyArray<"hash" | "typedData">`, and incompatible signers fail offline with an actionable error. The method naming mirrors the parameter arity:
+  - Safe accounts (multi-signer): `signUserOperationWithSigners(op, signers[], chainId)` — plural.
+  - Simple7702 / Calibur (single signer): `signUserOperationWithSigner(op, signer, chainId)` — singular.
+
+  Call-site is one line:
+  ```ts
+  import { fromViem } from "abstractionkit"
+  userOp.signature = await safe.signUserOperationWithSigners(
+      userOp, [fromViem(account)], chainId,
+  )
+  ```
+
+- **`ExternalSigner` interface**: `{ address, signHash?, signTypedData? }` discriminated union that enforces at least one of the two methods at compile time. Accepts any signer that matches the shape (viem local account, viem WalletClient, ethers Wallet, hardware wallet, MPC, WebAuthn, Uint8Array-held keys). The library has zero runtime dependency on viem or ethers for this surface.
+- **`fromPrivateKey(pk)` / `fromViem(account)` / `fromEthersWallet(wallet)` / `fromViemWalletClient(client)` adapters**: one-line factories returning an `ExternalSigner`. Structural types only. `fromViem` / `fromViemWalletClient` require viem ≥ 2.0; `fromEthersWallet` requires ethers ≥ 6.0.
+- **`SignHashFn` / `SignTypedDataFn` / `TypedData` / `SigningScheme` types** exported from the package root for implementers of custom signers.
+- **`SafeMultiChainSigAccountV1.signUserOperationsWithSigners`**: new async multi-op variant that signs a Merkle-rooted bundle of UserOperations with a single signature across chains, using `ExternalSigner[]`.
+
+### Breaking Changes
+
+> **Note on versioning.** The callback-API removal below is a breaking change for callers of `signUserOperationWithSigner`'s prior callback shape on `Calibur7702Account`. Calibur is not yet in use in any production environment; we're communicating directly with the developers currently building against it to coordinate the migration.
+
+- **Callback signing API removed.** `signUserOperationWithSigner(op, callback, chainId)` as introduced in the original signer PR is gone, along with the `SignerFunction`, `AddressedSignerFunction`, `SignerInput`, `SignerResult`, and `SignerTypedData` types. The callback method name is now reused for the new capability-oriented API on single-signer accounts (Simple7702, Calibur) with a different parameter shape. Migration:
+  ```ts
+  // Before:
+  const signer = async ({ userOpHash }) => ({
+    signature: wallet.signingKey.sign(userOpHash).serialized,
+  });
+  userOp.signature = await account.signUserOperationWithSigner(userOp, signer, chainId);
+
+  // After — Simple7702 / Calibur (single signer):
+  import { fromEthersWallet } from "abstractionkit";
+  userOp.signature = await account.signUserOperationWithSigner(
+    userOp, fromEthersWallet(wallet), chainId,
+  );
+
+  // After — Safe accounts (multi-signer, plural method name):
+  userOp.signature = await safe.signUserOperationWithSigners(
+    userOp, [fromEthersWallet(wallet)], chainId,
+  );
+  ```
+
+### Migration: Signing with a raw private key
+
+The existing sync `signUserOperation(op, pk[] | pk, chainId): string` method on every account **is untouched**. If your code passes a hex private-key string directly, no change needed. The new `signUserOperationWithSigner(s)` methods are Signers-only — they do NOT accept bare pk strings. To sign with a pk string via the new API, wrap explicitly:
+
+```ts
+import { fromPrivateKey } from "abstractionkit";
+userOp.signature = await safe.signUserOperationWithSigners(
+  userOp, [fromPrivateKey(pk)], chainId,
+);
+```
+
 ## 0.3.1
 
 ### New Features
