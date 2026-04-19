@@ -1917,6 +1917,10 @@ export class SafeAccount extends SmartAccount {
 	 * recovery is unreliable for contract signers, WebAuthn-wrapped
 	 * signatures, and `v ∈ {31, 32}` eth_sign-flavored signatures.
 	 *
+	 * Signers are invoked in parallel; if multiple callbacks share an
+	 * interactive wallet session (e.g., `window.ethereum` prompts), sequence
+	 * them inside your callback to avoid overlapping popups.
+	 *
 	 * @param useroperation - useroperation to sign
 	 * @param signers - one signer function per signer (any order)
 	 * @param chainId - target chain id

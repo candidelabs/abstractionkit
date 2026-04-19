@@ -409,6 +409,10 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 	 * WebAuthn-wrapped signatures, and `v ∈ {31, 32}` eth_sign-flavored
 	 * signatures.
 	 *
+	 * Signers are invoked in parallel; if multiple callbacks share an
+	 * interactive wallet session (e.g., `window.ethereum` prompts), sequence
+	 * them inside your callback to avoid overlapping popups.
+	 *
 	 * @param useroperation - The UserOperation to sign
 	 * @param signers - One addressed signer function per signer
 	 * @param chainId - The target chain ID
