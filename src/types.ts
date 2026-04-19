@@ -453,3 +453,150 @@ export interface ParallelPaymasterInitValues {
 	paymasterPostOpGasLimit: bigint;
 	paymasterData: string;
 }
+
+/**
+ * EIP-712 typed data bundle. Exposed to signers that prefer structured
+ * `signTypedData` over raw hash signing (better wallet UX — Metamask &
+ * hardware wallets can display structured fields instead of a hex blob).
+ */
+export interface SignerTypedData {
+	/** EIP-712 domain separator fields */
+	domain: {
+		name?: string;
+		version?: string;
+		chainId?: number | bigint;
+		verifyingContract?: string;
+		salt?: string;
+	};
+	/** EIP-712 type definitions */
+	types: Record<string, { name: string; type: string }[]>;
+	/** Name of the root type being signed */
+	primaryType: string;
+	/** The structured message to sign */
+	message: unknown;
+}
+
+/**
+ * Context passed to a {@link SignerFunction}.
+ * Exposes the hash to sign plus surrounding context so the signer can
+ * choose its preferred signing scheme.
+ *
+ * The `userOpHash` is what the on-chain validator recovers against —
+ * for Simple7702 and Calibur it is the ERC-4337 userOperation hash; for
+ * Safe accounts it is the EIP-712 digest of the SafeOp struct. When
+ * `typedData` is present, signing it via `signTypedData` is equivalent to
+ * signing `userOpHash` raw (both produce the same digest).
+ *
+ * ## Which signing scheme is accepted?
+ *
+ * - **Simple7702** (eth-infinitism reference) and **Calibur** verify a
+ *   plain ECDSA signature over `userOpHash` — raw only, no EIP-191.
+ * - **Safe** (4337 module → `Safe.checkSignatures`) accepts **both** a
+ *   raw signature over the EIP-712 digest (`v ∈ {27, 28}`) and an
+ *   `eth_sign`-style EIP-191-wrapped signature (`v ∈ {31, 32}`, i.e.
+ *   standard `v + 4`). Most tooling (`viem.signMessage`, `ethers.signMessage`)
+ *   emits `v = 27 / 28` even when wrapping with EIP-191, so passing that
+ *   output directly to a Safe account will still fail verification unless
+ *   the caller manually adds 4 to `v`.
+ *
+ * **Recommended**: sign `userOpHash` raw (viem: `walletClient.sign({ hash })`,
+ * ethers: `wallet.signingKey.sign(hash).serialized`), or — for Safe —
+ * use `typedData` with `signTypedData(...)` for structured wallet UX. These
+ * paths work across every account in this SDK without `v` manipulation.
+ */
+export interface SignerInput<
+	TUserOp extends
+		| UserOperationV6
+		| UserOperationV7
+		| UserOperationV8
+		| UserOperationV9 =
+		| UserOperationV6
+		| UserOperationV7
+		| UserOperationV8
+		| UserOperationV9,
+> {
+	/**
+	 * The 32-byte hash the signer should produce a signature over (hex string).
+	 *
+	 * The simplest and most portable choice is to sign this hash raw
+	 * (`signingKey.sign(hash)` in ethers, `walletClient.sign({ hash })` in
+	 * viem). Every account in this SDK accepts a raw signature.
+	 *
+	 * Simple7702 and Calibur only accept the raw form. Safe additionally
+	 * accepts an EIP-191-wrapped (`eth_sign`) signature, but only when the
+	 * signature's `v` byte is 31 or 32 — which default `signMessage` tooling
+	 * does not produce.
+	 */
+	userOpHash: string;
+	/** The full UserOperation — useful for signers that want to inspect or display it. */
+	userOperation: TUserOp;
+	/** Target chain ID. */
+	chainId: bigint;
+	/** EntryPoint contract address the userOp will be submitted to. */
+	entryPoint: string;
+	/**
+	 * EIP-712 typed data equivalent of `userOpHash`, when the account signs
+	 * via EIP-712 (Safe accounts). Absent for accounts that sign the raw
+	 * userOp hash directly (Simple7702, Calibur). Signing via
+	 * `signTypedData(domain, types, message)` produces a signature over the
+	 * same digest as signing `userOpHash` raw.
+	 */
+	typedData?: SignerTypedData;
+}
+
+/**
+ * Result returned by a {@link SignerFunction}.
+ * `signerAddress` is optional for accounts that don't need it (Simple7702,
+ * Calibur). For accounts that require it (Safe — see {@link AddressedSignerFunction}),
+ * the type system enforces that it is present.
+ */
+export interface SignerResult {
+	/**
+	 * The Ethereum address that produced `signature`. Optional here so a
+	 * signer targeting Simple7702 / Calibur can return just `{ signature }`.
+	 * Safe account methods require this via {@link AddressedSignerFunction}.
+	 */
+	signerAddress?: string;
+	/** The hex-encoded signature bytes. */
+	signature: string;
+}
+
+/**
+ * A signing function that receives a {@link SignerInput} context and returns
+ * a {@link SignerResult}. Use this to integrate viem, ethers Signers,
+ * hardware wallets, or MPC signers without passing raw private keys.
+ *
+ * Assignable from {@link AddressedSignerFunction} (return-type covariance),
+ * so a "proper" signer that always reports its address works anywhere a
+ * lax `SignerFunction` is expected.
+ */
+export type SignerFunction<
+	TUserOp extends
+		| UserOperationV6
+		| UserOperationV7
+		| UserOperationV8
+		| UserOperationV9 =
+		| UserOperationV6
+		| UserOperationV7
+		| UserOperationV8
+		| UserOperationV9,
+> = (input: SignerInput<TUserOp>) => Promise<SignerResult>;
+
+/**
+ * A stricter {@link SignerFunction} that MUST return `signerAddress`.
+ * Used by Safe accounts, where signatures must be ordered by signer address
+ * on-chain and the signer's address cannot be inferred reliably (contract
+ * signers, WebAuthn-wrapped signatures, and `eth_sign`-flavored signatures
+ * with `v ∈ {31, 32}` all break naive ecrecover).
+ */
+export type AddressedSignerFunction<
+	TUserOp extends
+		| UserOperationV6
+		| UserOperationV7
+		| UserOperationV8
+		| UserOperationV9 =
+		| UserOperationV6
+		| UserOperationV7
+		| UserOperationV8
+		| UserOperationV9,
+> = (input: SignerInput<TUserOp>) => Promise<Required<SignerResult>>;

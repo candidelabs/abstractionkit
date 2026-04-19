@@ -5,7 +5,7 @@ import {
     getDelegatedAddress, getFunctionSelector, handlefetchGasPrice,
     sendJsonRpcRequest
 } from "../../utils";
-import { GasOption, PolygonChain, StateOverrideSet, UserOperationV8, UserOperationV9 } from "src/types";
+import { GasOption, PolygonChain, SignerFunction, StateOverrideSet, UserOperationV8, UserOperationV9 } from "src/types";
 import { AbstractionKitError } from "src/errors";
 import {
     Authorization7702Hex, bigintToHex,
@@ -760,6 +760,38 @@ export class BaseSimple7702Account extends SmartAccount {
 		const wallet = new Wallet(privateKey);
         return wallet.signingKey.sign(userOperationHash).serialized;
 	}
+
+    /**
+     * Sign a UserOperation with an external {@link SignerFunction} (viem,
+     * ethers Signer, hardware wallet, MPC signer, etc.). Computes the
+     * UserOperation hash and invokes the signer with a {@link SignerInput}
+     * context so it can choose raw vs EIP-191 signing.
+     *
+     * @param useroperation - The UserOperation to sign
+     * @param signer - Async signing function receiving a SignerInput
+     * @param chainId - Target chain ID
+     * @returns Promise resolving to the hex-encoded signature
+     */
+    protected async baseSignUserOperationWithSigner<
+        T extends UserOperationV8 | UserOperationV9,
+    >(
+        useroperation: T,
+        signer: SignerFunction<T>,
+        chainId: bigint,
+    ): Promise<string> {
+        const userOperationHash = createUserOperationHash(
+            useroperation,
+            this.entrypointAddress,
+            chainId,
+        );
+        const { signature } = await signer({
+            userOpHash: userOperationHash,
+            userOperation: useroperation,
+            chainId,
+            entryPoint: this.entrypointAddress,
+        });
+        return signature;
+    }
     
     /**
 	 * Submit a signed UserOperation to a bundler for on-chain inclusion.
@@ -974,6 +1006,45 @@ export class Simple7702Account extends BaseSimple7702Account {
 		chainId: bigint,
     ): string {
         return this.baseSignUserOperation(useroperation, privateKey, chainId);
+    }
+
+    /**
+     * Sign a {@link UserOperationV8} with an external signer (viem, ethers
+     * Signer, hardware wallet, MPC signer, etc.) instead of a raw private key.
+     *
+     * @param useroperation - The UserOperation to sign
+     * @param signer - Async signing function receiving a SignerInput
+     * @param chainId - Target chain ID
+     * @returns Promise resolving to the hex-encoded signature
+     *
+     * @example
+     * // The Simple7702 delegatee verifies a raw ECDSA signature over the
+     * // userOp hash — no EIP-191 prefix. Use a raw-hash signing API, not
+     * // `personal_sign` / `signMessage`, or the signature will not verify.
+     * // The signer may omit `signerAddress` — it is ignored for Simple7702.
+     * userOp.signature = await account.signUserOperationWithSigner(
+     *   userOp,
+     *   // viem:
+     *   async ({ userOpHash }) => ({
+     *     signature: await walletClient.sign({ hash: userOpHash }),
+     *   }),
+     *   // ethers v6:
+     *   // async ({ userOpHash }) => ({
+     *   //   signature: wallet.signingKey.sign(userOpHash).serialized,
+     *   // }),
+     *   chainId,
+     * );
+     */
+    public async signUserOperationWithSigner(
+        useroperation: UserOperationV8,
+        signer: SignerFunction<UserOperationV8>,
+        chainId: bigint,
+    ): Promise<string> {
+        return this.baseSignUserOperationWithSigner(
+            useroperation,
+            signer,
+            chainId,
+        );
     }
 
     /**

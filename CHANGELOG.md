@@ -1,5 +1,27 @@
 # Changelog
 
+## [Unreleased]
+
+### New Features
+
+- **`signUserOperationWithSigner`**: new method on `Calibur7702Account`, `Simple7702Account`, `Simple7702AccountV09`, `SafeAccountV0_2_0`, `SafeAccountV0_3_0`, and `SafeAccountV1_5_0_M_0_3_0` for integrating external signers (viem, ethers Signers, hardware wallets, MPC signers) without passing raw private keys.
+- **Shared `SignerFunction` / `AddressedSignerFunction` / `SignerInput` / `SignerResult` / `SignerTypedData` types** exported from the package root. `SignerInput` carries `userOpHash`, the full `userOperation`, `chainId`, `entryPoint`, and — for Safe accounts — an EIP-712 `typedData` bundle so signers can use `signTypedData` for structured wallet display. Signers return `{ signerAddress?: string; signature: string }`. Safe accounts require the stricter `AddressedSignerFunction` (signer must declare its address) — signatures are ordered by signer address on-chain and ecrecover is unreliable for contract signers, WebAuthn-wrapped signatures, and `eth_sign`-flavored signatures with `v ∈ {31, 32}`.
+
+### Breaking Changes
+
+> **Note on versioning.** The `SignerFunction` shape change below is a breaking change, but it does not necessarily trigger a major version bump. `Calibur7702Account` is not yet in use in any production environment, and we're communicating directly with the developers currently building against it to coordinate the migration.
+
+- **`Calibur7702Account` `SignerFunction` shape changed.** The callback now receives a `SignerInput` context object and returns `{ signerAddress?, signature }` instead of a bare signature string. Migration:
+  ```ts
+  // Before (0.3.1):
+  const signer = (hash) => wallet.signingKey.sign(hash).serialized;
+  // After (0.4.0):
+  const signer = async ({ userOpHash }) => ({
+    signature: wallet.signingKey.sign(userOpHash).serialized,
+  });
+  ```
+  The recommended signing path is raw-hash ECDSA over `userOpHash` (viem: `walletClient.sign({ hash })`, ethers: `wallet.signingKey.sign(hash)`). Simple7702 and Calibur only accept the raw form; Safe additionally accepts EIP-191-wrapped signatures but only with `v ∈ {31, 32}`, which default `signMessage` tooling does not produce. For Safe, `walletClient.signTypedData(...)` with the supplied `typedData` is the structured-UX equivalent of raw signing.
+
 ## 0.3.1
 
 ### New Features

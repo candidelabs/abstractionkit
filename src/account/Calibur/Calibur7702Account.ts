@@ -4,7 +4,7 @@ import {
 	createCallData, createUserOperationHash, fetchAccountNonce,
 	getDelegatedAddress, getFunctionSelector, handlefetchGasPrice, sendJsonRpcRequest
 } from "../../utils";
-import { UserOperationV8 } from "src/types";
+import { SignerFunction, UserOperationV8 } from "src/types";
 import { AbstractionKitError } from "src/errors";
 import {
 	Authorization7702Hex, bigintToHex,
@@ -19,7 +19,7 @@ import { PrependTokenPaymasterApproveAccount } from "src/paymaster/types";
 import {
 	CaliburKeyType, CaliburKey, CaliburKeySettings, CaliburKeySettingsResult,
 	WebAuthnSignatureData, CaliburCreateUserOperationOverrides,
-	CaliburSignatureOverrides, SignerFunction,
+	CaliburSignatureOverrides,
 } from "./types";
 
 
@@ -617,22 +617,32 @@ export class Calibur7702Account extends SmartAccount
 	 * secondary key, pass its key hash via `overrides.keyHash`.
 	 *
 	 * @param userOperation - The UserOperation to sign
-	 * @param signer - Async signing function: `(hash: string) => Promise<string>`
+	 * @param signer - Async signing function receiving a {@link SignerInput}
 	 * @param chainId - Target chain ID
 	 * @param overrides - Optional overrides (keyHash for secondary keys, hookData)
 	 * @returns Promise resolving to the hex-encoded wrapped signature
 	 *
 	 * @example
-	 * // Sign with a viem wallet client
+	 * // Calibur verifies a raw ECDSA signature over the userOp hash — no
+	 * // EIP-191 prefix. Use a raw-hash signing API, not `personal_sign` /
+	 * // `signMessage`, or the signature will not verify.
+	 * // The signer may omit `signerAddress` — it is ignored for Calibur.
 	 * userOp.signature = await account.signUserOperationWithSigner(
 	 *   userOp,
-	 *   (hash) => walletClient.signMessage({ message: { raw: hash } }),
+	 *   // viem:
+	 *   async ({ userOpHash }) => ({
+	 *     signature: await walletClient.sign({ hash: userOpHash }),
+	 *   }),
+	 *   // ethers v6:
+	 *   // async ({ userOpHash }) => ({
+	 *   //   signature: wallet.signingKey.sign(userOpHash).serialized,
+	 *   // }),
 	 *   chainId,
 	 * );
 	 */
 	public async signUserOperationWithSigner(
 		userOperation: UserOperationV8,
-		signer: SignerFunction,
+		signer: SignerFunction<UserOperationV8>,
 		chainId: bigint,
 		overrides: CaliburSignatureOverrides = {},
 	): Promise<string> {
@@ -643,8 +653,13 @@ export class Calibur7702Account extends SmartAccount
 		);
 		const keyHash = overrides.keyHash ?? ROOT_KEY_HASH;
 		const hookData = overrides.hookData ?? "0x";
-		const ecdsaSig = await signer(userOperationHash);
-		return Calibur7702Account.wrapSignature(keyHash, ecdsaSig, hookData);
+		const { signature } = await signer({
+			userOpHash: userOperationHash,
+			userOperation,
+			chainId,
+			entryPoint: this.entrypointAddress,
+		});
+		return Calibur7702Account.wrapSignature(keyHash, signature, hookData);
 	}
 
 	/**

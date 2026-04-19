@@ -699,9 +699,9 @@ describe('Calibur7702Account', () => {
             eip7702Auth: null,
         };
 
-        const signerFn = async (hash) => {
-            return wallet.signingKey.sign(hash).serialized;
-        };
+        const signerFn = async ({ userOpHash }) => ({
+            signature: wallet.signingKey.sign(userOpHash).serialized,
+        });
 
         const sigFromSigner = await account.signUserOperationWithSigner(userOp, signerFn, 11155111n);
         const sigFromKey = account.signUserOperation(userOp, signingKey, 11155111n);
@@ -726,7 +726,9 @@ describe('Calibur7702Account', () => {
             eip7702Auth: null,
         };
 
-        const signerFn = async (hash) => wallet.signingKey.sign(hash).serialized;
+        const signerFn = async ({ userOpHash }) => ({
+            signature: wallet.signingKey.sign(userOpHash).serialized,
+        });
 
         const sigFromSigner = await account.signUserOperationWithSigner(userOp, signerFn, 11155111n, { keyHash });
         const sigFromKey = account.signUserOperation(userOp, signingKey, 11155111n, { keyHash });

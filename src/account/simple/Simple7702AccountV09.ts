@@ -1,4 +1,4 @@
-import { StateOverrideSet, UserOperationV9 } from "src/types";
+import { SignerFunction, StateOverrideSet, UserOperationV9 } from "src/types";
 import { BaseSimple7702Account, CreateUserOperationOverrides, SimpleMetaTransaction } from "./Simple7702Account";
 import { ENTRYPOINT_V9 } from "src/constants";
 import { SendUseroperationResponse } from "../SendUseroperationResponse";
@@ -94,6 +94,27 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 		chainId: bigint,
     ): string {
         return this.baseSignUserOperation(useroperation, privateKey, chainId);
+    }
+
+    /**
+     * Sign a {@link UserOperationV9} with an external signer (viem, ethers
+     * Signer, hardware wallet, MPC signer, etc.) instead of a raw private key.
+     *
+     * @param useroperation - The UserOperation to sign
+     * @param signer - Async signing function receiving a SignerInput
+     * @param chainId - Target chain ID
+     * @returns Promise resolving to the hex-encoded signature
+     */
+    public async signUserOperationWithSigner(
+        useroperation: UserOperationV9,
+        signer: SignerFunction<UserOperationV9>,
+        chainId: bigint,
+    ): Promise<string> {
+        return this.baseSignUserOperationWithSigner(
+            useroperation,
+            signer,
+            chainId,
+        );
     }
 
     /**

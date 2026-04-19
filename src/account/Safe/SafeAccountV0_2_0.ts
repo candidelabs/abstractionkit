@@ -9,7 +9,7 @@ import {
 	SignerSignaturePair,
 } from "./types";
 
-import { UserOperationV6, MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet } from "../../types";
+import { UserOperationV6, MetaTransaction, OnChainIdentifierParamsType, AddressedSignerFunction, StateOverrideSet } from "../../types";
 import { ENTRYPOINT_V6 } from "src/constants";
 import { createCallData } from "src/utils";
 import { SafeAccountV0_3_0 } from "./SafeAccountV0_3_0";
@@ -493,5 +493,40 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			this.safe4337ModuleAddress,
 			overrides
 		)
+	}
+
+	/**
+	 * Sign a UserOperation using one or more external {@link AddressedSignerFunction}s
+	 * (viem, ethers Signers, hardware wallets, MPC signers, etc.) instead of
+	 * raw private keys. Each signer receives a {@link SignerInput} exposing
+	 * both the EIP-712 hash and the full typed-data bundle, and must return
+	 * `{ signerAddress, signature }` — Safe orders signatures by signer
+	 * address on-chain, and recovery is unreliable for contract signers,
+	 * WebAuthn-wrapped signatures, and `v ∈ {31, 32}` eth_sign-flavored
+	 * signatures.
+	 *
+	 * @param useroperation - The UserOperation to sign
+	 * @param signers - One addressed signer function per signer
+	 * @param chainId - The target chain ID
+	 * @param overrides - Override validAfter / validUntil
+	 * @returns Promise resolving to the formatted signature string
+	 */
+	public signUserOperationWithSigner(
+		useroperation: UserOperationV6,
+		signers: AddressedSignerFunction<UserOperationV6>[],
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+		} = {},
+	): Promise<string> {
+		return SafeAccount.baseSignSingleUserOperationWithSigner(
+			useroperation,
+			signers,
+			chainId,
+			this.entrypointAddress,
+			this.safe4337ModuleAddress,
+			overrides,
+		);
 	}
 }

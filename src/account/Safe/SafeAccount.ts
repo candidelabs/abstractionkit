@@ -17,6 +17,7 @@ import {
 	ENTRYPOINT_V7,
 	EIP712_SAFE_OPERATION_V7_TYPE,
 	EIP712_SAFE_OPERATION_V6_TYPE,
+	EIP712_SAFE_OPERATION_PRIMARY_TYPE,
     ENTRYPOINT_V9,
 } from "../../constants";
 import {
@@ -31,6 +32,7 @@ import {
     OnChainIdentifierParamsType,
     TenderlySimulationResult,
     UserOperationV9,
+    AddressedSignerFunction,
 } from "../../types";
 import {
 	createCallData,
@@ -1898,6 +1900,105 @@ export class SafeAccount extends SmartAccount {
 				validAfter,
 				validUntil,
                 isMultiChainSignature:overrides.isMultiChainSignature
+			},
+		);
+	}
+
+	/**
+	 * Create a useroperation signature using external signer functions
+	 * (viem, ethers Signers, hardware wallets, MPC signers, etc.) instead
+	 * of raw private keys. Each signer is invoked with a {@link SignerInput}
+	 * exposing both the EIP-712 hash (`userOpHash`) and the full typed-data
+	 * bundle (`typedData`), so the signer can use `signTypedData` for
+	 * structured wallet display or sign the raw hash directly.
+	 *
+	 * Each signer MUST return its own `signerAddress` alongside the
+	 * signature — Safe orders signatures by signer address on-chain and
+	 * recovery is unreliable for contract signers, WebAuthn-wrapped
+	 * signatures, and `v ∈ {31, 32}` eth_sign-flavored signatures.
+	 *
+	 * @param useroperation - useroperation to sign
+	 * @param signers - one signer function per signer (any order)
+	 * @param chainId - target chain id
+	 * @param entrypointAddress - target entrypoint
+	 * @param safe4337ModuleAddress - safe 4337 module address
+	 * @param overrides - overrides for the default values
+	 * @returns signature
+	 */
+	public static async baseSignSingleUserOperationWithSigner<
+		T extends UserOperationV6 | UserOperationV7,
+	>(
+		useroperation: T,
+		signers: AddressedSignerFunction<T>[],
+		chainId: bigint,
+		entrypointAddress: string,
+		safe4337ModuleAddress: string,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			isMultiChainSignature?: boolean;
+		} = {},
+	): Promise<string> {
+		const validAfter = overrides.validAfter ?? 0n;
+		const validUntil = overrides.validUntil ?? 0n;
+
+		if (signers.length < 1) {
+			throw new RangeError("There should be at least one signer");
+		}
+		if (chainId < 0n) {
+			throw new RangeError("chainId can't be negative");
+		}
+		if (validAfter < 0n) {
+			throw new RangeError("validAfter can't be negative");
+		}
+		if (validUntil < 0n) {
+			throw new RangeError("validUntil can't be negative");
+		}
+
+		const typedData = SafeAccount.getUserOperationEip712Data(
+			useroperation,
+			chainId,
+			{
+				validAfter,
+				validUntil,
+				entrypointAddress,
+				safe4337ModuleAddress,
+			},
+		);
+		const userOperationEip712Hash = TypedDataEncoder.hash(
+			typedData.domain,
+			typedData.types,
+			typedData.messageValue,
+		);
+
+		const signerInput = {
+			userOpHash: userOperationEip712Hash,
+			userOperation: useroperation,
+			chainId,
+			entryPoint: entrypointAddress,
+			typedData: {
+				domain: typedData.domain,
+				types: typedData.types,
+				primaryType: EIP712_SAFE_OPERATION_PRIMARY_TYPE,
+				message: typedData.messageValue,
+			},
+		};
+
+		const results = await Promise.all(
+			signers.map((sign) => sign(signerInput)),
+		);
+
+		const signerSignaturePairs = results.map(({ signerAddress, signature }) => ({
+			signer: getAddress(signerAddress),
+			signature,
+		}));
+
+		return SafeAccount.formatSignaturesToUseroperationSignature(
+			signerSignaturePairs,
+			{
+				validAfter,
+				validUntil,
+				isMultiChainSignature: overrides.isMultiChainSignature,
 			},
 		);
 	}

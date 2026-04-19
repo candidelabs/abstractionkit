@@ -7,7 +7,7 @@ export { CaliburKeyType } from "./account/Calibur/types";
 export type {
 	CaliburKey, CaliburKeySettings, CaliburKeySettingsResult,
 	WebAuthnSignatureData, CaliburCreateUserOperationOverrides,
-	CaliburSignatureOverrides, SignerFunction,
+	CaliburSignatureOverrides,
 } from "./account/Calibur/types";
 export {
 	SocialRecoveryModule,
@@ -135,6 +135,11 @@ export type {
 	MetaTransaction,
     SponsorMetadata,
     ParallelPaymasterInitValues,
+    SignerFunction,
+    AddressedSignerFunction,
+    SignerInput,
+    SignerResult,
+    SignerTypedData,
 } from "./types";
 
 export {
