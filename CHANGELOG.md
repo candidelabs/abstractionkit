@@ -20,7 +20,7 @@
     signature: wallet.signingKey.sign(userOpHash).serialized,
   });
   ```
-  The recommended signing path is raw-hash ECDSA over `userOpHash` (viem: `walletClient.sign({ hash })`, ethers: `wallet.signingKey.sign(hash)`). Simple7702 and Calibur only accept the raw form; Safe additionally accepts EIP-191-wrapped signatures but only with `v ∈ {31, 32}`, which default `signMessage` tooling does not produce. For Safe, `walletClient.signTypedData(...)` with the supplied `typedData` is the structured-UX equivalent of raw signing.
+  The recommended signing path is raw-hash ECDSA over `userOpHash` (viem: `privateKeyToAccount(pk).sign({ hash })` on a Local Account; ethers: `wallet.signingKey.sign(hash)`). Raw-hash signing requires a local/derived key — JSON-RPC wallets (MetaMask, etc.) do not expose it. Simple7702 and Calibur only accept the raw form, so they cannot be driven by JSON-RPC wallets. Safe additionally accepts EIP-191-wrapped signatures but only with `v ∈ {31, 32}`, which default `signMessage` tooling does not produce; for Safe, `signTypedData(...)` with the supplied `typedData` is the structured-UX equivalent of raw signing and works with JSON-RPC wallets.
 
 ## 0.3.1
 

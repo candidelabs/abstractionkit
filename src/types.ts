@@ -499,10 +499,19 @@ export interface SignerTypedData {
  *   output directly to a Safe account will still fail verification unless
  *   the caller manually adds 4 to `v`.
  *
- * **Recommended**: sign `userOpHash` raw (viem: `walletClient.sign({ hash })`,
- * ethers: `wallet.signingKey.sign(hash).serialized`), or — for Safe —
- * use `typedData` with `signTypedData(...)` for structured wallet UX. These
+ * **Recommended**: sign `userOpHash` raw (viem:
+ * `privateKeyToAccount(pk).sign({ hash })`, ethers:
+ * `wallet.signingKey.sign(hash).serialized`), or — for Safe — use
+ * `typedData` with `signTypedData(...)` for structured wallet UX. These
  * paths work across every account in this SDK without `v` manipulation.
+ *
+ * Raw-hash signing requires a local/derived key: a private key, mnemonic,
+ * HD key, or hardware wallet exposed as a viem Local Account / ethers
+ * Signer. JSON-RPC wallets (MetaMask, WalletConnect-backed wallets, etc.)
+ * do NOT expose raw-hash signing — they only implement `personal_sign` and
+ * `eth_signTypedData_v4`. For those, use `typedData` + `signTypedData(...)`
+ * on Safe accounts; Simple7702 and Calibur are incompatible with JSON-RPC
+ * signers for UserOp signing.
  */
 export interface SignerInput<
 	TUserOp extends
@@ -519,8 +528,9 @@ export interface SignerInput<
 	 * The 32-byte hash the signer should produce a signature over (hex string).
 	 *
 	 * The simplest and most portable choice is to sign this hash raw
-	 * (`signingKey.sign(hash)` in ethers, `walletClient.sign({ hash })` in
-	 * viem). Every account in this SDK accepts a raw signature.
+	 * (`signingKey.sign(hash)` in ethers, `account.sign({ hash })` on a
+	 * viem Local Account). Every account in this SDK accepts a raw
+	 * signature.
 	 *
 	 * Simple7702 and Calibur only accept the raw form. Safe additionally
 	 * accepts an EIP-191-wrapped (`eth_sign`) signature, but only when the

@@ -627,11 +627,19 @@ export class Calibur7702Account extends SmartAccount
 	 * // EIP-191 prefix. Use a raw-hash signing API, not `personal_sign` /
 	 * // `signMessage`, or the signature will not verify.
 	 * // The signer may omit `signerAddress` — it is ignored for Calibur.
+	 * //
+	 * // Raw-hash signing requires a local/derived key (private key, mnemonic,
+	 * // HD key, or hardware wallet exposed as a local account). JSON-RPC
+	 * // wallets like MetaMask do NOT expose raw-hash signing — they only
+	 * // support `personal_sign` and `eth_signTypedData_v4`.
+	 * import { privateKeyToAccount } from 'viem/accounts';
+	 * const localAccount = privateKeyToAccount(privateKey);
+	 *
 	 * userOp.signature = await account.signUserOperationWithSigner(
 	 *   userOp,
-	 *   // viem:
+	 *   // viem local account:
 	 *   async ({ userOpHash }) => ({
-	 *     signature: await walletClient.sign({ hash: userOpHash }),
+	 *     signature: await localAccount.sign({ hash: userOpHash }),
 	 *   }),
 	 *   // ethers v6:
 	 *   // async ({ userOpHash }) => ({
