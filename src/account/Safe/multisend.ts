@@ -2,9 +2,10 @@ import { AbiCoder, getBytes, solidityPacked } from "ethers";
 import { type MetaTransaction, Operation } from "src/types";
 
 /**
- * Encodes a Metatransaction to be executed by Safe contract
- * @param metaTransaction - metatransaction to be encoded
- * @returns  The encoded metatransaction
+ * Pack a single MetaTransaction into the MultiSend byte layout
+ * (operation, to, value, dataLength, data).
+ * @param metaTransaction - The transaction to encode
+ * @returns The encoded transaction bytes (without 0x prefix)
  */
 function encodeMultiSendTransaction(metaTransaction: MetaTransaction): string {
 	const operation = metaTransaction.operation ?? Operation.Call;
@@ -18,9 +19,9 @@ function encodeMultiSendTransaction(metaTransaction: MetaTransaction): string {
 }
 
 /**
- * Encodes a Metatransaction list to be batch executed by Safe contract
- * @param metaTransactions - metatransaction list to be encoded
- * @returns The encoded metatransaction
+ * Encode a list of MetaTransactions into the `multiSend` argument for batch execution.
+ * @param metaTransactions - The transactions to batch
+ * @returns The concatenated encoded transactions as a 0x-prefixed hex string
  */
 export function encodeMultiSendCallData(metaTransactions: MetaTransaction[]): string {
 	return `0x${metaTransactions.map((tx) => encodeMultiSendTransaction(tx)).join("")}`;

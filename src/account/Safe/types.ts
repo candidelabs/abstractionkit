@@ -36,7 +36,7 @@ export interface CreateBaseUserOperationOverrides {
 	/** set the maxPriorityFeePerGasPercentageMultiplier instead of querying the current gas price from the rpc node */
 	maxPriorityFeePerGasPercentageMultiplier?: number;
 
-	/** pass some state overrides for gas estimation"*/
+	/** pass some state overrides for gas estimation */
 	state_override_set?: StateOverrideSet;
 
 	dummySignerSignaturePairs?: SignerSignaturePair[];

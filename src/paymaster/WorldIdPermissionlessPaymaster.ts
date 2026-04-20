@@ -39,10 +39,10 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 		root: bigint,
 		proof: string,
 		overrides?: {
-			/** set the entrypoint address intead of determining it from the useroperation structure.*/
+			/** set the entrypoint address instead of determining it from the useroperation structure. */
 			entrypoint?: string;
 
-			/** pass some state overrides for gas estimation"*/
+			/** pass some state overrides for gas estimation */
 			state_override_set?: StateOverrideSet;
 		},
 	): Promise<UserOperationV8>;
@@ -53,10 +53,10 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 		root: bigint,
 		proof: string,
 		overrides?: {
-			/** set the entrypoint address intead of determining it from the useroperation structure.*/
+			/** set the entrypoint address instead of determining it from the useroperation structure. */
 			entrypoint?: string;
 
-			/** pass some state overrides for gas estimation"*/
+			/** pass some state overrides for gas estimation */
 			state_override_set?: StateOverrideSet;
 		},
 	): Promise<UserOperationV7>;
@@ -67,9 +67,9 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 		root: bigint,
 		proof: string,
 		overrides?: {
-			/** set the entrypoint address intead of determining it from the useroperation structure.*/
+			/** set the entrypoint address instead of determining it from the useroperation structure. */
 			entrypoint?: string;
-			/** pass some state overrides for gas estimation"*/
+			/** pass some state overrides for gas estimation */
 			state_override_set?: StateOverrideSet;
 		},
 	): Promise<UserOperationV8 | UserOperationV7> {
@@ -118,7 +118,7 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 		let verificationGasLimit = userOperation.verificationGasLimit;
 		let callGasLimit = userOperation.callGasLimit;
 
-		// set preVerificationGas to zero to force restimation
+		// set preVerificationGas to zero to force re-estimation
 		userOperation.preVerificationGas = 0n;
 
 		const bundler = new Bundler(bundlerRpc);
@@ -149,11 +149,12 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 }
 
 /**
- * createWorldIdSignal is a helper function to work with "@worldcoin/idkit
+ * Build the signal parameter expected by `@worldcoin/idkit`'s `IDKitWidget`.
+ * Binds the proof to a specific account, nonce, and chain.
  * @param accountAddress - account address
  * @param accountNonce - account nonce
  * @param chainId - chain id
- * @returns idkit IDKitWidget signal
+ * @returns keccak256 hash to use as the `signal` for IDKitWidget
  */
 export function createWorldIdSignal(
 	accountAddress: string,

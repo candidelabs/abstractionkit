@@ -98,16 +98,21 @@ export type JsonRpcResponse = {
 	error?: JsonRpcError;
 };
 
+/** Hex-encoded chain ID returned by eth_chainId. */
 export type ChainIdResult = string;
+/** Array of EntryPoint addresses returned by eth_supportedEntryPoints. */
 export type SupportedEntryPointsResult = string[];
 
+/** Result for a single transaction from a Tenderly bundle simulation. */
 export type SingleTransactionTenderlySimulationResult = {
 	transaction: Record<string, unknown>;
 	simulation: { id: string } & Record<string, unknown>;
 };
 
+/** Result array from a Tenderly bundle simulation (one entry per transaction). */
 export type TenderlySimulationResult = SingleTransactionTenderlySimulationResult[];
 
+/** Union of all possible `result` payloads returned by SDK-level JSON-RPC calls. */
 export type JsonRpcResult =
 	| ChainIdResult
 	| SupportedEntryPointsResult
@@ -242,6 +247,7 @@ export type PmUserOperationV7Result = {
 	sponsorMetadata?: SponsorMetadata;
 };
 
+/** Paymaster fields returned by pm_getPaymasterData for EntryPoint v0.8 (identical shape to v0.7). */
 export type PmUserOperationV8Result = PmUserOperationV7Result;
 
 /** Paymaster fields returned by pm_getPaymasterData for EntryPoint v0.6. */
@@ -291,6 +297,7 @@ export interface MetaTransaction {
  * Erc20 token info from the token paymaster
  */
 export interface ERC20Token {
+	/** Token name */
 	name: string;
 	/** Token symbol */
 	symbol: string;
@@ -304,7 +311,7 @@ export interface ERC20Token {
  * Erc20 token info from the token paymaster with exchange rate
  */
 export interface ERC20TokenWithExchangeRate extends ERC20Token {
-	/** Token exchange rate*/
+	/** Token exchange rate */
 	exchangeRate: bigint;
 }
 
@@ -313,14 +320,17 @@ export interface ERC20TokenWithExchangeRate extends ERC20Token {
  * V7/V8 paymasters return structured dummyPaymasterAndData; V6 returns a concatenated hex string.
  */
 export interface PaymasterMetadata {
+	/** Sponsor display name */
 	name: string;
+	/** Sponsor description */
 	description: string;
+	/** Sponsor icon URLs */
 	icons: string[];
 	/** Paymaster contract address */
 	address: string;
-	/** the event that will be emitted when a useroperation is sponsored */
+	/** The event topic emitted on-chain when a UserOperation is sponsored */
 	sponsoredEventTopic: string;
-	/** dummyPaymasterAndData to use for gas estimation */
+	/** Dummy paymaster data used for gas estimation */
 	dummyPaymasterAndData:
 		| {
 				paymaster: string;
@@ -412,6 +422,7 @@ export enum GasOption {
 	/** 1.5x multiplier -- highest cost, fastest inclusion */
 	Fast = 1.5,
 }
+/** Polygon network identifier used to select the correct Polygon Gas Station endpoint. */
 export enum PolygonChain {
 	Mainnet = "v2",
 	ZkMainnet = "zkevm",
@@ -419,11 +430,15 @@ export enum PolygonChain {
 	Cardona = "cardona",
 }
 
+/** EIP-1559 gas price pair in Gwei, as returned by Polygon Gas Station. */
 export type GasPrice = {
-	maxPriorityFee: number; //in Gwei
-	maxFee: number; //in Gwei
+	/** Priority fee (tip) in Gwei */
+	maxPriorityFee: number;
+	/** Max fee per gas in Gwei */
+	maxFee: number;
 };
 
+/** Response shape returned by the Polygon Gas Station API. */
 export type PolygonGasStationJsonRpcResponse = {
 	safeLow: GasPrice;
 	standard: GasPrice;
@@ -433,20 +448,26 @@ export type PolygonGasStationJsonRpcResponse = {
 	blockNumber: number;
 };
 
+/** Attribution parameters appended to calldata as an on-chain identifier for analytics. */
 export type OnChainIdentifierParamsType = {
 	/** Project name */
 	project: string;
-	/** "Web" or "Mobile" or "Safe App" or "Widget", defaults to "Web". */
+	/** Client platform; defaults to "Web" */
 	platform?: "Web" | "Mobile" | "Safe App" | "Widget";
-	/** tool used, defaults to "abstractionkit" */
+	/** Tool name; defaults to "abstractionkit" */
 	tool?: string;
-	/** tool version, defaults to current abstractionkit version */
+	/** Tool version; defaults to the current abstractionkit version */
 	toolVersion?: string;
 };
 
+/** Paymaster fields pre-populated during UserOperation construction for parallel paymaster flows. */
 export interface ParallelPaymasterInitValues {
+	/** Paymaster contract address */
 	paymaster: string;
+	/** Paymaster verification gas limit */
 	paymasterVerificationGasLimit: bigint;
+	/** Paymaster post-operation gas limit */
 	paymasterPostOpGasLimit: bigint;
+	/** Paymaster-specific data */
 	paymasterData: string;
 }

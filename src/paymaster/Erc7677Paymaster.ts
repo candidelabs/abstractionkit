@@ -439,14 +439,11 @@ export class Erc7677Paymaster extends Paymaster {
 			userOp.callGasLimit = 0n;
 			userOp.verificationGasLimit = 0n;
 			userOp.preVerificationGas = 0n;
-			// Some bundlers reject estimation when fees are set and the sender
-			// has insufficient balance to pay them. Zero them during the
-			// estimate and restore after — same pattern as CandidePaymaster.
-			//
-			// Pimlico is an exception: estimating with maxFeePerGas = 0 makes
-			// its paymaster postOp divide by the fee and revert with
-			// "AA50 postOp reverted: divide by zero". Skip the zeroing for
-			// Pimlico and pass the user-supplied fees through unchanged.
+			// Zero fees during estimation (same pattern as CandidePaymaster):
+			// some bundlers reject estimation if the sender can't cover the
+			// set fees. Exception: Pimlico's paymaster postOp divides by fee
+			// and reverts "AA50 postOp reverted: divide by zero" on fee=0, so
+			// pass its fees through unchanged.
 			const skipFeeZeroing = this.provider === "pimlico";
 			const inputMaxFeePerGas = userOp.maxFeePerGas;
 			const inputMaxPriorityFeePerGas = userOp.maxPriorityFeePerGas;
@@ -807,11 +804,9 @@ export class Erc7677Paymaster extends Paymaster {
 		}
 		userOp.callData = callDataWithApprove;
 
-		// Step 7 — final paymaster data (signature over the fully-populated
-		// userOp). The token flow always fetches fresh paymaster data: the
-		// stub's `isFinal` cannot be honored here because callData was mutated
-		// after the stub was generated, so any stub signature is over a
-		// different UserOp hash than the one we're about to return.
+		// Step 7 — final paymaster data. The token flow always refetches:
+		// callData was mutated after the stub, so any stub `isFinal` signature
+		// would be over a different UserOp hash.
 		const final = await this.getPaymasterData(userOp, entrypoint, chainIdHex, context);
 		this.applyPaymasterFields(userOp, final);
 

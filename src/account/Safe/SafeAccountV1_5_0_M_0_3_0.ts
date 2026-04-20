@@ -159,6 +159,16 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 		return SafeAccountV0_3_0.createFactoryAddressAndData(owners, modOverrides);
 	}
 
+	/**
+	 * Create a UserOperation with v1.5.0 defaults applied for WebAuthn verification
+	 * (RIP-7951 precompile + Daimo fallback). See {@link SafeAccountV0_3_0.createUserOperation}.
+	 *
+	 * @param transactions - Array of MetaTransactions to execute
+	 * @param providerRpc - Ethereum JSON-RPC node URL (for nonce and gas prices)
+	 * @param bundlerRpc - Bundler RPC URL (for gas estimation)
+	 * @param overrides - Override any auto-determined values
+	 * @returns The unsigned UserOperation (UserOperationV7) ready to be signed
+	 */
 	public async createUserOperation(
 		transactions: MetaTransaction[],
 		providerRpc?: string,
@@ -176,6 +186,14 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 		});
 	}
 
+	/**
+	 * Estimate gas limits for a UserOperation with v1.5.0 WebAuthn defaults applied.
+	 *
+	 * @param userOperation - The UserOperation to estimate gas for
+	 * @param bundlerRpc - Bundler RPC URL
+	 * @param overrides - State overrides, dummy signatures, and WebAuthn configuration
+	 * @returns A tuple of [preVerificationGas, verificationGasLimit, callGasLimit]
+	 */
 	public async estimateUserOperationGas(
 		userOperation: UserOperationV7,
 		bundlerRpc: string,
@@ -202,6 +220,15 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 		});
 	}
 
+	/**
+	 * Compute the counterfactual address of the WebAuthn signer proxy for the given public key.
+	 * Applies v1.5.0 defaults for precompile + Daimo verifier.
+	 *
+	 * @param x - X coordinate of the WebAuthn P-256 public key
+	 * @param y - Y coordinate of the WebAuthn P-256 public key
+	 * @param overrides - Override WebAuthn verifier, factory, singleton, and proxy-code addresses
+	 * @returns The counterfactual verifier/proxy address
+	 */
 	public static createWebAuthnSignerVerifierAddress(
 		x: bigint,
 		y: bigint,
@@ -224,6 +251,15 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 		});
 	}
 
+	/**
+	 * Create a MetaTransaction that deploys the WebAuthn verifier/proxy for the given public key.
+	 * Applies v1.5.0 defaults for precompile + Daimo verifier.
+	 *
+	 * @param x - X coordinate of the WebAuthn P-256 public key
+	 * @param y - Y coordinate of the WebAuthn P-256 public key
+	 * @param overrides - Override WebAuthn verifier and factory addresses
+	 * @returns A MetaTransaction that deploys the verifier
+	 */
 	public static createDeployWebAuthnVerifierMetaTransaction(
 		x: bigint,
 		y: bigint,
@@ -244,6 +280,13 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 		});
 	}
 
+	/**
+	 * Build dummy signer/signature pairs for gas estimation, with v1.5.0 WebAuthn defaults.
+	 *
+	 * @param expectedSigners - Signers whose signatures will be produced at sign time
+	 * @param webAuthnSignatureOverrides - Override WebAuthn verifier/module configuration
+	 * @returns An array of dummy SignerSignaturePair entries, one per expected signer
+	 */
 	public static createDummySignerSignaturePairForExpectedSigners(
 		expectedSigners: Signer[],
 		webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
@@ -259,6 +302,17 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 		});
 	}
 
+	/**
+	 * Verify a WebAuthn signature over a message hash on-chain via the P-256 verifier.
+	 * Applies v1.5.0 defaults for precompile + Daimo verifier.
+	 *
+	 * @param nodeRpcUrl - Ethereum JSON-RPC node URL
+	 * @param signer - WebAuthn public key that purportedly produced the signature
+	 * @param messageHash - The hash that was signed
+	 * @param signature - The WebAuthn signature bytes
+	 * @param overrides - Override WebAuthn verifier and singleton addresses
+	 * @returns Promise of `true` if the signature verifies, otherwise `false`
+	 */
 	public static async verifyWebAuthnSignatureForMessageHash(
 		nodeRpcUrl: string,
 		signer: WebauthnPublicKey,

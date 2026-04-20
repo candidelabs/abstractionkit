@@ -15,10 +15,9 @@ export function pickScheme<C>(
 	accepted: readonly SigningScheme[],
 	context: { accountName: string; signerIndex: number },
 ): SigningScheme {
-	// Use `typeof === "function"` (not truthiness) so a malformed signer
-	// like `{ signHash: true }` (e.g. from a JS caller bypassing types) is
-	// rejected via pickScheme's AbstractionKitError instead of crashing
-	// later with a raw TypeError on the call site.
+	// Typeof-check (not truthiness) so malformed signers like
+	// `{ signHash: true }` from JS callers bypassing types get a clear
+	// AbstractionKitError here instead of a raw TypeError at the call site.
 	const signerCan: SigningScheme[] = [];
 	if (typeof signer.signTypedData === "function") signerCan.push("typedData");
 	if (typeof signer.signHash === "function") signerCan.push("hash");

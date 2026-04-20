@@ -30,26 +30,20 @@ import type {
 } from "./types";
 
 /**
- * @class
- * Safe account variant that supports multi-chain signatures via Merkle trees.
- * Allows signing UserOperations for multiple chains with a single signature,
- * using EntryPoint v0.9 and EIP-712 typed data with Merkle proofs.
+ * Safe account variant that supports multi-chain signatures via Merkle trees:
+ * sign UserOperations for multiple chains under one signature on EntryPoint v0.9.
  *
- * Uses Safe Passkey module v0.2.1 WebAuthn verifiers by default,
- * with the Daimo P256 verifier instead of the FCL P256 verifier
- * used by the base SafeAccount class.
+ * Uses Safe Passkey module v0.2.1 WebAuthn verifiers by default (Daimo P256
+ * verifier instead of the base class's FCL P256).
  * @see {@link https://github.com/safe-fndn/safe-modules/blob/04e65efbce634e776cc8c1fbe90061f09e09a71b/modules/passkey/CHANGELOG.md?plain=1#L23}
  *
- * @remarks Signer typing on this class is asymmetric:
- * - {@link signUserOperationWithSigners} (singular Operation) signs one op
- *   and uses {@link SignContext} like every other account.
- * - {@link signUserOperationsWithSigners} (plural Operations) signs a bundle
- *   under one signature and uses {@link MultiOpSignContext}.
+ * @remarks Signer typing is asymmetric:
+ * - {@link signUserOperationWithSigners} (singular) → {@link SignContext}
+ * - {@link signUserOperationsWithSigners} (plural) → {@link MultiOpSignContext}
  *
- * To author one signer that works on both methods, type it as
- * `ExternalSigner<unknown>` (the shape returned by the built-in adapters).
- * The two narrow context types exist so signers that DO read the context
- * get accurate, non-optional fields per path.
+ * Type a signer as `ExternalSigner<unknown>` (what the built-in adapters
+ * return) to work on both methods; the narrow contexts exist so signers that
+ * read the context get correct non-optional fields per path.
  */
 export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V9;
@@ -103,11 +97,10 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * @returns account address
 	 */
 	public static createAccountAddress(owners: Signer[], overrides: InitCodeOverrides = {}): string {
-		// webAuthnSignerFactory, webAuthnSignerSingleton, and webAuthnSignerProxyCreationCode
-		// are not defaulted here — the init code path only configures the shared signer
-		// and its verifier. Deploying the deterministic verifier proxy and swapping it
-		// for the shared signer happens later in createUserOperation (nonce == 0),
-		// which defaults those fields.
+		// Init code only configures the shared signer and its verifier; the
+		// verifier proxy is deployed and swapped in later by createUserOperation
+		// (nonce == 0), which defaults webAuthnSignerFactory / Singleton /
+		// ProxyCreationCode.
 		const modOverrides = {
 			...overrides,
 			webAuthnSharedSigner:
@@ -162,11 +155,10 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				y = owner.y;
 			}
 		}
-		// webAuthnSignerFactory, webAuthnSignerSingleton, and webAuthnSignerProxyCreationCode
-		// are not defaulted here — the init code path only configures the shared signer
-		// and its verifier. Deploying the deterministic verifier proxy and swapping it
-		// for the shared signer happens later in createUserOperation (nonce == 0),
-		// which defaults those fields.
+		// Init code only configures the shared signer and its verifier; the
+		// verifier proxy is deployed and swapped in later by createUserOperation
+		// (nonce == 0), which defaults webAuthnSignerFactory / Singleton /
+		// ProxyCreationCode.
 		const modOverrides = {
 			...overrides,
 			webAuthnSharedSigner:
@@ -337,11 +329,10 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): [string, string] {
-		// webAuthnSignerFactory, webAuthnSignerSingleton, and webAuthnSignerProxyCreationCode
-		// are not defaulted here — the init code path only configures the shared signer
-		// and its verifier. Deploying the deterministic verifier proxy and swapping it
-		// for the shared signer happens later in createUserOperation (nonce == 0),
-		// which defaults those fields.
+		// Init code only configures the shared signer and its verifier; the
+		// verifier proxy is deployed and swapped in later by createUserOperation
+		// (nonce == 0), which defaults webAuthnSignerFactory / Singleton /
+		// ProxyCreationCode.
 		const modOverrides = {
 			...overrides,
 			webAuthnSharedSigner:
@@ -587,23 +578,18 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	}
 
 	/**
-	 * Sign a list of UserOperations with a single multi-chain signature,
-	 * using {@link AkSigner} instances typed for {@link MultiOpSignContext}
-	 * (viem, ethers, hardware wallet, HSM, MPC, Uint8Array-only). Each
+	 * Sign a list of UserOperations with a single multi-chain signature. Each
 	 * signer signs the Merkle root of the UserOperation EIP-712 hashes via
-	 * raw-hash signing. `signTypedData` isn't exposed here because the
-	 * Merkle root is opaque and has no meaningful typed-data display.
+	 * raw-hash signing; `signTypedData` isn't exposed because the Merkle root
+	 * is opaque and has no meaningful typed-data display.
 	 *
-	 * Signers always receive {@link MultiOpSignContext} regardless of bundle
-	 * length, so multi-op-typed signers can rely on `ctx.userOperations`
-	 * being defined. Pre-built adapters `fromPrivateKey`, `fromViem`, and
-	 * `fromEthersWallet` return a universal `Signer<unknown>` and work
-	 * here without retyping; user-defined single-op signers
-	 * (`Signer<SignContext>`) do not — they would receive a context shape
-	 * they didn't declare. `fromViemWalletClient` is **not** usable on the
-	 * multi-op Merkle path: it only exposes `signTypedData`, and the
-	 * Merkle root has no meaningful typed-data display. {@link pickScheme}
-	 * rejects it offline with an actionable error.
+	 * Signers always receive {@link MultiOpSignContext}. The built-in adapters
+	 * `fromPrivateKey`, `fromViem`, and `fromEthersWallet` return
+	 * `Signer<unknown>` and work here without retyping; `fromViemWalletClient`
+	 * does **not** — it only exposes `signTypedData`, so {@link pickScheme}
+	 * rejects it offline. User-defined single-op signers
+	 * (`Signer<SignContext>`) also don't work — they'd receive a context shape
+	 * they didn't declare.
 	 *
 	 * @param userOperationsToSign - UserOperations + chain IDs + validity windows
 	 * @param signers - one Signer per owner (any order; sorted by address on-chain)
@@ -693,10 +679,9 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			});
 			return userOpSignatures;
 		} else {
-			// length === 1: single op with multi-chain flag, but signers
-			// still see multi-op context (length-1 bundle). Routes through
-			// the base helper with multi-op context override so the runtime
-			// shape matches the signer's declared type.
+			// length === 1: single op with multi-chain flag; signers still get
+			// the length-1 multi-op context so the runtime shape matches their
+			// declared type.
 			const u = userOperationsToSign[0];
 			const sig = await SafeAccount.baseSignUserOperationWithSigners(
 				u.userOperation,
@@ -784,7 +769,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	}
 
 	/**
-	 * formate a list of eip712 signatures to a list of multi chain useroperations signatures
+	 * format a list of eip712 signatures to a list of multi chain useroperations signatures
 	 * @param signerSignaturePairs - a list of a pair of a signer and it's signature
 	 * @param overrides - overrides for the default values
 	 * @returns signature

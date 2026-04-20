@@ -248,6 +248,15 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		return [sender, initCode];
 	}
 
+	/**
+	 * Build the Safe initializer calldata for the account setup transaction.
+	 * Encodes the owners, threshold, module setup, and optional WebAuthn configuration.
+	 *
+	 * @param owners - Array of owner signers (ECDSA addresses or WebAuthn public keys)
+	 * @param threshold - Number of required signatures for transaction approval
+	 * @param overrides - Override default module, multisend, and WebAuthn addresses
+	 * @returns The encoded initializer calldata hex string
+	 */
 	public static createInitializerCallData(
 		owners: Signer[],
 		threshold: number,

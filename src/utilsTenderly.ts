@@ -241,10 +241,9 @@ export async function simulateUserOperationWithTenderly(
 		}
 	}
 
-	// For EIP-7702 userOps (factory == "0x7702"), the EntryPoint checks
-	// that the sender's code starts with the EIP-7702 delegation prefix
-	// (0xef0100). Inject a code state override so the check passes in
-	// simulation.
+	// EIP-7702 userOps (factory == "0x7702"): EntryPoint requires the sender's
+	// code to start with the delegation prefix (0xef0100). Inject a code state
+	// override so the simulation passes.
 	if (
 		!isV6UserOperation &&
 		(userOperation as UserOperationV7 | UserOperationV8 | UserOperationV9).factory === "0x7702"
@@ -429,7 +428,7 @@ export async function simulateUserOperationCallDataWithTenderlyAndCreateShareLin
 			callDataSimulationShareLink: simulationLinks[1],
 		};
 	} else {
-		throw new AbstractionKitError("BAD_DATA", "invalid number of simulations retuned", {
+		throw new AbstractionKitError("BAD_DATA", "invalid number of simulations returned", {
 			context: JSON.stringify(simulation, (_key, value) =>
 				typeof value === "bigint" ? `0x${value.toString(16)}` : value,
 			),
@@ -493,11 +492,10 @@ export async function simulateUserOperationCallDataWithTenderly(
 			factoryData = null;
 		}
 
-		// Handle IAccountExecute.executeUserOp callData rewriting.
-		// When callData starts with the executeUserOp selector (0x8dd7712f),
-		// the EntryPoint rewrites the call to
+		// IAccountExecute.executeUserOp rewrite: when callData starts with the
+		// executeUserOp selector (0x8dd7712f), EntryPoint calls
 		// sender.executeUserOp(packedUserOp, userOpHash) instead of
-		// sender.call(callData). Replicate that behavior here.
+		// sender.call(callData). Replicate here.
 		const EXECUTE_USEROP_SELECTOR = "0x8dd7712f";
 		if (callData.toLowerCase().startsWith(EXECUTE_USEROP_SELECTOR)) {
 			const abiCoder = AbiCoder.defaultAbiCoder();
@@ -652,7 +650,7 @@ export async function simulateSenderCallDataWithTenderlyAndCreateShareLink(
 			callDataSimulationShareLink: simulationLinks[1],
 		};
 	} else {
-		throw new AbstractionKitError("BAD_DATA", "invalid number of simulations retuned", {
+		throw new AbstractionKitError("BAD_DATA", "invalid number of simulations returned", {
 			context: JSON.stringify(simulation, (_key, value) =>
 				typeof value === "bigint" ? `0x${value.toString(16)}` : value,
 			),

@@ -219,9 +219,10 @@ export function createPackedUserOperationV8(useroperation: UserOperationV8): str
 }
 
 /**
- * createPackedUserOperation for the standard entrypointv0.8 hash
- * @param useroperation -useroperation to pack
- * @returns packed UserOperation
+ * Shared packer for EntryPoint v0.8 and v0.9 UserOperations.
+ * @param useroperation - UserOperation to pack
+ * @param is_v9 - If true, strips the paymaster signature suffix (v0.9-specific)
+ * @returns ABI-encoded packed UserOperation as a hex string
  */
 function baseCreatePackedUserOperationV8V9(
 	useroperation: UserOperationV8 | UserOperationV9,
@@ -409,13 +410,13 @@ export async function sendJsonRpcRequest(
 }
 
 /**
- * get function selector from the function signature
- * @param functionSignature - example of a function signature "mint(address)"
- * @returns fucntion selector - hexstring representation of the first four bytes of the hash of the signature of the function
+ * Get a 4-byte function selector from a Solidity-style function signature.
+ * Computed as the first 4 bytes of keccak256(signature).
+ * @param functionSignature - Solidity-style function signature, e.g. "mint(address)"
+ * @returns Function selector as a 0x-prefixed 10-character hex string
  *
  * @example
- * const getNonceFunctionSignature =  'getNonce(address,uint192)';
- * const getNonceFunctionSelector =  getFunctionSelector(getNonceFunctionSignature);
+ * getFunctionSelector("getNonce(address,uint192)"); // "0x35567e1a"
  */
 export function getFunctionSelector(functionSignature: string): string {
 	return id(functionSignature).slice(0, 10);

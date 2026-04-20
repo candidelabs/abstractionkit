@@ -14,19 +14,17 @@ import type {
 import { sendJsonRpcRequest } from "./utils";
 
 /**
- * Client for communicating with an ERC-4337 bundler via JSON-RPC.
- * Provides methods for gas estimation, UserOperation submission, and receipt retrieval.
+ * JSON-RPC client for an ERC-4337 bundler.
  *
- * Candide's bundler endpoint follows the format:
+ * Candide bundler endpoints:
  * - `https://api.candide.dev/api/v3/{chainId}/{apiKey}` (authenticated)
- * - `https://api.candide.dev/public/v3/{chainId}` (public, no key required)
+ * - `https://api.candide.dev/public/v3/{chainId}` (public)
  *
  * @example
  * const bundler = new Bundler("https://api.candide.dev/public/v3/11155111");
  * const receipt = await bundler.getUserOperationReceipt(userOpHash);
  */
 export class Bundler {
-	/** The bundler JSON-RPC endpoint URL */
 	readonly rpcUrl: string;
 
 	/** @param rpcUrl - The bundler JSON-RPC endpoint URL */
@@ -35,7 +33,7 @@ export class Bundler {
 	}
 
 	/**
-	 * Get the chain ID from the bundler.
+	 * Get the bundler's chain ID.
 	 * @returns The chain ID as a hex-encoded string
 	 */
 	async chainId(): Promise<string> {
@@ -56,7 +54,7 @@ export class Bundler {
 	}
 
 	/**
-	 * Get the list of EntryPoint addresses supported by this bundler.
+	 * Get EntryPoint addresses supported by this bundler.
 	 * @returns An array of supported EntryPoint contract addresses
 	 */
 	async supportedEntryPoints(): Promise<string[]> {
@@ -112,12 +110,8 @@ export class Bundler {
 				preVerificationGas: BigInt(res.preVerificationGas),
 				verificationGasLimit: BigInt(res.verificationGasLimit),
 			};
-			// `paymasterVerificationGasLimit` and `paymasterPostOpGasLimit`
-			// are standard ERC-4337 UserOperation fields but NOT part of the
-			// bundler-spec `GasInfo`. Some bundlers return them as a
-			// non-standard extension when a paymaster is attached; forwarded
-			// here for compatibility. Guarded with `!= null` so spec-compliant
-			// bundlers still work.
+			// Non-spec extension: some bundlers return paymaster gas fields
+			// alongside the standard ones. Forward them when present.
 			if (res.paymasterVerificationGasLimit != null) {
 				gasEstimationResult.paymasterVerificationGasLimit = BigInt(
 					res.paymasterVerificationGasLimit,
@@ -173,7 +167,7 @@ export class Bundler {
 	/**
 	 * Get the receipt for a previously submitted UserOperation.
 	 * @param useroperationhash - The hash of the UserOperation to look up
-	 * @returns The receipt, or null if not yet included
+	 * @returns The receipt, or null if not yet included on-chain
 	 */
 	async getUserOperationReceipt(useroperationhash: string): Promise<UserOperationReceiptResult> {
 		try {

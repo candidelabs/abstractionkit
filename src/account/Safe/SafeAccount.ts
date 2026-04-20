@@ -74,6 +74,21 @@ import {
 	type WebauthnSignatureData,
 } from "./types";
 
+/**
+ * Base implementation shared by all Safe-account variants.
+ *
+ * Provides the core logic for Safe ERC-4337 accounts: counterfactual address
+ * derivation, initializer/factory-data encoding, EIP-712 UserOperation signing,
+ * multi-signer aggregation (ECDSA + WebAuthn), module enable/disable helpers,
+ * and UserOperation construction. Versioned subclasses
+ * ({@link SafeAccountV0_2_0}, {@link SafeAccountV0_3_0},
+ * {@link SafeAccountV1_5_0_M_0_3_0}) bind this class to a specific EntryPoint
+ * and Safe singleton, and expose version-typed wrappers.
+ *
+ * Instantiate directly only for an already-deployed account; use a subclass's
+ * static `initializeNewAccount` to produce a counterfactual account + factory
+ * data for first-time deployment.
+ */
 export class SafeAccount extends SmartAccount {
 	static readonly DEFAULT_WEB_AUTHN_SHARED_SIGNER: string =
 		"0xfD90FAd33ee8b58f32c00aceEad1358e4AFC23f9";
@@ -123,6 +138,15 @@ export class SafeAccount extends SmartAccount {
 
 	readonly onChainIdentifier: string | null;
 
+	/**
+	 * @param accountAddress - On-chain address of the Safe account
+	 * @param safe4337ModuleAddress - Address of the Safe 4337 module the account delegates to
+	 * @param entrypointAddress - Target EntryPoint address (v0.6 / v0.7 / v0.9)
+	 * @param overrides - Optional on-chain-identifier configuration and custom singleton
+	 * @param overrides.onChainIdentifierParams - Attribution params for analytics (mutually exclusive with `onChainIdentifier`)
+	 * @param overrides.onChainIdentifier - Pre-computed 32-byte identifier hex (no 0x prefix or with 0x)
+	 * @param overrides.safeAccountSingleton - Override Safe singleton address + init hash (defaults to Safe L2 v1.4.1)
+	 */
 	constructor(
 		accountAddress: string,
 		safe4337ModuleAddress: string,
@@ -286,7 +310,7 @@ export class SafeAccount extends SmartAccount {
 	/**
 	 * encode calldata to be executed by Safe account
 	 * @param to - target address
-	 * @param value - amount of natic token to transafer to target address
+	 * @param value - amount of native token to transfer to target address
 	 * @param data - calldata
 	 * @param operation - either call or delegate call
 	 * @param overrides - overrides for the default values
@@ -448,7 +472,7 @@ export class SafeAccount extends SmartAccount {
 
 	/**
 	 * @deprecated
-	 * formate a list of eip712 signatures to a useroperation signature
+	 * format a list of eip712 signatures to a useroperation signature
 	 * @param signersAddresses - signers public addresses
 	 * @param signatures - list of eip712 signatures
 	 * @param overrides - overrides for the default values
@@ -897,7 +921,7 @@ export class SafeAccount extends SmartAccount {
 
 	/**
 	 * @deprecated
-	 * formate an eip712 signature to a useroperation signature
+	 * format an eip712 signature to a useroperation signature
 	 * @param signature - an eip712 signature
 	 * @param overrides - overrides for the default values
 	 * @param overrides.validAfter - timestamp the signature will be valid after
@@ -1930,7 +1954,7 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * formate a list of eip712 signatures to a useroperation signature
+	 * format a list of eip712 signatures to a useroperation signature
 	 * @param signerSignaturePairs - a list of a pair of a signer and it's signature
 	 * @param overrides - overrides for the default values
 	 * @returns signature
@@ -2049,7 +2073,7 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * formate a list of eip712 signatures to a safe signature(without the time range)
+	 * format a list of eip712 signatures to a safe signature (without the time range)
 	 * @param signerSignaturePairs - a list of a pair of a signer and it's signature
 	 * @param overrides - overrides for the default values
 	 * @returns signature
@@ -2065,10 +2089,8 @@ export class SafeAccount extends SmartAccount {
 				isContractSignature = isContractSignature || typeof signer !== "string";
 				if (isContractSignature) {
 					if (typeof signer !== "string") {
-						//webauthn signature
-						//check if this is a webAuthn signature to replace
-						//the signer address with the shared signer address
-						//if init
+						// webauthn signature — on init, use the shared signer address
+						// instead of the per-owner WebAuthn verifier address
 						if (webAuthnSignatureOverrides.isInit == null) {
 							throw new RangeError("Must define isInit parameter when using WebAuthn");
 						}
@@ -2590,10 +2612,12 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * fetches a list of the account owners public addresses
+	 * fetches a paginated list of enabled modules for this account.
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
-	 * @returns a promise of a list of owners public addresses and
-	 * next Start of the next page
+	 * @param overrides - pagination overrides
+	 * @param overrides.start - module address to start from (defaults to the sentinel 0x...0001)
+	 * @param overrides.pageSize - maximum number of modules to return (default 10)
+	 * @returns a promise of [moduleAddresses, nextPageStart]; pass nextPageStart back in overrides.start to continue
 	 */
 	public async getModules(
 		nodeRpcUrl: string,
@@ -2626,7 +2650,7 @@ export class SafeAccount extends SmartAccount {
 			if (getModulesResult === "0x") {
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					"getModules retuned an empty result, the target account is " +
+					"getModules returned an empty result, the target account is " +
 						"probably not deployed yet.",
 				);
 			}
@@ -2666,10 +2690,10 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * create a list of dummy signer signature pair list based on the expected signers
-	 * @param expectedSigners - webauthn public key x parameter
-	 * @param webAuthnSignatureOverrides - overrides for the default values
-	 * @returns a list of dummy SignerSignaturePair
+	 * create a list of dummy signer/signature pairs for gas estimation based on the expected signers.
+	 * @param expectedSigners - signers whose signatures will be produced at sign time
+	 * @param webAuthnSignatureOverrides - WebAuthn verifier/module configuration
+	 * @returns a list of dummy SignerSignaturePair entries, one per expected signer
 	 */
 	public static createDummySignerSignaturePairForExpectedSigners(
 		expectedSigners: Signer[],
@@ -2728,7 +2752,7 @@ export class SafeAccount extends SmartAccount {
 
 	/**
 	 * verify a webauthn signature against a signer and a message hash
-	 * @note: this function works by constructing the bytecode of a webatuhn
+	 * @note: this function works by constructing the bytecode of a webauthn
 	 * verifying contract proxy that represent the input signer, then overriding
 	 * an arbitrary address code and caling "isValidSignature" using eth_call
 	 * this way we can check a signature even if the verifying contract is not
@@ -2752,7 +2776,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): Promise<boolean> {
 		if (messageHash.length !== 66 || messageHash.slice(0, 2) !== "0x") {
-			throw new RangeError("Invalid messageHash ,must be a 0x prefixed keccak256 hash.");
+			throw new RangeError("Invalid messageHash, must be a 0x-prefixed keccak256 hash.");
 		}
 
 		const eip7212WebAuthnPrecompileVerifier =
@@ -2830,7 +2854,8 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * create MetaTransaction to enable a module
+	 * create MetaTransaction to enable a module on a Safe account
+	 * @param moduleAddress - Module to enable
 	 * @param accountAddress - Safe account to enable the module for
 	 * @returns a MetaTransaction
 	 */
@@ -2851,11 +2876,16 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * create a standard disable a module MetaTransaction
-	 * @param moduleAddress - Module to disable
-	 * @param prevModuleAddress - previous module to moudle to disable
-	 * @param accountAddress - Safe account to enable the module for
-	 * @returns a MetaTransaction
+	 * create a MetaTransaction that disables a module on this Safe account,
+	 * fetching the previous module in the linked list automatically when not provided.
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain (used when prevModuleAddress is not provided)
+	 * @param moduleToDisableAddress - Module to disable
+	 * @param accountAddress - Safe account to disable the module on
+	 * @param overrides - overrides for the default values
+	 * @param overrides.prevModuleAddress - previous module in the linked list (skips the RPC lookup when set)
+	 * @param overrides.modulesStart - pagination start when scanning modules to find the previous one
+	 * @param overrides.modulesPageSize - pagination page size when scanning modules
+	 * @returns a promise of a MetaTransaction
 	 */
 	public async createDisableModuleMetaTransaction(
 		nodeRpcUrl: string,
@@ -2903,10 +2933,10 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * create a standard disable a module MetaTransaction
+	 * create a standard disable-module MetaTransaction (callers provide the previous module).
 	 * @param moduleAddress - Module to disable
-	 * @param prevModuleAddress - previous module to moudle to disable
-	 * @param accountAddress - Safe account to enable the module for
+	 * @param prevModuleAddress - previous module in the linked list
+	 * @param accountAddress - Safe account to disable the module on
 	 * @returns a MetaTransaction
 	 */
 	public static createStandardDisableModuleMetaTransaction(
@@ -2926,6 +2956,25 @@ export class SafeAccount extends SmartAccount {
 		};
 	}
 
+	/**
+	 * Simulate the encoded calldata for this account on Tenderly and optionally return a share link.
+	 * When `isInit` isn't provided, nonce is fetched via `nodeRpcUrl` to decide whether to include
+	 * factory address/data in the simulation.
+	 * @param tenderlyAccountSlug - The Tenderly account slug
+	 * @param tenderlyProjectSlug - The Tenderly project slug
+	 * @param tenderlyAccessKey - The Tenderly API access key
+	 * @param nodeRpcUrl - Ethereum JSON-RPC node URL (only used when overrides.isInit is not set)
+	 * @param chainId - Target chain ID
+	 * @param metaTransactions - Transactions to simulate (ignored if overrides.callData is set)
+	 * @param blockNumber - Optional block number for the simulation
+	 * @param overrides - overrides for the default values
+	 * @param overrides.safeModuleExecutorFunctionSelector - executor function to use
+	 * @param overrides.multisendContractAddress - multisend address for batch transactions
+	 * @param overrides.callData - pre-encoded calldata, overriding metaTransactions
+	 * @param overrides.createShareLink - if true (default), also create a shareable dashboard link
+	 * @param overrides.isInit - skip the nonce RPC check and explicitly set whether this is a deployment simulation
+	 * @returns The simulation result, and optionally `callDataSimulationShareLink` / `accountDeploymentSimulationShareLink`
+	 */
 	async simulateCallDataWithTenderlyAndCreateShareLink(
 		tenderlyAccountSlug: string,
 		tenderlyProjectSlug: string,
@@ -3008,12 +3057,11 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * create eip712 signing data for a safe message
-	 * @param useroperation - useroperation to hash
+	 * create EIP-712 signing data for a Safe message, scoped to this account.
 	 * @param chainId - target chain id
-	 * @param message - message to hash
-	 * @returns an object containing the typed data domain, type and typed data vales
-	 * object needed for hashing and signing a sae message
+	 * @param message - message string to sign
+	 * @returns an object containing the typed data domain, types, and message value
+	 * needed for hashing and signing a Safe message
 	 */
 	getSafeMessageEip712Data(
 		chainId: bigint,
@@ -3028,12 +3076,12 @@ export class SafeAccount extends SmartAccount {
 }
 
 /**
- * generate  Safe on-chain identifier as per https://docs.safe.global/sdk/onchain-tracking
+ * generate a Safe on-chain identifier per https://docs.safe.global/sdk/onchain-tracking
  * @param project - project name
- * @param platform - "Web" or "Mobile" or "Safe App" or "Widget", defaults to "Web".
- * @param tool - tool used, defaults to "abstractionkit"
- * @param toolVersion - tool version, defaults to current abstractionkit version
- * @returns the onchain idenetifier as a hex string (not 0x prefixed)
+ * @param platform - "Web", "Mobile", "Safe App", or "Widget"; defaults to "Web"
+ * @param tool - tool name; defaults to "abstractionkit"
+ * @param toolVersion - tool version; defaults to the current abstractionkit version
+ * @returns the on-chain identifier as a hex string (not 0x prefixed)
  */
 function generateOnChainIdentifier(
 	project: string,

@@ -374,29 +374,21 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 	}
 
 	/**
-	 * Sign a UserOperation using one or more {@link ExternalSigner} instances.
-	 * Capability-oriented entry point: each Signer declares what it can do
-	 * (`signHash`, `signTypedData`, both) and the account picks the best
-	 * match per signer. Incompatible signers fail offline with an actionable
-	 * error — no silent bundler rejections.
+	 * Sign a UserOperation with one or more {@link ExternalSigner} instances
+	 * (viem, ethers, hardware wallets, MPC, HSMs). Each signer declares its
+	 * capabilities (`signHash`, `signTypedData`, or both) and the account picks
+	 * the best match; incompatible signers fail offline with an actionable error.
 	 *
-	 * This method is for external signers only (viem, ethers, hardware
-	 * wallets, MPC, HSMs, Uint8Array-only signers). If you just have a raw
-	 * private-key string, use the sync {@link signUserOperation} method
-	 * instead, or wrap explicitly with `fromPrivateKey(pk)`.
-	 *
-	 * Prebuilt adapters: `fromViem`, `fromEthersWallet`,
-	 * `fromViemWalletClient`, `fromPrivateKey`. Custom signers just need to
-	 * match the `ExternalSigner` shape.
+	 * For a raw private-key string, use the sync {@link signUserOperation}
+	 * instead or wrap with `fromPrivateKey(pk)`. Prebuilt adapters: `fromViem`,
+	 * `fromEthersWallet`, `fromViemWalletClient`, `fromPrivateKey`.
 	 *
 	 * @example
 	 * import { fromViem } from "abstractionkit";
 	 * import { privateKeyToAccount } from "viem/accounts";
 	 *
 	 * const signer = fromViem(privateKeyToAccount(pk));
-	 * userOp.signature = await account.signUserOperationWithSigners(
-	 *   userOp, [signer], chainId,
-	 * );
+	 * userOp.signature = await account.signUserOperationWithSigners(userOp, [signer], chainId);
 	 *
 	 * @param useroperation - UserOperation to sign
 	 * @param signers - one ExternalSigner per owner (any order)

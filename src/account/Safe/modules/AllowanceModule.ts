@@ -207,7 +207,6 @@ export class AllowanceModule extends SafeModule {
 	}
 
 	/**
-	 *
 	 * create MetaTransaction that allows to use the allowance to perform a transfer.
 	 * @param safeAddress - The Safe whose funds should be used.
 	 * @param token - Token contract address.
@@ -317,11 +316,11 @@ export class AllowanceModule extends SafeModule {
 	}
 
 	/**
-	 * Get allowance
+	 * Get the delegate's allowance for a specific token.
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
 	 * @param safeAddress - The target account.
 	 * @param delegate - The target delegate.
-	 * @param token - The target delegate.
+	 * @param token - The target token.
 	 * @returns promise of Allowance
 	 */
 	public async getTokensAllowance(
@@ -400,10 +399,12 @@ export class AllowanceModule extends SafeModule {
 	}
 
 	/**
-	 * Get delegates
+	 * Fetch a single page of delegate addresses from the module (used internally by `getDelegates`).
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
 	 * @param safeAddress - The target account.
-	 * @return promise of the account's current recovery request
+	 * @param start - Pagination start index
+	 * @param pageSize - Maximum number of delegates to return in this page
+	 * @returns promise of `{ results, next }` — `next` is 0 when there are no more pages
 	 */
 	public async baseGetDelegates(
 		nodeRpcUrl: string,

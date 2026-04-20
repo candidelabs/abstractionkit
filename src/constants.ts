@@ -37,6 +37,7 @@ export const BaseUserOperationDummyValues = {
 	signature: "0x",
 };
 
+/** EIP-712 primary type string used when signing Safe UserOperations. */
 export const EIP712_SAFE_OPERATION_PRIMARY_TYPE = "SafeOp";
 
 /** EIP-712 type definition for Safe UserOperation signing (EntryPoint v0.6) */
@@ -77,6 +78,7 @@ export const EIP712_SAFE_OPERATION_V7_TYPE = {
 	],
 };
 
+/** EIP-712 primary type string used when signing multi-chain Safe operations. */
 export const EIP712_MULTI_CHAIN_OPERATIONS_PRIMARY_TYPE = "MerkleTreeRoot";
 
 /** EIP-712 type definition for multi-chain Safe operations using Merkle tree roots */

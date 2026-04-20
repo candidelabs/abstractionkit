@@ -88,48 +88,22 @@ export interface CandidePaymasterContext {
 	/** Sponsorship policy identifier for the Candide paymaster. */
 	sponsorshipPolicyId?: string;
 	/**
-	 * Signing phase for the **parallel signing** feature. Only relevant for
-	 * EntryPoint v0.9 accounts that use `PAYMASTER_SIG_MAGIC`-aware paymasters.
+	 * Opt into the **parallel signing** two-phase flow (EntryPoint v0.9 only).
 	 *
-	 * Parallel signing decouples owner signing from the paymaster's final
-	 * signature. This is useful when multiple owners need to co-sign a
-	 * UserOperation (e.g. multi-sig wallets) or when the signing step happens
-	 * on a separate device/service. Without parallel signing, you would need
-	 * the final paymaster signature before owners can sign, creating a
-	 * sequential dependency.
+	 * Decouples owner signing from the paymaster's final signature, so owners
+	 * can sign asynchronously on separate devices (multi-sig, hardware wallets,
+	 * cross-chain multi-sig) without waiting for the paymaster. Works because
+	 * EP v0.9 truncates `paymasterData` at the `PAYMASTER_SIG_MAGIC` boundary
+	 * (`22e325a297439656`) when computing the UserOperation hash — the hash is
+	 * identical whether `paymasterData` holds the init placeholder or the final
+	 * signature, so owners can sign before the paymaster commits.
 	 *
-	 * ## How it works
+	 * - `"commit"` — first call: stub fields, gas estimation, returns init
+	 *   `paymasterData` ending with `PAYMASTER_SIG_MAGIC`. Owners then sign.
+	 * - `"finalize"` — second call: skips gas estimation, swaps the placeholder
+	 *   for the real paymaster signature. Ready to send to the bundler.
 	 *
-	 * EntryPoint v0.9 introduces the `PAYMASTER_SIG_MAGIC` convention: when
-	 * computing the UserOperation hash, the `paymasterData` is truncated at
-	 * the magic boundary (`22e325a297439656`). This means the hash is
-	 * identical whether the paymasterData contains the init placeholder or
-	 * the final paymaster signature — so owners can safely sign the
-	 * UserOperation before the paymaster has issued its real signature.
-	 *
-	 * ## Two-phase flow
-	 *
-	 * **`"commit"`** — First call. The paymaster:
-	 *   1. Sets dummy paymaster fields for gas estimation.
-	 *   2. Estimates gas limits via the bundler.
-	 *   3. Returns init `paymasterData` ending with `PAYMASTER_SIG_MAGIC`.
-	 *   After this call, the UserOp is ready for owner signing.
-	 *
-	 * **`"finalize"`** — Second call. The paymaster:
-	 *   1. Skips gas estimation (already done in commit).
-	 *   2. Replaces the init `paymasterData` with the real paymaster signature.
-	 *   After this call, the UserOp is ready to be sent to the bundler.
-	 *
-	 * ## When to use
-	 *
-	 * - Multi-owner accounts where owners sign in parallel on different devices.
-	 * - Flows where the signing step is asynchronous (e.g. hardware wallets,
-	 *   approval queues, cross-chain multi-sig via `SafeMultiChainSigAccount`).
-	 * - Any scenario where you need a stable UserOp hash before the paymaster
-	 *   commits its final signature.
-	 *
-	 * If omitted, the default single-step flow is used: gas estimation,
-	 * paymaster signature, and owner signing all happen sequentially.
+	 * Omit for the default single-step (sequential) flow.
 	 */
 	signingPhase?: "commit" | "finalize";
 }
@@ -179,7 +153,7 @@ export interface Erc7677PaymasterConstructorOptions {
  * Allows manually specifying the EntryPoint address instead of auto-detection.
  */
 export interface BasePaymasterUserOperationOverrides {
-	/** set the entrypoint address intead of determining it from the useroperation structure.*/
+	/** set the entrypoint address instead of determining it from the useroperation structure. */
 	entrypoint?: string;
 	/** When true, prepend an approve(0) call before the actual token approval. Required for tokens like USDT that don't allow changing a non-zero allowance directly. */
 	resetApproval?: boolean;
@@ -204,7 +178,7 @@ export interface GasPaymasterUserOperationOverrides extends BasePaymasterUserOpe
 	/** set the preVerificationGasPercentageMultiplier instead of estimating gas using the bundler*/
 	preVerificationGasPercentageMultiplier?: number;
 
-	/** pass some state overrides for gas estimation"*/
+	/** pass some state overrides for gas estimation */
 	state_override_set?: StateOverrideSet;
 
 	context?: CandidePaymasterContext;

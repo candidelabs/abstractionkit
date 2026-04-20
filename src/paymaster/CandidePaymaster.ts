@@ -569,7 +569,8 @@ export class CandidePaymaster extends Paymaster {
 					throw new RangeError(`UserOperation for entrypoint ${entrypoint} is not supported`);
 				}
 				this.setDummyPaymasterFields(userOp, epData);
-				// Prepend an infinite approval and re-estimate UserOperation gas limits (a later rational allowance will be calculated and replace the infinite one)
+				// Prepend an infinite approval and re-estimate gas; a proper
+				// allowance is calculated later and replaces the infinite one.
 				const oldCallData = userOp.callData;
 				const requiresAllowanceReset =
 					overrides?.resetApproval ??
