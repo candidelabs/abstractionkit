@@ -86,7 +86,7 @@ export class StateVerifier {
       new Set([params.primaryRpc, ...params.verificationRpcs]),
     );
     this.quorumThreshold =
-      params.quorumThreshold ?? Math.max(Math.floor(this.consensusRpcs.length / 2), 1);
+      params.quorumThreshold ?? Math.floor(this.consensusRpcs.length / 2) + 1;
     this.retries = params.retries ?? 3;
     this.syncTolerance = params.syncTolerance ?? 1;
     this.requestTimeoutMs = params.requestTimeoutMs ?? 10_000;

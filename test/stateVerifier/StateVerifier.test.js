@@ -8,7 +8,8 @@ describe('StateVerifier constructor', () => {
     });
     expect(v.primaryRpc).toBe('http://primary');
     expect(v.consensusRpcs).toEqual(['http://primary', 'http://a', 'http://b', 'http://c']);
-    expect(v.quorumThreshold).toBe(2);
+    // Strict majority of 4 consensusRpcs = floor(4/2) + 1 = 3.
+    expect(v.quorumThreshold).toBe(3);
     expect(v.retries).toBe(3);
     expect(v.syncTolerance).toBe(1);
     expect(v.requestTimeoutMs).toBe(10000);
