@@ -46,3 +46,99 @@ describe('StateVerifier constructor', () => {
     expect(() => new ak.StateVerifier({ primaryRpc: 'http://p', verificationRpcs: [] })).toThrow();
   });
 });
+
+function mockVerifierRpc({ blockFixture, proofFixture, codeFixture }) {
+  const original = global.fetch;
+  global.fetch = async (url, init) => {
+    const body = JSON.parse(init.body);
+    let result;
+    switch (body.method) {
+      case 'eth_blockNumber':
+        result = blockFixture.block.number;
+        break;
+      case 'eth_getBlockByNumber':
+        result = {
+          number: blockFixture.block.number,
+          hash: blockFixture.block.hash,
+          stateRoot: blockFixture.block.stateRoot,
+          parentHash: blockFixture.block.parentHash,
+          timestamp: blockFixture.block.timestamp,
+        };
+        break;
+      case 'eth_getProof':
+        result = proofFixture;
+        break;
+      case 'eth_getCode':
+        result = codeFixture;
+        break;
+      default:
+        throw new Error(`Unhandled method: ${body.method}`);
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ jsonrpc: '2.0', id: 1, result }),
+    };
+  };
+  return () => { global.fetch = original; };
+}
+
+describe('StateVerifier.getVerifiedAccountState', () => {
+  test('verifies EOA balance and nonce', async () => {
+    const f = require('./fixtures/eoa-with-history.json');
+    const restore = mockVerifierRpc({ blockFixture: f, proofFixture: f.getProof });
+    try {
+      const v = new ak.StateVerifier({ primaryRpc: 'http://primary', verificationRpcs: ['http://a'] });
+      const state = await v.getVerifiedAccountState({
+        address: f.getProof.address,
+        blockNumber: BigInt(f.block.number),
+      });
+      expect(state.accountExists).toBe(true);
+      expect(state.balance).toBeGreaterThan(0n);
+      expect(state.stateRoot).toBe(f.block.stateRoot);
+    } finally { restore(); }
+  });
+
+  test('verifies contract storage slot', async () => {
+    const f = require('./fixtures/safe-v141-singleton.json');
+    const restore = mockVerifierRpc({ blockFixture: f, proofFixture: f.getProof });
+    try {
+      const v = new ak.StateVerifier({ primaryRpc: 'http://primary', verificationRpcs: ['http://a'] });
+      const state = await v.getVerifiedAccountState({
+        address: f.getProof.address,
+        slots: [f.getProof.storageProof[0].key],
+        blockNumber: BigInt(f.block.number),
+      });
+      const keyHex = f.getProof.storageProof[0].key.replace(/^0x/, '');
+      const normalized = '0x' + keyHex.padStart(64, '0');
+      expect(state.storage[normalized]).toBe(f.getProof.storageProof[0].value);
+    } finally { restore(); }
+  });
+
+  test('handles absence (empty account)', async () => {
+    const f = require('./fixtures/empty-account.json');
+    const restore = mockVerifierRpc({ blockFixture: f, proofFixture: f.getProof });
+    try {
+      const v = new ak.StateVerifier({ primaryRpc: 'http://primary', verificationRpcs: ['http://a'] });
+      const state = await v.getVerifiedAccountState({
+        address: f.getProof.address,
+        blockNumber: BigInt(f.block.number),
+      });
+      expect(state.accountExists).toBe(false);
+    } finally { restore(); }
+  });
+
+  test('accepts slots as bigint, number, or hex string', async () => {
+    const f = require('./fixtures/safe-v141-singleton.json');
+    const restore = mockVerifierRpc({ blockFixture: f, proofFixture: f.getProof });
+    try {
+      const v = new ak.StateVerifier({ primaryRpc: 'http://primary', verificationRpcs: ['http://a'] });
+      // All three normalize to the same slot 0x00..00.
+      await v.getVerifiedAccountState({
+        address: f.getProof.address,
+        slots: [0n, 0, '0x0'],
+        blockNumber: BigInt(f.block.number),
+      });
+    } finally { restore(); }
+  });
+});

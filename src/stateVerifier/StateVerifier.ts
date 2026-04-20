@@ -1,5 +1,23 @@
 import { getConsensusBlockHeader as standaloneGetHeader } from "./consensus";
-import type { ConsensusBlockHeader } from "./types";
+import { verifyAccountProof, verifyStorageProof, EMPTY_STORAGE_HASH, EMPTY_CODE_HASH } from "./proofVerifier";
+import { jsonRpcCall } from "./rpc";
+import { AccountProofInvalidError } from "./errors";
+import type { ConsensusBlockHeader, EthGetProofResult, VerifiedAccountState } from "./types";
+
+function normalizeSlot(slot: string | bigint | number): string {
+  let asBig: bigint;
+  if (typeof slot === "bigint") asBig = slot;
+  else if (typeof slot === "number") {
+    if (!Number.isInteger(slot) || slot < 0) {
+      throw new Error(`Invalid slot number: ${slot}`);
+    }
+    asBig = BigInt(slot);
+  } else {
+    const hex = slot.startsWith("0x") ? slot.slice(2) : slot;
+    asBig = BigInt("0x" + hex);
+  }
+  return "0x" + asBig.toString(16).padStart(64, "0");
+}
 
 /**
  * Orchestrator for trust-minimized state verification.
@@ -71,5 +89,86 @@ export class StateVerifier {
       syncTolerance: this.syncTolerance,
       requestTimeoutMs: this.requestTimeoutMs,
     });
+  }
+
+  /**
+   * Fetch and verify an account's state at a block, including any requested
+   * storage slots. Uses `primaryRpc` for eth_getProof. State root comes from a
+   * consensus query across `consensusRpcs` (primary + verifiers).
+   *
+   * @example
+   * const state = await verifier.getVerifiedAccountState({
+   *   address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+   *   slots: [0n, 1n],
+   * });
+   * console.log(state.balance, state.storage);
+   */
+  async getVerifiedAccountState(params: {
+    address: string;
+    slots?: (string | bigint | number)[];
+    blockNumber?: bigint | "latest";
+    header?: ConsensusBlockHeader;
+  }): Promise<VerifiedAccountState> {
+    const { address, slots = [] } = params;
+
+    if (params.header && typeof params.blockNumber === "bigint") {
+      if (params.header.blockNumber !== params.blockNumber) {
+        throw new Error(
+          `header.blockNumber (${params.header.blockNumber}) does not match blockNumber (${params.blockNumber})`,
+        );
+      }
+    }
+
+    const header = params.header ?? (await this.getConsensusBlockHeader({
+      blockNumber: params.blockNumber ?? "latest",
+    }));
+
+    const normalizedSlots = slots.map(normalizeSlot);
+    const blockHex = "0x" + header.blockNumber.toString(16);
+
+    const proof = await jsonRpcCall<EthGetProofResult>({
+      url: this.primaryRpc,
+      method: "eth_getProof",
+      params: [address, normalizedSlots, blockHex],
+      timeoutMs: this.requestTimeoutMs,
+      retries: this.retries,
+    });
+
+    verifyAccountProof({ stateRoot: header.stateRoot, address, proof });
+
+    const storage: Record<string, string> = {};
+    for (const sp of proof.storageProof) {
+      verifyStorageProof({
+        storageHash: proof.storageHash,
+        storageKey: sp.key,
+        storageValue: sp.value,
+        storageProof: sp.proof,
+        address,
+      });
+      storage[normalizeSlot(sp.key)] = sp.value;
+    }
+
+    const balance = BigInt(proof.balance === "0x" ? "0x0" : proof.balance);
+    const nonce = BigInt(proof.nonce === "0x" ? "0x0" : proof.nonce);
+    const zeroHash = "0x0000000000000000000000000000000000000000000000000000000000000000";
+    const accountExists = !(
+      balance === 0n &&
+      nonce === 0n &&
+      (proof.storageHash.toLowerCase() === EMPTY_STORAGE_HASH ||
+        proof.storageHash.toLowerCase() === zeroHash) &&
+      (proof.codeHash.toLowerCase() === EMPTY_CODE_HASH ||
+        proof.codeHash.toLowerCase() === zeroHash)
+    );
+
+    return {
+      blockNumber: header.blockNumber,
+      stateRoot: header.stateRoot,
+      accountExists,
+      balance,
+      nonce,
+      codeHash: proof.codeHash,
+      storageHash: proof.storageHash,
+      storage,
+    };
   }
 }
