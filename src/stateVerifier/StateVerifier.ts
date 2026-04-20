@@ -262,4 +262,41 @@ export class StateVerifier {
       codeHash: state.codeHash,
     };
   }
+
+  /**
+   * Verify multiple accounts in parallel at the same block. Shares one
+   * consensus-verified block header across all verifications, saving N-1
+   * round trips.
+   *
+   * Failure semantics: Promise.all. First failure rejects the batch.
+   *
+   * @example
+   * const [alice, bob] = await verifier.getVerifiedAccountStates([
+   *   { address: "0xAlice" },
+   *   { address: "0xBob", slots: [0n] },
+   * ]);
+   */
+  async getVerifiedAccountStates(
+    requests: Array<{
+      address: string;
+      slots?: (string | bigint | number)[];
+    }>,
+    options?: {
+      blockNumber?: bigint | "latest";
+      header?: ConsensusBlockHeader;
+    },
+  ): Promise<VerifiedAccountState[]> {
+    const header = options?.header ?? (await this.getConsensusBlockHeader({
+      blockNumber: options?.blockNumber ?? "latest",
+    }));
+    return Promise.all(
+      requests.map((r) =>
+        this.getVerifiedAccountState({
+          address: r.address,
+          slots: r.slots,
+          header,
+        }),
+      ),
+    );
+  }
 }

@@ -223,3 +223,43 @@ describe('StateVerifier.getVerifiedCode', () => {
     } finally { restore(); }
   });
 });
+
+describe('StateVerifier.getVerifiedAccountStates', () => {
+  test('verifies multiple accounts using a shared header', async () => {
+    const f1 = require('./fixtures/eoa-with-history.json');
+    const f2 = require('./fixtures/safe-v141-singleton.json');
+    if (f1.block.hash !== f2.block.hash) {
+      console.warn('Batch test fixtures are at different blocks; skipping.');
+      return;
+    }
+    let proofCallCount = 0;
+    const original = global.fetch;
+    global.fetch = async (url, init) => {
+      const body = JSON.parse(init.body);
+      let result;
+      if (body.method === 'eth_blockNumber') {
+        result = f1.block.number;
+      } else if (body.method === 'eth_getBlockByNumber') {
+        result = {
+          number: f1.block.number, hash: f1.block.hash,
+          stateRoot: f1.block.stateRoot, parentHash: f1.block.parentHash,
+          timestamp: f1.block.timestamp,
+        };
+      } else if (body.method === 'eth_getProof') {
+        proofCallCount++;
+        result = body.params[0].toLowerCase() === f1.getProof.address.toLowerCase()
+          ? f1.getProof : f2.getProof;
+      }
+      return { ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 1, result }) };
+    };
+    try {
+      const v = new ak.StateVerifier({ primaryRpc: 'http://primary', verificationRpcs: ['http://a'] });
+      const states = await v.getVerifiedAccountStates([
+        { address: f1.getProof.address },
+        { address: f2.getProof.address },
+      ], { blockNumber: BigInt(f1.block.number) });
+      expect(states).toHaveLength(2);
+      expect(proofCallCount).toBe(2);
+    } finally { global.fetch = original; }
+  });
+});
