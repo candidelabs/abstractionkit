@@ -1,19 +1,38 @@
 // Captures fixtures for state verifier tests.
 // Usage:
-//   RPC_URL=https://ethereum-rpc.publicnode.com node test/stateVerifier/fixtures/capture.js
-// Output: 5 JSON files in this directory.
+//   TEST_RPC_URL=https://your-rpc node test/stateVerifier/fixtures/capture.js
+// Output: 5 JSON files in this directory. The URL is NOT stored in the
+// fixtures so authenticated endpoints (API keys) do not leak into git.
 
 const fs = require('fs');
 const path = require('path');
 
-const RPC_URL = process.env.RPC_URL || 'https://ethereum-rpc.publicnode.com';
+const RPC_URL = process.env.TEST_RPC_URL || process.env.RPC_URL || 'https://ethereum-rpc.publicnode.com';
+const REQUEST_TIMEOUT_MS = 15_000;
 
 async function rpc(method, params) {
-  const res = await fetch(RPC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(RPC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      signal: controller.signal,
+    });
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      throw new Error(`${method}: request timed out after ${REQUEST_TIMEOUT_MS}ms`);
+    }
+    throw new Error(`${method}: network error: ${e.message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '(unreadable body)');
+    throw new Error(`${method}: HTTP ${res.status} ${res.statusText}: ${body.slice(0, 200)}`);
+  }
   const data = await res.json();
   if (data.error) throw new Error(`${method}: ${JSON.stringify(data.error)}`);
   return data.result;
@@ -24,7 +43,6 @@ async function captureAt(name, address, slots, blockHex) {
   const proof = await rpc('eth_getProof', [address, slots, blockHex]);
   const code = await rpc('eth_getCode', [address, blockHex]);
   const fixture = {
-    rpcUrl: RPC_URL,
     blockNumber: blockHex,
     block: {
       number: block.number,
