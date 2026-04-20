@@ -317,7 +317,7 @@ export class Calibur7702Account
 			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					"providerRpc can't be null if eoaDelegatorNonce " + "is not overriden",
+					"providerRpc can't be null if eoaDelegatorNonce " + "is not overridden",
 				);
 			}
 
@@ -506,7 +506,7 @@ export class Calibur7702Account
 				throw new AbstractionKitError(
 					"BAD_DATA",
 					"bundlerRpc can't be null if preVerificationGas," +
-						"verificationGasLimit and callGasLimit are not overriden",
+						"verificationGasLimit and callGasLimit are not overridden",
 				);
 			}
 		}

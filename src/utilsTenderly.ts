@@ -814,7 +814,7 @@ export async function callTenderlySimulateBundle(
 			for (const address in stateOverrides) {
 				for (const key in stateOverrides[address]) {
 					if (key !== "balance" && key !== "code" && key !== "storage" && key !== "stateDiff") {
-						throw new RangeError(`Invalide stateOverrides key: ${key}.`);
+						throw new RangeError(`Invalid stateOverrides key: ${key}.`);
 					} else if (
 						"storage" in stateOverrides[address] &&
 						"stateDiff" in stateOverrides[address]

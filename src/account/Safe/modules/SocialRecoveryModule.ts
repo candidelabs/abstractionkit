@@ -40,7 +40,7 @@ export class SocialRecoveryModule extends SafeModule {
 	 * Can also trigger the start of the execution by passing true to 'execute' parameter.
 	 * Once triggered the recovery is pending for the recovery period before it can be finalised.
 	 * @param accountAddress - The target account.
-	 * @param newOwners - The new owners' addressess.
+	 * @param newOwners - The new owners' addresses.
 	 * @param newThreshold - The new threshold for the safe.
 	 * @param execute - Whether to auto-start execution of recovery.
 	 * @returns a MetaTransaction
@@ -70,7 +70,7 @@ export class SocialRecoveryModule extends SafeModule {
 	 * Can also trigger the start of the execution by passing true to 'execute' parameter.
 	 * Once triggered the recovery is pending for the recovery period before it can be finalised.
 	 * @param accountAddress - The target account.
-	 * @param newOwners - The new owners' addressess.
+	 * @param newOwners - The new owners' addresses.
 	 * @param newThreshold - The new threshold for the safe.
 	 * @param signatureData - The guardians signers and signatures pair list.
 	 * @param execute - true to auto-start execution of recovery or false for not.
@@ -107,7 +107,7 @@ export class SocialRecoveryModule extends SafeModule {
 	 * @notice create MetaTransaction that lets the guardians start the execution of the recovery request.
 	 * Once triggered the recovery is pending for the recovery period before it can be finalised.
 	 * @param accountAddress - The target account.
-	 * @param newOwners - The new owners' addressess.
+	 * @param newOwners - The new owners' addresses.
 	 * @param newThreshold - The new threshold for the safe.
 	 * @returns a MetaTransaction
 	 */
@@ -148,7 +148,7 @@ export class SocialRecoveryModule extends SafeModule {
 	}
 
 	/**
-	 * create a MetaTransction that lets the account cancel an ongoing recovery request.
+	 * create a MetaTransaction that lets the account cancel an ongoing recovery request.
 	 * @returns a MetaTransaction
 	 */
 	public createCancelRecoveryMetaTransaction(): MetaTransaction {
@@ -190,10 +190,10 @@ export class SocialRecoveryModule extends SafeModule {
 	/**
 	 * create MetaTransaction that lets the owner revoke a guardian from its account.
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
-	 * (to get the prevGuardian paramter).
+	 * (to get the prevGuardian parameter).
 	 * @param accountAddress - The target account.
 	 * @param guardianAddress - The guardian to revoke.
-	 * @param threshold - The new threshold that will be set after execution of revokation.
+	 * @param threshold - The new threshold that will be set after execution of revocation.
 	 * @param prevGuardian - (if not provided, will be detected using the nodeRpcUrl)
 	 * The previous guardian linking to the guardian in the linked list.
 	 * @returns promise of a MetaTransaction
@@ -235,7 +235,7 @@ export class SocialRecoveryModule extends SafeModule {
 	 * create MetaTransaction that lets the owner revoke a guardian from its account.
 	 * @param prevGuardian - The previous guardian linking to the guardian in the linked list.
 	 * @param guardian - The guardian to revoke.
-	 * @param threshold - The new threshold that will be set after execution of revokation.
+	 * @param threshold - The new threshold that will be set after execution of revocation.
 	 * @returns a MetaTransaction
 	 */
 	public createStandardRevokeGuardianWithThresholdMetaTransaction(
@@ -259,7 +259,7 @@ export class SocialRecoveryModule extends SafeModule {
 
 	/**
 	 * create MetaTransaction that lets the owner change the guardian threshold required to initiate a recovery.
-	 * @param threshold - The new threshold that will be set after execution of revokation.
+	 * @param threshold - The new threshold that will be set after execution of revocation.
 	 * @returns a MetaTransaction
 	 */
 	public createChangeThresholdMetaTransaction(threshold: bigint): MetaTransaction {
@@ -277,7 +277,7 @@ export class SocialRecoveryModule extends SafeModule {
 	 * Generates the recovery hash that should be signed by the guardian to authorize a recovery
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
 	 * @param accountAddress - The target account.
-	 * @param newOwners - The new owners' addressess.
+	 * @param newOwners - The new owners' addresses.
 	 * @param newThreshold - The new threshold for the safe.
 	 * @param nonce - recovery nonce
 	 * @returns promise of a recovery hash
@@ -348,7 +348,7 @@ export class SocialRecoveryModule extends SafeModule {
 	 * Retrieves the guardian approval count for this particular recovery request at current nonce.
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
 	 * @param accountAddress - The target account.
-	 * @param newOwners - The new owners' addressess.
+	 * @param newOwners - The new owners' addresses.
 	 * @param newThreshold - The new threshold for the safe.
 	 * @return promise of the account's current recovery approvals count
 	 */
@@ -383,7 +383,7 @@ export class SocialRecoveryModule extends SafeModule {
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
 	 * @param accountAddress - The target account.
 	 * @param guardian - The guardian.
-	 * @param newOwners - The new owners' addressess.
+	 * @param newOwners - The new owners' addresses.
 	 * @param newThreshold - The new threshold for the safe.
 	 * @return promise of guardian approval status
 	 */

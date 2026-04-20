@@ -50,7 +50,7 @@ export interface SimpleMetaTransaction {
  * gas limits estimated via bundler, gas prices fetched from the network).
  */
 export interface CreateUserOperationOverrides {
-	/** set the nonce instead of quering the current nonce from the rpc node */
+	/** set the nonce instead of querying the current nonce from the rpc node */
 	nonce?: bigint;
 	/** set the callData instead of using the encoding of the provided Metatransactions*/
 	callData?: string;
@@ -60,9 +60,9 @@ export interface CreateUserOperationOverrides {
 	verificationGasLimit?: bigint;
 	/** set the preVerificationGas instead of estimating gas using the bundler*/
 	preVerificationGas?: bigint;
-	/** set the maxFeePerGas instead of quering the current gas price from the rpc node */
+	/** set the maxFeePerGas instead of querying the current gas price from the rpc node */
 	maxFeePerGas?: bigint;
-	/** set the maxPriorityFeePerGas instead of quering the current gas price from the rpc node */
+	/** set the maxPriorityFeePerGas instead of querying the current gas price from the rpc node */
 	maxPriorityFeePerGas?: bigint;
 
 	/** set the callGasLimitPercentageMultiplier instead of estimating gas using the bundler*/
@@ -71,9 +71,9 @@ export interface CreateUserOperationOverrides {
 	verificationGasLimitPercentageMultiplier?: number;
 	/** set the preVerificationGasPercentageMultiplier instead of estimating gas using the bundler*/
 	preVerificationGasPercentageMultiplier?: number;
-	/** set the maxFeePerGasPercentageMultiplier instead of quering the current gas price from the rpc node */
+	/** set the maxFeePerGasPercentageMultiplier instead of querying the current gas price from the rpc node */
 	maxFeePerGasPercentageMultiplier?: number;
-	/** set the maxPriorityFeePerGasPercentageMultiplier instead of quering the current gas price from the rpc node */
+	/** set the maxPriorityFeePerGasPercentageMultiplier instead of querying the current gas price from the rpc node */
 	maxPriorityFeePerGasPercentageMultiplier?: number;
 
 	/** pass some state overrides for gas estimation"*/
@@ -375,7 +375,7 @@ export class BaseSimple7702Account extends SmartAccount {
 			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					"providerRpc cant't be null if nonce is not overriden",
+					"providerRpc can't be null if nonce is not overridden",
 				);
 			}
 		} else {
@@ -430,7 +430,7 @@ export class BaseSimple7702Account extends SmartAccount {
 			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					"providerRpc cant't be null if eoaDelegatorNonce " + "is not overriden",
+					"providerRpc can't be null if eoaDelegatorNonce " + "is not overridden",
 				);
 			}
 
@@ -529,7 +529,7 @@ export class BaseSimple7702Account extends SmartAccount {
 			if (yParity !== "0x0" && yParity !== "0x00" && yParity !== "0x1" && yParity !== "0x01") {
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					"invalide yParity value for eoaDelegatorSignature. " + "must be '0x0' or '0x1'",
+					"invalid yParity value for eoaDelegatorSignature. " + "must be '0x0' or '0x1'",
 				);
 			}
 
@@ -621,8 +621,8 @@ export class BaseSimple7702Account extends SmartAccount {
 			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					"bundlerRpc cant't be null if preVerificationGas," +
-						"verificationGasLimit and callGasLimit are not overriden",
+					"bundlerRpc can't be null if preVerificationGas," +
+						"verificationGasLimit and callGasLimit are not overridden",
 				);
 			}
 		}

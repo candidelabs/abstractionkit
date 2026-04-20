@@ -832,7 +832,7 @@ export async function handlefetchGasPrice(
 	} else {
 		throw new AbstractionKitError(
 			"BAD_DATA",
-			"providerRpc can't be null if maxFeePerGas and " + "maxPriorityFeePerGas are not overriden",
+			"providerRpc can't be null if maxFeePerGas and " + "maxPriorityFeePerGas are not overridden",
 		);
 	}
 	return [maxFeePerGas, maxPriorityFeePerGas];

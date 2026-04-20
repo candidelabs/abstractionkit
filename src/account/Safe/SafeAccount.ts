@@ -166,14 +166,14 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * calculate proxy/account address using initilizer call data
+	 * calculate proxy/account address using initializer call data
 	 * @param initializerCallData from createBaseInitializerCallData
 	 * @param overrides - overrides for the default values
 	 * @param overrides.c2Nonce - create2 nonce to generate different sender addresses from the same owners
 	 * defaults to zero
 	 * @param overrides.safeFactoryAddress - safeFactoryAddress, defaults to
 	 * SafeAccountFactory.DEFAULT_FACTORY_ADDRESS
-	 * @param overrides.singletonInitHash - a hash that includes the singleton address and thr proxy bytecode
+	 * @param overrides.singletonInitHash - a hash that includes the singleton address and the proxy bytecode
 	 * keccak256(solidityPacked(["bytes", "bytes"], [proxyByteCode, abiCoder.encode(["uint256"], [singletonAddress])]))
 	 * defaults to SafeAccount.safeAccountSingleton.singletonInitHash
 	 * @returns proxy/account address
@@ -902,7 +902,7 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides - overrides for the default values
 	 * @param overrides.validAfter - timestamp the signature will be valid after
 	 * @param overrides.validUntil - timestamp the signature will be valid until
-	 * @returns formated signature
+	 * @returns formatted signature
 	 */
 	public static formatEip712SingleSignatureToUseroperationSignature(
 		signature: string,
@@ -1367,7 +1367,7 @@ export class SafeAccount extends SmartAccount {
 			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					"providerRpc cant't be null if nonce is not overriden",
+					"providerRpc can't be null if nonce is not overridden",
 				);
 			}
 		} else {
@@ -1439,8 +1439,8 @@ export class SafeAccount extends SmartAccount {
 			//nonce = 0
 			if (this.x == null || this.y == null) {
 				throw new RangeError(
-					"Invalide account initialization with Webauthnn signer." +
-						"Webauthnn signer publickey can be null!!",
+					"Invalid account initialization with Webauthn signer." +
+						"Webauthn signer publickey can be null!!",
 				);
 			}
 
@@ -1652,8 +1652,8 @@ export class SafeAccount extends SmartAccount {
 			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					"bundlerRpc cant't be null if preVerificationGas," +
-						"verificationGasLimit and callGasLimit are not overriden",
+					"bundlerRpc can't be null if preVerificationGas," +
+						"verificationGasLimit and callGasLimit are not overridden",
 				);
 			}
 		}
@@ -1896,7 +1896,7 @@ export class SafeAccount extends SmartAccount {
 			eip7212WebAuthnPrecompileVerifier.slice(0, 38) !== ZeroAddress.slice(0, 38)
 		) {
 			throw new RangeError(
-				"Invalide precompile address. " +
+				"Invalid precompile address. " +
 					"It should have the format 0x000000000000000000000000000000000000____",
 			);
 		}
@@ -2155,15 +2155,15 @@ export class SafeAccount extends SmartAccount {
 	/**
 	 * create a swapOwner metatransaction and create a metatransaction to
 	 * deploy a webauthn verifier owner if not deployed and it will automatically
-	 * fetch the prevowner needed for the swap
+	 * fetch the prevOwner needed for the swap
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
-	 * (to get the prevOwner paramter) and to check if a webauthn newowner verifier
+	 * (to get the prevOwner parameter) and to check if a webauthn newowner verifier
 	 * is already deployed.
 	 * @param newOwner - newOwner public address
 	 * @param oldOwner - oldOwner to replace public address
 	 * @param overrides - overrides for the default values
 	 * @param overrides.prevOwner - if set, it will be used as the previous owner and
-	 * nideRpcUrl won't be used to fetch it
+	 * nodeRpcUrl won't be used to fetch it
 	 * @returns a promise of a list of metaTransactions
 	 */
 	public async createSwapOwnerMetaTransactions(
@@ -2244,15 +2244,15 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * create a removeOwner metatransaction, and fetch the prevowner
+	 * create a removeOwner metatransaction, and fetch the prevOwner
 	 * needed for the remove
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
-	 * (to get the prevOwner paramter).
+	 * (to get the prevOwner parameter).
 	 * @param ownerToDelete - owner to delete public address
 	 * @param threshold - new threshold
 	 * @param overrides - overrides for the default values
 	 * @param overrides.prevOwner - if set, it will be used as the previous owner and
-	 * nideRpcUrl won't be used to fetch it
+	 * nodeRpcUrl won't be used to fetch it
 	 * @returns a promise of a metaTransaction
 	 */
 	public async createRemoveOwnerMetaTransaction(
@@ -2752,7 +2752,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): Promise<boolean> {
 		if (messageHash.length !== 66 || messageHash.slice(0, 2) !== "0x") {
-			throw new RangeError("Invalide messageHash ,must be a 0x prefixed keccak256 hash.");
+			throw new RangeError("Invalid messageHash ,must be a 0x prefixed keccak256 hash.");
 		}
 
 		const eip7212WebAuthnPrecompileVerifier =
@@ -2767,7 +2767,7 @@ export class SafeAccount extends SmartAccount {
 			eip7212WebAuthnPrecompileVerifier.slice(0, 38) !== ZeroAddress.slice(0, 38)
 		) {
 			throw new RangeError(
-				"Invalide precompile address. " +
+				"Invalid precompile address. " +
 					"It should have the format 0x000000000000000000000000000000000000____",
 			);
 		}
