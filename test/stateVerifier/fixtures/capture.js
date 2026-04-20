@@ -55,10 +55,13 @@ async function captureAt(name, address, slots, blockHex) {
     blockHex,
   );
 
-  // 2. Empty account (dead address)
+  // 2. Empty account (provably absent from the trie -- never funded, never used).
+  // 0x000000000000000000000000000000000000dead has ~51 ETH on mainnet and is
+  // therefore present in the trie. Use 0xCafecafecafecafecafecafecafecafecafecafe
+  // instead: verified absent (branch exclusion proof, balance=0, nonce=0).
   await captureAt(
     'empty-account',
-    '0x000000000000000000000000000000000000dead',
+    '0xCafecafecafecafecafecafecafecafecafecafe',
     [],
     blockHex,
   );
