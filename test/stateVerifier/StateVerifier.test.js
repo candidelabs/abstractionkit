@@ -142,3 +142,33 @@ describe('StateVerifier.getVerifiedAccountState', () => {
     } finally { restore(); }
   });
 });
+
+describe('StateVerifier convenience methods', () => {
+  test('getVerifiedBalance returns a bigint', async () => {
+    const f = require('./fixtures/eoa-with-history.json');
+    const restore = mockVerifierRpc({ blockFixture: f, proofFixture: f.getProof });
+    try {
+      const v = new ak.StateVerifier({ primaryRpc: 'http://primary', verificationRpcs: ['http://a'] });
+      const bal = await v.getVerifiedBalance({
+        address: f.getProof.address,
+        blockNumber: BigInt(f.block.number),
+      });
+      expect(typeof bal).toBe('bigint');
+      expect(bal).toBeGreaterThan(0n);
+    } finally { restore(); }
+  });
+
+  test('getVerifiedStorageSlot returns the slot value hex', async () => {
+    const f = require('./fixtures/safe-v141-singleton.json');
+    const restore = mockVerifierRpc({ blockFixture: f, proofFixture: f.getProof });
+    try {
+      const v = new ak.StateVerifier({ primaryRpc: 'http://primary', verificationRpcs: ['http://a'] });
+      const val = await v.getVerifiedStorageSlot({
+        address: f.getProof.address,
+        slot: f.getProof.storageProof[0].key,
+        blockNumber: BigInt(f.block.number),
+      });
+      expect(val).toBe(f.getProof.storageProof[0].value);
+    } finally { restore(); }
+  });
+});

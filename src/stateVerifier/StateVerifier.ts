@@ -171,4 +171,47 @@ export class StateVerifier {
       storage,
     };
   }
+
+  /**
+   * Verify a single storage slot on an account at a block.
+   * Thin wrapper over `getVerifiedAccountState` for single-slot lookups.
+   *
+   * @example
+   * const ownerPtr = await verifier.getVerifiedStorageSlot({
+   *   address: "0xSafeAddress",
+   *   slot: 2n,
+   * });
+   */
+  async getVerifiedStorageSlot(params: {
+    address: string;
+    slot: string | bigint | number;
+    blockNumber?: bigint | "latest";
+    header?: ConsensusBlockHeader;
+  }): Promise<string> {
+    const state = await this.getVerifiedAccountState({
+      address: params.address,
+      slots: [params.slot],
+      blockNumber: params.blockNumber,
+      header: params.header,
+    });
+    return state.storage[normalizeSlot(params.slot)];
+  }
+
+  /**
+   * Verify an account's balance at a block.
+   * Thin wrapper over `getVerifiedAccountState`.
+   *
+   * @example
+   * const balance = await verifier.getVerifiedBalance({
+   *   address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+   * });
+   */
+  async getVerifiedBalance(params: {
+    address: string;
+    blockNumber?: bigint | "latest";
+    header?: ConsensusBlockHeader;
+  }): Promise<bigint> {
+    const state = await this.getVerifiedAccountState(params);
+    return state.balance;
+  }
 }
