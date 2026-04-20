@@ -172,3 +172,54 @@ describe('StateVerifier convenience methods', () => {
     } finally { restore(); }
   });
 });
+
+describe('StateVerifier.getVerifiedCode', () => {
+  test('verifies contract bytecode against codeHash', async () => {
+    const f = require('./fixtures/safe-v141-singleton.json');
+    const restore = mockVerifierRpc({
+      blockFixture: f,
+      proofFixture: f.getProof,
+      codeFixture: f.getCode,
+    });
+    try {
+      const v = new ak.StateVerifier({ primaryRpc: 'http://primary', verificationRpcs: ['http://a'] });
+      const { code, codeHash } = await v.getVerifiedCode({
+        address: f.getProof.address,
+        blockNumber: BigInt(f.block.number),
+      });
+      expect(code).toBe(f.getCode);
+      expect(codeHash).toBe(f.getProof.codeHash);
+    } finally { restore(); }
+  });
+
+  test('throws CodeHashMismatchError when code bytes do not hash to codeHash', async () => {
+    const f = require('./fixtures/safe-v141-singleton.json');
+    const restore = mockVerifierRpc({
+      blockFixture: f,
+      proofFixture: f.getProof,
+      codeFixture: '0xdeadbeef',  // tampered
+    });
+    try {
+      const v = new ak.StateVerifier({ primaryRpc: 'http://primary', verificationRpcs: ['http://a'] });
+      await expect(v.getVerifiedCode({
+        address: f.getProof.address,
+        blockNumber: BigInt(f.block.number),
+      })).rejects.toBeInstanceOf(ak.CodeHashMismatchError);
+    } finally { restore(); }
+  });
+
+  test('handles EOA (empty code)', async () => {
+    const f = require('./fixtures/empty-account.json');
+    const restore = mockVerifierRpc({
+      blockFixture: f, proofFixture: f.getProof, codeFixture: '0x',
+    });
+    try {
+      const v = new ak.StateVerifier({ primaryRpc: 'http://primary', verificationRpcs: ['http://a'] });
+      const { code } = await v.getVerifiedCode({
+        address: f.getProof.address,
+        blockNumber: BigInt(f.block.number),
+      });
+      expect(code).toBe('0x');
+    } finally { restore(); }
+  });
+});

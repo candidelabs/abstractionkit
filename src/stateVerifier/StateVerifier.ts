@@ -1,7 +1,8 @@
+import { keccak256 } from "ethers";
 import { getConsensusBlockHeader as standaloneGetHeader } from "./consensus";
 import { verifyAccountProof, verifyStorageProof, EMPTY_STORAGE_HASH, EMPTY_CODE_HASH } from "./proofVerifier";
 import { jsonRpcCall } from "./rpc";
-import { AccountProofInvalidError } from "./errors";
+import { AccountProofInvalidError, CodeHashMismatchError } from "./errors";
 import type { ConsensusBlockHeader, EthGetProofResult, VerifiedAccountState } from "./types";
 
 function normalizeSlot(slot: string | bigint | number): string {
@@ -213,5 +214,52 @@ export class StateVerifier {
   }): Promise<bigint> {
     const state = await this.getVerifiedAccountState(params);
     return state.balance;
+  }
+
+  /**
+   * Fetch and verify an account's deployed bytecode at a block.
+   *
+   * Fetches eth_getCode on the primary RPC, then checks that keccak256(code)
+   * matches the codeHash from a verified account proof. EOAs and empty
+   * accounts (code = "0x") are handled by comparing against EMPTY_CODE_HASH.
+   *
+   * @example
+   * const { code } = await verifier.getVerifiedCode({ address: safeAddr });
+   * if (!code.startsWith(EXPECTED_PREFIX)) throw new Error("unexpected bytecode");
+   */
+  async getVerifiedCode(params: {
+    address: string;
+    blockNumber?: bigint | "latest";
+    header?: ConsensusBlockHeader;
+  }): Promise<{ blockNumber: bigint; code: string; codeHash: string }> {
+    const state = await this.getVerifiedAccountState(params);
+    const blockHex = "0x" + state.blockNumber.toString(16);
+
+    const code = await jsonRpcCall<string>({
+      url: this.primaryRpc,
+      method: "eth_getCode",
+      params: [params.address, blockHex],
+      timeoutMs: this.requestTimeoutMs,
+      retries: this.retries,
+    });
+
+    const actualCodeHash =
+      code === "0x" ? EMPTY_CODE_HASH : keccak256(code).toLowerCase();
+    const expectedHash = state.codeHash.toLowerCase();
+    const zeroHash = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+    const matches =
+      actualCodeHash === expectedHash ||
+      (actualCodeHash === EMPTY_CODE_HASH && expectedHash === zeroHash);
+
+    if (!matches) {
+      throw new CodeHashMismatchError(params.address, state.codeHash, actualCodeHash);
+    }
+
+    return {
+      blockNumber: state.blockNumber,
+      code,
+      codeHash: state.codeHash,
+    };
   }
 }
