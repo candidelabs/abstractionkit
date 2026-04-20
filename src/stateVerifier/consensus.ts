@@ -97,7 +97,18 @@ export async function getConsensusBlockHeader(params: {
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
     if (r.status === "fulfilled") {
-      successes.push(r.value);
+      // A node can legitimately return null for eth_getBlockByNumber when the
+      // block does not exist on that chain (e.g., a verifier pointed at the
+      // wrong network). Treat null as a failure so it surfaces as either a
+      // quorum miss or, when other nodes did return data, a visible disagreement.
+      if (r.value.header == null) {
+        failures.push({
+          url: r.value.url,
+          error: `block ${blockHex} not found on node`,
+        });
+      } else {
+        successes.push(r.value);
+      }
     } else {
       failures.push({ url: verificationRpcs[i], error: String(r.reason) });
     }
