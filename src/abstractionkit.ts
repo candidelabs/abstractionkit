@@ -165,3 +165,17 @@ export type {
 } from "./account/Safe/safeMessage";
 
 export { AbstractionKitError } from "./errors";
+
+export {
+  StateProofVerificationError,
+  ConsensusStateRootDisagreementError,
+  ConsensusQuorumNotMetError,
+  AccountProofInvalidError,
+  StorageProofInvalidError,
+  CodeHashMismatchError,
+} from "./stateVerifier/errors";
+export type {
+  EthGetProofResult,
+  VerifiedAccountState,
+  ConsensusBlockHeader,
+} from "./stateVerifier/types";
