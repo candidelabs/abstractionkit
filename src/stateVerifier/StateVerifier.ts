@@ -100,7 +100,7 @@ export class StateVerifier {
    * @returns A block header whose `stateRoot` has been agreed upon by all
    *   responding consensus nodes.
    * @throws {ConsensusQuorumNotMetError} Fewer than `quorumThreshold` nodes responded.
-   * @throws {ConsensusStateRootDisagreementError} Nodes returned different state roots.
+   * @throws {ConsensusHeaderDisagreementError} Nodes returned different state roots.
    *
    * @example
    * const verifier = new StateVerifier({
@@ -136,7 +136,7 @@ export class StateVerifier {
    * @returns A fully verified {@link VerifiedAccountState} proven against the
    *   consensus state root.
    * @throws {ConsensusQuorumNotMetError} Consensus could not be established.
-   * @throws {ConsensusStateRootDisagreementError} Nodes disagree on the state root.
+   * @throws {ConsensusHeaderDisagreementError} Nodes disagree on the state root.
    * @throws {AccountProofInvalidError} The account MPT proof is invalid.
    * @throws {StorageProofInvalidError} A storage MPT proof is invalid.
    *
@@ -361,6 +361,14 @@ export class StateVerifier {
       header?: ConsensusBlockHeader;
     },
   ): Promise<VerifiedAccountState[]> {
+    if (options?.header && typeof options?.blockNumber === "bigint") {
+      if (options.header.blockNumber !== options.blockNumber) {
+        throw new Error(
+          `header.blockNumber (${options.header.blockNumber}) does not match blockNumber (${options.blockNumber})`,
+        );
+      }
+    }
+
     const header = options?.header ?? (await this.getConsensusBlockHeader({
       blockNumber: options?.blockNumber ?? "latest",
     }));
