@@ -181,6 +181,3 @@ export type {
 } from "./stateVerifier/types";
 export { verifyAccountProof, verifyStorageProof, getConsensusBlockHeader, StateVerifier } from "./stateVerifier";
 
-// Test-only exports. Removed before v1 ships. Do not use externally.
-export { Nibbles as __testNibbles, PathEncoder as __testPathEncoder, parseMptNode as __testParseMptNode } from "./stateVerifier/mpt";
-export { verifyMptProof as __testVerifyMptProof } from "./stateVerifier/proofVerifier";
