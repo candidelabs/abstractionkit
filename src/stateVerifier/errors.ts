@@ -1,13 +1,9 @@
-import { AbstractionKitError } from "../errors";
+import { AbstractionKitError, Jsonable } from "../errors";
 
 /** Base class for all state proof verification failures. */
 export class StateProofVerificationError extends AbstractionKitError {
-  public readonly context: Record<string, unknown>;
-
-  constructor(message: string, ctx: Record<string, unknown> = {}) {
-    super("UNKNOWN_ERROR", message, { context: ctx });
-    this.name = "StateProofVerificationError";
-    this.context = ctx;
+  constructor(message: string, context?: Jsonable) {
+    super("UNKNOWN_ERROR", message, { context });
   }
 }
 
@@ -20,7 +16,6 @@ export class ConsensusStateRootDisagreementError extends StateProofVerificationE
       `Verification nodes disagree on state root: ${nodes.map((n) => `${n.url}=${n.stateRoot}`).join(", ")}`,
       { nodes },
     );
-    this.name = "ConsensusStateRootDisagreementError";
     this.nodes = nodes;
   }
 }
@@ -40,7 +35,6 @@ export class ConsensusQuorumNotMetError extends StateProofVerificationError {
       `Consensus quorum not met: ${responded}/${required} nodes responded`,
       { responded, required, failures },
     );
-    this.name = "ConsensusQuorumNotMetError";
     this.responded = responded;
     this.required = required;
     this.failures = failures;
@@ -58,7 +52,6 @@ export class AccountProofInvalidError extends StateProofVerificationError {
       `Account proof invalid for ${address} at state root ${stateRoot}: ${detail}`,
       { address, stateRoot, blockNumber: blockNumber.toString() },
     );
-    this.name = "AccountProofInvalidError";
     this.address = address;
     this.stateRoot = stateRoot;
     this.blockNumber = blockNumber;
@@ -76,7 +69,6 @@ export class StorageProofInvalidError extends StateProofVerificationError {
       `Storage proof invalid for slot ${slot} at storage hash ${storageHash}: ${detail}`,
       { address, slot, storageHash },
     );
-    this.name = "StorageProofInvalidError";
     this.address = address;
     this.slot = slot;
     this.storageHash = storageHash;
@@ -94,7 +86,6 @@ export class CodeHashMismatchError extends StateProofVerificationError {
       `Code at ${address} hashes to ${actualCodeHash}, expected ${expectedCodeHash}`,
       { address, expectedCodeHash, actualCodeHash },
     );
-    this.name = "CodeHashMismatchError";
     this.address = address;
     this.expectedCodeHash = expectedCodeHash;
     this.actualCodeHash = actualCodeHash;
