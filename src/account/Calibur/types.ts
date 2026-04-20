@@ -146,9 +146,3 @@ export interface CaliburSignatureOverrides {
 	keyHash?: string;
 }
 
-/**
- * A signing function that takes a hash and returns a raw signature.
- * Use this to integrate viem, ethers Signers, hardware wallets, or MPC signers
- * without passing raw private keys.
- */
-export type SignerFunction = (hash: string) => Promise<string>;

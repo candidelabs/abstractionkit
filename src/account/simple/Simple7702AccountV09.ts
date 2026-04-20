@@ -1,4 +1,5 @@
 import { StateOverrideSet, UserOperationV9 } from "src/types";
+import { Signer as AkSigner } from "src/signer/types";
 import { BaseSimple7702Account, CreateUserOperationOverrides, SimpleMetaTransaction } from "./Simple7702Account";
 import { ENTRYPOINT_V9 } from "src/constants";
 import { SendUseroperationResponse } from "../SendUseroperationResponse";
@@ -94,6 +95,20 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 		chainId: bigint,
     ): string {
         return this.baseSignUserOperation(useroperation, privateKey, chainId);
+    }
+
+    /**
+     * Sign a {@link UserOperationV9} using an {@link ExternalSigner}.
+     * Simple7702 only accepts raw-hash ECDSA; signers without `signHash`
+     * fail offline with an actionable error. For a raw pk string, use the
+     * sync {@link signUserOperation} method or wrap with `fromPrivateKey`.
+     */
+    public async signUserOperationWithSigner(
+        useroperation: UserOperationV9,
+        signer: AkSigner,
+        chainId: bigint,
+    ): Promise<string> {
+        return this.baseSignUserOperationWithSigner(useroperation, signer, chainId);
     }
 
     /**

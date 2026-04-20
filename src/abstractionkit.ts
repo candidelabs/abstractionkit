@@ -7,8 +7,30 @@ export { CaliburKeyType } from "./account/Calibur/types";
 export type {
 	CaliburKey, CaliburKeySettings, CaliburKeySettingsResult,
 	WebAuthnSignatureData, CaliburCreateUserOperationOverrides,
-	CaliburSignatureOverrides, SignerFunction,
+	CaliburSignatureOverrides,
 } from "./account/Calibur/types";
+
+// ─── Signer interface design (capability-oriented) ──────────────────────
+// Exported as `ExternalSigner` because the old package-level `Signer` is
+// already taken by an owner-identifier union in Safe/types. An eventual
+// rename there would promote this to the unqualified `Signer`.
+export type {
+	Signer as ExternalSigner,
+	SigningScheme,
+	TypedData,
+	SignHashFn,
+	SignTypedDataFn,
+	SignContext,
+	MultiOpSignContext,
+} from "./signer/types";
+export {
+	fromPrivateKey,
+	fromViem, fromEthersWallet, fromViemWalletClient,
+} from "./signer/adapters";
+// ViemLocalAccountLike / ViemWalletClientLike / EthersWalletLike are NOT
+// exported. They're internal structural shapes the adapters match against;
+// callers pass concrete viem / ethers instances directly. If you need the
+// input type for a wrapper, use `Parameters<typeof fromViem>[0]` etc.
 export {
 	SocialRecoveryModule,
 	SocialRecoveryModuleGracePeriodSelector,
