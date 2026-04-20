@@ -1,4 +1,4 @@
-import { getBytes } from "ethers";
+import { decodeRlp, getBytes } from "ethers";
 
 /** Half-byte (0..15) operations for Merkle Patricia Trie paths. */
 export const Nibbles = {
@@ -53,4 +53,55 @@ export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a[i] !== b[i]) return false;
   }
   return true;
+}
+
+export type MptNode =
+  | {
+      kind: "branch";
+      /** 16 children (indices 0-15), each a 32-byte hash reference or empty string "0x". */
+      children: string[];
+      /** The value stored at this branch, if any. Empty "0x" means no value. */
+      value: string;
+      rlpEncoded: Uint8Array;
+    }
+  | {
+      kind: "extension";
+      path: number[];
+      /** Next node reference (32-byte hash or inline-encoded node for small nodes). */
+      next: string;
+      rlpEncoded: Uint8Array;
+    }
+  | {
+      kind: "leaf";
+      path: number[];
+      /** Leaf value as hex string. */
+      value: string;
+      rlpEncoded: Uint8Array;
+    };
+
+/** Parse an RLP-encoded MPT node into a structured representation. */
+export function parseMptNode(rlp: Uint8Array): MptNode {
+  const decoded = decodeRlp(rlp);
+  if (!Array.isArray(decoded)) {
+    throw new Error(`Expected MPT node to be an RLP list, got ${typeof decoded}`);
+  }
+
+  if (decoded.length === 17) {
+    const children = decoded.slice(0, 16) as string[];
+    const value = decoded[16] as string;
+    return { kind: "branch", children, value, rlpEncoded: rlp };
+  }
+
+  if (decoded.length === 2) {
+    const encodedPathHex = decoded[0] as string;
+    const encodedPath = hexToBytes(encodedPathHex);
+    const leaf = PathEncoder.isLeaf(encodedPath);
+    const path = PathEncoder.decode(encodedPath);
+    const second = decoded[1] as string;
+    return leaf
+      ? { kind: "leaf", path, value: second, rlpEncoded: rlp }
+      : { kind: "extension", path, next: second, rlpEncoded: rlp };
+  }
+
+  throw new Error(`Invalid MPT node length: ${decoded.length}`);
 }

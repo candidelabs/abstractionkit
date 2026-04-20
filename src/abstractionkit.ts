@@ -181,4 +181,4 @@ export type {
 } from "./stateVerifier/types";
 
 // Test-only exports. Removed before v1 ships. Do not use externally.
-export { Nibbles as __testNibbles, PathEncoder as __testPathEncoder } from "./stateVerifier/mpt";
+export { Nibbles as __testNibbles, PathEncoder as __testPathEncoder, parseMptNode as __testParseMptNode } from "./stateVerifier/mpt";

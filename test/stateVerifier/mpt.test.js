@@ -54,3 +54,33 @@ describe('PathEncoder', () => {
     expect(ak.__testPathEncoder.isLeaf(new Uint8Array([0x1a]))).toBe(false);
   });
 });
+
+describe('parseMptNode', () => {
+  test('parses a leaf node from a real fixture', () => {
+    const fixture = require('./fixtures/eoa-with-history.json');
+    const proof = fixture.getProof.accountProof;
+    const lastRlpHex = proof[proof.length - 1];
+    const lastRlp = Uint8Array.from(Buffer.from(lastRlpHex.slice(2), 'hex'));
+    const node = ak.__testParseMptNode(lastRlp);
+    expect(node.kind).toBe('leaf');
+  });
+
+  test('parses branch or extension at the root of a real proof', () => {
+    const fixture = require('./fixtures/eoa-with-history.json');
+    const proof = fixture.getProof.accountProof;
+    const firstRlpHex = proof[0];
+    const firstRlp = Uint8Array.from(Buffer.from(firstRlpHex.slice(2), 'hex'));
+    const node = ak.__testParseMptNode(firstRlp);
+    expect(['branch', 'extension']).toContain(node.kind);
+    if (node.kind === 'branch') {
+      expect(node.children).toHaveLength(16);
+    }
+  });
+
+  test('throws on invalid node length', () => {
+    const { encodeRlp } = require('ethers');
+    const badRlpHex = encodeRlp(['0x01']);
+    const badRlp = Uint8Array.from(Buffer.from(badRlpHex.slice(2), 'hex'));
+    expect(() => ak.__testParseMptNode(badRlp)).toThrow(/Invalid MPT node length/);
+  });
+});
