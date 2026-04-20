@@ -84,3 +84,73 @@ describe('parseMptNode', () => {
     expect(() => ak.__testParseMptNode(badRlp)).toThrow(/Invalid MPT node length/);
   });
 });
+
+describe('verifyMptProof via fixtures (internal)', () => {
+  const { encodeRlp } = require('ethers');
+
+  function hexBytes(hex) {
+    return Uint8Array.from(Buffer.from(hex.replace(/^0x/, ''), 'hex'));
+  }
+
+  function stripLeadingZeros(hex) {
+    let h = hex.replace(/^0x/, '').replace(/^0+/, '');
+    if (h.length === 0) return '0x';
+    if (h.length % 2 !== 0) h = '0' + h;
+    return '0x' + h;
+  }
+
+  test('verifies a valid account proof for an EOA with history', () => {
+    const fixture = require('./fixtures/eoa-with-history.json');
+    const p = fixture.getProof;
+    const stateRoot = hexBytes(fixture.block.stateRoot);
+    const address = hexBytes(p.address);
+    // Account RLP = [nonce, balance, storageHash, codeHash]
+    const accountRlp = encodeRlp([
+      stripLeadingZeros(p.nonce),
+      stripLeadingZeros(p.balance),
+      p.storageHash,
+      p.codeHash,
+    ]);
+    const ok = ak.__testVerifyMptProof({
+      rootHash: stateRoot,
+      key: address,
+      proof: p.accountProof,
+      expectedValue: hexBytes(accountRlp),
+    });
+    expect(ok).toBe(true);
+  });
+
+  test('rejects a tampered account proof (wrong balance)', () => {
+    const fixture = require('./fixtures/eoa-with-history.json');
+    const p = fixture.getProof;
+    const stateRoot = hexBytes(fixture.block.stateRoot);
+    const address = hexBytes(p.address);
+    const accountRlp = encodeRlp([
+      stripLeadingZeros(p.nonce),
+      '0xffffffffffffffffffffffffffff',
+      p.storageHash,
+      p.codeHash,
+    ]);
+    const ok = ak.__testVerifyMptProof({
+      rootHash: stateRoot,
+      key: address,
+      proof: p.accountProof,
+      expectedValue: hexBytes(accountRlp),
+    });
+    expect(ok).toBe(false);
+  });
+
+  test('verifies absence for a never-used address', () => {
+    const fixture = require('./fixtures/empty-account.json');
+    const p = fixture.getProof;
+    const stateRoot = hexBytes(fixture.block.stateRoot);
+    const address = hexBytes(p.address);
+    const ok = ak.__testVerifyMptProof({
+      rootHash: stateRoot,
+      key: address,
+      proof: p.accountProof,
+      expectedValue: undefined,
+    });
+    expect(ok).toBe(true);
+  });
+});
