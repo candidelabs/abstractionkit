@@ -104,4 +104,77 @@ describe('getConsensusBlockHeader', () => {
       expect(calls).toEqual(['eth_blockNumber', 'eth_getBlockByNumber']);
     } finally { restore(); }
   });
+
+  test('resolves "latest" via median of verifier-reported heights', async () => {
+    // Three verifiers, one lies extremely far ahead. Median must ignore the
+    // outlier; we expect the chain tip to resolve to 100 - syncTolerance = 99.
+    const block99 = {
+      number: '0x63', hash: '0xhash99', stateRoot: '0xroot99',
+      parentHash: '0xparent99', timestamp: '0x64',
+    };
+    const restore = mockFetch({
+      'http://honest-a': (body) => {
+        if (body.method === 'eth_blockNumber') return '0x64';   // 100
+        if (body.method === 'eth_getBlockByNumber') {
+          expect(body.params[0]).toBe('0x63');
+          return block99;
+        }
+      },
+      'http://honest-b': (body) => {
+        if (body.method === 'eth_blockNumber') return '0x64';   // 100
+        if (body.method === 'eth_getBlockByNumber') return block99;
+      },
+      'http://liar': (body) => {
+        if (body.method === 'eth_blockNumber') return '0x98967f'; // 9999999 (lie)
+        // Liar cannot actually produce block 99 from its forged chain, but
+        // assume it serves the same block since the test is about median resolution.
+        if (body.method === 'eth_getBlockByNumber') return block99;
+      },
+    });
+    try {
+      const header = await ak.getConsensusBlockHeader({
+        blockNumber: 'latest',
+        verificationRpcs: ['http://honest-a', 'http://honest-b', 'http://liar'],
+      });
+      expect(header.blockNumber).toBe(99n);
+    } finally { restore(); }
+  });
+
+  test('throws ConsensusStateRootDisagreementError when blockHash diverges even with matching stateRoot', async () => {
+    const base = { number: '0x10', stateRoot: '0xsameroot', parentHash: '0xp', timestamp: '0x64' };
+    const restore = mockFetch({
+      'http://a': () => ({ ...base, hash: '0xhashA' }),
+      'http://b': () => ({ ...base, hash: '0xhashA' }),
+      'http://c': () => ({ ...base, hash: '0xhashZ' }),  // different blockHash, same stateRoot
+    });
+    try {
+      await expect(ak.getConsensusBlockHeader({
+        blockNumber: 16n,
+        verificationRpcs: ['http://a', 'http://b', 'http://c'],
+      })).rejects.toBeInstanceOf(ak.ConsensusStateRootDisagreementError);
+    } finally { restore(); }
+  });
+
+  test('default quorum requires strict majority (N=3 requires 2 responders)', async () => {
+    const block = { number: '0x10', hash: '0xh', stateRoot: '0xsame', parentHash: '0xp', timestamp: '0x64' };
+    const original = global.fetch;
+    global.fetch = async (url, init) => {
+      // Only one of the three responds successfully.
+      if (url === 'http://a') {
+        return {
+          ok: true, status: 200,
+          json: async () => ({ jsonrpc: '2.0', id: 1, result: block }),
+        };
+      }
+      throw new Error('down');
+    };
+    try {
+      // No explicit quorumThreshold, so default (floor(3/2)+1 = 2) kicks in.
+      // Only 1 node responded, so quorum should be unmet.
+      await expect(ak.getConsensusBlockHeader({
+        blockNumber: 16n,
+        verificationRpcs: ['http://a', 'http://b', 'http://c'],
+      })).rejects.toBeInstanceOf(ak.ConsensusQuorumNotMetError);
+    } finally { global.fetch = original; }
+  });
 });

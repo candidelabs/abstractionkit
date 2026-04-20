@@ -14,27 +14,30 @@ type RawBlockHeader = {
  * Fetch a block header from N verification RPC nodes in parallel. Requires:
  *
  * 1. At least `quorumThreshold` nodes respond successfully.
- * 2. All responders agree on the state root.
+ * 2. All responders agree on every field of the block header
+ *    (stateRoot, hash, parentHash, timestamp).
  *
- * Returns the agreed-upon `ConsensusBlockHeader`. Resolves `"latest"` against
- * the first verification RPC minus `syncTolerance` so slower nodes have time
- * to catch up before the parallel query.
+ * Returns the agreed-upon `ConsensusBlockHeader`. When `blockNumber` is
+ * `"latest"`, the chain tip is resolved by querying `eth_blockNumber` on every
+ * verifier in parallel and taking the median of the responses (resists both
+ * stale-lying and future-lying malicious nodes under an honest-majority
+ * assumption), then subtracting `syncTolerance` to give slower nodes time
+ * to catch up before the header fan-out.
  *
  * @param params.blockNumber - Block to fetch. Pass `"latest"` to use the current
- *   chain tip (resolved minus `syncTolerance` blocks).
+ *   chain tip (resolved via cross-node median minus `syncTolerance`).
  * @param params.verificationRpcs - One or more JSON-RPC endpoint URLs to query.
- *   All of them must agree on the state root for the call to succeed.
+ *   All responders must agree on the full header for the call to succeed.
  * @param params.quorumThreshold - Minimum number of nodes that must respond
- *   successfully. Defaults to `floor(verificationRpcs.length / 2)` (majority),
- *   minimum 1.
+ *   successfully. Defaults to strict majority `floor(verificationRpcs.length / 2) + 1`.
  * @param params.syncTolerance - How many blocks behind the chain tip to use when
  *   resolving `"latest"`, giving slower nodes time to catch up. Defaults to 1.
  * @param params.requestTimeoutMs - Per-request timeout in milliseconds.
  *   Defaults to 10 000.
  * @returns The consensus-verified block header agreed upon by all responding nodes.
  * @throws {ConsensusQuorumNotMetError} Fewer than `quorumThreshold` nodes responded.
- * @throws {ConsensusStateRootDisagreementError} Responding nodes returned different
- *   state roots for the same block.
+ * @throws {ConsensusStateRootDisagreementError} Responding nodes returned differing
+ *   header fields for the same block number.
  *
  * @example
  * const header = await getConsensusBlockHeader({
@@ -56,7 +59,7 @@ export async function getConsensusBlockHeader(params: {
   const {
     blockNumber,
     verificationRpcs,
-    quorumThreshold = Math.max(Math.floor(verificationRpcs.length / 2), 1),
+    quorumThreshold = Math.floor(verificationRpcs.length / 2) + 1,
     syncTolerance = 1,
     requestTimeoutMs = 10_000,
   } = params;
@@ -65,16 +68,49 @@ export async function getConsensusBlockHeader(params: {
     throw new ConsensusQuorumNotMetError(0, quorumThreshold, []);
   }
 
-  // Resolve "latest" against the first RPC, minus syncTolerance.
+  // Resolve "latest" across all verifiers (median minus syncTolerance).
   let resolvedBlockNumber: bigint;
   if (blockNumber === "latest") {
-    const latestHex = await jsonRpcCall<string>({
-      url: verificationRpcs[0],
-      method: "eth_blockNumber",
-      params: [],
-      timeoutMs: requestTimeoutMs,
-    });
-    resolvedBlockNumber = BigInt(latestHex) - BigInt(syncTolerance);
+    const latestResults = await Promise.allSettled(
+      verificationRpcs.map((url) =>
+        jsonRpcCall<string | null>({
+          url,
+          method: "eth_blockNumber",
+          params: [],
+          timeoutMs: requestTimeoutMs,
+        }).then((r) => ({ url, hex: r })),
+      ),
+    );
+    const latests: bigint[] = [];
+    const latestFailures: Array<{ url: string; error: string }> = [];
+    for (let i = 0; i < latestResults.length; i++) {
+      const r = latestResults[i];
+      if (r.status === "fulfilled" && r.value.hex != null) {
+        latests.push(BigInt(r.value.hex));
+      } else if (r.status === "fulfilled") {
+        latestFailures.push({
+          url: r.value.url,
+          error: "null response from eth_blockNumber",
+        });
+      } else {
+        latestFailures.push({
+          url: verificationRpcs[i],
+          error: String(r.reason),
+        });
+      }
+    }
+    if (latests.length < quorumThreshold) {
+      throw new ConsensusQuorumNotMetError(
+        latests.length,
+        quorumThreshold,
+        latestFailures,
+      );
+    }
+    // Lower median: robust to single-node lies in either direction under
+    // honest-majority.
+    latests.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    const median = latests[Math.floor((latests.length - 1) / 2)];
+    resolvedBlockNumber = median - BigInt(syncTolerance);
   } else {
     resolvedBlockNumber = blockNumber;
   }
@@ -118,9 +154,25 @@ export async function getConsensusBlockHeader(params: {
     throw new ConsensusQuorumNotMetError(successes.length, quorumThreshold, failures);
   }
 
-  const reference = successes[0].header.stateRoot.toLowerCase();
+  // Require unanimity on every header field, not just stateRoot. A malicious
+  // node could otherwise report a correct stateRoot alongside a fabricated
+  // blockHash / parentHash / timestamp, which callers may use downstream
+  // (e.g., block-hash anchoring, reorg checks, timestamp-dependent logic).
+  const ref = successes[0].header;
+  const refN = {
+    stateRoot: ref.stateRoot.toLowerCase(),
+    hash: ref.hash.toLowerCase(),
+    parentHash: ref.parentHash.toLowerCase(),
+    timestamp: ref.timestamp,
+  };
   for (const s of successes) {
-    if (s.header.stateRoot.toLowerCase() !== reference) {
+    const h = s.header;
+    if (
+      h.stateRoot.toLowerCase() !== refN.stateRoot ||
+      h.hash.toLowerCase() !== refN.hash ||
+      h.parentHash.toLowerCase() !== refN.parentHash ||
+      h.timestamp !== refN.timestamp
+    ) {
       throw new ConsensusStateRootDisagreementError(
         successes.map((s) => ({ url: s.url, stateRoot: s.header.stateRoot })),
       );
