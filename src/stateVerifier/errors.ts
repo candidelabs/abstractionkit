@@ -13,22 +13,41 @@ export class StateProofVerificationError extends AbstractionKitError {
   }
 }
 
-/**
- * Thrown when two or more verification nodes return different state roots for
- * the same block number. This indicates either a split network, a compromised
- * node, or a misconfigured RPC URL.
- *
- * Inspect `nodes` to identify which endpoint(s) disagree.
- */
-export class ConsensusStateRootDisagreementError extends StateProofVerificationError {
-  /** Each responding node and the state root it returned. */
-  public readonly nodes: Array<{ url: string; stateRoot: string }>;
+/** Per-node block header data captured when verifiers disagree. */
+export type ConsensusDisagreementNode = {
+  url: string;
+  stateRoot: string;
+  blockHash: string;
+  parentHash: string;
+  /** Block timestamp as returned by the node (hex or decimal string). */
+  timestamp: string;
+};
 
-  constructor(nodes: Array<{ url: string; stateRoot: string }>) {
+/**
+ * Thrown when two or more verification nodes return different block header
+ * fields for the same block number. This indicates either a split network, a
+ * compromised node, or a misconfigured RPC URL.
+ *
+ * Inspect `fields` to see which header field(s) disagreed, and `nodes` to
+ * identify which endpoint(s) returned what.
+ */
+export class ConsensusHeaderDisagreementError extends StateProofVerificationError {
+  /**
+   * Names of the header fields on which the nodes disagreed. Valid values:
+   * `"stateRoot"`, `"blockHash"`, `"parentHash"`, `"timestamp"`.
+   */
+  public readonly fields: string[];
+  /** Each responding node and the full header fields it returned. */
+  public readonly nodes: ConsensusDisagreementNode[];
+
+  constructor(fields: string[], nodes: ConsensusDisagreementNode[]) {
     super(
-      `Verification nodes disagree on state root: ${nodes.map((n) => `${n.url}=${n.stateRoot}`).join(", ")}`,
-      { nodes },
+      `Verification nodes disagree on block header field(s) [${fields.join(", ")}]: ${nodes
+        .map((n) => `${n.url}={stateRoot:${n.stateRoot},blockHash:${n.blockHash}}`)
+        .join(", ")}`,
+      { fields, nodes },
     );
+    this.fields = fields;
     this.nodes = nodes;
   }
 }

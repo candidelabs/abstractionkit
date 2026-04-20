@@ -168,12 +168,13 @@ export { AbstractionKitError } from "./errors";
 
 export {
   StateProofVerificationError,
-  ConsensusStateRootDisagreementError,
+  ConsensusHeaderDisagreementError,
   ConsensusQuorumNotMetError,
   AccountProofInvalidError,
   StorageProofInvalidError,
   CodeHashMismatchError,
 } from "./stateVerifier/errors";
+export type { ConsensusDisagreementNode } from "./stateVerifier/errors";
 export type {
   EthGetProofResult,
   VerifiedAccountState,

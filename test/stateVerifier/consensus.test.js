@@ -40,7 +40,7 @@ describe('getConsensusBlockHeader', () => {
     } finally { restore(); }
   });
 
-  test('throws ConsensusStateRootDisagreementError when a node disagrees', async () => {
+  test('throws ConsensusHeaderDisagreementError when a node disagrees', async () => {
     const base = { number: '0x10', hash: '0xh', parentHash: '0xp', timestamp: '0x64' };
     const restore = mockFetch({
       'http://a': () => ({ ...base, stateRoot: '0xroot1' }),
@@ -51,7 +51,7 @@ describe('getConsensusBlockHeader', () => {
       await expect(ak.getConsensusBlockHeader({
         blockNumber: 16n,
         verificationRpcs: ['http://a', 'http://b', 'http://c'],
-      })).rejects.toBeInstanceOf(ak.ConsensusStateRootDisagreementError);
+      })).rejects.toBeInstanceOf(ak.ConsensusHeaderDisagreementError);
     } finally { restore(); }
   });
 
@@ -140,7 +140,7 @@ describe('getConsensusBlockHeader', () => {
     } finally { restore(); }
   });
 
-  test('throws ConsensusStateRootDisagreementError when blockHash diverges even with matching stateRoot', async () => {
+  test('throws ConsensusHeaderDisagreementError when blockHash diverges even with matching stateRoot', async () => {
     const base = { number: '0x10', stateRoot: '0xsameroot', parentHash: '0xp', timestamp: '0x64' };
     const restore = mockFetch({
       'http://a': () => ({ ...base, hash: '0xhashA' }),
@@ -151,7 +151,7 @@ describe('getConsensusBlockHeader', () => {
       await expect(ak.getConsensusBlockHeader({
         blockNumber: 16n,
         verificationRpcs: ['http://a', 'http://b', 'http://c'],
-      })).rejects.toBeInstanceOf(ak.ConsensusStateRootDisagreementError);
+      })).rejects.toBeInstanceOf(ak.ConsensusHeaderDisagreementError);
     } finally { restore(); }
   });
 

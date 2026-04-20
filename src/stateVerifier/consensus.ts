@@ -1,4 +1,8 @@
-import { ConsensusQuorumNotMetError, ConsensusStateRootDisagreementError } from "./errors";
+import {
+  ConsensusQuorumNotMetError,
+  ConsensusHeaderDisagreementError,
+  type ConsensusDisagreementNode,
+} from "./errors";
 import { jsonRpcCall } from "./rpc";
 import type { ConsensusBlockHeader } from "./types";
 
@@ -36,7 +40,7 @@ type RawBlockHeader = {
  *   Defaults to 10 000.
  * @returns The consensus-verified block header agreed upon by all responding nodes.
  * @throws {ConsensusQuorumNotMetError} Fewer than `quorumThreshold` nodes responded.
- * @throws {ConsensusStateRootDisagreementError} Responding nodes returned differing
+ * @throws {ConsensusHeaderDisagreementError} Responding nodes returned differing
  *   header fields for the same block number.
  *
  * @example
@@ -165,18 +169,23 @@ export async function getConsensusBlockHeader(params: {
     parentHash: ref.parentHash.toLowerCase(),
     timestamp: ref.timestamp,
   };
+  const disagreeingFields = new Set<string>();
   for (const s of successes) {
     const h = s.header;
-    if (
-      h.stateRoot.toLowerCase() !== refN.stateRoot ||
-      h.hash.toLowerCase() !== refN.hash ||
-      h.parentHash.toLowerCase() !== refN.parentHash ||
-      h.timestamp !== refN.timestamp
-    ) {
-      throw new ConsensusStateRootDisagreementError(
-        successes.map((s) => ({ url: s.url, stateRoot: s.header.stateRoot })),
-      );
-    }
+    if (h.stateRoot.toLowerCase() !== refN.stateRoot) disagreeingFields.add("stateRoot");
+    if (h.hash.toLowerCase() !== refN.hash) disagreeingFields.add("blockHash");
+    if (h.parentHash.toLowerCase() !== refN.parentHash) disagreeingFields.add("parentHash");
+    if (h.timestamp !== refN.timestamp) disagreeingFields.add("timestamp");
+  }
+  if (disagreeingFields.size > 0) {
+    const nodes: ConsensusDisagreementNode[] = successes.map((s) => ({
+      url: s.url,
+      stateRoot: s.header.stateRoot,
+      blockHash: s.header.hash,
+      parentHash: s.header.parentHash,
+      timestamp: s.header.timestamp,
+    }));
+    throw new ConsensusHeaderDisagreementError([...disagreeingFields], nodes);
   }
 
   const h = successes[0].header;

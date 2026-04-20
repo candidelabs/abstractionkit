@@ -5,12 +5,16 @@ describe('StateVerifier errors', () => {
     const generic = new ak.StateProofVerificationError('boom');
     expect(generic).toBeInstanceOf(ak.StateProofVerificationError);
 
-    const disagreement = new ak.ConsensusStateRootDisagreementError([
-      { url: 'a', stateRoot: '0x1' },
-      { url: 'b', stateRoot: '0x2' },
-    ]);
+    const disagreement = new ak.ConsensusHeaderDisagreementError(
+      ['stateRoot'],
+      [
+        { url: 'a', stateRoot: '0x1', blockHash: '0xa', parentHash: '0xp', timestamp: '0x64' },
+        { url: 'b', stateRoot: '0x2', blockHash: '0xb', parentHash: '0xp', timestamp: '0x64' },
+      ],
+    );
     expect(disagreement).toBeInstanceOf(ak.StateProofVerificationError);
     expect(disagreement.nodes).toHaveLength(2);
+    expect(disagreement.fields).toEqual(['stateRoot']);
 
     const quorum = new ak.ConsensusQuorumNotMetError(1, 2, []);
     expect(quorum).toBeInstanceOf(ak.StateProofVerificationError);
