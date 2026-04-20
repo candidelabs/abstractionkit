@@ -13,16 +13,20 @@ describe('StateVerifier errors', () => {
     expect(disagreement.nodes).toHaveLength(2);
 
     const quorum = new ak.ConsensusQuorumNotMetError(1, 2, []);
+    expect(quorum).toBeInstanceOf(ak.StateProofVerificationError);
     expect(quorum.responded).toBe(1);
     expect(quorum.required).toBe(2);
 
     const account = new ak.AccountProofInvalidError('0xabc', '0xroot', 42n, 'bad');
+    expect(account).toBeInstanceOf(ak.StateProofVerificationError);
     expect(account.blockNumber).toBe(42n);
 
     const storage = new ak.StorageProofInvalidError('0xslot', '0xhash', 'bad');
+    expect(storage).toBeInstanceOf(ak.StateProofVerificationError);
     expect(storage.slot).toBe('0xslot');
 
     const code = new ak.CodeHashMismatchError('0xaddr', '0xexp', '0xact');
+    expect(code).toBeInstanceOf(ak.StateProofVerificationError);
     expect(code.expectedCodeHash).toBe('0xexp');
   });
 

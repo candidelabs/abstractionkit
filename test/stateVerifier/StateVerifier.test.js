@@ -229,10 +229,9 @@ describe('StateVerifier.getVerifiedAccountStates', () => {
   test('verifies multiple accounts using a shared header', async () => {
     const f1 = require('./fixtures/eoa-with-history.json');
     const f2 = require('./fixtures/safe-v141-singleton.json');
-    if (f1.block.hash !== f2.block.hash) {
-      console.warn('Batch test fixtures are at different blocks; skipping.');
-      return;
-    }
+    // Fail loudly if fixtures drift out of sync: this test's coverage depends
+    // on both fixtures being at the same block.
+    expect(f1.block.hash).toBe(f2.block.hash);
     let proofCallCount = 0;
     const original = global.fetch;
     global.fetch = async (url, init) => {

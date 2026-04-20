@@ -1,11 +1,11 @@
 const ak = require('../../dist/index.cjs');
 
-// The internal MPT walker is now tested indirectly through verifyAccountProof
-// and verifyStorageProof with real fixture data. Variety of node shapes is
-// covered because:
+// The internal MPT walker is tested indirectly through verifyAccountProof
+// with real fixture data. Variety of node shapes is covered because:
 //   - eoa-with-history.json exercises deep branch paths (and leaf)
-//   - safe-v141-singleton.json exercises contract leaves + storage proofs
+//   - safe-v141-singleton.json exercises contract leaves
 //   - empty-account.json exercises absence-proof paths
+// (Storage-proof paths are exercised by proofVerifier.test.js.)
 
 describe('MPT verification via public verifiers', () => {
   test('branch + extension + leaf walks succeed on real fixtures', () => {
