@@ -47,9 +47,11 @@ export interface SignContext<T extends BaseUserOperation = BaseUserOperation> {
  *
  * Type your multi-op signer as `ExternalSigner<MultiOpSignContext>` for
  * full autocomplete on `userOperations`. Pre-built adapters
- * (`fromPrivateKey`, `fromViem`, `fromEthersWallet`,
- * `fromViemWalletClient`) return a universal `Signer<unknown>` and work in
- * either path without retyping.
+ * `fromPrivateKey`, `fromViem`, and `fromEthersWallet` return a universal
+ * `Signer<unknown>` and work on either single-op or multi-op paths
+ * without retyping. `fromViemWalletClient` only exposes `signTypedData`,
+ * so it's usable on single-op paths only — the multi-op Merkle root is
+ * opaque, has no typed-data display, and requires raw-hash signing.
  */
 export interface MultiOpSignContext<T extends BaseUserOperation = BaseUserOperation> {
 	readonly userOperations: ReadonlyArray<{
@@ -128,7 +130,7 @@ export type SignTypedDataFn<C = SignContext> = (
  *   }
  * }
  * const signer = fromPrivateKeyBytes(bytes)
- * try { userOp.signature = await safe.signUserOp(op, [signer], chainId) }
+ * try { userOp.signature = await safe.signUserOperationWithSigners(op, [signer], chainId) }
  * finally { bytes.fill(0) }  // zero the buffer on dispose
  * ```
  *

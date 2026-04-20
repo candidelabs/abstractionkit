@@ -15,9 +15,13 @@ export function pickScheme<C>(
 	accepted: readonly SigningScheme[],
 	context: { accountName: string; signerIndex: number },
 ): SigningScheme {
+	// Use `typeof === "function"` (not truthiness) so a malformed signer
+	// like `{ signHash: true }` (e.g. from a JS caller bypassing types) is
+	// rejected via pickScheme's AbstractionKitError instead of crashing
+	// later with a raw TypeError on the call site.
 	const signerCan: SigningScheme[] = [];
-	if (signer.signTypedData) signerCan.push("typedData");
-	if (signer.signHash) signerCan.push("hash");
+	if (typeof signer.signTypedData === "function") signerCan.push("typedData");
+	if (typeof signer.signHash === "function") signerCan.push("hash");
 
 	for (const scheme of accepted) {
 		if (signerCan.includes(scheme)) return scheme;
@@ -70,7 +74,7 @@ export async function invokeSigner<C>(
 	},
 ): Promise<`0x${string}`> {
 	if (scheme === "typedData") {
-		if (!signer.signTypedData) {
+		if (typeof signer.signTypedData !== "function") {
 			throw new AbstractionKitError("BAD_DATA",
 				`signer ${signer.address} is missing signTypedData`);
 		}
@@ -80,7 +84,7 @@ export async function invokeSigner<C>(
 		}
 		return signer.signTypedData(payload.typedData, payload.context);
 	}
-	if (!signer.signHash) {
+	if (typeof signer.signHash !== "function") {
 		throw new AbstractionKitError("BAD_DATA",
 			`signer ${signer.address} is missing signHash`);
 	}

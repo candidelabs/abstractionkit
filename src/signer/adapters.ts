@@ -103,7 +103,7 @@ export interface EthersWalletLike {
  * @example
  * import { fromPrivateKey } from "abstractionkit";
  * const signer = fromPrivateKey(process.env.PRIVATE_KEY!);
- * userOp.signature = await safe.signUserOp(userOp, [signer], chainId);
+ * userOp.signature = await safe.signUserOperationWithSigners(userOp, [signer], chainId);
  */
 export function fromPrivateKey(privateKey: string): Signer<unknown> {
 	const wallet = new Wallet(privateKey);

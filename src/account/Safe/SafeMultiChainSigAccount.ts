@@ -583,11 +583,14 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 *
 	 * Signers always receive {@link MultiOpSignContext} regardless of bundle
 	 * length, so multi-op-typed signers can rely on `ctx.userOperations`
-	 * being defined. Pre-built adapters (`fromPrivateKey`, `fromViem`,
-	 * `fromEthersWallet`, `fromViemWalletClient`) return a universal
-	 * `Signer<unknown>` and work here without retyping; user-defined
-	 * single-op signers (`Signer<SignContext>`) do not — they would receive
-	 * a context shape they didn't declare.
+	 * being defined. Pre-built adapters `fromPrivateKey`, `fromViem`, and
+	 * `fromEthersWallet` return a universal `Signer<unknown>` and work
+	 * here without retyping; user-defined single-op signers
+	 * (`Signer<SignContext>`) do not — they would receive a context shape
+	 * they didn't declare. `fromViemWalletClient` is **not** usable on the
+	 * multi-op Merkle path: it only exposes `signTypedData`, and the
+	 * Merkle root has no meaningful typed-data display. {@link pickScheme}
+	 * rejects it offline with an actionable error.
 	 *
 	 * @param userOperationsToSign - UserOperations + chain IDs + validity windows
 	 * @param signers - one Signer per owner (any order; sorted by address on-chain)
