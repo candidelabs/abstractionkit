@@ -1,29 +1,43 @@
-import { SmartAccount } from "../SmartAccount";
-import { BaseUserOperationDummyValues, CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS, ENTRYPOINT_V8, ZeroAddress } from "src/constants";
+import { AbiCoder, keccak256, Wallet } from "ethers";
+import { Bundler } from "src/Bundler";
 import {
-	createCallData, createUserOperationHash, fetchAccountNonce,
-	getDelegatedAddress, getFunctionSelector, handlefetchGasPrice, sendJsonRpcRequest
-} from "../../utils";
-import { UserOperationV8 } from "src/types";
-import { Signer as AkSigner, SignContext, SigningScheme } from "src/signer/types";
-import { pickScheme, invokeSigner } from "src/signer/negotiate";
+	BaseUserOperationDummyValues,
+	CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS,
+	ENTRYPOINT_V8,
+	ZeroAddress,
+} from "src/constants";
 import { AbstractionKitError } from "src/errors";
+import type { PrependTokenPaymasterApproveAccount } from "src/paymaster/types";
+import { invokeSigner, pickScheme } from "src/signer/negotiate";
+import type { Signer as AkSigner, SignContext, SigningScheme } from "src/signer/types";
+import type { JsonRpcResult, UserOperationV8 } from "src/types";
 import {
-	Authorization7702Hex, bigintToHex,
+	type Authorization7702Hex,
+	bigintToHex,
 	createAndSignEip7702RawTransaction,
 	createRevokeDelegationAuthorization,
 } from "src/utils7702";
-import { Bundler } from "src/Bundler";
-import { Wallet, AbiCoder, keccak256 } from "ethers";
-import { SendUseroperationResponse } from "../SendUseroperationResponse";
-import { SimpleMetaTransaction } from "../simple/Simple7702Account";
-import { PrependTokenPaymasterApproveAccount } from "src/paymaster/types";
 import {
-	CaliburKeyType, CaliburKey, CaliburKeySettings, CaliburKeySettingsResult,
-	WebAuthnSignatureData, CaliburCreateUserOperationOverrides,
-	CaliburSignatureOverrides,
+	createCallData,
+	createUserOperationHash,
+	fetchAccountNonce,
+	getDelegatedAddress,
+	getFunctionSelector,
+	handlefetchGasPrice,
+	sendJsonRpcRequest,
+} from "../../utils";
+import { SendUseroperationResponse } from "../SendUseroperationResponse";
+import { SmartAccount } from "../SmartAccount";
+import type { SimpleMetaTransaction } from "../simple/Simple7702Account";
+import {
+	type CaliburCreateUserOperationOverrides,
+	type CaliburKey,
+	type CaliburKeySettings,
+	type CaliburKeySettingsResult,
+	CaliburKeyType,
+	type CaliburSignatureOverrides,
+	type WebAuthnSignatureData,
 } from "./types";
-
 
 const DEFAULT_SINGLETON_ADDRESS = CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS;
 
@@ -79,9 +93,10 @@ const KEY_AT_SELECTOR = "0x4223b5c2";
  * const response = await account.sendUserOperation(userOp, bundlerRpc);
  * ```
  */
-export class Calibur7702Account extends SmartAccount
-	implements PrependTokenPaymasterApproveAccount {
-
+export class Calibur7702Account
+	extends SmartAccount
+	implements PrependTokenPaymasterApproveAccount
+{
 	/** Function selector for `executeUserOp(bytes)` */
 	static readonly executorFunctionSelector = EXECUTE_USER_OP_SELECTOR;
 
@@ -108,7 +123,8 @@ export class Calibur7702Account extends SmartAccount
 	 */
 	public static createDummyWebAuthnSignature(keyHash: string): string {
 		const abiCoder = AbiCoder.defaultAbiCoder();
-		const dummyClientDataJSON = '{"type":"webauthn.get","challenge":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","origin":"https://example.com","crossOrigin":false}';
+		const dummyClientDataJSON =
+			'{"type":"webauthn.get","challenge":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","origin":"https://example.com","crossOrigin":false}';
 		const challengeIndex = BigInt(dummyClientDataJSON.indexOf('"challenge":"'));
 		const typeIndex = BigInt(dummyClientDataJSON.indexOf('"type":"webauthn.get"'));
 		return abiCoder.encode(
@@ -117,14 +133,16 @@ export class Calibur7702Account extends SmartAccount
 				keyHash,
 				abiCoder.encode(
 					["(bytes,string,uint256,uint256,uint256,uint256)"],
-					[[
-						"0x49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000000",
-						dummyClientDataJSON,
-						challengeIndex,
-						typeIndex,
-						BigInt("0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0"),
-						BigInt("0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0"),
-					]],
+					[
+						[
+							"0x49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000000",
+							dummyClientDataJSON,
+							challengeIndex,
+							typeIndex,
+							BigInt("0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0"),
+							BigInt("0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0"),
+						],
+					],
 				),
 				"0x",
 			],
@@ -143,16 +161,9 @@ export class Calibur7702Account extends SmartAccount
 	 * @param hookData - Optional hook data (default: "0x")
 	 * @returns Hex-encoded wrapped signature ready for `userOp.signature`
 	 */
-	public static wrapSignature(
-		keyHash: string,
-		rawSignature: string,
-		hookData = "0x",
-	): string {
+	public static wrapSignature(keyHash: string, rawSignature: string, hookData = "0x"): string {
 		const abiCoder = AbiCoder.defaultAbiCoder();
-		return abiCoder.encode(
-			["bytes32", "bytes", "bytes"],
-			[keyHash, rawSignature, hookData],
-		);
+		return abiCoder.encode(["bytes32", "bytes", "bytes"], [keyHash, rawSignature, hookData]);
 	}
 
 	/** The EntryPoint contract address this account targets */
@@ -188,15 +199,8 @@ export class Calibur7702Account extends SmartAccount
 	 * @param chainId - Target chain ID
 	 * @returns The UserOperation hash as a hex string
 	 */
-	public getUserOperationHash(
-		userOperation: UserOperationV8,
-		chainId: bigint,
-	): string {
-		return createUserOperationHash(
-			userOperation,
-			this.entrypointAddress,
-			chainId,
-		);
+	public getUserOperationHash(userOperation: UserOperationV8, chainId: bigint): string {
+		return createUserOperationHash(userOperation, this.entrypointAddress, chainId);
 	}
 
 	// ─── CallData Encoding ───────────────────────────────────────────────
@@ -214,7 +218,7 @@ export class Calibur7702Account extends SmartAccount
 		revertOnFailure = true,
 	): string {
 		const abiCoder = AbiCoder.defaultAbiCoder();
-		const calls = transactions.map(tx => [tx.to, tx.value, tx.data]);
+		const calls = transactions.map((tx) => [tx.to, tx.value, tx.data]);
 		// BatchedCall struct { Call[] calls; bool revertOnFailure; }
 		// Solidity's abi.decode(data, (BatchedCall)) expects a single struct/tuple
 		// parameter, which has an extra offset layer compared to two separate args.
@@ -254,11 +258,7 @@ export class Calibur7702Account extends SmartAccount
 
 		if (overrides.nonce == null) {
 			if (providerRpc != null) {
-				nonceOp = fetchAccountNonce(
-					providerRpc,
-					this.entrypointAddress,
-					this.accountAddress,
-				);
+				nonceOp = fetchAccountNonce(providerRpc, this.entrypointAddress, this.accountAddress);
 			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
@@ -269,17 +269,11 @@ export class Calibur7702Account extends SmartAccount
 			nonce = overrides.nonce;
 		}
 
-		if (
-			typeof overrides.maxFeePerGas === "bigint" &&
-			overrides.maxFeePerGas < 0n
-		) {
+		if (typeof overrides.maxFeePerGas === "bigint" && overrides.maxFeePerGas < 0n) {
 			throw new RangeError("maxFeePerGas override can't be negative");
 		}
 
-		if (
-			typeof overrides.maxPriorityFeePerGas === "bigint" &&
-			overrides.maxPriorityFeePerGas < 0n
-		) {
+		if (typeof overrides.maxPriorityFeePerGas === "bigint" && overrides.maxPriorityFeePerGas < 0n) {
 			throw new RangeError("maxPriorityFeePerGas override can't be negative");
 		}
 
@@ -287,12 +281,11 @@ export class Calibur7702Account extends SmartAccount
 		let maxPriorityFeePerGas = BaseUserOperationDummyValues.maxPriorityFeePerGas;
 
 		let gasPriceOp: Promise<[bigint, bigint]> | null = null;
-		if (
-			overrides.maxFeePerGas == null ||
-			overrides.maxPriorityFeePerGas == null
-		) {
+		if (overrides.maxFeePerGas == null || overrides.maxPriorityFeePerGas == null) {
 			gasPriceOp = handlefetchGasPrice(
-				providerRpc, overrides.polygonGasStation, overrides.gasLevel
+				providerRpc,
+				overrides.polygonGasStation,
+				overrides.gasLevel,
 			);
 		}
 
@@ -302,8 +295,7 @@ export class Calibur7702Account extends SmartAccount
 
 		if (overrides.eip7702Auth != null) {
 			eip7702AuthChainId = overrides.eip7702Auth.chainId;
-			eip7702AuthAddress = overrides.eip7702Auth.address ??
-				this.delegateeAddress;
+			eip7702AuthAddress = overrides.eip7702Auth.address ?? this.delegateeAddress;
 			eip7702AuthNonce = overrides.eip7702Auth.nonce ?? null;
 		}
 
@@ -312,23 +304,20 @@ export class Calibur7702Account extends SmartAccount
 		let skipEip7702Auth = false;
 		let delegationCheckOp: Promise<string | null> | null = null;
 		if (overrides.eip7702Auth != null && providerRpc != null) {
-			delegationCheckOp = getDelegatedAddress(this.accountAddress, providerRpc)
-				.catch(() => null);
+			delegationCheckOp = getDelegatedAddress(this.accountAddress, providerRpc).catch(() => null);
 		}
 
 		if (overrides.eip7702Auth != null && eip7702AuthNonce == null) {
-			let eip7702AuthNonceOp;
+			let eip7702AuthNonceOp: Promise<JsonRpcResult>;
 			if (providerRpc != null) {
-				eip7702AuthNonceOp = sendJsonRpcRequest(
-					providerRpc,
-					"eth_getTransactionCount",
-					[this.accountAddress, "latest"]
-				);
+				eip7702AuthNonceOp = sendJsonRpcRequest(providerRpc, "eth_getTransactionCount", [
+					this.accountAddress,
+					"latest",
+				]);
 			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					"providerRpc can't be null if eoaDelegatorNonce " +
-					"is not overriden",
+					"providerRpc can't be null if eoaDelegatorNonce " + "is not overriden",
 				);
 			}
 
@@ -341,11 +330,14 @@ export class Calibur7702Account extends SmartAccount
 			let idx = 0;
 			eip7702AuthNonce = BigInt(values[idx++] as string);
 			if (nonceOp != null) nonce = values[idx++] as bigint;
-			if (gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++] as [bigint, bigint];
+			if (gasPriceOp != null)
+				[maxFeePerGas, maxPriorityFeePerGas] = values[idx++] as [bigint, bigint];
 			if (delegationCheckOp != null) {
 				const delegatedTo = values[idx++] as string | null;
-				if (delegatedTo != null &&
-					delegatedTo.toLowerCase() === (eip7702AuthAddress as string).toLowerCase()) {
+				if (
+					delegatedTo != null &&
+					delegatedTo.toLowerCase() === (eip7702AuthAddress as string).toLowerCase()
+				) {
 					skipEip7702Auth = true;
 				}
 			}
@@ -359,11 +351,14 @@ export class Calibur7702Account extends SmartAccount
 				const values = await Promise.all(ops);
 				let idx = 0;
 				if (nonceOp != null) nonce = values[idx++] as bigint;
-				if (gasPriceOp != null) [maxFeePerGas, maxPriorityFeePerGas] = values[idx++] as [bigint, bigint];
+				if (gasPriceOp != null)
+					[maxFeePerGas, maxPriorityFeePerGas] = values[idx++] as [bigint, bigint];
 				if (delegationCheckOp != null) {
 					const delegatedTo = values[idx++] as string | null;
-					if (delegatedTo != null &&
-						delegatedTo.toLowerCase() === (eip7702AuthAddress as string).toLowerCase()) {
+					if (
+						delegatedTo != null &&
+						delegatedTo.toLowerCase() === (eip7702AuthAddress as string).toLowerCase()
+					) {
 						skipEip7702Auth = true;
 					}
 				}
@@ -381,19 +376,20 @@ export class Calibur7702Account extends SmartAccount
 			}
 		}
 
-		maxFeePerGas = overrides.maxFeePerGas ??
+		maxFeePerGas =
+			overrides.maxFeePerGas ??
 			BigInt(
 				Math.floor(
-					Number(maxFeePerGas) *
-					(((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100) / 100)
-				)
+					Number(maxFeePerGas) * (((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100) / 100),
+				),
 			);
-		maxPriorityFeePerGas = overrides.maxPriorityFeePerGas ??
+		maxPriorityFeePerGas =
+			overrides.maxPriorityFeePerGas ??
 			BigInt(
 				Math.floor(
 					Number(maxPriorityFeePerGas) *
-					(((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100) / 100)
-				)
+						(((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100) / 100),
+				),
 			);
 
 		if (nonce == null) {
@@ -416,14 +412,10 @@ export class Calibur7702Account extends SmartAccount
 		let userOperation: UserOperationV8;
 		if (overrides.eip7702Auth != null && !skipEip7702Auth) {
 			const yParity = overrides.eip7702Auth.yParity ?? "0x0";
-			if (
-				yParity != "0x0" && yParity != "0x00" &&
-				yParity != "0x1" && yParity != "0x01"
-			) {
+			if (yParity !== "0x0" && yParity !== "0x00" && yParity !== "0x1" && yParity !== "0x01") {
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					"invalid yParity value for eoaDelegatorSignature. " +
-					"must be '0x0' or '0x1'"
+					"invalid yParity value for eoaDelegatorSignature. " + "must be '0x0' or '0x1'",
 				);
 			}
 
@@ -432,9 +424,11 @@ export class Calibur7702Account extends SmartAccount
 				address: eip7702AuthAddress as string,
 				nonce: bigintToHex(eip7702AuthNonce as bigint),
 				yParity: yParity,
-				r: overrides.eip7702Auth.r ??
+				r:
+					overrides.eip7702Auth.r ??
 					"0x4277ba564d2c138823415df0ec8e8f97f30825056d54ec5128a8b29ec2dd81b2",
-				s: overrides.eip7702Auth.s ??
+				s:
+					overrides.eip7702Auth.s ??
 					"0x1075a1bec7f59848cca899ece93075199cd2aabceb0654b9ae00b881a30044cd",
 			};
 			userOperation = {
@@ -489,8 +483,8 @@ export class Calibur7702Account extends SmartAccount
 				userOperation.maxPriorityFeePerGas = 0n;
 
 				const userOperationToEstimate: UserOperationV8 = { ...userOperation };
-				userOperationToEstimate.signature = overrides.dummySignature ??
-					Calibur7702Account.dummySignature;
+				userOperationToEstimate.signature =
+					overrides.dummySignature ?? Calibur7702Account.dummySignature;
 
 				const bundler = new Bundler(bundlerRpc);
 				const estimation = await bundler.estimateUserOperationGas(
@@ -503,8 +497,8 @@ export class Calibur7702Account extends SmartAccount
 				verificationGasLimit = BigInt(estimation.verificationGasLimit);
 				callGasLimit = BigInt(estimation.callGasLimit);
 				// Safety margin for P-256/WebAuthn signature verification overhead
-			// that the bundler's simulation may underestimate.
-			verificationGasLimit += 55_000n;
+				// that the bundler's simulation may underestimate.
+				verificationGasLimit += 55_000n;
 
 				userOperation.maxFeePerGas = inputMaxFeePerGas;
 				userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas;
@@ -512,60 +506,52 @@ export class Calibur7702Account extends SmartAccount
 				throw new AbstractionKitError(
 					"BAD_DATA",
 					"bundlerRpc can't be null if preVerificationGas," +
-					"verificationGasLimit and callGasLimit are not overriden",
+						"verificationGasLimit and callGasLimit are not overriden",
 				);
 			}
 		}
 
-		if (
-			typeof overrides.preVerificationGas === "bigint" &&
-			overrides.preVerificationGas < 0n
-		) {
+		if (typeof overrides.preVerificationGas === "bigint" && overrides.preVerificationGas < 0n) {
 			throw new RangeError("preVerificationGas override can't be negative");
 		}
 
-		if (
-			typeof overrides.verificationGasLimit === "bigint" &&
-			overrides.verificationGasLimit < 0n
-		) {
+		if (typeof overrides.verificationGasLimit === "bigint" && overrides.verificationGasLimit < 0n) {
 			throw new RangeError("verificationGasLimit override can't be negative");
 		}
 
-		if (
-			typeof overrides.callGasLimit === "bigint" &&
-			overrides.callGasLimit < 0n
-		) {
+		if (typeof overrides.callGasLimit === "bigint" && overrides.callGasLimit < 0n) {
 			throw new RangeError("callGasLimit override can't be negative");
 		}
 
-		userOperation.preVerificationGas = overrides.preVerificationGas ??
+		userOperation.preVerificationGas =
+			overrides.preVerificationGas ??
 			BigInt(
 				Math.floor(
 					Number(preVerificationGas) *
-					(((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100) / 100)
+						(((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100) / 100),
 				),
 			);
 
-		userOperation.verificationGasLimit = overrides.verificationGasLimit ??
+		userOperation.verificationGasLimit =
+			overrides.verificationGasLimit ??
 			BigInt(
 				Math.floor(
 					Number(verificationGasLimit) *
-					(((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100) / 100)
+						(((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100) / 100),
 				),
 			);
 
-		userOperation.callGasLimit = overrides.callGasLimit ??
+		userOperation.callGasLimit =
+			overrides.callGasLimit ??
 			BigInt(
 				Math.floor(
-					Number(callGasLimit) *
-					(((overrides.callGasLimitPercentageMultiplier ?? 0) + 100) / 100)
+					Number(callGasLimit) * (((overrides.callGasLimitPercentageMultiplier ?? 0) + 100) / 100),
 				),
 			);
 
 		// Set the dummy signature so paymaster sponsorship calls can simulate
 		// validateUserOp (Calibur's signature decoder rejects empty signatures).
-		userOperation.signature = overrides.dummySignature ??
-			Calibur7702Account.dummySignature;
+		userOperation.signature = overrides.dummySignature ?? Calibur7702Account.dummySignature;
 
 		return userOperation;
 	}
@@ -680,20 +666,19 @@ export class Calibur7702Account extends SmartAccount
 		// which expects struct-wrapped encoding (extra offset for dynamic tuple).
 		const webAuthnEncoded = abiCoder.encode(
 			["(bytes,string,uint256,uint256,uint256,uint256)"],
-			[[
-				webAuthnAuth.authenticatorData,
-				webAuthnAuth.clientDataJSON,
-				webAuthnAuth.challengeIndex,
-				webAuthnAuth.typeIndex,
-				webAuthnAuth.r,
-				webAuthnAuth.s,
-			]],
+			[
+				[
+					webAuthnAuth.authenticatorData,
+					webAuthnAuth.clientDataJSON,
+					webAuthnAuth.challengeIndex,
+					webAuthnAuth.typeIndex,
+					webAuthnAuth.r,
+					webAuthnAuth.s,
+				],
+			],
 		);
 
-		return abiCoder.encode(
-			["bytes32", "bytes", "bytes"],
-			[keyHash, webAuthnEncoded, hookData],
-		);
+		return abiCoder.encode(["bytes32", "bytes", "bytes"], [keyHash, webAuthnEncoded, hookData]);
 	}
 
 	/**
@@ -713,11 +698,7 @@ export class Calibur7702Account extends SmartAccount
 			this.entrypointAddress,
 		);
 
-		return new SendUseroperationResponse(
-			sendUserOperationRes,
-			bundler,
-			this.entrypointAddress,
-		);
+		return new SendUseroperationResponse(sendUserOperationRes, bundler, this.entrypointAddress);
 	}
 
 	// ─── Key Helpers (static) ────────────────────────────────────────────
@@ -773,10 +754,7 @@ export class Calibur7702Account extends SmartAccount
 	public static getKeyHash(key: CaliburKey): string {
 		const innerHash = keccak256(key.publicKey);
 		const abiCoder = AbiCoder.defaultAbiCoder();
-		const encoded = abiCoder.encode(
-			["uint8", "bytes32"],
-			[key.keyType, innerHash],
-		);
+		const encoded = abiCoder.encode(["uint8", "bytes32"], [key.keyType, innerHash]);
 		return keccak256(encoded);
 	}
 
@@ -801,7 +779,7 @@ export class Calibur7702Account extends SmartAccount
 	 * @returns Parsed key settings with all fields populated
 	 */
 	public static unpackKeySettings(packed: bigint): CaliburKeySettingsResult {
-		const hook = "0x" + (packed & ((1n << 160n) - 1n)).toString(16).padStart(40, "0");
+		const hook = `0x${(packed & ((1n << 160n) - 1n)).toString(16).padStart(40, "0")}`;
 		const expiration = Number((packed >> 160n) & ((1n << 40n) - 1n));
 		const isAdmin = ((packed >> 200n) & 1n) === 1n;
 		return { hook, expiration, isAdmin };
@@ -830,17 +808,16 @@ export class Calibur7702Account extends SmartAccount
 			throw new AbstractionKitError(
 				"BAD_DATA",
 				"createRegisterKeyMetaTransactions does not allow setting " +
-				"isAdmin to true. Encode the calldata manually for admin keys.",
+					"isAdmin to true. Encode the calldata manually for admin keys.",
 			);
 		}
 
 		const abiCoder = AbiCoder.defaultAbiCoder();
 
 		// Register: register((uint8 keyType, bytes publicKey))
-		const registerCallData = REGISTER_SELECTOR + abiCoder.encode(
-			["(uint8,bytes)"],
-			[[key.keyType, key.publicKey]],
-		).slice(2);
+		const registerCallData =
+			REGISTER_SELECTOR +
+			abiCoder.encode(["(uint8,bytes)"], [[key.keyType, key.publicKey]]).slice(2);
 
 		// Update: update(bytes32 keyHash, uint256 packedSettings)
 		const safeSettings: CaliburKeySettings = {
@@ -849,10 +826,8 @@ export class Calibur7702Account extends SmartAccount
 		};
 		const keyHash = Calibur7702Account.getKeyHash(key);
 		const packedSettings = Calibur7702Account.packKeySettings(safeSettings);
-		const updateCallData = UPDATE_SELECTOR + abiCoder.encode(
-			["bytes32", "uint256"],
-			[keyHash, packedSettings],
-		).slice(2);
+		const updateCallData =
+			UPDATE_SELECTOR + abiCoder.encode(["bytes32", "uint256"], [keyHash, packedSettings]).slice(2);
 
 		return [
 			{ to: ZeroAddress, value: 0n, data: registerCallData },
@@ -866,14 +841,9 @@ export class Calibur7702Account extends SmartAccount
 	 * @param keyHash - The key hash to revoke
 	 * @returns A {@link SimpleMetaTransaction} that calls `revoke(bytes32)`
 	 */
-	public static createRevokeKeyMetaTransaction(
-		keyHash: string,
-	): SimpleMetaTransaction {
+	public static createRevokeKeyMetaTransaction(keyHash: string): SimpleMetaTransaction {
 		const abiCoder = AbiCoder.defaultAbiCoder();
-		const callData = REVOKE_SELECTOR + abiCoder.encode(
-			["bytes32"],
-			[keyHash],
-		).slice(2);
+		const callData = REVOKE_SELECTOR + abiCoder.encode(["bytes32"], [keyHash]).slice(2);
 
 		return { to: ZeroAddress, value: 0n, data: callData };
 	}
@@ -959,24 +929,22 @@ export class Calibur7702Account extends SmartAccount
 		if (signerAddress.toLowerCase() !== this.accountAddress.toLowerCase()) {
 			throw new AbstractionKitError(
 				"BAD_DATA",
-				"eoaPrivateKey does not match accountAddress (" +
-					this.accountAddress + ")",
+				`eoaPrivateKey does not match accountAddress (${this.accountAddress})`,
 			);
 		}
 
 		// Verify delegation state before revoking
 		const delegatedTo = await getDelegatedAddress(this.accountAddress, providerRpc);
 		if (delegatedTo === null) {
-			throw new AbstractionKitError(
-				"BAD_DATA",
-				"Account is not delegated — nothing to revoke",
-			);
+			throw new AbstractionKitError("BAD_DATA", "Account is not delegated — nothing to revoke");
 		}
 		if (delegatedTo.toLowerCase() !== this.delegateeAddress.toLowerCase()) {
 			throw new AbstractionKitError(
 				"BAD_DATA",
 				"Account is delegated to a different address (" +
-					delegatedTo + "), not " + this.delegateeAddress +
+					delegatedTo +
+					"), not " +
+					this.delegateeAddress +
 					" — use the correct account class to revoke",
 			);
 		}
@@ -992,20 +960,21 @@ export class Calibur7702Account extends SmartAccount
 
 		if (overrides.nonce == null) {
 			ops.push(
-				sendJsonRpcRequest(
-					providerRpc, "eth_getTransactionCount",
-					[this.accountAddress, "latest"]
-				).then((v) => { results.nonce = BigInt(v as string); })
+				sendJsonRpcRequest(providerRpc, "eth_getTransactionCount", [
+					this.accountAddress,
+					"latest",
+				]).then((v) => {
+					results.nonce = BigInt(v as string);
+				}),
 			);
 		}
 
 		if (overrides.maxFeePerGas == null || overrides.maxPriorityFeePerGas == null) {
 			ops.push(
-				handlefetchGasPrice(providerRpc, undefined)
-					.then(([fee, tip]) => {
-						results.maxFeePerGas = fee;
-						results.maxPriorityFeePerGas = tip;
-					})
+				handlefetchGasPrice(providerRpc, undefined).then(([fee, tip]) => {
+					results.maxFeePerGas = fee;
+					results.maxPriorityFeePerGas = tip;
+				}),
 			);
 		}
 
@@ -1013,16 +982,15 @@ export class Calibur7702Account extends SmartAccount
 
 		const txNonce = overrides.nonce ?? results.nonce ?? 0n;
 		const maxFeePerGas = overrides.maxFeePerGas ?? results.maxFeePerGas ?? 0n;
-		const maxPriorityFeePerGas = overrides.maxPriorityFeePerGas ?? results.maxPriorityFeePerGas ?? 0n;
+		const maxPriorityFeePerGas =
+			overrides.maxPriorityFeePerGas ?? results.maxPriorityFeePerGas ?? 0n;
 
 		// Authorization nonce = txNonce + 1 by default
 		// (tx nonce is incremented before authorization processing in EIP-7702)
-		const authNonce = overrides.authorizationNonce ?? (txNonce + 1n);
+		const authNonce = overrides.authorizationNonce ?? txNonce + 1n;
 
 		// Create undelegation authorization (delegates to address(0))
-		const authHex = createRevokeDelegationAuthorization(
-			chainId, authNonce, eoaPrivateKey
-		);
+		const authHex = createRevokeDelegationAuthorization(chainId, authNonce, eoaPrivateKey);
 
 		// Convert Authorization7702Hex -> Authorization7702 for raw tx builder
 		const auth = {
@@ -1070,16 +1038,14 @@ export class Calibur7702Account extends SmartAccount
 			throw new AbstractionKitError(
 				"BAD_DATA",
 				"createUpdateKeySettingsMetaTransaction does not allow setting " +
-				"isAdmin to true. Encode the calldata manually for admin keys.",
+					"isAdmin to true. Encode the calldata manually for admin keys.",
 			);
 		}
 
 		const abiCoder = AbiCoder.defaultAbiCoder();
 		const packedSettings = Calibur7702Account.packKeySettings(settings);
-		const callData = UPDATE_SELECTOR + abiCoder.encode(
-			["bytes32", "uint256"],
-			[keyHash, packedSettings],
-		).slice(2);
+		const callData =
+			UPDATE_SELECTOR + abiCoder.encode(["bytes32", "uint256"], [keyHash, packedSettings]).slice(2);
 
 		return { to: ZeroAddress, value: 0n, data: callData };
 	}
@@ -1090,14 +1056,9 @@ export class Calibur7702Account extends SmartAccount
 	 * @param newNonce - The new nonce value (all nonces below this are invalidated)
 	 * @returns A {@link SimpleMetaTransaction} that calls `invalidateNonce(uint256)`
 	 */
-	public static createInvalidateNonceMetaTransaction(
-		newNonce: bigint,
-	): SimpleMetaTransaction {
+	public static createInvalidateNonceMetaTransaction(newNonce: bigint): SimpleMetaTransaction {
 		const abiCoder = AbiCoder.defaultAbiCoder();
-		const callData = INVALIDATE_NONCE_SELECTOR + abiCoder.encode(
-			["uint256"],
-			[newNonce],
-		).slice(2);
+		const callData = INVALIDATE_NONCE_SELECTOR + abiCoder.encode(["uint256"], [newNonce]).slice(2);
 
 		return { to: ZeroAddress, value: 0n, data: callData };
 	}
@@ -1126,16 +1087,8 @@ export class Calibur7702Account extends SmartAccount
 	 * @param sequenceKey - Optional sequence key for parallel nonce channels (default: 0)
 	 * @returns The fully constructed nonce `(sequenceKey << 64) | seq`
 	 */
-	public async getNonce(
-		providerRpc: string,
-		sequenceKey = 0,
-	): Promise<bigint> {
-		return fetchAccountNonce(
-			providerRpc,
-			this.entrypointAddress,
-			this.accountAddress,
-			sequenceKey,
-		);
+	public async getNonce(providerRpc: string, sequenceKey = 0): Promise<bigint> {
+		return fetchAccountNonce(providerRpc, this.entrypointAddress, this.accountAddress, sequenceKey);
 	}
 
 	/**
@@ -1145,37 +1098,24 @@ export class Calibur7702Account extends SmartAccount
 	 * @param keyHash - The key hash to check
 	 * @returns True if the key is registered
 	 */
-	public async isKeyRegistered(
-		providerRpc: string,
-		keyHash: string,
-	): Promise<boolean> {
+	public async isKeyRegistered(providerRpc: string, keyHash: string): Promise<boolean> {
 		const abiCoder = AbiCoder.defaultAbiCoder();
-		const callData = IS_REGISTERED_SELECTOR + abiCoder.encode(
-			["bytes32"],
-			[keyHash],
-		).slice(2);
+		const callData = IS_REGISTERED_SELECTOR + abiCoder.encode(["bytes32"], [keyHash]).slice(2);
 
-		const result = await sendJsonRpcRequest(
-			providerRpc,
-			"eth_call",
-			[
-				{
-					from: ZeroAddress,
-					to: this.accountAddress,
-					data: callData,
-				},
-				"latest",
-			],
-		);
+		const result = await sendJsonRpcRequest(providerRpc, "eth_call", [
+			{
+				from: ZeroAddress,
+				to: this.accountAddress,
+				data: callData,
+			},
+			"latest",
+		]);
 
 		if (typeof result === "string") {
 			const decoded = abiCoder.decode(["bool"], result);
 			return decoded[0] as boolean;
 		}
-		throw new AbstractionKitError(
-			"BAD_DATA",
-			"Unexpected response from isRegistered call",
-		);
+		throw new AbstractionKitError("BAD_DATA", "Unexpected response from isRegistered call");
 	}
 
 	/**
@@ -1190,32 +1130,22 @@ export class Calibur7702Account extends SmartAccount
 		keyHash: string,
 	): Promise<CaliburKeySettingsResult> {
 		const abiCoder = AbiCoder.defaultAbiCoder();
-		const callData = GET_KEY_SETTINGS_SELECTOR + abiCoder.encode(
-			["bytes32"],
-			[keyHash],
-		).slice(2);
+		const callData = GET_KEY_SETTINGS_SELECTOR + abiCoder.encode(["bytes32"], [keyHash]).slice(2);
 
-		const result = await sendJsonRpcRequest(
-			providerRpc,
-			"eth_call",
-			[
-				{
-					from: ZeroAddress,
-					to: this.accountAddress,
-					data: callData,
-				},
-				"latest",
-			],
-		);
+		const result = await sendJsonRpcRequest(providerRpc, "eth_call", [
+			{
+				from: ZeroAddress,
+				to: this.accountAddress,
+				data: callData,
+			},
+			"latest",
+		]);
 
 		if (typeof result === "string") {
 			const decoded = abiCoder.decode(["uint256"], result);
 			return Calibur7702Account.unpackKeySettings(BigInt(decoded[0]));
 		}
-		throw new AbstractionKitError(
-			"BAD_DATA",
-			"Unexpected response from getKeySettings call",
-		);
+		throw new AbstractionKitError("BAD_DATA", "Unexpected response from getKeySettings call");
 	}
 
 	/**
@@ -1225,28 +1155,18 @@ export class Calibur7702Account extends SmartAccount
 	 * @param keyHash - The key hash to query
 	 * @returns Parsed {@link CaliburKey}
 	 */
-	public async getKey(
-		providerRpc: string,
-		keyHash: string,
-	): Promise<CaliburKey> {
+	public async getKey(providerRpc: string, keyHash: string): Promise<CaliburKey> {
 		const abiCoder = AbiCoder.defaultAbiCoder();
-		const callData = GET_KEY_SELECTOR + abiCoder.encode(
-			["bytes32"],
-			[keyHash],
-		).slice(2);
+		const callData = GET_KEY_SELECTOR + abiCoder.encode(["bytes32"], [keyHash]).slice(2);
 
-		const result = await sendJsonRpcRequest(
-			providerRpc,
-			"eth_call",
-			[
-				{
-					from: ZeroAddress,
-					to: this.accountAddress,
-					data: callData,
-				},
-				"latest",
-			],
-		);
+		const result = await sendJsonRpcRequest(providerRpc, "eth_call", [
+			{
+				from: ZeroAddress,
+				to: this.accountAddress,
+				data: callData,
+			},
+			"latest",
+		]);
 
 		if (typeof result === "string") {
 			const decoded = abiCoder.decode(["(uint8,bytes)"], result);
@@ -1256,10 +1176,7 @@ export class Calibur7702Account extends SmartAccount
 				publicKey: keyTuple[1] as string,
 			};
 		}
-		throw new AbstractionKitError(
-			"BAD_DATA",
-			"Unexpected response from getKey call",
-		);
+		throw new AbstractionKitError("BAD_DATA", "Unexpected response from getKey call");
 	}
 
 	/**
@@ -1279,33 +1196,24 @@ export class Calibur7702Account extends SmartAccount
 		const abiCoder = AbiCoder.defaultAbiCoder();
 		let blockTag: string;
 		if (overrides.blockNumber != null) {
-			blockTag = "0x" + overrides.blockNumber.toString(16);
+			blockTag = `0x${overrides.blockNumber.toString(16)}`;
 		} else {
-			const blockHex = await sendJsonRpcRequest(
-				providerRpc, "eth_blockNumber", [],
-			) as string;
+			const blockHex = (await sendJsonRpcRequest(providerRpc, "eth_blockNumber", [])) as string;
 			blockTag = blockHex;
 		}
 
 		// Get key count
-		const countResult = await sendJsonRpcRequest(
-			providerRpc,
-			"eth_call",
-			[
-				{
-					from: ZeroAddress,
-					to: this.accountAddress,
-					data: KEY_COUNT_SELECTOR,
-				},
-				blockTag,
-			],
-		);
+		const countResult = await sendJsonRpcRequest(providerRpc, "eth_call", [
+			{
+				from: ZeroAddress,
+				to: this.accountAddress,
+				data: KEY_COUNT_SELECTOR,
+			},
+			blockTag,
+		]);
 
 		if (typeof countResult !== "string") {
-			throw new AbstractionKitError(
-				"BAD_DATA",
-				"Unexpected response from keyCount call",
-			);
+			throw new AbstractionKitError("BAD_DATA", "Unexpected response from keyCount call");
 		}
 
 		// Non-delegated accounts return "0x" which can't be converted to BigInt.
@@ -1319,24 +1227,17 @@ export class Calibur7702Account extends SmartAccount
 		// Batch all keyAt calls in parallel
 		const keyAtPromises: Promise<unknown>[] = [];
 		for (let i = 0; i < count; i++) {
-			const keyAtCallData = KEY_AT_SELECTOR + abiCoder.encode(
-				["uint256"],
-				[i],
-			).slice(2);
+			const keyAtCallData = KEY_AT_SELECTOR + abiCoder.encode(["uint256"], [i]).slice(2);
 
 			keyAtPromises.push(
-				sendJsonRpcRequest(
-					providerRpc,
-					"eth_call",
-					[
-						{
-							from: ZeroAddress,
-							to: this.accountAddress,
-							data: keyAtCallData,
-						},
-						blockTag,
-					],
-				),
+				sendJsonRpcRequest(providerRpc, "eth_call", [
+					{
+						from: ZeroAddress,
+						to: this.accountAddress,
+						data: keyAtCallData,
+					},
+					blockTag,
+				]),
 			);
 		}
 
@@ -1419,8 +1320,9 @@ export class Calibur7702Account extends SmartAccount
 		if (!callData.startsWith(EXECUTE_USER_OP_SELECTOR)) {
 			throw new AbstractionKitError(
 				"BAD_DATA",
-				"Invalid calldata, should start with " + EXECUTE_USER_OP_SELECTOR +
-				" (executeUserOp selector)",
+				"Invalid calldata, should start with " +
+					EXECUTE_USER_OP_SELECTOR +
+					" (executeUserOp selector)",
 				{ context: { callData } },
 			);
 		}
@@ -1428,7 +1330,7 @@ export class Calibur7702Account extends SmartAccount
 		// Decode: strip selector -> decode BatchedCall struct
 		const batchedCallDecoded = abiCoder.decode(
 			["((address,uint256,bytes)[],bool)"],
-			"0x" + callData.slice(10),
+			`0x${callData.slice(10)}`,
 		);
 		const existingCalls = batchedCallDecoded[0][0] as [];
 		const revertOnFailure = batchedCallDecoded[0][1] as boolean;
@@ -1437,9 +1339,7 @@ export class Calibur7702Account extends SmartAccount
 			(call: [string, bigint, string]) => ({
 				to: call[0],
 				value: BigInt(call[1]),
-				data: typeof call[2] !== "string"
-					? new TextDecoder().decode(call[2])
-					: call[2],
+				data: typeof call[2] !== "string" ? new TextDecoder().decode(call[2]) : call[2],
 			}),
 		);
 
@@ -1451,7 +1351,7 @@ export class Calibur7702Account extends SmartAccount
 		});
 
 		// Re-encode as BatchedCall struct
-		const calls = decodedTransactions.map(tx => [tx.to, tx.value, tx.data]);
+		const calls = decodedTransactions.map((tx) => [tx.to, tx.value, tx.data]);
 		const batchedCallEncoded = abiCoder.encode(
 			["((address,uint256,bytes)[],bool)"],
 			[[calls, revertOnFailure]],

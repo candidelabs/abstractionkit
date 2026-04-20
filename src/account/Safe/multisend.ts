@@ -1,5 +1,5 @@
 import { AbiCoder, getBytes, solidityPacked } from "ethers";
-import { MetaTransaction, Operation } from "src/types";
+import { type MetaTransaction, Operation } from "src/types";
 
 /**
  * Encodes a Metatransaction to be executed by Safe contract
@@ -22,12 +22,8 @@ function encodeMultiSendTransaction(metaTransaction: MetaTransaction): string {
  * @param metaTransactions - metatransaction list to be encoded
  * @returns The encoded metatransaction
  */
-export function encodeMultiSendCallData(
-	metaTransactions: MetaTransaction[],
-): string {
-	return (
-		"0x" + metaTransactions.map((tx) => encodeMultiSendTransaction(tx)).join("")
-	);
+export function encodeMultiSendCallData(metaTransactions: MetaTransaction[]): string {
+	return `0x${metaTransactions.map((tx) => encodeMultiSendTransaction(tx)).join("")}`;
 }
 
 /**
@@ -38,6 +34,6 @@ export function encodeMultiSendCallData(
  */
 export function decodeMultiSendCallData(callData: string): string {
 	const abiCoder = AbiCoder.defaultAbiCoder();
-	const decodedCalldata = abiCoder.decode(["bytes"], "0x" + callData.slice(10));
+	const decodedCalldata = abiCoder.decode(["bytes"], `0x${callData.slice(10)}`);
 	return decodedCalldata[0] as string;
 }

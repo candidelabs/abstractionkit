@@ -1,4 +1,9 @@
-import { GasOption, ParallelPaymasterInitValues, PolygonChain, StateOverrideSet } from "src/types";
+import type {
+	GasOption,
+	ParallelPaymasterInitValues,
+	PolygonChain,
+	StateOverrideSet,
+} from "src/types";
 
 /**
  * Key types supported by the Calibur smart account.
@@ -145,4 +150,3 @@ export interface CaliburSignatureOverrides {
 	/** Key hash of a registered secondary key. If omitted, the root key hash is used. */
 	keyHash?: string;
 }
-

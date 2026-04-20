@@ -1,5 +1,5 @@
-import { Wallet, getAddress } from "ethers";
-import { Signer, TypedData } from "./types";
+import { getAddress, Wallet } from "ethers";
+import type { Signer, TypedData } from "./types";
 
 // Structural types for well-known signers. NO imports from viem / ethers
 // at the type level (beyond the already-present ethers runtime dep used by
@@ -109,14 +109,9 @@ export function fromPrivateKey(privateKey: string): Signer<unknown> {
 	const wallet = new Wallet(privateKey);
 	return {
 		address: getAddress(wallet.address) as `0x${string}`,
-		signHash: async (hash) =>
-			wallet.signingKey.sign(hash).serialized as `0x${string}`,
+		signHash: async (hash) => wallet.signingKey.sign(hash).serialized as `0x${string}`,
 		signTypedData: async (td) =>
-			(await wallet.signTypedData(
-				td.domain,
-				td.types,
-				td.message,
-			)) as `0x${string}`,
+			(await wallet.signTypedData(td.domain, td.types, td.message)) as `0x${string}`,
 	};
 }
 
@@ -188,8 +183,7 @@ export function fromEthersWallet(wallet: EthersWalletLike): Signer<unknown> {
 	// checksummed 0x-prefixed hex.
 	return {
 		address: wallet.address as `0x${string}`,
-		signHash: async (hash) =>
-			wallet.signingKey.sign(hash).serialized as `0x${string}`,
+		signHash: async (hash) => wallet.signingKey.sign(hash).serialized as `0x${string}`,
 		signTypedData: async (td) =>
 			(await wallet.signTypedData(td.domain, td.types, td.message)) as `0x${string}`,
 	};

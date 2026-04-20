@@ -1,4 +1,10 @@
-import type { GasOption, StateOverrideSet, PolygonChain, OnChainIdentifierParamsType, MetaTransaction, UserOperationV9, ParallelPaymasterInitValues } from "../../types";
+import type {
+	GasOption,
+	OnChainIdentifierParamsType,
+	PolygonChain,
+	StateOverrideSet,
+	UserOperationV9,
+} from "../../types";
 
 /**
  * Overrides for the "createBaseUserOperationAndFactoryAddressAndFactoryData" function
@@ -48,7 +54,7 @@ export interface CreateBaseUserOperationOverrides {
 	gasLevel?: GasOption;
 	polygonGasStation?: PolygonChain;
 
-    expectedSigners?: Signer[];
+	expectedSigners?: Signer[];
 	isMultiChainSignature?: boolean;
 
 	parallelPaymasterInitValues?: {
@@ -60,14 +66,13 @@ export interface CreateBaseUserOperationOverrides {
 		paymasterPostOpGasLimit: bigint;
 		/** set the paymaster data, only valid value is 0x22e325a297439656 */
 		paymasterData: string;
-	}
+	};
 }
 
 /**
  * Overrides for the "createUserOperation" function
  */
-export interface CreateUserOperationV6Overrides
-	extends CreateBaseUserOperationOverrides {
+export interface CreateUserOperationV6Overrides extends CreateBaseUserOperationOverrides {
 	/** set the initCode instead of using the calculated value */
 	initCode?: string;
 }
@@ -75,15 +80,14 @@ export interface CreateUserOperationV6Overrides
 /**
  * Overrides for the "createUserOperation" function
  */
-export interface CreateUserOperationV7Overrides
-	extends CreateBaseUserOperationOverrides {
+export interface CreateUserOperationV7Overrides extends CreateBaseUserOperationOverrides {
 	/** set the factory address instead of using the calculated value */
 	factory?: string;
 	/** set the factory data instead of using the calculated value */
 	factoryData?: string;
 }
 
-export interface CreateUserOperationV9Overrides extends CreateUserOperationV7Overrides{}
+export interface CreateUserOperationV9Overrides extends CreateUserOperationV7Overrides {}
 
 /** Safe singleton contract address and init hash for deterministic deployment. */
 export interface SafeAccountSingleton {
@@ -122,8 +126,8 @@ export interface InitCodeOverrides {
 	eip7212WebAuthnPrecompileVerifierForSharedSigner?: string;
 	eip7212WebAuthnContractVerifierForSharedSigner?: string;
 
-    onChainIdentifierParams?: OnChainIdentifierParamsType;
-    onChainIdentifier?: string;
+	onChainIdentifierParams?: OnChainIdentifierParamsType;
+	onChainIdentifier?: string;
 }
 
 export interface BaseInitOverrides {
@@ -241,8 +245,8 @@ export interface SafeUserOperationV7TypedMessageValue {
 }
 
 /** EIP-712 typed data values for a Safe UserOperation (EntryPoint v0.9). */
-export interface SafeUserOperationV9TypedMessageValue extends SafeUserOperationV7TypedMessageValue{
-}
+export interface SafeUserOperationV9TypedMessageValue
+	extends SafeUserOperationV7TypedMessageValue {}
 
 /** An Ethereum address string representing an ECDSA signer. */
 export type ECDSAPublicAddress = string;
@@ -280,7 +284,7 @@ export interface SignerSignaturePair {
 export const EOADummySignerSignaturePair: SignerSignaturePair = {
 	signer: "0xfD90FAd33ee8b58f32c00aceEad1358e4AFC23f9",
 	signature:
-        "0x47003599ffa7e9198f321afa774e34a12a959844efd6363b88896e9c24ed33cf4e1be876ef123a3c4467e7d451511434039539699f2baa2f44955fa3d1c1c6d81c",
+		"0x47003599ffa7e9198f321afa774e34a12a959844efd6363b88896e9c24ed33cf4e1be876ef123a3c4467e7d451511434039539699f2baa2f44955fa3d1c1c6d81c",
 	isContractSignature: false,
 };
 
@@ -294,10 +298,10 @@ export const WebauthnDummySignerSignaturePair: SignerSignaturePair = {
 
 /** A UserOperation with chain context ready for signing. */
 export interface UserOperationToSign {
-    chainId: bigint,
-    userOperation: UserOperationV9,
-    validAfter?: bigint;
-    validUntil?: bigint;
+	chainId: bigint;
+	userOperation: UserOperationV9;
+	validAfter?: bigint;
+	validUntil?: bigint;
 }
 
 /** Extends UserOperationToSign with per-operation WebAuthn/module overrides. */

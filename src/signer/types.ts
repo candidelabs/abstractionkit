@@ -1,4 +1,4 @@
-import { BaseUserOperation } from "../types";
+import type { BaseUserOperation } from "../types";
 
 /**
  * Narrow EIP-712 typed data payload. All hex fields are typed as

@@ -1,4 +1,4 @@
-import { Authorization7702Hex } from "./utils7702";
+import type { Authorization7702Hex } from "./utils7702";
 
 /**
  * Base fields shared by all UserOperation versions.
@@ -70,22 +70,16 @@ export interface UserOperationV8 extends BaseUserOperation {
 	/** Paymaster-specific data (null if no paymaster) */
 	paymasterData: string | null;
 	/** EIP-7702 delegation authorization (null if not using 7702) */
-    eip7702Auth: Authorization7702Hex | null;
+	eip7702Auth: Authorization7702Hex | null;
 }
 
 /**
  * UserOperation for EntryPoint v0.9. Same structure as v0.8.
  */
-export interface UserOperationV9 extends UserOperationV8 {
-}
+export interface UserOperationV9 extends UserOperationV8 {}
 
 /** Union type for values that can be ABI-encoded as function parameters. */
-export type AbiInputValue =
-	| string
-	| bigint
-	| number
-	| boolean
-	| AbiInputValue[];
+export type AbiInputValue = string | bigint | number | boolean | AbiInputValue[];
 
 /** Union type for JSON-RPC request parameters. */
 export type JsonRpcParam = string | bigint | boolean | object | JsonRpcParam[];
@@ -99,7 +93,7 @@ export type JsonRpcResponse = {
 	/** The result payload on success */
 	result?: JsonRpcResult;
 	/** Tenderly simulation results */
-    simulation_results?: JsonRpcResult;
+	simulation_results?: JsonRpcResult;
 	/** The error payload on failure */
 	error?: JsonRpcError;
 };
@@ -108,11 +102,11 @@ export type ChainIdResult = string;
 export type SupportedEntryPointsResult = string[];
 
 export type SingleTransactionTenderlySimulationResult = {
-    transaction: Record<string, unknown>;
-    simulation: { id: string } & Record<string, unknown>;
-}
+	transaction: Record<string, unknown>;
+	simulation: { id: string } & Record<string, unknown>;
+};
 
-export type TenderlySimulationResult = SingleTransactionTenderlySimulationResult[]
+export type TenderlySimulationResult = SingleTransactionTenderlySimulationResult[];
 
 export type JsonRpcResult =
 	| ChainIdResult
@@ -124,7 +118,7 @@ export type JsonRpcResult =
 	| SupportedERC20TokensAndMetadata
 	| PmUserOperationV7Result
 	| PmUserOperationV6Result
-    | TenderlySimulationResult;
+	| TenderlySimulationResult;
 
 /** JSON-RPC error object returned when a request fails. */
 export type JsonRpcError = {
@@ -368,11 +362,14 @@ export interface SupportedERC20TokensAndMetadataWithExchangeRate {
 }
 
 /** @deprecated Use SupportedERC20TokensAndMetadataWithExchangeRate instead */
-export type SupportedERC20TokensAndMetadataV7WithExchangeRate = SupportedERC20TokensAndMetadataWithExchangeRate;
+export type SupportedERC20TokensAndMetadataV7WithExchangeRate =
+	SupportedERC20TokensAndMetadataWithExchangeRate;
 /** @deprecated Use SupportedERC20TokensAndMetadataWithExchangeRate instead */
-export type SupportedERC20TokensAndMetadataV8WithExchangeRate = SupportedERC20TokensAndMetadataWithExchangeRate;
+export type SupportedERC20TokensAndMetadataV8WithExchangeRate =
+	SupportedERC20TokensAndMetadataWithExchangeRate;
 /** @deprecated Use SupportedERC20TokensAndMetadataWithExchangeRate instead */
-export type SupportedERC20TokensAndMetadataV6WithExchangeRate = SupportedERC20TokensAndMetadataWithExchangeRate;
+export type SupportedERC20TokensAndMetadataV6WithExchangeRate =
+	SupportedERC20TokensAndMetadataWithExchangeRate;
 
 /**
  * Wrapper for a dictionary type
@@ -416,36 +413,36 @@ export enum GasOption {
 	Fast = 1.5,
 }
 export enum PolygonChain {
-	Mainnet = 'v2',
-    ZkMainnet = 'zkevm',
-	Amoy = 'amoy',
-	Cardona = 'cardona',
+	Mainnet = "v2",
+	ZkMainnet = "zkevm",
+	Amoy = "amoy",
+	Cardona = "cardona",
 }
 
 export type GasPrice = {
-    maxPriorityFee:number; //in Gwei
-    maxFee:number; //in Gwei
-}
+	maxPriorityFee: number; //in Gwei
+	maxFee: number; //in Gwei
+};
 
 export type PolygonGasStationJsonRpcResponse = {
-    safeLow: GasPrice;
-    standard: GasPrice;
-    fast: GasPrice;
-    estimatedBaseFee:string;
-    blockTime:number;
-    blockNumber:number;
+	safeLow: GasPrice;
+	standard: GasPrice;
+	fast: GasPrice;
+	estimatedBaseFee: string;
+	blockTime: number;
+	blockNumber: number;
 };
 
 export type OnChainIdentifierParamsType = {
-  /** Project name */
-  project: string
-  /** "Web" or "Mobile" or "Safe App" or "Widget", defaults to "Web". */
-  platform?:  "Web" | "Mobile" | "Safe App" | "Widget",
-  /** tool used, defaults to "abstractionkit" */
-  tool?: string
-  /** tool version, defaults to current abstractionkit version */
-  toolVersion?: string
-}
+	/** Project name */
+	project: string;
+	/** "Web" or "Mobile" or "Safe App" or "Widget", defaults to "Web". */
+	platform?: "Web" | "Mobile" | "Safe App" | "Widget";
+	/** tool used, defaults to "abstractionkit" */
+	tool?: string;
+	/** tool version, defaults to current abstractionkit version */
+	toolVersion?: string;
+};
 
 export interface ParallelPaymasterInitValues {
 	paymaster: string;

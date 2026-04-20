@@ -1,17 +1,21 @@
-import { OnChainIdentifierParamsType, MetaTransaction, UserOperationV7 } from "src/types";
+import { Safe_L2_V1_5_0 } from "src/constants";
+import type {
+	MetaTransaction,
+	OnChainIdentifierParamsType,
+	StateOverrideSet,
+	UserOperationV7,
+} from "src/types";
 import { SafeAccount } from "./SafeAccount";
 import { SafeAccountV0_3_0 } from "./SafeAccountV0_3_0";
-import {
-	Signer,
+import type {
+	CreateUserOperationV7Overrides,
 	InitCodeOverrides,
 	SafeAccountSingleton,
-	CreateUserOperationV7Overrides,
+	Signer,
 	SignerSignaturePair,
 	WebAuthnSignatureOverrides,
 	WebauthnPublicKey,
 } from "./types";
-import { Safe_L2_V1_5_0 } from "src/constants";
-import { StateOverrideSet } from "src/types";
 
 /**
  * Safe v1.5.0 smart account implementation with module v0.3.0 for EntryPoint v0.7.
@@ -26,7 +30,7 @@ import { StateOverrideSet } from "src/types";
  */
 export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 	static readonly DEFAULT_WEB_AUTHN_PRECOMPILE: string =
-		"0x0000000000000000000000000000000000000100";  // EIP-7951
+		"0x0000000000000000000000000000000000000100"; // EIP-7951
 	static readonly DEFAULT_WEB_AUTHN_DAIMO_VERIFIER: string =
 		"0xc2b78104907F722DABAc4C69f826a522B2754De4";
 
@@ -42,21 +46,18 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 		overrides: {
 			safe4337ModuleAddress?: string;
 			entrypointAddress?: string;
-            onChainIdentifierParams?: OnChainIdentifierParamsType;
-            onChainIdentifier?: string;
+			onChainIdentifierParams?: OnChainIdentifierParamsType;
+			onChainIdentifier?: string;
 			safeAccountSingleton?: SafeAccountSingleton;
 		} = {},
 	) {
-        super(
-            accountAddress,
-            {
-                safe4337ModuleAddress: overrides.safe4337ModuleAddress,
-                entrypointAddress: overrides.entrypointAddress,
-                onChainIdentifierParams: overrides.onChainIdentifierParams,
-                onChainIdentifier: overrides.onChainIdentifier,
-                safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0
-            }
-        );
+		super(accountAddress, {
+			safe4337ModuleAddress: overrides.safe4337ModuleAddress,
+			entrypointAddress: overrides.entrypointAddress,
+			onChainIdentifierParams: overrides.onChainIdentifierParams,
+			onChainIdentifier: overrides.onChainIdentifier,
+			safeAccountSingleton: overrides.safeAccountSingleton ?? Safe_L2_V1_5_0,
+		});
 	}
 
 	/**
@@ -75,14 +76,12 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 			singletonInitHash?: string;
 		} = {},
 	): string {
-        const modOverrides = { ...overrides,
-            singletonInitHash: overrides.singletonInitHash??Safe_L2_V1_5_0.singletonInitHash,
-        };
-        return SafeAccountV0_3_0.createProxyAddress(
-            initializerCallData,
-            modOverrides
-        );
-    }
+		const modOverrides = {
+			...overrides,
+			singletonInitHash: overrides.singletonInitHash ?? Safe_L2_V1_5_0.singletonInitHash,
+		};
+		return SafeAccountV0_3_0.createProxyAddress(initializerCallData, modOverrides);
+	}
 
 	/**
 	 * Create and initialize a new SafeAccountV1_5_0_M_0_3_0 from its initial owners.
@@ -100,16 +99,18 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): SafeAccountV1_5_0_M_0_3_0 {
-        const modOverrides = { ...overrides,
-            safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
-			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifierForSharedSigner: overrides.eip7212WebAuthnContractVerifierForSharedSigner??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
-        };
-        return SafeAccountV0_3_0.initializeNewAccount(
-            owners,
-            modOverrides
-        );
-    }
+		const modOverrides = {
+			...overrides,
+			safeAccountSingleton: overrides.safeAccountSingleton ?? Safe_L2_V1_5_0,
+			eip7212WebAuthnPrecompileVerifierForSharedSigner:
+				overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifierForSharedSigner:
+				overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+		};
+		return SafeAccountV0_3_0.initializeNewAccount(owners, modOverrides);
+	}
 
 	/**
 	 * Calculate the counterfactual account address from the initial owner signers.
@@ -119,20 +120,19 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 	 * @param overrides - Override default initialization values
 	 * @returns The deterministic account address
 	 */
-	public static createAccountAddress(
-		owners: Signer[],
-		overrides: InitCodeOverrides = {},
-	): string {
-        const modOverrides = { ...overrides,
-            safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
-			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifierForSharedSigner: overrides.eip7212WebAuthnContractVerifierForSharedSigner??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
-        };
-        return SafeAccountV0_3_0.createAccountAddress(
-            owners,
-            modOverrides
-        );
-    }
+	public static createAccountAddress(owners: Signer[], overrides: InitCodeOverrides = {}): string {
+		const modOverrides = {
+			...overrides,
+			safeAccountSingleton: overrides.safeAccountSingleton ?? Safe_L2_V1_5_0,
+			eip7212WebAuthnPrecompileVerifierForSharedSigner:
+				overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifierForSharedSigner:
+				overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+		};
+		return SafeAccountV0_3_0.createAccountAddress(owners, modOverrides);
+	}
 
 	/**
 	 * Create the factory address and encoded factory data for deploying a new Safe account.
@@ -146,16 +146,18 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): [string, string] {
-     const modOverrides = { ...overrides,
-            safeAccountSingleton: overrides.safeAccountSingleton??Safe_L2_V1_5_0,
-			eip7212WebAuthnPrecompileVerifierForSharedSigner: overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifierForSharedSigner: overrides.eip7212WebAuthnContractVerifierForSharedSigner??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
-        };
-        return SafeAccountV0_3_0.createFactoryAddressAndData(
-            owners,
-            modOverrides
-        );
-    }
+		const modOverrides = {
+			...overrides,
+			safeAccountSingleton: overrides.safeAccountSingleton ?? Safe_L2_V1_5_0,
+			eip7212WebAuthnPrecompileVerifierForSharedSigner:
+				overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifierForSharedSigner:
+				overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+		};
+		return SafeAccountV0_3_0.createFactoryAddressAndData(owners, modOverrides);
+	}
 
 	public async createUserOperation(
 		transactions: MetaTransaction[],
@@ -165,8 +167,12 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 	): Promise<UserOperationV7> {
 		return super.createUserOperation(transactions, providerRpc, bundlerRpc, {
 			...overrides,
-			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+			eip7212WebAuthnPrecompileVerifier:
+				overrides.eip7212WebAuthnPrecompileVerifier ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifier:
+				overrides.eip7212WebAuthnContractVerifier ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
 		});
 	}
 
@@ -187,8 +193,12 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 	): Promise<[bigint, bigint, bigint]> {
 		return super.estimateUserOperationGas(userOperation, bundlerRpc, {
 			...overrides,
-			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+			eip7212WebAuthnPrecompileVerifier:
+				overrides.eip7212WebAuthnPrecompileVerifier ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifier:
+				overrides.eip7212WebAuthnContractVerifier ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
 		});
 	}
 
@@ -205,8 +215,12 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 	): string {
 		return SafeAccount.createWebAuthnSignerVerifierAddress(x, y, {
 			...overrides,
-			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+			eip7212WebAuthnPrecompileVerifier:
+				overrides.eip7212WebAuthnPrecompileVerifier ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifier:
+				overrides.eip7212WebAuthnContractVerifier ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
 		});
 	}
 
@@ -221,8 +235,12 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 	): MetaTransaction {
 		return SafeAccount.createDeployWebAuthnVerifierMetaTransaction(x, y, {
 			...overrides,
-			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+			eip7212WebAuthnPrecompileVerifier:
+				overrides.eip7212WebAuthnPrecompileVerifier ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifier:
+				overrides.eip7212WebAuthnContractVerifier ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
 		});
 	}
 
@@ -232,8 +250,12 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 	): SignerSignaturePair[] {
 		return SafeAccount.createDummySignerSignaturePairForExpectedSigners(expectedSigners, {
 			...webAuthnSignatureOverrides,
-			eip7212WebAuthnPrecompileVerifier: webAuthnSignatureOverrides.eip7212WebAuthnPrecompileVerifier??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifier: webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+			eip7212WebAuthnPrecompileVerifier:
+				webAuthnSignatureOverrides.eip7212WebAuthnPrecompileVerifier ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifier:
+				webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier ??
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
 		});
 	}
 
@@ -248,10 +270,20 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 			webAuthnSignerSingleton?: string;
 		} = {},
 	): Promise<boolean> {
-		return SafeAccount.verifyWebAuthnSignatureForMessageHash(nodeRpcUrl, signer, messageHash, signature, {
-			...overrides,
-			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier??SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
-		});
+		return SafeAccount.verifyWebAuthnSignatureForMessageHash(
+			nodeRpcUrl,
+			signer,
+			messageHash,
+			signature,
+			{
+				...overrides,
+				eip7212WebAuthnPrecompileVerifier:
+					overrides.eip7212WebAuthnPrecompileVerifier ??
+					SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
+				eip7212WebAuthnContractVerifier:
+					overrides.eip7212WebAuthnContractVerifier ??
+					SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+			},
+		);
 	}
 }

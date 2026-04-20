@@ -1,6 +1,6 @@
-import { SafeModule } from "./SafeModule";
+import type { MetaTransaction } from "../../../types";
 import { createCallData, sendEthCallRequest } from "../../../utils";
-import { MetaTransaction } from "../../../types";
+import { SafeModule } from "./SafeModule";
 
 /**
  * Pre-deployed Social Recovery Module addresses, each with a different
@@ -23,211 +23,200 @@ export enum SocialRecoveryModuleGracePeriodSelector {
  * Guardians must reach a configurable approval threshold before recovery
  * can be executed, and a grace period must elapse before finalization.
  */
-export class SocialRecoveryModule extends SafeModule{
-    static readonly DEFAULT_SOCIAL_RECOVERY_ADDRESS =
-        SocialRecoveryModuleGracePeriodSelector.After3Days;
+export class SocialRecoveryModule extends SafeModule {
+	static readonly DEFAULT_SOCIAL_RECOVERY_ADDRESS =
+		SocialRecoveryModuleGracePeriodSelector.After3Days;
 
-    /**
-     * @param moduleAddress - Deployed address of the Social Recovery Module.
-     *   Defaults to the 3-day grace period deployment.
-     */
-    constructor(
-		moduleAddress: string = SocialRecoveryModule.DEFAULT_SOCIAL_RECOVERY_ADDRESS,
-	) {
+	/**
+	 * @param moduleAddress - Deployed address of the Social Recovery Module.
+	 *   Defaults to the 3-day grace period deployment.
+	 */
+	constructor(moduleAddress: string = SocialRecoveryModule.DEFAULT_SOCIAL_RECOVERY_ADDRESS) {
 		super(moduleAddress);
 	}
 
-    /**
+	/**
 	 * create MetaTransaction that lets single guardian confirm the execution of the recovery request.
-     * Can also trigger the start of the execution by passing true to 'execute' parameter.
-     * Once triggered the recovery is pending for the recovery period before it can be finalised.
-     * @param accountAddress - The target account.
-     * @param newOwners - The new owners' addressess.
-     * @param newThreshold - The new threshold for the safe.
-     * @param execute - Whether to auto-start execution of recovery.
+	 * Can also trigger the start of the execution by passing true to 'execute' parameter.
+	 * Once triggered the recovery is pending for the recovery period before it can be finalised.
+	 * @param accountAddress - The target account.
+	 * @param newOwners - The new owners' addressess.
+	 * @param newThreshold - The new threshold for the safe.
+	 * @param execute - Whether to auto-start execution of recovery.
 	 * @returns a MetaTransaction
 	 */
-    public createConfirmRecoveryMetaTransaction(
-        accountAddress: string,
-        newOwners: string[],
-        newThreshold: number,
-        execute: boolean
-    ):MetaTransaction{
-        //"confirmRecovery(address,address[],uint256,bool)"
-        const functionSelector = "0x064e2d0e";
-        const callData = createCallData(
-            functionSelector,
-            ["address", "address[]", "uint256", "bool"],
-            [accountAddress, newOwners, newThreshold, execute],
-        );
-        return {
-            to:this.moduleAddress,
-            data: callData,
-            value: 0n
-        }
-    }
-    
-    /**
-     * create MetaTransaction that lets multiple guardians confirm the execution of the recovery request.
-     * Can also trigger the start of the execution by passing true to 'execute' parameter.
-     * Once triggered the recovery is pending for the recovery period before it can be finalised.
-     * @param accountAddress - The target account.
-     * @param newOwners - The new owners' addressess.
-     * @param newThreshold - The new threshold for the safe.
-     * @param signatureData - The guardians signers and signatures pair list.
-     * @param execute - true to auto-start execution of recovery or false for not.
-	 * @returns a MetaTransaction
-     */
-    public createMultiConfirmRecoveryMetaTransaction(
-        accountAddress: string,
-        newOwners: string[],
-        newThreshold: number,
-        signaturePairList: RecoverySignaturePair[],
-        execute: boolean
-    ):MetaTransaction{
-        //"multiConfirmRecovery(address,address[],uint256,SignatureData[],bool)"
-        const functionSelector = "0x0728e1e7";
-        const callData = createCallData(
-            functionSelector,
-            ["address", "address[]", "uint256", "(address,bytes)", "bool"],
-            [
-                accountAddress,
-                newOwners,
-                newThreshold,
-                signaturePairList.map(
-                    signaturePair=> [signaturePair.signer, signaturePair.signature]),
-                execute
-            ],
-        );
-        return {
-            to:this.moduleAddress,
-            data: callData,
-            value: 0n
-        }
-    }
+	public createConfirmRecoveryMetaTransaction(
+		accountAddress: string,
+		newOwners: string[],
+		newThreshold: number,
+		execute: boolean,
+	): MetaTransaction {
+		//"confirmRecovery(address,address[],uint256,bool)"
+		const functionSelector = "0x064e2d0e";
+		const callData = createCallData(
+			functionSelector,
+			["address", "address[]", "uint256", "bool"],
+			[accountAddress, newOwners, newThreshold, execute],
+		);
+		return {
+			to: this.moduleAddress,
+			data: callData,
+			value: 0n,
+		};
+	}
 
-    /**
-     * @notice create MetaTransaction that lets the guardians start the execution of the recovery request.
-     * Once triggered the recovery is pending for the recovery period before it can be finalised.
-     * @param accountAddress - The target account.
-     * @param newOwners - The new owners' addressess.
-     * @param newThreshold - The new threshold for the safe.
+	/**
+	 * create MetaTransaction that lets multiple guardians confirm the execution of the recovery request.
+	 * Can also trigger the start of the execution by passing true to 'execute' parameter.
+	 * Once triggered the recovery is pending for the recovery period before it can be finalised.
+	 * @param accountAddress - The target account.
+	 * @param newOwners - The new owners' addressess.
+	 * @param newThreshold - The new threshold for the safe.
+	 * @param signatureData - The guardians signers and signatures pair list.
+	 * @param execute - true to auto-start execution of recovery or false for not.
 	 * @returns a MetaTransaction
-     */
-    public createExecuteRecoveryMetaTransaction(
-        accountAddress: string,
-        newOwners: string[],
-        newThreshold: number,
-    ):MetaTransaction{
-        //"executeRecovery(address,address[],uint256)"
-        const functionSelector = "0xb1f85f69";
-        const callData = createCallData(
-            functionSelector,
-            ["address", "address[]", "uint256"],
-            [accountAddress, newOwners, newThreshold],
-        );
-        return {
-            to:this.moduleAddress,
-            data: callData,
-            value: 0n
-        }
-    }
+	 */
+	public createMultiConfirmRecoveryMetaTransaction(
+		accountAddress: string,
+		newOwners: string[],
+		newThreshold: number,
+		signaturePairList: RecoverySignaturePair[],
+		execute: boolean,
+	): MetaTransaction {
+		//"multiConfirmRecovery(address,address[],uint256,SignatureData[],bool)"
+		const functionSelector = "0x0728e1e7";
+		const callData = createCallData(
+			functionSelector,
+			["address", "address[]", "uint256", "(address,bytes)", "bool"],
+			[
+				accountAddress,
+				newOwners,
+				newThreshold,
+				signaturePairList.map((signaturePair) => [signaturePair.signer, signaturePair.signature]),
+				execute,
+			],
+		);
+		return {
+			to: this.moduleAddress,
+			data: callData,
+			value: 0n,
+		};
+	}
 
-    /**
-     * create a MetaTransaction that finalizes an ongoing recovery request if the recovery period is over.
-     * The method is public and callable by anyone to enable orchestration.
-     * @param accountAddress - The target account.
+	/**
+	 * @notice create MetaTransaction that lets the guardians start the execution of the recovery request.
+	 * Once triggered the recovery is pending for the recovery period before it can be finalised.
+	 * @param accountAddress - The target account.
+	 * @param newOwners - The new owners' addressess.
+	 * @param newThreshold - The new threshold for the safe.
 	 * @returns a MetaTransaction
-     */
-    public createFinalizeRecoveryMetaTransaction(
-        accountAddress: string,
-    ):MetaTransaction{
-        //"finalizeRecovery(address)"
-        const functionSelector = "0x315a7af3";
-        const callData = createCallData(
-            functionSelector,
-            ["address"],
-            [accountAddress],
-        );
-        return {
-            to:this.moduleAddress,
-            data: callData,
-            value: 0n
-        }
-    }
+	 */
+	public createExecuteRecoveryMetaTransaction(
+		accountAddress: string,
+		newOwners: string[],
+		newThreshold: number,
+	): MetaTransaction {
+		//"executeRecovery(address,address[],uint256)"
+		const functionSelector = "0xb1f85f69";
+		const callData = createCallData(
+			functionSelector,
+			["address", "address[]", "uint256"],
+			[accountAddress, newOwners, newThreshold],
+		);
+		return {
+			to: this.moduleAddress,
+			data: callData,
+			value: 0n,
+		};
+	}
 
-    /**
-     * create a MetaTransction that lets the account cancel an ongoing recovery request.
+	/**
+	 * create a MetaTransaction that finalizes an ongoing recovery request if the recovery period is over.
+	 * The method is public and callable by anyone to enable orchestration.
+	 * @param accountAddress - The target account.
 	 * @returns a MetaTransaction
-     */
-    public createCancelRecoveryMetaTransaction():MetaTransaction{
-        //"cancelRecovery()";
-        const functionSelector = "0x0ba234d6";
-        const callData = functionSelector;
+	 */
+	public createFinalizeRecoveryMetaTransaction(accountAddress: string): MetaTransaction {
+		//"finalizeRecovery(address)"
+		const functionSelector = "0x315a7af3";
+		const callData = createCallData(functionSelector, ["address"], [accountAddress]);
+		return {
+			to: this.moduleAddress,
+			data: callData,
+			value: 0n,
+		};
+	}
 
-        return {
-            to:this.moduleAddress,
-            data: callData,
-            value: 0n
-        }
-    }
-
-    /**
-     * create a MetaTransaction that lets the owner add a guardian for its account.
-     * @param guardianAddress - The guardian to add.
-     * @param threshold - The new threshold that will be set after addition.
+	/**
+	 * create a MetaTransction that lets the account cancel an ongoing recovery request.
 	 * @returns a MetaTransaction
-     */
-    public createAddGuardianWithThresholdMetaTransaction(
-        guardianAddress: string,
-        threshold: bigint,
-    ):MetaTransaction{
-        //"addGuardianWithThreshold(address,uint256)"
-        const functionSelector = "0xbe0e54d7";
-        const callData = createCallData(
-            functionSelector,
-            ["address", "uint256"],
-            [guardianAddress, threshold],
-        );
-        return {
-            to:this.moduleAddress,
-            data: callData,
-            value: 0n
-        }
-    }
-    
-    /**
-     * create MetaTransaction that lets the owner revoke a guardian from its account.
-     * @param nodeRpcUrl - The JSON-RPC API url for the target chain
-     * (to get the prevGuardian paramter).
-     * @param accountAddress - The target account.
-     * @param guardianAddress - The guardian to revoke.
-     * @param threshold - The new threshold that will be set after execution of revokation.
-     * @param prevGuardian - (if not provided, will be detected using the nodeRpcUrl)
-     * The previous guardian linking to the guardian in the linked list.
+	 */
+	public createCancelRecoveryMetaTransaction(): MetaTransaction {
+		//"cancelRecovery()";
+		const functionSelector = "0x0ba234d6";
+		const callData = functionSelector;
+
+		return {
+			to: this.moduleAddress,
+			data: callData,
+			value: 0n,
+		};
+	}
+
+	/**
+	 * create a MetaTransaction that lets the owner add a guardian for its account.
+	 * @param guardianAddress - The guardian to add.
+	 * @param threshold - The new threshold that will be set after addition.
+	 * @returns a MetaTransaction
+	 */
+	public createAddGuardianWithThresholdMetaTransaction(
+		guardianAddress: string,
+		threshold: bigint,
+	): MetaTransaction {
+		//"addGuardianWithThreshold(address,uint256)"
+		const functionSelector = "0xbe0e54d7";
+		const callData = createCallData(
+			functionSelector,
+			["address", "uint256"],
+			[guardianAddress, threshold],
+		);
+		return {
+			to: this.moduleAddress,
+			data: callData,
+			value: 0n,
+		};
+	}
+
+	/**
+	 * create MetaTransaction that lets the owner revoke a guardian from its account.
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * (to get the prevGuardian paramter).
+	 * @param accountAddress - The target account.
+	 * @param guardianAddress - The guardian to revoke.
+	 * @param threshold - The new threshold that will be set after execution of revokation.
+	 * @param prevGuardian - (if not provided, will be detected using the nodeRpcUrl)
+	 * The previous guardian linking to the guardian in the linked list.
 	 * @returns promise of a MetaTransaction
-     */
-    public async createRevokeGuardianWithThresholdMetaTransaction(
-        nodeRpcUrl: string,
-        accountAddress: string,
-        guardianAddress: string,
-        threshold: bigint,
+	 */
+	public async createRevokeGuardianWithThresholdMetaTransaction(
+		nodeRpcUrl: string,
+		accountAddress: string,
+		guardianAddress: string,
+		threshold: bigint,
 		overrides: {
-            prevGuardianAddress?: string,
+			prevGuardianAddress?: string;
 		} = {},
-    ):Promise<MetaTransaction>{
-        let prevGuardianAddressT = overrides.prevGuardianAddress;
+	): Promise<MetaTransaction> {
+		let prevGuardianAddressT = overrides.prevGuardianAddress;
 		if (prevGuardianAddressT == null) {
 			const guardians = await this.getGuardians(nodeRpcUrl, accountAddress);
 			const guardianToDeleteIndex = guardians.indexOf(guardianAddress);
-			if (guardianToDeleteIndex == -1) {
+			if (guardianToDeleteIndex === -1) {
 				throw new RangeError(
-                    guardianAddress + 
-                    " is not a current guardian for account : " +
-                    accountAddress
-                );
-			} else if (guardianToDeleteIndex == 0) {
-                //SENTINEL_ADDRESS
+					`${guardianAddress} is not a current guardian for account : ${accountAddress}`,
+				);
+			} else if (guardianToDeleteIndex === 0) {
+				//SENTINEL_ADDRESS
 				prevGuardianAddressT = "0x0000000000000000000000000000000000000001";
 			} else if (guardianToDeleteIndex > 0) {
 				prevGuardianAddressT = guardians[guardianToDeleteIndex - 1];
@@ -237,373 +226,320 @@ export class SocialRecoveryModule extends SafeModule{
 		}
 		return this.createStandardRevokeGuardianWithThresholdMetaTransaction(
 			prevGuardianAddressT,
-            guardianAddress,
+			guardianAddress,
 			threshold,
 		);
-    }
+	}
 
-    /**
-     * create MetaTransaction that lets the owner revoke a guardian from its account.
-     * @param prevGuardian - The previous guardian linking to the guardian in the linked list.
-     * @param guardian - The guardian to revoke.
-     * @param threshold - The new threshold that will be set after execution of revokation.
+	/**
+	 * create MetaTransaction that lets the owner revoke a guardian from its account.
+	 * @param prevGuardian - The previous guardian linking to the guardian in the linked list.
+	 * @param guardian - The guardian to revoke.
+	 * @param threshold - The new threshold that will be set after execution of revokation.
 	 * @returns a MetaTransaction
-     */
-    public createStandardRevokeGuardianWithThresholdMetaTransaction(
-        prevGuardianAddress: string,
-        guardianAddress: string,
-        threshold: bigint,
-    ):MetaTransaction{
-        //"revokeGuardianWithThreshold(address,address,uint256)"
-        const functionSelector = "0x936f7d86";
-        const callData = createCallData(
-            functionSelector,
-            ["address", "address", "uint256"],
-            [prevGuardianAddress, guardianAddress, threshold],
-        );
-        return {
-            to:this.moduleAddress,
-            data: callData,
-            value: 0n
-        }
-    }
+	 */
+	public createStandardRevokeGuardianWithThresholdMetaTransaction(
+		prevGuardianAddress: string,
+		guardianAddress: string,
+		threshold: bigint,
+	): MetaTransaction {
+		//"revokeGuardianWithThreshold(address,address,uint256)"
+		const functionSelector = "0x936f7d86";
+		const callData = createCallData(
+			functionSelector,
+			["address", "address", "uint256"],
+			[prevGuardianAddress, guardianAddress, threshold],
+		);
+		return {
+			to: this.moduleAddress,
+			data: callData,
+			value: 0n,
+		};
+	}
 
-    /**
-     * create MetaTransaction that lets the owner change the guardian threshold required to initiate a recovery.
-     * @param threshold - The new threshold that will be set after execution of revokation.
+	/**
+	 * create MetaTransaction that lets the owner change the guardian threshold required to initiate a recovery.
+	 * @param threshold - The new threshold that will be set after execution of revokation.
 	 * @returns a MetaTransaction
-     */
-    public createChangeThresholdMetaTransaction(
-        threshold: bigint,
-    ):MetaTransaction{
-        //"changeThreshold(address,uint256)"
-        const functionSelector = "0x694e80c3";
-        const callData = createCallData(
-            functionSelector,
-            ["uint256"],
-            [threshold],
-        );
-        return {
-            to:this.moduleAddress,
-            data: callData,
-            value: 0n
-        }
-    }
+	 */
+	public createChangeThresholdMetaTransaction(threshold: bigint): MetaTransaction {
+		//"changeThreshold(address,uint256)"
+		const functionSelector = "0x694e80c3";
+		const callData = createCallData(functionSelector, ["uint256"], [threshold]);
+		return {
+			to: this.moduleAddress,
+			data: callData,
+			value: 0n,
+		};
+	}
 
-    /**
-     * Generates the recovery hash that should be signed by the guardian to authorize a recovery
-     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
-     * @param accountAddress - The target account.
-     * @param newOwners - The new owners' addressess.
-     * @param newThreshold - The new threshold for the safe.
-     * @param nonce - recovery nonce
+	/**
+	 * Generates the recovery hash that should be signed by the guardian to authorize a recovery
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+	 * @param accountAddress - The target account.
+	 * @param newOwners - The new owners' addressess.
+	 * @param newThreshold - The new threshold for the safe.
+	 * @param nonce - recovery nonce
 	 * @returns promise of a recovery hash
-     */
-    public async getRecoveryHash(
-        nodeRpcUrl: string,
-        accountAddress: string,
-        newOwners: string[],
-        newThreshold: number,
-        nonce: bigint,
-    ):Promise<string>{
-        //"getRecoveryHash(address,address[],uint256,uint256)"
-        const functionSelector = "0x5f19df08";
-        const callData = createCallData(
-            functionSelector,
-            ["address", "address[]", "uint256", "uint256"],
-            [accountAddress, newOwners, newThreshold, nonce],
-        );
+	 */
+	public async getRecoveryHash(
+		nodeRpcUrl: string,
+		accountAddress: string,
+		newOwners: string[],
+		newThreshold: number,
+		nonce: bigint,
+	): Promise<string> {
+		//"getRecoveryHash(address,address[],uint256,uint256)"
+		const functionSelector = "0x5f19df08";
+		const callData = createCallData(
+			functionSelector,
+			["address", "address[]", "uint256", "uint256"],
+			[accountAddress, newOwners, newThreshold, nonce],
+		);
 
-        const ethCallParams ={
-            to: this.moduleAddress,
-            data: callData,
-        };
+		const ethCallParams = {
+			to: this.moduleAddress,
+			data: callData,
+		};
 
-        const recoveryHashResult = await sendEthCallRequest(
-            nodeRpcUrl, ethCallParams, "latest");
-        
-        this.checkForEmptyResultAndRevert(recoveryHashResult, "getRecoveryHash");
-	    const decodedCalldata = this.abiCoder.decode(
-            ["bytes32"], recoveryHashResult);
-        return decodedCalldata[0];
-    }
+		const recoveryHashResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
 
-    /**
-     * Retrieves the account's current ongoing recovery request.
-     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
-     * @param accountAddress - The target account.
-     * @return promise of the account's current recovery request
-     */
-    public async getRecoveryRequest(
-        nodeRpcUrl: string,
-        accountAddress: string,
-    ):Promise<RecoveryRequest>{
-        //"getRecoveryRequest(address)"
-        const functionSelector = "0x4f9a28b9";
-        const callData = createCallData(
-            functionSelector,
-            ["address"],
-            [accountAddress],
-        );
+		this.checkForEmptyResultAndRevert(recoveryHashResult, "getRecoveryHash");
+		const decodedCalldata = this.abiCoder.decode(["bytes32"], recoveryHashResult);
+		return decodedCalldata[0];
+	}
 
-        const ethCallParams ={
-            to: this.moduleAddress,
-            data: callData,
-        };
+	/**
+	 * Retrieves the account's current ongoing recovery request.
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+	 * @param accountAddress - The target account.
+	 * @return promise of the account's current recovery request
+	 */
+	public async getRecoveryRequest(
+		nodeRpcUrl: string,
+		accountAddress: string,
+	): Promise<RecoveryRequest> {
+		//"getRecoveryRequest(address)"
+		const functionSelector = "0x4f9a28b9";
+		const callData = createCallData(functionSelector, ["address"], [accountAddress]);
 
-        const recoveryRequestResult = await sendEthCallRequest(
-            nodeRpcUrl, ethCallParams, "latest");
+		const ethCallParams = {
+			to: this.moduleAddress,
+			data: callData,
+		};
 
-        this.checkForEmptyResultAndRevert(recoveryRequestResult, "getRecoveryRequest");
-	    const decodedCalldata = this.abiCoder.decode(
-            ["(uint256,uint256,uint64,address[])"], recoveryRequestResult);
+		const recoveryRequestResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
 
-        return {
-            guardiansApprovalCount: BigInt(decodedCalldata[0][0]),
-            newThreshold: BigInt(decodedCalldata[0][1]),
-            executeAfter: BigInt(decodedCalldata[0][2]),
-            newOwners: decodedCalldata[0][3],
-        }
-    }
+		this.checkForEmptyResultAndRevert(recoveryRequestResult, "getRecoveryRequest");
+		const decodedCalldata = this.abiCoder.decode(
+			["(uint256,uint256,uint64,address[])"],
+			recoveryRequestResult,
+		);
 
-    /**
-     * Retrieves the guardian approval count for this particular recovery request at current nonce.
-     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
-     * @param accountAddress - The target account.
-     * @param newOwners - The new owners' addressess.
-     * @param newThreshold - The new threshold for the safe.
-     * @return promise of the account's current recovery approvals count
-     */
-    public async getRecoveryApprovals(
-        nodeRpcUrl: string,
-        accountAddress: string,
-        newOwners: string[],
-        newThreshold: number,
-    ):Promise<bigint>{
-        //"getRecoveryApprovals(address,address[],uint256)"
-        const functionSelector = "0x6c6595ca";
-        const callData = createCallData(
-            functionSelector,
-            ["address", "address[]", "uint256"],
-            [accountAddress, newOwners, newThreshold],
-        );
+		return {
+			guardiansApprovalCount: BigInt(decodedCalldata[0][0]),
+			newThreshold: BigInt(decodedCalldata[0][1]),
+			executeAfter: BigInt(decodedCalldata[0][2]),
+			newOwners: decodedCalldata[0][3],
+		};
+	}
 
-        const ethCallParams ={
-            to: this.moduleAddress,
-            data: callData,
-        };
-        const recoveryApprovalResult = await sendEthCallRequest(
-            nodeRpcUrl, ethCallParams, "latest");
+	/**
+	 * Retrieves the guardian approval count for this particular recovery request at current nonce.
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+	 * @param accountAddress - The target account.
+	 * @param newOwners - The new owners' addressess.
+	 * @param newThreshold - The new threshold for the safe.
+	 * @return promise of the account's current recovery approvals count
+	 */
+	public async getRecoveryApprovals(
+		nodeRpcUrl: string,
+		accountAddress: string,
+		newOwners: string[],
+		newThreshold: number,
+	): Promise<bigint> {
+		//"getRecoveryApprovals(address,address[],uint256)"
+		const functionSelector = "0x6c6595ca";
+		const callData = createCallData(
+			functionSelector,
+			["address", "address[]", "uint256"],
+			[accountAddress, newOwners, newThreshold],
+		);
 
-        this.checkForEmptyResultAndRevert(recoveryApprovalResult, "getRecoveryApprovals");
-	    const decodedCalldata = this.abiCoder.decode(["uint256"], recoveryApprovalResult);
+		const ethCallParams = {
+			to: this.moduleAddress,
+			data: callData,
+		};
+		const recoveryApprovalResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
 
-        return BigInt(decodedCalldata[0]);
-    }
+		this.checkForEmptyResultAndRevert(recoveryApprovalResult, "getRecoveryApprovals");
+		const decodedCalldata = this.abiCoder.decode(["uint256"], recoveryApprovalResult);
 
-    /**
-     * Retrieves specific guardian approval status a particular recovery request at current nonce.
-     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
-     * @param accountAddress - The target account.
-     * @param guardian - The guardian.
-     * @param newOwners - The new owners' addressess.
-     * @param newThreshold - The new threshold for the safe.
-     * @return promise of guardian approval status
-     */
-    public async hasGuardianApproved(
-        nodeRpcUrl: string,
-        accountAddress: string,
-        guardian: string,
-        newOwners: string[],
-        newThreshold: number,
-    ):Promise<boolean>{
-        //"hasGuardianApproved(address,address,address[],uint256)"
-        const functionSelector = "0x37d82c36";
-        const callData = createCallData(
-            functionSelector,
-            ["address", "address", "address[]", "uint256"],
-            [accountAddress, guardian, newOwners, newThreshold],
-        );
+		return BigInt(decodedCalldata[0]);
+	}
 
-        const ethCallParams ={
-            to: this.moduleAddress,
-            data: callData,
-        };
-        const hasGuardianApprovedResult = await sendEthCallRequest(
-            nodeRpcUrl, ethCallParams, "latest");
+	/**
+	 * Retrieves specific guardian approval status a particular recovery request at current nonce.
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+	 * @param accountAddress - The target account.
+	 * @param guardian - The guardian.
+	 * @param newOwners - The new owners' addressess.
+	 * @param newThreshold - The new threshold for the safe.
+	 * @return promise of guardian approval status
+	 */
+	public async hasGuardianApproved(
+		nodeRpcUrl: string,
+		accountAddress: string,
+		guardian: string,
+		newOwners: string[],
+		newThreshold: number,
+	): Promise<boolean> {
+		//"hasGuardianApproved(address,address,address[],uint256)"
+		const functionSelector = "0x37d82c36";
+		const callData = createCallData(
+			functionSelector,
+			["address", "address", "address[]", "uint256"],
+			[accountAddress, guardian, newOwners, newThreshold],
+		);
 
-        this.checkForEmptyResultAndRevert(
-            hasGuardianApprovedResult, "hasGuardianApproved");
-	    const decodedCalldata = this.abiCoder.decode(
-            ["bool"], hasGuardianApprovedResult);
+		const ethCallParams = {
+			to: this.moduleAddress,
+			data: callData,
+		};
+		const hasGuardianApprovedResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
 
-        return Boolean(decodedCalldata[0]);
-    }
+		this.checkForEmptyResultAndRevert(hasGuardianApprovedResult, "hasGuardianApproved");
+		const decodedCalldata = this.abiCoder.decode(["bool"], hasGuardianApprovedResult);
 
-    /**
-     * Checks if an address is a guardian for an account.
-     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
-     * @param accountAddress - The target account.
-     * @param guardian - The address to check.
-     * @return promise of `true` if the address is a guardian for
-     * the account otherwise `false`.
-     */
-    public async isGuardian(
-        nodeRpcUrl: string,
-        accountAddress: string,
-        guardian: string,
-    ):Promise<boolean>{
-        //"isGuardian(address,address)"
-        const functionSelector = "0xd4ee9734";
-        const callData = createCallData(
-            functionSelector,
-            ["address", "address"],
-            [accountAddress, guardian],
-        );
+		return Boolean(decodedCalldata[0]);
+	}
 
-        const ethCallParams ={
-            to: this.moduleAddress,
-            data: callData,
-        };
-        const isGuardianResult = await sendEthCallRequest(
-            nodeRpcUrl, ethCallParams, "latest");
+	/**
+	 * Checks if an address is a guardian for an account.
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+	 * @param accountAddress - The target account.
+	 * @param guardian - The address to check.
+	 * @return promise of `true` if the address is a guardian for
+	 * the account otherwise `false`.
+	 */
+	public async isGuardian(
+		nodeRpcUrl: string,
+		accountAddress: string,
+		guardian: string,
+	): Promise<boolean> {
+		//"isGuardian(address,address)"
+		const functionSelector = "0xd4ee9734";
+		const callData = createCallData(
+			functionSelector,
+			["address", "address"],
+			[accountAddress, guardian],
+		);
 
-        this.checkForEmptyResultAndRevert(isGuardianResult, "isGuardian");
-	    const decodedCalldata = this.abiCoder.decode(
-            ["bool"], isGuardianResult);
+		const ethCallParams = {
+			to: this.moduleAddress,
+			data: callData,
+		};
+		const isGuardianResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
 
-        return Boolean(decodedCalldata[0]);
-    }
+		this.checkForEmptyResultAndRevert(isGuardianResult, "isGuardian");
+		const decodedCalldata = this.abiCoder.decode(["bool"], isGuardianResult);
 
-    /**
-     * Counts the number of active guardians for an account.
-     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
-     * @param accountAddress - The target account.
-     * @return promise of The number of active guardians for an account.
-     */
-    public async guardiansCount(
-        nodeRpcUrl: string,
-        accountAddress: string,
-    ):Promise<bigint>{
-        //"guardiansCount(address)"
-        const functionSelector = "0xc026e7ee";
-        const callData = createCallData(
-            functionSelector,
-            ["address"],
-            [accountAddress],
-        );
+		return Boolean(decodedCalldata[0]);
+	}
 
-        const ethCallParams ={
-            to: this.moduleAddress,
-            data: callData,
-        };
-        const guardiansCountResult = await sendEthCallRequest(
-            nodeRpcUrl, ethCallParams, "latest");
+	/**
+	 * Counts the number of active guardians for an account.
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+	 * @param accountAddress - The target account.
+	 * @return promise of The number of active guardians for an account.
+	 */
+	public async guardiansCount(nodeRpcUrl: string, accountAddress: string): Promise<bigint> {
+		//"guardiansCount(address)"
+		const functionSelector = "0xc026e7ee";
+		const callData = createCallData(functionSelector, ["address"], [accountAddress]);
 
-        this.checkForEmptyResultAndRevert(guardiansCountResult, "guardiansCount");
-	    const decodedCalldata = this.abiCoder.decode(
-            ["uint256"], guardiansCountResult);
+		const ethCallParams = {
+			to: this.moduleAddress,
+			data: callData,
+		};
+		const guardiansCountResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
 
-        return BigInt(decodedCalldata[0]);
-    }
+		this.checkForEmptyResultAndRevert(guardiansCountResult, "guardiansCount");
+		const decodedCalldata = this.abiCoder.decode(["uint256"], guardiansCountResult);
 
-    /**
-     * Retrieves the account threshold.
-     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
-     * @param accountAddress - The target account.
-     * @return promise of Threshold.
-     */
-    public async threshold(
-        nodeRpcUrl: string,
-        accountAddress: string,
-    ):Promise<bigint>{
-        //"threshold(address)"
-        const functionSelector = "0xc86ec2bf";
-        const callData = createCallData(
-            functionSelector,
-            ["address"],
-            [accountAddress],
-        );
+		return BigInt(decodedCalldata[0]);
+	}
 
-        const ethCallParams ={
-            to: this.moduleAddress,
-            data: callData,
-        };
-        const thresholdResult = await sendEthCallRequest(
-            nodeRpcUrl, ethCallParams, "latest");
+	/**
+	 * Retrieves the account threshold.
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+	 * @param accountAddress - The target account.
+	 * @return promise of Threshold.
+	 */
+	public async threshold(nodeRpcUrl: string, accountAddress: string): Promise<bigint> {
+		//"threshold(address)"
+		const functionSelector = "0xc86ec2bf";
+		const callData = createCallData(functionSelector, ["address"], [accountAddress]);
 
-        this.checkForEmptyResultAndRevert(thresholdResult, "threshold");
-	    const decodedCalldata = this.abiCoder.decode(
-            ["uint256"], thresholdResult);
+		const ethCallParams = {
+			to: this.moduleAddress,
+			data: callData,
+		};
+		const thresholdResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
 
-        return BigInt(decodedCalldata[0]);
-    }
+		this.checkForEmptyResultAndRevert(thresholdResult, "threshold");
+		const decodedCalldata = this.abiCoder.decode(["uint256"], thresholdResult);
 
-    /**
-     * Get the active guardians for an account.
-     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
-     * @param accountAddress - The target account.
-     * @return promise of a list of the active guardians for an account.
-     */
-    public async getGuardians(
-        nodeRpcUrl: string,
-        accountAddress: string,
-    ):Promise<string[]>{
-        //"getGuardians(address)"
-        const functionSelector = "0xf18858ab";
-        const callData = createCallData(
-            functionSelector,
-            ["address"],
-            [accountAddress],
-        );
+		return BigInt(decodedCalldata[0]);
+	}
 
-        const ethCallParams ={
-            to: this.moduleAddress,
-            data: callData,
-        };
-        const getGuardiansResult = await sendEthCallRequest(
-            nodeRpcUrl, ethCallParams, "latest");
+	/**
+	 * Get the active guardians for an account.
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+	 * @param accountAddress - The target account.
+	 * @return promise of a list of the active guardians for an account.
+	 */
+	public async getGuardians(nodeRpcUrl: string, accountAddress: string): Promise<string[]> {
+		//"getGuardians(address)"
+		const functionSelector = "0xf18858ab";
+		const callData = createCallData(functionSelector, ["address"], [accountAddress]);
 
-        this.checkForEmptyResultAndRevert(getGuardiansResult, "threshold");
-	    const decodedCalldata = this.abiCoder.decode(
-            ["address[]"], getGuardiansResult);
+		const ethCallParams = {
+			to: this.moduleAddress,
+			data: callData,
+		};
+		const getGuardiansResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
 
-        return decodedCalldata[0];
-    }
+		this.checkForEmptyResultAndRevert(getGuardiansResult, "threshold");
+		const decodedCalldata = this.abiCoder.decode(["address[]"], getGuardiansResult);
 
-    /**
-     * Get the module nonce for an account.
-     * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
-     * @param accountAddress - The target account.
-     * @return promise of the nonce for this account.
-     */
-    public async nonce(
-        nodeRpcUrl: string,
-        accountAddress: string,
-    ):Promise<bigint>{
-        //"nonce(address)"
-        const functionSelector = "0x70ae92d2";
-        const callData = createCallData(
-            functionSelector,
-            ["address"],
-            [accountAddress],
-        );
+		return decodedCalldata[0];
+	}
 
-        const ethCallParams ={
-            to: this.moduleAddress,
-            data: callData,
-        };
-        const nonceResult = await sendEthCallRequest(
-            nodeRpcUrl, ethCallParams, "latest");
+	/**
+	 * Get the module nonce for an account.
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+	 * @param accountAddress - The target account.
+	 * @return promise of the nonce for this account.
+	 */
+	public async nonce(nodeRpcUrl: string, accountAddress: string): Promise<bigint> {
+		//"nonce(address)"
+		const functionSelector = "0x70ae92d2";
+		const callData = createCallData(functionSelector, ["address"], [accountAddress]);
 
-        this.checkForEmptyResultAndRevert(nonceResult, "threshold");
-	    const decodedCalldata = this.abiCoder.decode(
-            ["uint256"], nonceResult);
+		const ethCallParams = {
+			to: this.moduleAddress,
+			data: callData,
+		};
+		const nonceResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
 
-        return BigInt(decodedCalldata[0]);
-    }
+		this.checkForEmptyResultAndRevert(nonceResult, "threshold");
+		const decodedCalldata = this.abiCoder.decode(["uint256"], nonceResult);
 
-    /**
+		return BigInt(decodedCalldata[0]);
+	}
+
+	/**
 	 * create recovery request eip712 data
 	 * @param rpcNode - node to fetch the recovery nonce
 	 * @param accountAddress - address of account to recover
@@ -611,76 +547,74 @@ export class SocialRecoveryModule extends SafeModule{
 	 * @param newThreshold - new threshold
 	 * @param overrides.recoveryNonce - manually set the recovery nonce
 	 * @returns an object containing the typed data domain, type and typed data vales
-     * object needed for hashing and signing
+	 * object needed for hashing and signing
 	 */
 	async getRecoveryRequestEip712Data(
-        rpcNode: string,
-        chainId: bigint,
-        accountAddress: string,
-        newOwners: string[],
-        newThreshold: bigint,
-        overrides: {
-            recoveryNonce?: bigint,
-        } = {}
+		rpcNode: string,
+		chainId: bigint,
+		accountAddress: string,
+		newOwners: string[],
+		newThreshold: bigint,
+		overrides: {
+			recoveryNonce?: bigint;
+		} = {},
 	): Promise<{
-        domain: RecoveryRequestTypedDataDomain,
-        types:Record<string, {name: string;type: string;}[]>,
-        messageValue: RecoveryRequestTypedMessageValue
-    }> {
-        let recoveryNonce;
-        if(overrides.recoveryNonce == null){
-            const socialRecoveryModule = new SocialRecoveryModule(
-                this.moduleAddress
-            );
-            recoveryNonce = await socialRecoveryModule.nonce(rpcNode, accountAddress);
-        }else{
-            recoveryNonce = overrides.recoveryNonce;
-        }
+		domain: RecoveryRequestTypedDataDomain;
+		types: Record<string, { name: string; type: string }[]>;
+		messageValue: RecoveryRequestTypedMessageValue;
+	}> {
+		let recoveryNonce: bigint;
+		if (overrides.recoveryNonce == null) {
+			const socialRecoveryModule = new SocialRecoveryModule(this.moduleAddress);
+			recoveryNonce = await socialRecoveryModule.nonce(rpcNode, accountAddress);
+		} else {
+			recoveryNonce = overrides.recoveryNonce;
+		}
 
-        const messageValue: RecoveryRequestTypedMessageValue = {
-            wallet: accountAddress,
-            newOwners,
-            newThreshold,
-            nonce: recoveryNonce
-        };
-        const domain: RecoveryRequestTypedDataDomain = {
-            name: "Social Recovery Module",
-            version: "0.0.1",
-            chainId: Number(chainId),
-            verifyingContract: this.moduleAddress
-        };
+		const messageValue: RecoveryRequestTypedMessageValue = {
+			wallet: accountAddress,
+			newOwners,
+			newThreshold,
+			nonce: recoveryNonce,
+		};
+		const domain: RecoveryRequestTypedDataDomain = {
+			name: "Social Recovery Module",
+			version: "0.0.1",
+			chainId: Number(chainId),
+			verifyingContract: this.moduleAddress,
+		};
 
-        return {
-            domain,
-            types: EIP712_RECOVERY_MODULE_TYPE,
-            messageValue,
-        };
+		return {
+			domain,
+			types: EIP712_RECOVERY_MODULE_TYPE,
+			messageValue,
+		};
 	}
 }
 
 /**
  * Represents an ongoing recovery request for a Safe account.
  */
-export type RecoveryRequest  = {
-    /** Number of guardians that have approved this recovery request. */
-    guardiansApprovalCount:bigint;
-    /** The new owner threshold that will be set after recovery. */
-    newThreshold:bigint;
-    /** Unix timestamp (seconds) after which the recovery can be finalized. 0 if not yet executed. */
-    executeAfter:bigint;
-    /** The list of new owner addresses that will replace the current owners. */
-    newOwners:string[];
-}
+export type RecoveryRequest = {
+	/** Number of guardians that have approved this recovery request. */
+	guardiansApprovalCount: bigint;
+	/** The new owner threshold that will be set after recovery. */
+	newThreshold: bigint;
+	/** Unix timestamp (seconds) after which the recovery can be finalized. 0 if not yet executed. */
+	executeAfter: bigint;
+	/** The list of new owner addresses that will replace the current owners. */
+	newOwners: string[];
+};
 
 /**
  * A guardian address paired with its EIP-712 signature authorizing a recovery.
  */
-export type RecoverySignaturePair  = {
-    /** Guardian address that produced the signature. */
-    signer:string;
-    /** Hex-encoded signature bytes. */
-    signature:string;
-}
+export type RecoverySignaturePair = {
+	/** Guardian address that produced the signature. */
+	signer: string;
+	/** Hex-encoded signature bytes. */
+	signature: string;
+};
 
 /** EIP-712 primary type string used when signing recovery requests. */
 export const EXECUTE_RECOVERY_PRIMARY_TYPE = "ExecuteRecovery";
@@ -689,36 +623,36 @@ export const EXECUTE_RECOVERY_PRIMARY_TYPE = "ExecuteRecovery";
  * EIP-712 domain separator fields for signing recovery requests.
  */
 export type RecoveryRequestTypedDataDomain = {
-    /** Domain name, always "Social Recovery Module". */
-    name: string;
-    /** Domain version, e.g. "0.0.1". */
-    version: string;
-    /** Chain ID of the target network. */
+	/** Domain name, always "Social Recovery Module". */
+	name: string;
+	/** Domain version, e.g. "0.0.1". */
+	version: string;
+	/** Chain ID of the target network. */
 	chainId: number;
-    /** Address of the Social Recovery Module contract. */
+	/** Address of the Social Recovery Module contract. */
 	verifyingContract: string;
-}
+};
 
 /**
  * EIP-712 structured message values for a recovery request signature.
  */
 export type RecoveryRequestTypedMessageValue = {
-    /** Address of the Safe account being recovered. */
+	/** Address of the Safe account being recovered. */
 	wallet: string;
-    /** New owner addresses to set after recovery. */
+	/** New owner addresses to set after recovery. */
 	newOwners: string[];
-    /** New Safe threshold to set after recovery. */
+	/** New Safe threshold to set after recovery. */
 	newThreshold: bigint;
-    /** Recovery nonce for replay protection. */
+	/** Recovery nonce for replay protection. */
 	nonce: bigint;
-}
+};
 
 /** EIP-712 type definitions for the `ExecuteRecovery` primary type. */
 export const EIP712_RECOVERY_MODULE_TYPE = {
-    ExecuteRecovery: [
-      { type: "address", name: "wallet" },
-      { type: "address[]", name: "newOwners" },
-      { type: "uint256", name: "newThreshold" },
-      { type: "uint256", name: "nonce" },
-    ],
+	ExecuteRecovery: [
+		{ type: "address", name: "wallet" },
+		{ type: "address[]", name: "newOwners" },
+		{ type: "uint256", name: "newThreshold" },
+		{ type: "uint256", name: "nonce" },
+	],
 };
