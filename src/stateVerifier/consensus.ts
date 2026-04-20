@@ -11,7 +11,7 @@ type RawBlockHeader = {
 };
 
 /**
- * Fetch a block header from N verification RPC nodes in parallel. Require:
+ * Fetch a block header from N verification RPC nodes in parallel. Requires:
  *
  * 1. At least `quorumThreshold` nodes respond successfully.
  * 2. All responders agree on the state root.
@@ -20,13 +20,31 @@ type RawBlockHeader = {
  * the first verification RPC minus `syncTolerance` so slower nodes have time
  * to catch up before the parallel query.
  *
- * @throws ConsensusQuorumNotMetError, ConsensusStateRootDisagreementError
+ * @param params.blockNumber - Block to fetch. Pass `"latest"` to use the current
+ *   chain tip (resolved minus `syncTolerance` blocks).
+ * @param params.verificationRpcs - One or more JSON-RPC endpoint URLs to query.
+ *   All of them must agree on the state root for the call to succeed.
+ * @param params.quorumThreshold - Minimum number of nodes that must respond
+ *   successfully. Defaults to `floor(verificationRpcs.length / 2)` (majority),
+ *   minimum 1.
+ * @param params.syncTolerance - How many blocks behind the chain tip to use when
+ *   resolving `"latest"`, giving slower nodes time to catch up. Defaults to 1.
+ * @param params.requestTimeoutMs - Per-request timeout in milliseconds.
+ *   Defaults to 10 000.
+ * @returns The consensus-verified block header agreed upon by all responding nodes.
+ * @throws {ConsensusQuorumNotMetError} Fewer than `quorumThreshold` nodes responded.
+ * @throws {ConsensusStateRootDisagreementError} Responding nodes returned different
+ *   state roots for the same block.
  *
  * @example
  * const header = await getConsensusBlockHeader({
  *   blockNumber: "latest",
- *   verificationRpcs: [url1, url2, url3],
+ *   verificationRpcs: [
+ *     "https://ethereum-rpc.publicnode.com",
+ *     "https://rpc.ankr.com/eth",
+ *   ],
  * });
+ * console.log(header.stateRoot);
  */
 export async function getConsensusBlockHeader(params: {
   blockNumber: bigint | "latest";

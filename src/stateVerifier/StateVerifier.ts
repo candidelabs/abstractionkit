@@ -50,6 +50,22 @@ export class StateVerifier {
   public readonly syncTolerance: number;
   public readonly requestTimeoutMs: number;
 
+  /**
+   * Create a new StateVerifier instance.
+   *
+   * @param params.primaryRpc - JSON-RPC endpoint used for `eth_getProof` and
+   *   `eth_getCode` calls. It also participates in the consensus vote.
+   * @param params.verificationRpcs - One or more additional JSON-RPC endpoints
+   *   used exclusively for the consensus state-root check. Must be non-empty.
+   * @param params.quorumThreshold - Minimum number of consensus nodes that must
+   *   agree on the state root. Defaults to majority of `[primaryRpc, ...verificationRpcs]`.
+   * @param params.retries - How many times to retry a failed `eth_getProof` /
+   *   `eth_getCode` request with exponential backoff. Defaults to 3.
+   * @param params.syncTolerance - Blocks behind the chain tip to use when resolving
+   *   `"latest"`, giving slower nodes time to sync. Defaults to 1.
+   * @param params.requestTimeoutMs - Per-request timeout in milliseconds.
+   *   Defaults to 10 000.
+   */
   constructor(params: {
     primaryRpc: string;
     verificationRpcs: string[];
@@ -79,6 +95,20 @@ export class StateVerifier {
   /**
    * Fetch a consensus-verified block header using this instance's config.
    * Queries all nodes in `consensusRpcs` (primary + verifiers, deduped).
+   *
+   * @param params.blockNumber - Block to fetch. Defaults to `"latest"`.
+   * @returns A block header whose `stateRoot` has been agreed upon by all
+   *   responding consensus nodes.
+   * @throws {ConsensusQuorumNotMetError} Fewer than `quorumThreshold` nodes responded.
+   * @throws {ConsensusStateRootDisagreementError} Nodes returned different state roots.
+   *
+   * @example
+   * const verifier = new StateVerifier({
+   *   primaryRpc: "https://alchemy.../mainnet",
+   *   verificationRpcs: ["https://ethereum-rpc.publicnode.com"],
+   * });
+   * const header = await verifier.getConsensusBlockHeader();
+   * console.log(header.blockNumber, header.stateRoot);
    */
   async getConsensusBlockHeader(params?: {
     blockNumber?: bigint | "latest";
@@ -94,8 +124,21 @@ export class StateVerifier {
 
   /**
    * Fetch and verify an account's state at a block, including any requested
-   * storage slots. Uses `primaryRpc` for eth_getProof. State root comes from a
+   * storage slots. Uses `primaryRpc` for `eth_getProof`. State root comes from a
    * consensus query across `consensusRpcs` (primary + verifiers).
+   *
+   * @param params.address - 0x-prefixed 20-byte account address to verify.
+   * @param params.slots - Storage slot keys to include in the proof. Each entry
+   *   may be a 0x-prefixed hex string, a bigint, or a non-negative integer.
+   * @param params.blockNumber - Block at which to verify state. Defaults to `"latest"`.
+   * @param params.header - Pre-fetched consensus header to reuse (avoids an extra
+   *   round trip when batching multiple accounts at the same block).
+   * @returns A fully verified {@link VerifiedAccountState} proven against the
+   *   consensus state root.
+   * @throws {ConsensusQuorumNotMetError} Consensus could not be established.
+   * @throws {ConsensusStateRootDisagreementError} Nodes disagree on the state root.
+   * @throws {AccountProofInvalidError} The account MPT proof is invalid.
+   * @throws {StorageProofInvalidError} A storage MPT proof is invalid.
    *
    * @example
    * const state = await verifier.getVerifiedAccountState({
@@ -177,6 +220,14 @@ export class StateVerifier {
    * Verify a single storage slot on an account at a block.
    * Thin wrapper over `getVerifiedAccountState` for single-slot lookups.
    *
+   * @param params.address - 0x-prefixed 20-byte account address.
+   * @param params.slot - Slot to read: 0x-prefixed hex string, bigint, or integer index.
+   * @param params.blockNumber - Block at which to verify state. Defaults to `"latest"`.
+   * @param params.header - Pre-fetched consensus header to reuse.
+   * @returns The 0x-prefixed hex value at the slot (as returned by `eth_getProof`).
+   * @throws {AccountProofInvalidError} The account proof is invalid.
+   * @throws {StorageProofInvalidError} The storage proof is invalid.
+   *
    * @example
    * const ownerPtr = await verifier.getVerifiedStorageSlot({
    *   address: "0xSafeAddress",
@@ -199,8 +250,14 @@ export class StateVerifier {
   }
 
   /**
-   * Verify an account's balance at a block.
+   * Verify an account's native token balance at a block.
    * Thin wrapper over `getVerifiedAccountState`.
+   *
+   * @param params.address - 0x-prefixed 20-byte account address.
+   * @param params.blockNumber - Block at which to verify state. Defaults to `"latest"`.
+   * @param params.header - Pre-fetched consensus header to reuse.
+   * @returns The proven balance in wei as a bigint.
+   * @throws {AccountProofInvalidError} The account proof is invalid.
    *
    * @example
    * const balance = await verifier.getVerifiedBalance({
@@ -219,9 +276,18 @@ export class StateVerifier {
   /**
    * Fetch and verify an account's deployed bytecode at a block.
    *
-   * Fetches eth_getCode on the primary RPC, then checks that keccak256(code)
-   * matches the codeHash from a verified account proof. EOAs and empty
-   * accounts (code = "0x") are handled by comparing against EMPTY_CODE_HASH.
+   * Fetches `eth_getCode` on the primary RPC, then checks that `keccak256(code)`
+   * matches the `codeHash` from a verified account proof. EOAs and empty
+   * accounts (code = `"0x"`) are handled by comparing against `EMPTY_CODE_HASH`.
+   *
+   * @param params.address - 0x-prefixed 20-byte account address.
+   * @param params.blockNumber - Block at which to verify state. Defaults to `"latest"`.
+   * @param params.header - Pre-fetched consensus header to reuse.
+   * @returns An object containing the proven `blockNumber`, `code` (0x-prefixed
+   *   bytecode hex), and `codeHash` (0x-prefixed keccak256 of the code).
+   * @throws {AccountProofInvalidError} The account proof is invalid.
+   * @throws {CodeHashMismatchError} The bytecode returned by `eth_getCode` does not
+   *   hash to the `codeHash` in the account proof.
    *
    * @example
    * const { code } = await verifier.getVerifiedCode({ address: safeAddr });
@@ -266,9 +332,18 @@ export class StateVerifier {
   /**
    * Verify multiple accounts in parallel at the same block. Shares one
    * consensus-verified block header across all verifications, saving N-1
-   * round trips.
+   * round trips compared to sequential `getVerifiedAccountState` calls.
    *
-   * Failure semantics: Promise.all. First failure rejects the batch.
+   * Failure semantics: `Promise.all` - the first failure rejects the entire batch.
+   *
+   * @param requests - Array of account requests. Each entry specifies an `address`
+   *   and an optional list of `slots` to include in the proof.
+   * @param options.blockNumber - Block at which to verify all accounts. Defaults to `"latest"`.
+   * @param options.header - Pre-fetched consensus header to share across all requests.
+   * @returns An array of {@link VerifiedAccountState} in the same order as `requests`.
+   * @throws {ConsensusQuorumNotMetError} Consensus could not be established.
+   * @throws {AccountProofInvalidError} Any account proof is invalid.
+   * @throws {StorageProofInvalidError} Any storage proof is invalid.
    *
    * @example
    * const [alice, bob] = await verifier.getVerifiedAccountStates([

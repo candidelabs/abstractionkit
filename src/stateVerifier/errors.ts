@@ -1,14 +1,27 @@
 import { AbstractionKitError, Jsonable } from "../errors";
 
-/** Base class for all state proof verification failures. */
+/**
+ * Base class for all state proof verification failures.
+ *
+ * Extends {@link AbstractionKitError} so callers can do a single
+ * `catch (e) { if (e instanceof StateProofVerificationError) ... }` to
+ * handle any verification failure from this module.
+ */
 export class StateProofVerificationError extends AbstractionKitError {
   constructor(message: string, context?: Jsonable) {
     super("UNKNOWN_ERROR", message, { context });
   }
 }
 
-/** Two or more verification nodes returned different state roots. */
+/**
+ * Thrown when two or more verification nodes return different state roots for
+ * the same block number. This indicates either a split network, a compromised
+ * node, or a misconfigured RPC URL.
+ *
+ * Inspect `nodes` to identify which endpoint(s) disagree.
+ */
 export class ConsensusStateRootDisagreementError extends StateProofVerificationError {
+  /** Each responding node and the state root it returned. */
   public readonly nodes: Array<{ url: string; stateRoot: string }>;
 
   constructor(nodes: Array<{ url: string; stateRoot: string }>) {
@@ -20,10 +33,18 @@ export class ConsensusStateRootDisagreementError extends StateProofVerificationE
   }
 }
 
-/** Fewer than `quorumThreshold` verification nodes responded. */
+/**
+ * Thrown when fewer than `quorumThreshold` verification nodes respond
+ * successfully for a given block number query.
+ *
+ * Check `failures` for per-node error messages to diagnose connectivity issues.
+ */
 export class ConsensusQuorumNotMetError extends StateProofVerificationError {
+  /** Number of nodes that responded in time without errors. */
   public readonly responded: number;
+  /** Minimum number of successful responses that was required. */
   public readonly required: number;
+  /** Per-node error messages for all nodes that failed. */
   public readonly failures: Array<{ url: string; error: string }>;
 
   constructor(
@@ -41,10 +62,17 @@ export class ConsensusQuorumNotMetError extends StateProofVerificationError {
   }
 }
 
-/** MPT account proof did not verify against the state root. */
+/**
+ * Thrown when an MPT account proof fails to verify against the consensus
+ * state root. Possible causes: tampered proof data, wrong block number, or
+ * a bug in the proof generation on the node.
+ */
 export class AccountProofInvalidError extends StateProofVerificationError {
+  /** The address whose proof was being verified. */
   public readonly address: string;
+  /** The state root the proof was checked against. */
   public readonly stateRoot: string;
+  /** The block number at which verification was attempted. */
   public readonly blockNumber: bigint;
 
   constructor(address: string, stateRoot: string, blockNumber: bigint, detail: string) {
@@ -58,10 +86,17 @@ export class AccountProofInvalidError extends StateProofVerificationError {
   }
 }
 
-/** MPT storage proof did not verify against the storage hash. */
+/**
+ * Thrown when an MPT storage proof fails to verify against the account's
+ * storage hash. Possible causes: tampered proof data, incorrect slot key, or
+ * a mismatch between the proof and the account's `storageHash` field.
+ */
 export class StorageProofInvalidError extends StateProofVerificationError {
+  /** The account address, if provided at call site. */
   public readonly address?: string;
+  /** 0x-prefixed slot key that failed verification. */
   public readonly slot: string;
+  /** The storage hash the proof was checked against. */
   public readonly storageHash: string;
 
   constructor(slot: string, storageHash: string, detail: string, address?: string) {
@@ -75,10 +110,17 @@ export class StorageProofInvalidError extends StateProofVerificationError {
   }
 }
 
-/** eth_getCode response did not hash to the verified codeHash. */
+/**
+ * Thrown when the bytecode returned by `eth_getCode` does not hash to the
+ * `codeHash` field proven by the account MPT proof. This indicates a node is
+ * serving inconsistent state: the account proof and the code response disagree.
+ */
 export class CodeHashMismatchError extends StateProofVerificationError {
+  /** The address whose code was fetched. */
   public readonly address: string;
+  /** The codeHash from the verified account proof. */
   public readonly expectedCodeHash: string;
+  /** keccak256 of the bytecode returned by eth_getCode. */
   public readonly actualCodeHash: string;
 
   constructor(address: string, expectedCodeHash: string, actualCodeHash: string) {
