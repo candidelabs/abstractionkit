@@ -12,6 +12,10 @@ import { Signer, TypedData } from "./types";
  * @remarks Requires viem &gt;= 2.0. The `sign({ hash })` method was added in
  * the viem 2.0 account refactor; viem 1.x callers see a type error and
  * should upgrade.
+ *
+ * @internal Not exported from the package root — pass concrete viem
+ * instances directly to {@link fromViem}. If you need to type a wrapper,
+ * use `Parameters<typeof fromViem>[0]`.
  */
 export interface ViemLocalAccountLike {
 	address: `0x${string}`;
@@ -32,6 +36,9 @@ export interface ViemLocalAccountLike {
  * system. The runtime call shape is stable across viem 2.x.
  *
  * @remarks Requires viem &gt;= 2.0.
+ *
+ * @internal Not exported from the package root — pass concrete viem
+ * `WalletClient` instances directly to {@link fromViemWalletClient}.
  */
 export interface ViemWalletClientLike {
 	account?: { address: `0x${string}` } | undefined;
@@ -61,6 +68,9 @@ type ViemSignTypedDataCall = (args: {
  * `TypedDataField[]` so the interface doesn't depend on ethers' type
  * exports while still accepting an ethers Wallet instance without casts
  * at the call site.
+ *
+ * @internal Not exported from the package root — pass concrete ethers
+ * `Wallet` / `HDNodeWallet` instances directly to {@link fromEthersWallet}.
  */
 export interface EthersWalletLike {
 	address: string;

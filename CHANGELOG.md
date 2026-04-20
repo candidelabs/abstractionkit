@@ -26,6 +26,19 @@
 
 > **Note on versioning.** The callback-API removal below is a breaking change for callers of `signUserOperationWithSigner`'s prior callback shape on `Calibur7702Account`. Calibur is not yet in use in any production environment; we're communicating directly with the developers currently building against it to coordinate the migration.
 
+- **`SafeAccount.baseSignSingleUserOperation` is now `protected static`.** Previously `public static`, which leaked an internal helper into the package surface. All callers should use the version-specific subclass methods that wrap it (`SafeAccountV0_2_0#signUserOperation`, `SafeAccountV0_3_0#signUserOperation`, etc.) — they auto-inject the correct entrypoint and 4337 module addresses. Migration:
+  ```ts
+  // Before:
+  const sig = SafeAccount.baseSignSingleUserOperation(
+    op, [pk], chainId,
+    SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS,
+    SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+  );
+  // After:
+  const sig = safeV3.signUserOperation(op, [pk], chainId);
+  ```
+  `baseSignUserOperationWithSigners` (introduced earlier in this Unreleased window) is also `protected static` for the same reason; no migration needed since it was never on a released `latest` tag.
+- **`ViemLocalAccountLike` / `ViemWalletClientLike` / `EthersWalletLike` are no longer exported.** They're internal structural shapes the adapters match against; pass concrete viem / ethers instances directly to `fromViem` / `fromViemWalletClient` / `fromEthersWallet`. If you need to type a wrapper, use `Parameters<typeof fromViem>[0]` (etc.).
 - **Callback signing API removed.** `signUserOperationWithSigner(op, callback, chainId)` as introduced in the original signer PR is gone, along with the `SignerFunction`, `AddressedSignerFunction`, `SignerInput`, `SignerResult`, and `SignerTypedData` types. The callback method name is now reused for the new capability-oriented API on single-signer accounts (Simple7702, Calibur) with a different parameter shape. Migration:
   ```ts
   // Before:

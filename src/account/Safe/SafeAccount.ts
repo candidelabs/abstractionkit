@@ -1848,7 +1848,7 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @returns signature
 	 */
-	public static baseSignSingleUserOperation(
+	protected static baseSignSingleUserOperation(
 		useroperation: UserOperationV6 | UserOperationV7,
 		privateKeys: string[],
 		chainId: bigint,
@@ -1938,7 +1938,7 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides - optional validAfter / validUntil / multi-chain flag
 	 * @returns formatted signature
 	 */
-	public static async baseSignUserOperationWithSigners<
+	protected static async baseSignUserOperationWithSigners<
 		T extends UserOperationV6 | UserOperationV7 | UserOperationV9,
 		C,
 	>(
