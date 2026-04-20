@@ -1,0 +1,107 @@
+const ak = require('../../dist/index.cjs');
+
+function mockFetch(handlers) {
+  const original = global.fetch;
+  global.fetch = async (url, init) => {
+    const body = JSON.parse(init.body);
+    const h = handlers[url];
+    if (!h) throw new Error(`No mock handler for ${url}`);
+    const result = await h(body);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ jsonrpc: '2.0', id: 1, result }),
+    };
+  };
+  return () => { global.fetch = original; };
+}
+
+describe('getConsensusBlockHeader', () => {
+  test('returns agreed-upon header when all nodes agree', async () => {
+    const block = {
+      number: '0x10',
+      hash: '0xblockhash',
+      stateRoot: '0xsameroot',
+      parentHash: '0xparent',
+      timestamp: '0x64',
+    };
+    const restore = mockFetch({
+      'http://a': () => block,
+      'http://b': () => block,
+      'http://c': () => block,
+    });
+    try {
+      const header = await ak.getConsensusBlockHeader({
+        blockNumber: 16n,
+        verificationRpcs: ['http://a', 'http://b', 'http://c'],
+      });
+      expect(header.stateRoot).toBe('0xsameroot');
+      expect(header.blockNumber).toBe(16n);
+    } finally { restore(); }
+  });
+
+  test('throws ConsensusStateRootDisagreementError when a node disagrees', async () => {
+    const base = { number: '0x10', hash: '0xh', parentHash: '0xp', timestamp: '0x64' };
+    const restore = mockFetch({
+      'http://a': () => ({ ...base, stateRoot: '0xroot1' }),
+      'http://b': () => ({ ...base, stateRoot: '0xroot2' }),
+      'http://c': () => ({ ...base, stateRoot: '0xroot1' }),
+    });
+    try {
+      await expect(ak.getConsensusBlockHeader({
+        blockNumber: 16n,
+        verificationRpcs: ['http://a', 'http://b', 'http://c'],
+      })).rejects.toBeInstanceOf(ak.ConsensusStateRootDisagreementError);
+    } finally { restore(); }
+  });
+
+  test('throws ConsensusQuorumNotMetError when too many nodes fail', async () => {
+    const block = { number: '0x10', hash: '0xh', stateRoot: '0xsame', parentHash: '0xp', timestamp: '0x64' };
+    const original = global.fetch;
+    global.fetch = async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (url === 'http://c') {
+        return {
+          ok: true, status: 200,
+          json: async () => ({ jsonrpc: '2.0', id: 1, result: block }),
+        };
+      }
+      throw new Error('down');
+    };
+    try {
+      await expect(ak.getConsensusBlockHeader({
+        blockNumber: 16n,
+        verificationRpcs: ['http://a', 'http://b', 'http://c'],
+        quorumThreshold: 2,
+      })).rejects.toBeInstanceOf(ak.ConsensusQuorumNotMetError);
+    } finally { global.fetch = original; }
+  });
+
+  test('resolves "latest" with syncTolerance', async () => {
+    const latestHex = '0x100';
+    const expected = '0xff';  // 256 - 1 = 255 = 0xff
+    const block = {
+      number: expected, hash: '0xh', stateRoot: '0xsame',
+      parentHash: '0xp', timestamp: '0x64',
+    };
+    const calls = [];
+    const restore = mockFetch({
+      'http://a': (body) => {
+        calls.push(body.method);
+        if (body.method === 'eth_blockNumber') return latestHex;
+        if (body.method === 'eth_getBlockByNumber') {
+          expect(body.params[0]).toBe(expected);
+          return block;
+        }
+      },
+    });
+    try {
+      const header = await ak.getConsensusBlockHeader({
+        blockNumber: 'latest',
+        verificationRpcs: ['http://a'],
+      });
+      expect(header.blockNumber).toBe(BigInt(expected));
+      expect(calls).toEqual(['eth_blockNumber', 'eth_getBlockByNumber']);
+    } finally { restore(); }
+  });
+});
