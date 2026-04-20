@@ -47,3 +47,38 @@ describe('verifyAccountProof', () => {
     })).toThrow(ak.AccountProofInvalidError);
   });
 });
+
+describe('verifyStorageProof', () => {
+  test('verifies a populated Safe singleton storage slot', () => {
+    const f = require('./fixtures/safe-v141-singleton.json');
+    const sp = f.getProof.storageProof[0];
+    expect(ak.verifyStorageProof({
+      storageHash: f.getProof.storageHash,
+      storageKey: sp.key,
+      storageValue: sp.value,
+      storageProof: sp.proof,
+    })).toBe(true);
+  });
+
+  test('verifies a USDC balance slot', () => {
+    const f = require('./fixtures/erc20-balance-slot.json');
+    const sp = f.getProof.storageProof[0];
+    expect(ak.verifyStorageProof({
+      storageHash: f.getProof.storageHash,
+      storageKey: sp.key,
+      storageValue: sp.value,
+      storageProof: sp.proof,
+    })).toBe(true);
+  });
+
+  test('throws StorageProofInvalidError on tampered value', () => {
+    const f = require('./fixtures/erc20-balance-slot.json');
+    const sp = f.getProof.storageProof[0];
+    expect(() => ak.verifyStorageProof({
+      storageHash: f.getProof.storageHash,
+      storageKey: sp.key,
+      storageValue: '0xffffffffffffffff',
+      storageProof: sp.proof,
+    })).toThrow(ak.StorageProofInvalidError);
+  });
+});

@@ -1,6 +1,6 @@
 import { encodeRlp, keccak256 } from "ethers";
 import { bytesEqual, hexToBytes, Nibbles, parseMptNode } from "./mpt";
-import { AccountProofInvalidError } from "./errors";
+import { AccountProofInvalidError, StorageProofInvalidError } from "./errors";
 import type { EthGetProofResult } from "./types";
 
 /**
@@ -198,4 +198,84 @@ export function verifyAccountProof(params: {
   }
 
   return true;
+}
+
+/**
+ * Verify a single eth_getProof storage proof against a storageHash.
+ *
+ * @param params.storageHash 0x-prefixed 32-byte storage trie root, typically
+ *   obtained from a verified account proof.
+ * @param params.storageKey 0x-prefixed hex slot (padded or minimal).
+ * @param params.storageValue 0x-prefixed hex value at the slot. Empty or zero means absence.
+ * @param params.storageProof RLP-encoded node hex strings.
+ * @param params.address Optional: included in error context if verification fails.
+ * @returns `true` if the proof is valid.
+ * @throws StorageProofInvalidError on failure.
+ *
+ * @example
+ * const ok = verifyStorageProof({
+ *   storageHash: accountProof.storageHash,
+ *   storageKey: slot,
+ *   storageValue: "0x05",
+ *   storageProof: accountProof.storageProof[0].proof,
+ * });
+ */
+export function verifyStorageProof(params: {
+  storageHash: string;
+  storageKey: string;
+  storageValue: string;
+  storageProof: string[];
+  address?: string;
+}): boolean {
+  const { storageHash, storageKey, storageValue, storageProof, address } = params;
+
+  let expectedValue: Uint8Array | undefined;
+  const normalizedValue = evenHex(storageValue);
+  const valueBytes = hexToBytes(normalizedValue);
+  if (valueBytes.length > 0 && !(valueBytes.length === 1 && valueBytes[0] === 0)) {
+    // Storage values are RLP-encoded as their minimal bytes.
+    const rlpHex = encodeRlp(stripLeadingZeros(normalizedValue));
+    expectedValue = hexToBytes(rlpHex);
+  }
+
+  let result: boolean;
+  try {
+    result = verifyMptProof({
+      rootHash: hexToBytes(storageHash),
+      key: hexToBytes(padSlot32(storageKey)),
+      proof: storageProof,
+      expectedValue,
+    });
+  } catch (e) {
+    throw new StorageProofInvalidError(
+      storageKey,
+      storageHash,
+      (e as Error).message,
+      address,
+    );
+  }
+
+  if (!result) {
+    throw new StorageProofInvalidError(
+      storageKey,
+      storageHash,
+      "verifyMptProof returned false",
+      address,
+    );
+  }
+
+  return true;
+}
+
+/** Normalize a slot key to 32-byte 0x-prefixed hex. */
+function padSlot32(slot: string): string {
+  const stripped = slot.replace(/^0x/, "");
+  if (stripped.length > 64) throw new Error(`Slot too long: ${slot}`);
+  return "0x" + stripped.padStart(64, "0");
+}
+
+/** Ensure hex string has an even number of nibbles (required by ethers getBytes). */
+function evenHex(hex: string): string {
+  const h = hex.replace(/^0x/, "");
+  return "0x" + (h.length % 2 === 0 ? h : "0" + h);
 }
