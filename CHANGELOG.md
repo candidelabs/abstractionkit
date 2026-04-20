@@ -18,7 +18,8 @@
 
 - **`ExternalSigner` interface**: `{ address, signHash?, signTypedData? }` discriminated union that enforces at least one of the two methods at compile time. Accepts any signer that matches the shape (viem local account, viem WalletClient, ethers Wallet, hardware wallet, MPC, WebAuthn, Uint8Array-held keys). The library has zero runtime dependency on viem or ethers for this surface.
 - **`fromPrivateKey(pk)` / `fromViem(account)` / `fromEthersWallet(wallet)` / `fromViemWalletClient(client)` adapters**: one-line factories returning an `ExternalSigner`. Structural types only. `fromViem` / `fromViemWalletClient` require viem ≥ 2.0; `fromEthersWallet` requires ethers ≥ 6.0.
-- **`SignHashFn` / `SignTypedDataFn` / `TypedData` / `SigningScheme` types** exported from the package root for implementers of custom signers.
+- **`SignHashFn` / `SignTypedDataFn` / `TypedData` / `SigningScheme` / `SignContext` / `MultiOpSignContext` types** exported from the package root for implementers of custom signers.
+- **`SignContext` forwarded to signers, narrowly typed per signing path**: signers receive a context as the second arg of `signHash` / `signTypedData` so custom validator implementations can inspect the userOp. `Signer<C>` is generic over context (default `C = SignContext` for single-op `{userOperation, chainId, entryPoint}`; opt into `ExternalSigner<MultiOpSignContext>` for `signUserOperationsWithSigners`'s `{userOperations[], entryPoint}`). Built-in adapters return `Signer<unknown>` and work everywhere. See `src/signer/types.ts`.
 - **`SafeMultiChainSigAccountV1.signUserOperationsWithSigners`**: new async multi-op variant that signs a Merkle-rooted bundle of UserOperations with a single signature across chains, using `ExternalSigner[]`.
 
 ### Breaking Changes

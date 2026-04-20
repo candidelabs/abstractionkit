@@ -1940,12 +1940,14 @@ export class SafeAccount extends SmartAccount {
 	 */
 	public static async baseSignUserOperationWithSigners<
 		T extends UserOperationV6 | UserOperationV7 | UserOperationV9,
+		C,
 	>(
 		useroperation: T,
-		signers: ReadonlyArray<AkSigner>,
+		signers: ReadonlyArray<AkSigner<C>>,
 		chainId: bigint,
 		entrypointAddress: string,
 		safe4337ModuleAddress: string,
+		context: C,
 		overrides: {
 			validAfter?: bigint;
 			validUntil?: bigint;
@@ -2004,7 +2006,11 @@ export class SafeAccount extends SmartAccount {
 
 		const signatures = await Promise.all(
 			signers.map((signer, i) =>
-				invokeSigner(signer, schemes[i], { hash: userOpHash, typedData }),
+				invokeSigner(signer, schemes[i], {
+					hash: userOpHash,
+					typedData,
+					context,
+				}),
 			),
 		);
 

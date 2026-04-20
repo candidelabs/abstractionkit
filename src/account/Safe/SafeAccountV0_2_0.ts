@@ -10,7 +10,7 @@ import {
 } from "./types";
 
 import { UserOperationV6, MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet } from "../../types";
-import { Signer as AkSigner } from "src/signer/types";
+import { Signer as AkSigner, SignContext } from "src/signer/types";
 import { ENTRYPOINT_V6 } from "src/constants";
 import { createCallData } from "src/utils";
 import { SafeAccountV0_3_0 } from "./SafeAccountV0_3_0";
@@ -511,12 +511,18 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			isMultiChainSignature?: boolean;
 		} = {},
 	): Promise<string> {
+		const context: SignContext<UserOperationV6> = {
+			userOperation: useroperation,
+			chainId,
+			entryPoint: this.entrypointAddress,
+		};
 		return SafeAccount.baseSignUserOperationWithSigners(
 			useroperation,
 			signers,
 			chainId,
 			this.entrypointAddress,
 			this.safe4337ModuleAddress,
+			context,
 			overrides,
 		);
 	}

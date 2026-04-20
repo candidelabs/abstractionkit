@@ -1,3 +1,5 @@
+import { BaseUserOperation } from "../types";
+
 /**
  * Narrow EIP-712 typed data payload. All hex fields are typed as
  * `` `0x${string}` `` so callers don't need casts when handing this straight
@@ -20,6 +22,43 @@ export interface TypedData {
 /** Signing schemes accounts may accept and signers may provide. */
 export type SigningScheme = "hash" | "typedData";
 
+/**
+ * Context the SDK passes to a signer on every account's
+ * `signUserOperationWithSigner(s)` (the single-op path — 99% of usage).
+ * All fields are required; IDE autocomplete shows them directly without a
+ * type guard. Default for {@link Signer}, {@link SignHashFn},
+ * {@link SignTypedDataFn}.
+ *
+ * For the multi-op Merkle path
+ * (`SafeMultiChainSigAccountV1.signUserOperationsWithSigners`), see
+ * {@link MultiOpSignContext}.
+ */
+export interface SignContext<T extends BaseUserOperation = BaseUserOperation> {
+	readonly userOperation: T;
+	readonly chainId: bigint;
+	readonly entryPoint: string;
+}
+
+/**
+ * Context for the multi-op Merkle signing path
+ * (`SafeMultiChainSigAccountV1.signUserOperationsWithSigners`). The signer
+ * sees the full bundle so you can show "you're
+ * authorizing N ops across these chains" instead of an opaque root.
+ *
+ * Type your multi-op signer as `ExternalSigner<MultiOpSignContext>` for
+ * full autocomplete on `userOperations`. Pre-built adapters
+ * (`fromPrivateKey`, `fromViem`, `fromEthersWallet`,
+ * `fromViemWalletClient`) return a universal `Signer<unknown>` and work in
+ * either path without retyping.
+ */
+export interface MultiOpSignContext<T extends BaseUserOperation = BaseUserOperation> {
+	readonly userOperations: ReadonlyArray<{
+		readonly userOperation: T;
+		readonly chainId: bigint;
+	}>;
+	readonly entryPoint: string;
+}
+
 /** Common fields every Signer exposes. */
 interface SignerBase {
 	/** Address that will recover from signatures this signer produces. */
@@ -28,19 +67,28 @@ interface SignerBase {
 
 /**
  * Sign a 32-byte hash raw (no EIP-191 prefix). Required for Simple7702 /
- * Calibur; acceptable fallback for Safe. Typical implementations:
- * `wallet.signingKey.sign(hash).serialized` (ethers) or
- * `account.sign({ hash })` (viem Local Account).
+ * Calibur; acceptable fallback for Safe.
+ *
+ * Generic over the context type the SDK will pass. Defaults to
+ * {@link SignContext} (single-op) — set explicitly to
+ * {@link MultiOpSignContext} for multi-op signers, or to `unknown` for
+ * universal/context-agnostic signers like the built-in adapters.
  */
-export type SignHashFn = (hash: `0x${string}`) => Promise<`0x${string}`>;
+export type SignHashFn<C = SignContext> = (
+	hash: `0x${string}`,
+	context: C,
+) => Promise<`0x${string}`>;
 
 /**
  * Sign an EIP-712 typed data payload. Preferred for Safe because wallets
- * can display structured fields instead of a hex blob. Typical
- * implementations: `wallet.signTypedData(domain, types, message)` (ethers)
- * or `account.signTypedData({...})` (viem).
+ * can display structured fields instead of a hex blob.
+ *
+ * Generic over context — see {@link SignHashFn}.
  */
-export type SignTypedDataFn = (data: TypedData) => Promise<`0x${string}`>;
+export type SignTypedDataFn<C = SignContext> = (
+	data: TypedData,
+	context: C,
+) => Promise<`0x${string}`>;
 
 /**
  * A capability-oriented signer. Must declare at least one of `signHash` or
@@ -93,8 +141,8 @@ export type SignTypedDataFn = (data: TypedData) => Promise<`0x${string}`>;
  * }
  * ```
  */
-export type Signer = SignerBase &
+export type Signer<C = SignContext> = SignerBase &
 	(
-		| { signHash: SignHashFn; signTypedData?: SignTypedDataFn }
-		| { signHash?: SignHashFn; signTypedData: SignTypedDataFn }
+		| { signHash: SignHashFn<C>; signTypedData?: SignTypedDataFn<C> }
+		| { signHash?: SignHashFn<C>; signTypedData: SignTypedDataFn<C> }
 	);

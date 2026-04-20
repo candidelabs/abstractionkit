@@ -20,6 +20,8 @@ export type {
 	TypedData,
 	SignHashFn,
 	SignTypedDataFn,
+	SignContext,
+	MultiOpSignContext,
 } from "./signer/types";
 export {
 	fromPrivateKey,

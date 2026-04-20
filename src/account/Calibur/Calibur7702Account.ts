@@ -5,7 +5,7 @@ import {
 	getDelegatedAddress, getFunctionSelector, handlefetchGasPrice, sendJsonRpcRequest
 } from "../../utils";
 import { UserOperationV8 } from "src/types";
-import { Signer as AkSigner, SigningScheme } from "src/signer/types";
+import { Signer as AkSigner, SignContext, SigningScheme } from "src/signer/types";
 import { pickScheme, invokeSigner } from "src/signer/negotiate";
 import { AbstractionKitError } from "src/errors";
 import {
@@ -647,7 +647,12 @@ export class Calibur7702Account extends SmartAccount
 			this.entrypointAddress,
 			chainId,
 		) as `0x${string}`;
-		const signature = await invokeSigner(signer, scheme, { hash });
+		const context: SignContext<UserOperationV8> = {
+			userOperation,
+			chainId,
+			entryPoint: this.entrypointAddress,
+		};
+		const signature = await invokeSigner(signer, scheme, { hash, context });
 		const keyHash = overrides.keyHash ?? ROOT_KEY_HASH;
 		const hookData = overrides.hookData ?? "0x";
 		return Calibur7702Account.wrapSignature(keyHash, signature, hookData);

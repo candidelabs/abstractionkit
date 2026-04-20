@@ -10,8 +10,8 @@ import { Signer, SigningScheme, TypedData } from "./types";
  * citing the signer's address, what the account accepts, and what the
  * signer can do.
  */
-export function pickScheme(
-	signer: Signer,
+export function pickScheme<C>(
+	signer: Signer<C>,
 	accepted: readonly SigningScheme[],
 	context: { accountName: string; signerIndex: number },
 ): SigningScheme {
@@ -56,11 +56,18 @@ function buildMismatchMessage(params: {
  * Invoke a signer for one scheme. Keeps the dispatch in one place so the
  * account-side code stays linear. `typedData` is optional: accounts that
  * only accept the `"hash"` scheme (Simple7702, Calibur) pass just `hash`.
+ *
+ * `context` is always forwarded to the signer so power-user implementations
+ * can inspect the userOp.
  */
-export async function invokeSigner(
-	signer: Signer,
+export async function invokeSigner<C>(
+	signer: Signer<C>,
 	scheme: SigningScheme,
-	payload: { hash: `0x${string}`; typedData?: TypedData },
+	payload: {
+		hash: `0x${string}`;
+		typedData?: TypedData;
+		context: C;
+	},
 ): Promise<`0x${string}`> {
 	if (scheme === "typedData") {
 		if (!signer.signTypedData) {
@@ -71,11 +78,11 @@ export async function invokeSigner(
 			throw new AbstractionKitError("BAD_DATA",
 				`scheme "typedData" selected but no typedData payload provided`);
 		}
-		return signer.signTypedData(payload.typedData);
+		return signer.signTypedData(payload.typedData, payload.context);
 	}
 	if (!signer.signHash) {
 		throw new AbstractionKitError("BAD_DATA",
 			`signer ${signer.address} is missing signHash`);
 	}
-	return signer.signHash(payload.hash);
+	return signer.signHash(payload.hash, payload.context);
 }

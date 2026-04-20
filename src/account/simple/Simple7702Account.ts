@@ -6,7 +6,7 @@ import {
     sendJsonRpcRequest
 } from "../../utils";
 import { GasOption, PolygonChain, StateOverrideSet, UserOperationV8, UserOperationV9 } from "src/types";
-import { Signer as AkSigner, SigningScheme } from "src/signer/types";
+import { Signer as AkSigner, SignContext, SigningScheme } from "src/signer/types";
 import { pickScheme, invokeSigner } from "src/signer/negotiate";
 import { AbstractionKitError } from "src/errors";
 import {
@@ -791,7 +791,12 @@ export class BaseSimple7702Account extends SmartAccount {
             this.entrypointAddress,
             chainId,
         ) as `0x${string}`;
-        return invokeSigner(signer, scheme, { hash });
+        const context: SignContext<T> = {
+            userOperation: useroperation,
+            chainId,
+            entryPoint: this.entrypointAddress,
+        };
+        return invokeSigner(signer, scheme, { hash, context });
     }
 
     /**

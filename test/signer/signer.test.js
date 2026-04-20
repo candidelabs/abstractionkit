@@ -88,6 +88,137 @@ describe('fromEthersWallet adapter', () => {
     });
 });
 
+// ─── SignContext delivery ────────────────────────────────────────────────
+
+describe('SignContext is forwarded to signers', () => {
+    const owner = computeAddress(PK1);
+
+    test('single-op accounts pass { userOperation, chainId, entryPoint }', async () => {
+        const safe = ak.SafeAccountV0_3_0.initializeNewAccount([owner]);
+        const op = buildSafeV3Op(safe);
+        const wallet = new Wallet(PK1);
+        let captured = null;
+        const inspecting = {
+            address: wallet.address,
+            signHash: async (h, ctx) => {
+                captured = ctx;
+                return wallet.signingKey.sign(h).serialized;
+            },
+        };
+        await safe.signUserOperationWithSigners(op, [inspecting], CHAIN_ID);
+        expect(captured).not.toBeNull();
+        expect('userOperation' in captured).toBe(true);
+        expect(captured.userOperation.sender).toBe(op.sender);
+        expect(captured.chainId).toBe(CHAIN_ID);
+        expect(captured.entryPoint).toBe(safe.entrypointAddress);
+    });
+
+    test('Simple7702 / Calibur forward the same single-op shape', async () => {
+        const wallet = new Wallet(PK1);
+
+        // Simple7702
+        const simple = new ak.Simple7702Account(owner);
+        const simpleOp = buildSimpleOp(owner);
+        let simpleCtx = null;
+        await simple.signUserOperationWithSigner(simpleOp, {
+            address: wallet.address,
+            signHash: async (h, ctx) => {
+                simpleCtx = ctx;
+                return wallet.signingKey.sign(h).serialized;
+            },
+        }, CHAIN_ID);
+        expect('userOperation' in simpleCtx).toBe(true);
+        expect(simpleCtx.userOperation.nonce).toBe(simpleOp.nonce);
+        expect(simpleCtx.chainId).toBe(CHAIN_ID);
+        expect(simpleCtx.entryPoint).toBe(simple.entrypointAddress);
+
+        // Calibur
+        const calibur = new ak.Calibur7702Account(owner);
+        const caliburOp = buildSimpleOp(owner);
+        let caliburCtx = null;
+        await calibur.signUserOperationWithSigner(caliburOp, {
+            address: wallet.address,
+            signHash: async (h, ctx) => {
+                caliburCtx = ctx;
+                return wallet.signingKey.sign(h).serialized;
+            },
+        }, CHAIN_ID);
+        expect('userOperation' in caliburCtx).toBe(true);
+        expect(caliburCtx.userOperation.nonce).toBe(caliburOp.nonce);
+        expect(caliburCtx.chainId).toBe(CHAIN_ID);
+        expect(caliburCtx.entryPoint).toBe(calibur.entrypointAddress);
+    });
+
+    test('multi-op Merkle path passes { userOperations[], entryPoint }', async () => {
+        const safe = ak.SafeMultiChainSigAccountV1.initializeNewAccount([owner]);
+        const op = buildSafeMultiChainOp(safe);
+        const op2 = { ...op, nonce: 1n };
+        const wallet = new Wallet(PK1);
+        let captured = null;
+        await safe.signUserOperationsWithSigners(
+            [
+                { userOperation: op, chainId: 1n, validAfter: 0n, validUntil: 0n },
+                { userOperation: op2, chainId: 10n, validAfter: 0n, validUntil: 0n },
+            ],
+            [{
+                address: wallet.address,
+                signHash: async (h, ctx) => {
+                    captured = ctx;
+                    return wallet.signingKey.sign(h).serialized;
+                },
+            }],
+        );
+        expect('userOperations' in captured).toBe(true);
+        expect(captured.userOperations).toHaveLength(2);
+        expect(captured.userOperations[0].chainId).toBe(1n);
+        expect(captured.userOperations[1].chainId).toBe(10n);
+        expect(captured.userOperations[1].userOperation.nonce).toBe(1n);
+        expect(captured.entryPoint).toBe(safe.entrypointAddress);
+    });
+
+    test('signUserOperationsWithSigners with length=1 still passes multi-op context', async () => {
+        // Regression: previously the length=1 path delegated to the single-op
+        // method which built single-op context, so a multi-op-typed signer
+        // would see `userOperations` undefined at runtime. Now the plural
+        // method always passes multi-op context regardless of bundle length.
+        const safe = ak.SafeMultiChainSigAccountV1.initializeNewAccount([owner]);
+        const op = buildSafeMultiChainOp(safe);
+        const wallet = new Wallet(PK1);
+        let captured = null;
+        await safe.signUserOperationsWithSigners(
+            [{ userOperation: op, chainId: CHAIN_ID, validAfter: 0n, validUntil: 0n }],
+            [{
+                address: wallet.address,
+                signHash: async (h, ctx) => {
+                    captured = ctx;
+                    return wallet.signingKey.sign(h).serialized;
+                },
+            }],
+        );
+        expect('userOperations' in captured).toBe(true);
+        expect(captured.userOperations).toHaveLength(1);
+        expect(captured.userOperations[0].chainId).toBe(CHAIN_ID);
+        expect(captured.userOperations[0].userOperation.sender).toBe(op.sender);
+        expect('userOperation' in captured).toBe(false);
+    });
+
+    test('signTypedData receives the same context shape', async () => {
+        const safe = ak.SafeAccountV0_3_0.initializeNewAccount([owner]);
+        const op = buildSafeV3Op(safe);
+        const wallet = new Wallet(PK1);
+        let captured = null;
+        await safe.signUserOperationWithSigners(op, [{
+            address: wallet.address,
+            signTypedData: async (td, ctx) => {
+                captured = ctx;
+                return wallet.signTypedData(td.domain, td.types, td.message);
+            },
+        }], CHAIN_ID);
+        expect('userOperation' in captured).toBe(true);
+        expect(captured.chainId).toBe(CHAIN_ID);
+    });
+});
+
 // ─── Safe accounts (multi-signer, plural method name) ───────────────────
 
 describe('SafeAccountV0_3_0 signUserOperationWithSigners', () => {

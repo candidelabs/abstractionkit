@@ -16,7 +16,7 @@ import {
 } from "./types";
 
 import { UserOperationV9, MetaTransaction, OnChainIdentifierParamsType } from "../../types";
-import { Signer as AkSigner } from "src/signer/types";
+import { Signer as AkSigner, SignContext, MultiOpSignContext } from "src/signer/types";
 import { pickScheme, invokeSigner } from "src/signer/negotiate";
 import { EIP712_MULTI_CHAIN_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants";
 import { generateMerkleProofs } from "./MerkleTree";
@@ -40,6 +40,17 @@ import {
  * with the Daimo P256 verifier instead of the FCL P256 verifier
  * used by the base SafeAccount class.
  * @see {@link https://github.com/safe-fndn/safe-modules/blob/04e65efbce634e776cc8c1fbe90061f09e09a71b/modules/passkey/CHANGELOG.md?plain=1#L23}
+ *
+ * @remarks Signer typing on this class is asymmetric:
+ * - {@link signUserOperationWithSigners} (singular Operation) signs one op
+ *   and uses {@link SignContext} like every other account.
+ * - {@link signUserOperationsWithSigners} (plural Operations) signs a bundle
+ *   under one signature and uses {@link MultiOpSignContext}.
+ *
+ * To author one signer that works on both methods, type it as
+ * `ExternalSigner<unknown>` (the shape returned by the built-in adapters).
+ * The two narrow context types exist so signers that DO read the context
+ * get accurate, non-optional fields per path.
  */
 export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V9;
@@ -458,12 +469,18 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			validUntil?: bigint;
 		} = {},
 	): Promise<string> {
+		const context: SignContext<UserOperationV9> = {
+			userOperation,
+			chainId,
+			entryPoint: this.entrypointAddress,
+		};
 		return SafeAccount.baseSignUserOperationWithSigners(
 			userOperation,
 			signers,
 			chainId,
 			this.entrypointAddress,
 			this.safe4337ModuleAddress,
+			context,
 			{
 				...overrides,
 				isMultiChainSignature: true,
@@ -557,12 +574,20 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	}
 
 	/**
-	 * Sign a list of UserOperations with a single multi-chain signature, using
-	 * {@link AkSigner} instances (viem, ethers, hardware wallet, HSM, MPC,
-	 * Uint8Array-only). Each signer signs the Merkle root of the UserOperation
-	 * EIP-712 hashes via raw-hash signing. `signTypedData` isn't exposed here
-	 * because the Merkle root is opaque and has no meaningful typed-data
-	 * display.
+	 * Sign a list of UserOperations with a single multi-chain signature,
+	 * using {@link AkSigner} instances typed for {@link MultiOpSignContext}
+	 * (viem, ethers, hardware wallet, HSM, MPC, Uint8Array-only). Each
+	 * signer signs the Merkle root of the UserOperation EIP-712 hashes via
+	 * raw-hash signing. `signTypedData` isn't exposed here because the
+	 * Merkle root is opaque and has no meaningful typed-data display.
+	 *
+	 * Signers always receive {@link MultiOpSignContext} regardless of bundle
+	 * length, so multi-op-typed signers can rely on `ctx.userOperations`
+	 * being defined. Pre-built adapters (`fromPrivateKey`, `fromViem`,
+	 * `fromEthersWallet`, `fromViemWalletClient`) return a universal
+	 * `Signer<unknown>` and work here without retyping; user-defined
+	 * single-op signers (`Signer<SignContext>`) do not — they would receive
+	 * a context shape they didn't declare.
 	 *
 	 * @param userOperationsToSign - UserOperations + chain IDs + validity windows
 	 * @param signers - one Signer per owner (any order; sorted by address on-chain)
@@ -570,7 +595,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 */
 	public async signUserOperationsWithSigners(
 		userOperationsToSign: UserOperationToSign[],
-		signers: ReadonlyArray<AkSigner>,
+		signers: ReadonlyArray<AkSigner<MultiOpSignContext<UserOperationV9>>>,
 	): Promise<string[]> {
 		if (userOperationsToSign.length < 1) {
 			throw new RangeError("There should be at least one userOperationsToSign");
@@ -578,6 +603,17 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		if (signers.length < 1) {
 			throw new RangeError("There should be at least one signer");
 		}
+
+		// Multi-op context: signers see the full bundle (length 1 or N) so
+		// they can log "authorizing N ops across these chains".
+		const context: MultiOpSignContext<UserOperationV9> = {
+			userOperations: userOperationsToSign.map((u) => ({
+				userOperation: u.userOperation,
+				chainId: u.chainId,
+			})),
+			entryPoint: this.entrypointAddress,
+		};
+
 		if (userOperationsToSign.length > 1) {
 			const userOperationsHashes: string[] = [];
 			userOperationsToSign.forEach((uopToSign) => {
@@ -616,9 +652,13 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 					signerIndex: i,
 				});
 			});
+
 			const signatures = await Promise.all(
 				signers.map((signer) =>
-					invokeSigner(signer, "hash", { hash: merkleTreeRootHash }),
+					invokeSigner(signer, "hash", {
+						hash: merkleTreeRootHash,
+						context,
+					}),
 				),
 			);
 			const signerSignaturePairs: SignerSignaturePair[] = signers.map(
@@ -644,17 +684,25 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			});
 			return userOpSignatures;
 		} else {
-			return [
-				await this.signUserOperationWithSigners(
-					userOperationsToSign[0].userOperation,
-					signers,
-					userOperationsToSign[0].chainId,
-					{
-						validUntil: userOperationsToSign[0].validUntil,
-						validAfter: userOperationsToSign[0].validAfter,
-					},
-				),
-			];
+			// length === 1: single op with multi-chain flag, but signers
+			// still see multi-op context (length-1 bundle). Routes through
+			// the base helper with multi-op context override so the runtime
+			// shape matches the signer's declared type.
+			const u = userOperationsToSign[0];
+			const sig = await SafeAccount.baseSignUserOperationWithSigners(
+				u.userOperation,
+				signers,
+				u.chainId,
+				this.entrypointAddress,
+				this.safe4337ModuleAddress,
+				context,
+				{
+					validAfter: u.validAfter,
+					validUntil: u.validUntil,
+					isMultiChainSignature: true,
+				},
+			);
+			return [sig];
 		}
 	}
 

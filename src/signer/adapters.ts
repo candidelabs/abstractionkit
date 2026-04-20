@@ -95,7 +95,7 @@ export interface EthersWalletLike {
  * const signer = fromPrivateKey(process.env.PRIVATE_KEY!);
  * userOp.signature = await safe.signUserOp(userOp, [signer], chainId);
  */
-export function fromPrivateKey(privateKey: string): Signer {
+export function fromPrivateKey(privateKey: string): Signer<unknown> {
 	const wallet = new Wallet(privateKey);
 	return {
 		address: getAddress(wallet.address) as `0x${string}`,
@@ -116,7 +116,7 @@ export function fromPrivateKey(privateKey: string): Signer {
  *
  * @remarks Requires viem &gt;= 2.0.
  */
-export function fromViem(account: ViemLocalAccountLike): Signer {
+export function fromViem(account: ViemLocalAccountLike): Signer<unknown> {
 	return {
 		address: account.address,
 		signHash: (hash) => account.sign({ hash }),
@@ -141,7 +141,7 @@ export function fromViem(account: ViemLocalAccountLike): Signer {
  *
  * @remarks Requires viem &gt;= 2.0.
  */
-export function fromViemWalletClient(client: ViemWalletClientLike): Signer {
+export function fromViemWalletClient(client: ViemWalletClientLike): Signer<unknown> {
 	if (!client.account) {
 		throw new Error(
 			"fromViemWalletClient: client has no `account` configured. " +
@@ -173,7 +173,7 @@ export function fromViemWalletClient(client: ViemWalletClientLike): Signer {
  *
  * @remarks Requires ethers &gt;= 6.0.
  */
-export function fromEthersWallet(wallet: EthersWalletLike): Signer {
+export function fromEthersWallet(wallet: EthersWalletLike): Signer<unknown> {
 	// ethers types `address` as plain `string`; at runtime it's always
 	// checksummed 0x-prefixed hex.
 	return {
