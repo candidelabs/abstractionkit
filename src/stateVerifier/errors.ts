@@ -1,6 +1,25 @@
 import { AbstractionKitError, Jsonable } from "../errors";
 
 /**
+ * Reduce an RPC URL to its origin so a malformed or credential-bearing URL
+ * (e.g., `https://eth-mainnet.foo.io/v2/SECRET_KEY`) cannot leak through
+ * error messages, logs, or error-report exports. For non-URL strings, return
+ * a redacted placeholder.
+ *
+ * @internal
+ */
+function sanitizeRpcUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    // `.origin` is protocol + host + port, with path, query, hash, and
+    // userinfo (credentials) all stripped.
+    return u.origin;
+  } catch {
+    return "[invalid-url]";
+  }
+}
+
+/**
  * Base class for all state proof verification failures.
  *
  * Extends {@link AbstractionKitError} so callers can do a single
@@ -41,14 +60,18 @@ export class ConsensusHeaderDisagreementError extends StateProofVerificationErro
   public readonly nodes: ConsensusDisagreementNode[];
 
   constructor(fields: string[], nodes: ConsensusDisagreementNode[]) {
+    const sanitized: ConsensusDisagreementNode[] = nodes.map((n) => ({
+      ...n,
+      url: sanitizeRpcUrl(n.url),
+    }));
     super(
-      `Verification nodes disagree on block header field(s) [${fields.join(", ")}]: ${nodes
+      `Verification nodes disagree on block header field(s) [${fields.join(", ")}]: ${sanitized
         .map((n) => `${n.url}={stateRoot:${n.stateRoot},blockHash:${n.blockHash}}`)
         .join(", ")}`,
-      { fields, nodes },
+      { fields, nodes: sanitized },
     );
     this.fields = fields;
-    this.nodes = nodes;
+    this.nodes = sanitized;
   }
 }
 
@@ -71,13 +94,17 @@ export class ConsensusQuorumNotMetError extends StateProofVerificationError {
     required: number,
     failures: Array<{ url: string; error: string }>,
   ) {
+    const sanitized = failures.map((f) => ({
+      ...f,
+      url: sanitizeRpcUrl(f.url),
+    }));
     super(
       `Consensus quorum not met: ${responded}/${required} nodes responded`,
-      { responded, required, failures },
+      { responded, required, failures: sanitized },
     );
     this.responded = responded;
     this.required = required;
-    this.failures = failures;
+    this.failures = sanitized;
   }
 }
 
