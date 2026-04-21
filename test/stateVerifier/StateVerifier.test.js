@@ -1,5 +1,10 @@
 const ak = require('../../dist/index.cjs');
 
+function padSlot32(slot) {
+  const hex = String(slot).replace(/^0x/, '').toLowerCase();
+  return '0x' + hex.padStart(64, '0');
+}
+
 describe('StateVerifier constructor', () => {
   test('applies defaults', () => {
     const v = new ak.StateVerifier({
@@ -46,6 +51,46 @@ describe('StateVerifier constructor', () => {
   test('throws when verificationRpcs is empty', () => {
     expect(() => new ak.StateVerifier({ primaryRpc: 'http://p', verificationRpcs: [] })).toThrow();
   });
+
+  test('throws on invalid quorumThreshold', () => {
+    expect(() => new ak.StateVerifier({
+      primaryRpc: 'http://p', verificationRpcs: ['http://a'], quorumThreshold: 0,
+    })).toThrow(/quorumThreshold/);
+    expect(() => new ak.StateVerifier({
+      primaryRpc: 'http://p', verificationRpcs: ['http://a'], quorumThreshold: 99,
+    })).toThrow(/quorumThreshold/);
+    expect(() => new ak.StateVerifier({
+      primaryRpc: 'http://p', verificationRpcs: ['http://a'], quorumThreshold: 1.5,
+    })).toThrow(/quorumThreshold/);
+  });
+
+  test('throws on negative retries / syncTolerance / non-positive requestTimeoutMs', () => {
+    expect(() => new ak.StateVerifier({
+      primaryRpc: 'http://p', verificationRpcs: ['http://a'], retries: -1,
+    })).toThrow(/retries/);
+    expect(() => new ak.StateVerifier({
+      primaryRpc: 'http://p', verificationRpcs: ['http://a'], syncTolerance: -1,
+    })).toThrow(/syncTolerance/);
+    expect(() => new ak.StateVerifier({
+      primaryRpc: 'http://p', verificationRpcs: ['http://a'], requestTimeoutMs: 0,
+    })).toThrow(/requestTimeoutMs/);
+  });
+});
+
+describe('StateVerifier slot normalization', () => {
+  // Exercise normalizeSlot via a proxy path: getVerifiedStorageSlot will
+  // invoke normalizeSlot on the user-provided slot before calling the mock.
+  test('rejects negative bigint slot', async () => {
+    const v = new ak.StateVerifier({ primaryRpc: 'http://p', verificationRpcs: ['http://a'] });
+    await expect(v.getVerifiedStorageSlot({ address: '0x' + '0'.repeat(40), slot: -1n }))
+      .rejects.toThrow(/uint256 range/);
+  });
+
+  test('rejects bigint slot larger than 2^256 - 1', async () => {
+    const v = new ak.StateVerifier({ primaryRpc: 'http://p', verificationRpcs: ['http://a'] });
+    await expect(v.getVerifiedStorageSlot({ address: '0x' + '0'.repeat(40), slot: 1n << 256n }))
+      .rejects.toThrow(/uint256 range/);
+  });
 });
 
 function mockVerifierRpc({ blockFixture, proofFixture, codeFixture }) {
@@ -66,9 +111,20 @@ function mockVerifierRpc({ blockFixture, proofFixture, codeFixture }) {
           timestamp: blockFixture.block.timestamp,
         };
         break;
-      case 'eth_getProof':
-        result = proofFixture;
+      case 'eth_getProof': {
+        // Mirror real eth_getProof behavior: only return storage proofs for
+        // the slots the caller actually requested, instead of echoing any
+        // storage proofs baked into the fixture at capture time.
+        const requested = (body.params[1] || []).map(padSlot32);
+        const requestedSet = new Set(requested);
+        result = {
+          ...proofFixture,
+          storageProof: (proofFixture.storageProof || []).filter((sp) =>
+            requestedSet.has(padSlot32(sp.key)),
+          ),
+        };
         break;
+      }
       case 'eth_getCode':
         result = codeFixture;
         break;
@@ -247,8 +303,16 @@ describe('StateVerifier.getVerifiedAccountStates', () => {
         };
       } else if (body.method === 'eth_getProof') {
         proofCallCount++;
-        result = body.params[0].toLowerCase() === f1.getProof.address.toLowerCase()
+        const source = body.params[0].toLowerCase() === f1.getProof.address.toLowerCase()
           ? f1.getProof : f2.getProof;
+        const requested = (body.params[1] || []).map(padSlot32);
+        const requestedSet = new Set(requested);
+        result = {
+          ...source,
+          storageProof: (source.storageProof || []).filter((sp) =>
+            requestedSet.has(padSlot32(sp.key)),
+          ),
+        };
       }
       return { ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 1, result }) };
     };

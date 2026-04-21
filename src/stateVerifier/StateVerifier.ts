@@ -5,6 +5,8 @@ import { jsonRpcCall } from "./rpc";
 import { AccountProofInvalidError, CodeHashMismatchError } from "./errors";
 import type { ConsensusBlockHeader, EthGetProofResult, VerifiedAccountState } from "./types";
 
+const MAX_UINT256 = (1n << 256n) - 1n;
+
 function normalizeSlot(slot: string | bigint | number): string {
   let asBig: bigint;
   if (typeof slot === "bigint") asBig = slot;
@@ -16,6 +18,11 @@ function normalizeSlot(slot: string | bigint | number): string {
   } else {
     const hex = slot.startsWith("0x") ? slot.slice(2) : slot;
     asBig = BigInt("0x" + hex);
+  }
+  if (asBig < 0n || asBig > MAX_UINT256) {
+    throw new RangeError(
+      `Invalid slot: ${slot} is outside the uint256 range [0, 2^256 - 1]`,
+    );
   }
   return "0x" + asBig.toString(16).padStart(64, "0");
 }
@@ -77,7 +84,7 @@ export class StateVerifier {
     if (!params.primaryRpc) {
       throw new Error("StateVerifier requires primaryRpc");
     }
-    if (params.verificationRpcs.length === 0) {
+    if (!Array.isArray(params.verificationRpcs) || params.verificationRpcs.length === 0) {
       throw new Error("StateVerifier requires at least one verification RPC");
     }
     this.primaryRpc = params.primaryRpc;
@@ -85,11 +92,45 @@ export class StateVerifier {
     this.consensusRpcs = Array.from(
       new Set([params.primaryRpc, ...params.verificationRpcs]),
     );
-    this.quorumThreshold =
-      params.quorumThreshold ?? Math.floor(this.consensusRpcs.length / 2) + 1;
-    this.retries = params.retries ?? 3;
-    this.syncTolerance = params.syncTolerance ?? 1;
-    this.requestTimeoutMs = params.requestTimeoutMs ?? 10_000;
+
+    const quorumDefault = Math.floor(this.consensusRpcs.length / 2) + 1;
+    const quorum = params.quorumThreshold ?? quorumDefault;
+    if (
+      !Number.isInteger(quorum) ||
+      quorum < 1 ||
+      quorum > this.consensusRpcs.length
+    ) {
+      throw new RangeError(
+        `quorumThreshold must be an integer in [1, ${this.consensusRpcs.length}], got ${quorum}`,
+      );
+    }
+    this.quorumThreshold = quorum;
+
+    const retries = params.retries ?? 3;
+    if (!Number.isInteger(retries) || retries < 0) {
+      throw new RangeError(`retries must be a non-negative integer, got ${retries}`);
+    }
+    this.retries = retries;
+
+    const syncTolerance = params.syncTolerance ?? 1;
+    if (!Number.isInteger(syncTolerance) || syncTolerance < 0) {
+      throw new RangeError(
+        `syncTolerance must be a non-negative integer, got ${syncTolerance}`,
+      );
+    }
+    this.syncTolerance = syncTolerance;
+
+    const requestTimeoutMs = params.requestTimeoutMs ?? 10_000;
+    if (
+      typeof requestTimeoutMs !== "number" ||
+      !Number.isFinite(requestTimeoutMs) ||
+      requestTimeoutMs <= 0
+    ) {
+      throw new RangeError(
+        `requestTimeoutMs must be a positive finite number, got ${requestTimeoutMs}`,
+      );
+    }
+    this.requestTimeoutMs = requestTimeoutMs;
   }
 
   /**
@@ -163,11 +204,14 @@ export class StateVerifier {
       }
     }
 
+    // Normalize/validate slots before any network call so malformed input
+    // surfaces immediately instead of after a consensus round-trip.
+    const normalizedSlots = slots.map(normalizeSlot);
+
     const header = params.header ?? (await this.getConsensusBlockHeader({
       blockNumber: params.blockNumber ?? "latest",
     }));
 
-    const normalizedSlots = slots.map(normalizeSlot);
     const blockHex = "0x" + header.blockNumber.toString(16);
 
     const proof = await jsonRpcCall<EthGetProofResult>({
@@ -179,6 +223,28 @@ export class StateVerifier {
     });
 
     verifyAccountProof({ stateRoot: header.stateRoot, address, proof });
+
+    // Guard against an RPC that returns proofs for different slots than we
+    // requested. Without this check, a malicious primary could satisfy
+    // verifyStorageProof cryptographically (the proofs are valid against the
+    // storageHash) but have the returned slots be irrelevant to the caller,
+    // leaving `getVerifiedStorageSlot` to resolve as `undefined`.
+    const requestedSlotSet = new Set(normalizedSlots);
+    const returnedSlotSet = new Set(
+      proof.storageProof.map((sp) => normalizeSlot(sp.key)),
+    );
+    if (requestedSlotSet.size !== returnedSlotSet.size) {
+      throw new Error(
+        `eth_getProof returned ${returnedSlotSet.size} distinct storage slots for ${requestedSlotSet.size} requested (address=${address})`,
+      );
+    }
+    for (const slot of requestedSlotSet) {
+      if (!returnedSlotSet.has(slot)) {
+        throw new Error(
+          `eth_getProof did not return a proof for requested storage slot ${slot} (address=${address})`,
+        );
+      }
+    }
 
     const storage: Record<string, string> = {};
     for (const sp of proof.storageProof) {
@@ -322,10 +388,14 @@ export class StateVerifier {
       throw new CodeHashMismatchError(params.address, state.codeHash, actualCodeHash);
     }
 
+    // Return the hash we actually validated against the fetched bytes, not
+    // state.codeHash: when the account is absent we accept actualCodeHash =
+    // EMPTY_CODE_HASH against state.codeHash = zeroHash, so returning the
+    // latter would leave `(code, codeHash)` inconsistent with keccak256(code).
     return {
       blockNumber: state.blockNumber,
       code,
-      codeHash: state.codeHash,
+      codeHash: actualCodeHash,
     };
   }
 
