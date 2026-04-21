@@ -155,6 +155,68 @@ describe('getConsensusBlockHeader', () => {
     } finally { restore(); }
   });
 
+  test('throws when a node returns a header for a different block number than requested', async () => {
+    const wrongNumber = { number: '0x99', hash: '0xh', stateRoot: '0xsame', parentHash: '0xp', timestamp: '0x64' };
+    const rightNumber = { number: '0x10', hash: '0xh', stateRoot: '0xsame', parentHash: '0xp', timestamp: '0x64' };
+    const restore = mockFetch({
+      'http://lying': () => wrongNumber,
+      'http://honest1': () => rightNumber,
+      'http://honest2': () => rightNumber,
+    });
+    try {
+      // Two honest nodes agree; lying node's wrong-number response is rejected
+      // as a failure, so quorum of 2/3 (strict majority default) is still met.
+      const header = await ak.getConsensusBlockHeader({
+        blockNumber: 16n,
+        verificationRpcs: ['http://lying', 'http://honest1', 'http://honest2'],
+      });
+      expect(header.blockNumber).toBe(16n);
+    } finally { restore(); }
+  });
+
+  test('throws RangeError on invalid consensus config', async () => {
+    await expect(ak.getConsensusBlockHeader({
+      blockNumber: 'latest', verificationRpcs: ['http://a'], syncTolerance: -1,
+    })).rejects.toThrow(/syncTolerance/);
+    await expect(ak.getConsensusBlockHeader({
+      blockNumber: 'latest', verificationRpcs: ['http://a'], quorumThreshold: 99,
+    })).rejects.toThrow(/quorumThreshold/);
+    await expect(ak.getConsensusBlockHeader({
+      blockNumber: -1n, verificationRpcs: ['http://a'],
+    })).rejects.toThrow(/blockNumber/);
+    await expect(ak.getConsensusBlockHeader({
+      blockNumber: 'latest', verificationRpcs: ['http://a'], requestTimeoutMs: 0,
+    })).rejects.toThrow(/requestTimeoutMs/);
+  });
+
+  test('sanitizes auth/path from URLs in disagreement error', async () => {
+    const base = { number: '0x10', parentHash: '0xp', timestamp: '0x64' };
+    const restore = mockFetch({
+      'https://eth-mainnet.example.com/v2/SECRET_KEY': () => ({ ...base, hash: '0xhashA', stateRoot: '0xroot1' }),
+      'https://honest.example.com/path?k=v': () => ({ ...base, hash: '0xhashB', stateRoot: '0xroot2' }),
+    });
+    try {
+      await ak.getConsensusBlockHeader({
+        blockNumber: 16n,
+        verificationRpcs: [
+          'https://eth-mainnet.example.com/v2/SECRET_KEY',
+          'https://honest.example.com/path?k=v',
+        ],
+      });
+      throw new Error('expected disagreement');
+    } catch (e) {
+      expect(e).toBeInstanceOf(ak.ConsensusHeaderDisagreementError);
+      // Sanitized URLs must strip path, query, and any credentials.
+      const urls = e.nodes.map((n) => n.url);
+      expect(urls).toContain('https://eth-mainnet.example.com');
+      expect(urls).toContain('https://honest.example.com');
+      // Secret and path must NOT appear anywhere.
+      expect(e.message).not.toMatch(/SECRET_KEY/);
+      expect(e.message).not.toMatch(/\/v2\//);
+      expect(JSON.stringify(e.nodes)).not.toMatch(/SECRET_KEY/);
+    } finally { restore(); }
+  });
+
   test('default quorum requires strict majority (N=3 requires 2 responders)', async () => {
     const block = { number: '0x10', hash: '0xh', stateRoot: '0xsame', parentHash: '0xp', timestamp: '0x64' };
     const original = global.fetch;

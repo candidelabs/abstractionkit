@@ -68,8 +68,36 @@ export async function getConsensusBlockHeader(params: {
     requestTimeoutMs = 10_000,
   } = params;
 
-  if (verificationRpcs.length === 0) {
+  if (!Array.isArray(verificationRpcs) || verificationRpcs.length === 0) {
     throw new ConsensusQuorumNotMetError(0, quorumThreshold, []);
+  }
+  if (
+    !Number.isInteger(quorumThreshold) ||
+    quorumThreshold < 1 ||
+    quorumThreshold > verificationRpcs.length
+  ) {
+    throw new RangeError(
+      `quorumThreshold must be an integer in [1, ${verificationRpcs.length}], got ${quorumThreshold}`,
+    );
+  }
+  if (!Number.isInteger(syncTolerance) || syncTolerance < 0) {
+    throw new RangeError(
+      `syncTolerance must be a non-negative integer, got ${syncTolerance}`,
+    );
+  }
+  if (
+    typeof requestTimeoutMs !== "number" ||
+    !Number.isFinite(requestTimeoutMs) ||
+    requestTimeoutMs <= 0
+  ) {
+    throw new RangeError(
+      `requestTimeoutMs must be a positive finite number, got ${requestTimeoutMs}`,
+    );
+  }
+  if (blockNumber !== "latest" && blockNumber < 0n) {
+    throw new RangeError(
+      `blockNumber must be non-negative, got ${blockNumber}`,
+    );
   }
 
   // Resolve "latest" across all verifiers (median minus syncTolerance).
@@ -114,7 +142,10 @@ export async function getConsensusBlockHeader(params: {
     // honest-majority.
     latests.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
     const median = latests[Math.floor((latests.length - 1) / 2)];
-    resolvedBlockNumber = median - BigInt(syncTolerance);
+    const subtracted = median - BigInt(syncTolerance);
+    // Clamp to 0 so a large syncTolerance on an early-stage chain cannot
+    // produce a negative block number (which would break hex formatting).
+    resolvedBlockNumber = subtracted < 0n ? 0n : subtracted;
   } else {
     resolvedBlockNumber = blockNumber;
   }
@@ -145,6 +176,14 @@ export async function getConsensusBlockHeader(params: {
         failures.push({
           url: r.value.url,
           error: `block ${blockHex} not found on node`,
+        });
+      } else if (BigInt(r.value.header.number) !== resolvedBlockNumber) {
+        // A node returned a header for a different block number than the one
+        // we asked for. Do not trust it as a response to our query; an honest
+        // node should return the exact block we requested.
+        failures.push({
+          url: r.value.url,
+          error: `block ${blockHex} number mismatch: node returned ${r.value.header.number}`,
         });
       } else {
         successes.push(r.value);
