@@ -24,14 +24,24 @@ export const Nibbles = {
 
 /** Compact hex-prefix encoding / decoding of MPT node paths. */
 export const PathEncoder = {
-	/** Decode a compact-encoded path back to a nibble array. */
+	/**
+	 * Decode a compact-encoded path back to a nibble array.
+	 *
+	 * HP encoding uses only four legal first-nibble prefixes:
+	 *   0x0 = extension, even length
+	 *   0x1 = extension, odd length
+	 *   0x2 = leaf, even length
+	 *   0x3 = leaf, odd length
+	 *
+	 * Anything else (0x4..0xf) is a malformed node and must be rejected so a
+	 * bogus HP byte like 0x40 is not silently treated as an odd-length path.
+	 */
 	decode(encodedPath: Uint8Array): number[] {
 		const nibbles = Nibbles.fromBytes(encodedPath);
 		const prefix = nibbles[0];
-		// Even length: 0x0_ (extension) or 0x2_ (leaf).
 		if (prefix === 0 || prefix === 2) return nibbles.slice(2);
-		// Odd length: 0x1_ (extension) or 0x3_ (leaf).
-		return nibbles.slice(1);
+		if (prefix === 1 || prefix === 3) return nibbles.slice(1);
+		throw new Error(`Invalid compact-path prefix: 0x${prefix.toString(16)}`);
 	},
 
 	/** True if the encoded path represents a leaf node (vs an extension). */
