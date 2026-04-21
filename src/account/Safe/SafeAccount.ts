@@ -1,78 +1,94 @@
 import {
-	Wallet,
 	AbiCoder,
-	TypedDataEncoder,
+	ethers,
+	getAddress,
 	keccak256,
 	solidityPacked,
 	solidityPackedKeccak256,
-	ethers,
-    getAddress
+	TypedDataEncoder,
+	Wallet,
 } from "ethers";
-import { SmartAccount } from "../SmartAccount";
+import { Bundler } from "src/Bundler";
+import { AbstractionKitError, ensureError } from "src/errors";
+import { SafeAccountFactory } from "src/factory/SafeAccountFactory";
+import { invokeSigner, pickScheme } from "src/signer/negotiate";
+import type { Signer as AkSigner, SigningScheme, TypedData } from "src/signer/types";
 import {
 	BaseUserOperationDummyValues,
-	ZeroAddress,
-	Safe_L2_V1_4_1,
+	EIP712_SAFE_OPERATION_PRIMARY_TYPE,
+	EIP712_SAFE_OPERATION_V6_TYPE,
+	EIP712_SAFE_OPERATION_V7_TYPE,
 	ENTRYPOINT_V6,
 	ENTRYPOINT_V7,
-	EIP712_SAFE_OPERATION_V7_TYPE,
-	EIP712_SAFE_OPERATION_V6_TYPE,
-	EIP712_SAFE_OPERATION_PRIMARY_TYPE,
-    ENTRYPOINT_V9,
+	ENTRYPOINT_V9,
+	Safe_L2_V1_4_1,
+	ZeroAddress,
 } from "../../constants";
 import {
-	MetaTransaction,
+	type AbiInputValue,
+	type BaseUserOperation,
+	type MetaTransaction,
+	type OnChainIdentifierParamsType,
 	Operation,
-	StateOverrideSet,
-	BaseUserOperation,
-	UserOperationV6,
-	UserOperationV7,
-    GasOption,
-    PolygonChain,
-    OnChainIdentifierParamsType,
-    TenderlySimulationResult,
-    UserOperationV9,
+	type StateOverrideSet,
+	type TenderlySimulationResult,
+	type UserOperationV6,
+	type UserOperationV7,
+	type UserOperationV9,
 } from "../../types";
 import {
 	createCallData,
-	getFunctionSelector,
 	fetchAccountNonce,
+	getFunctionSelector,
+	handlefetchGasPrice,
 	sendEthCallRequest,
 	sendEthGetCodeRequest,
-    handlefetchGasPrice,
 } from "../../utils";
-
 import {
-    simulateSenderCallDataWithTenderly,
-    simulateSenderCallDataWithTenderlyAndCreateShareLink
+	simulateSenderCallDataWithTenderly,
+	simulateSenderCallDataWithTenderlyAndCreateShareLink,
 } from "../../utilsTenderly";
-
-import {
-	CreateBaseUserOperationOverrides,
-	Signer,
-	SafeUserOperationTypedDataDomain,
-	SafeUserOperationV6TypedMessageValue,
-	SafeUserOperationV7TypedMessageValue,
-	SafeUserOperationV9TypedMessageValue,
-	SignerSignaturePair,
-	WebauthnSignatureData,
-	SafeModuleExecutorFunctionSelector,
-	EOADummySignerSignaturePair,
-	WebAuthnSignatureOverrides,
-	BaseInitOverrides,
-    WebauthnDummySignerSignaturePair,
-    WebauthnPublicKey,
-    SafeAccountSingleton,
-} from "./types";
-import { decodeMultiSendCallData, encodeMultiSendCallData } from "./multisend";
-import { Signer as AkSigner, SigningScheme, TypedData } from "src/signer/types";
-import { pickScheme, invokeSigner } from "src/signer/negotiate";
-import { AbstractionKitError, ensureError } from "src/errors";
-import { Bundler } from "src/Bundler";
 import { SendUseroperationResponse } from "../SendUseroperationResponse";
-import { SafeAccountFactory } from "src/factory/SafeAccountFactory";
-import { getSafeMessageEip712Data, SafeMessageTypedDataDomain, SafeMessageTypedMessageValue } from "./safeMessage";
+import { SmartAccount } from "../SmartAccount";
+import { decodeMultiSendCallData, encodeMultiSendCallData } from "./multisend";
+import {
+	getSafeMessageEip712Data,
+	type SafeMessageTypedDataDomain,
+	type SafeMessageTypedMessageValue,
+} from "./safeMessage";
+import {
+	type BaseInitOverrides,
+	type CreateBaseUserOperationOverrides,
+	EOADummySignerSignaturePair,
+	type SafeAccountSingleton,
+	SafeModuleExecutorFunctionSelector,
+	type SafeUserOperationTypedDataDomain,
+	type SafeUserOperationV6TypedMessageValue,
+	type SafeUserOperationV7TypedMessageValue,
+	type SafeUserOperationV9TypedMessageValue,
+	type Signer,
+	type SignerSignaturePair,
+	type WebAuthnSignatureOverrides,
+	WebauthnDummySignerSignaturePair,
+	type WebauthnPublicKey,
+	type WebauthnSignatureData,
+} from "./types";
 
+/**
+ * Base implementation shared by all Safe-account variants.
+ *
+ * Provides the core logic for Safe ERC-4337 accounts: counterfactual address
+ * derivation, initializer/factory-data encoding, EIP-712 UserOperation signing,
+ * multi-signer aggregation (ECDSA + WebAuthn), module enable/disable helpers,
+ * and UserOperation construction. Versioned subclasses
+ * ({@link SafeAccountV0_2_0}, {@link SafeAccountV0_3_0},
+ * {@link SafeAccountV1_5_0_M_0_3_0}) bind this class to a specific EntryPoint
+ * and Safe singleton, and expose version-typed wrappers.
+ *
+ * Instantiate directly only for an already-deployed account; use a subclass's
+ * static `initializeNewAccount` to produce a counterfactual account + factory
+ * data for first-time deployment.
+ */
 export class SafeAccount extends SmartAccount {
 	static readonly DEFAULT_WEB_AUTHN_SHARED_SIGNER: string =
 		"0xfD90FAd33ee8b58f32c00aceEad1358e4AFC23f9";
@@ -87,8 +103,7 @@ export class SafeAccount extends SmartAccount {
 	static readonly DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE: string =
 		"0x61010060405234801561001157600080fd5b506040516101ee3803806101ee83398101604081905261003091610058565b6001600160a01b0390931660805260a09190915260c0526001600160b01b031660e0526100bc565b6000806000806080858703121561006e57600080fd5b84516001600160a01b038116811461008557600080fd5b60208601516040870151606088015192965090945092506001600160b01b03811681146100b157600080fd5b939692955090935050565b60805160a05160c05160e05160ff6100ef60003960006008015260006031015260006059015260006080015260ff6000f3fe608060408190527f00000000000000000000000000000000000000000000000000000000000000003660b681018290527f000000000000000000000000000000000000000000000000000000000000000060a082018190527f00000000000000000000000000000000000000000000000000000000000000008285018190527f00000000000000000000000000000000000000000000000000000000000000009490939192600082376000806056360183885af490503d6000803e8060c3573d6000fd5b503d6000f3fea2646970667358221220ddd9bb059ba7a6497d560ca97aadf4dbf0476f578378554a50d41c6bb654beae64736f6c63430008180033";
 
-	static readonly DEFAULT_MULTISEND_CONTRACT_ADDRESS =
-		"0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526";
+	static readonly DEFAULT_MULTISEND_CONTRACT_ADDRESS = "0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526";
 
 	static readonly initializerFunctionSelector: string = "0xb63e800d";
 	static readonly initializerFunctionInputAbi: string[] = [
@@ -115,23 +130,32 @@ export class SafeAccount extends SmartAccount {
 	protected x: bigint | null = null;
 	protected y: bigint | null = null;
 
-	readonly safeAccountSingleton:SafeAccountSingleton;
+	readonly safeAccountSingleton: SafeAccountSingleton;
 	readonly entrypointAddress: string;
 	readonly safe4337ModuleAddress: string;
 	protected factoryAddress: string | null;
 	protected factoryData: string | null;
 
-    readonly onChainIdentifier: string | null;
+	readonly onChainIdentifier: string | null;
 
+	/**
+	 * @param accountAddress - On-chain address of the Safe account
+	 * @param safe4337ModuleAddress - Address of the Safe 4337 module the account delegates to
+	 * @param entrypointAddress - Target EntryPoint address (v0.6 / v0.7 / v0.9)
+	 * @param overrides - Optional on-chain-identifier configuration and custom singleton
+	 * @param overrides.onChainIdentifierParams - Attribution params for analytics (mutually exclusive with `onChainIdentifier`)
+	 * @param overrides.onChainIdentifier - Pre-computed 32-byte identifier hex (no 0x prefix or with 0x)
+	 * @param overrides.safeAccountSingleton - Override Safe singleton address + init hash (defaults to Safe L2 v1.4.1)
+	 */
 	constructor(
 		accountAddress: string,
 		safe4337ModuleAddress: string,
 		entrypointAddress: string,
-        overrides: {
-            onChainIdentifierParams?: OnChainIdentifierParamsType;
-            onChainIdentifier?: string;
-            safeAccountSingleton?: SafeAccountSingleton;
-        } = {}
+		overrides: {
+			onChainIdentifierParams?: OnChainIdentifierParamsType;
+			onChainIdentifier?: string;
+			safeAccountSingleton?: SafeAccountSingleton;
+		} = {},
 	) {
 		super(accountAddress);
 		this.entrypointAddress = entrypointAddress;
@@ -140,45 +164,40 @@ export class SafeAccount extends SmartAccount {
 		this.factoryData = null;
 
 		this.isInitWebAuthn = false;
-        
-        if(
-            overrides.onChainIdentifierParams != null &&
-            overrides.onChainIdentifier != null
-        ){
-			throw new RangeError(
-                "can't override both onChainIdentifier and onChainIdentifierParams"
-            );
-        }else if(overrides.onChainIdentifierParams != null){
-            this.onChainIdentifier = generateOnChainIdentifier(
-                overrides.onChainIdentifierParams.project,
-                overrides.onChainIdentifierParams.platform,
-                overrides.onChainIdentifierParams.tool,
-                overrides.onChainIdentifierParams.toolVersion,
-            );
-        }else if(overrides.onChainIdentifier != null){
-            let onChainIdentifier = overrides.onChainIdentifier;
-            if (onChainIdentifier.startsWith("0x")){
-                onChainIdentifier = onChainIdentifier.slice(2);
-            }
-            if(onChainIdentifier.length != 64){
-                throw new RangeError("onChainIdentifier length must be 64.");
-            }
-            this.onChainIdentifier = onChainIdentifier;
-        }else{
-            this.onChainIdentifier = null;
-        }
-        this.safeAccountSingleton = overrides.safeAccountSingleton?? Safe_L2_V1_4_1;
+
+		if (overrides.onChainIdentifierParams != null && overrides.onChainIdentifier != null) {
+			throw new RangeError("can't override both onChainIdentifier and onChainIdentifierParams");
+		} else if (overrides.onChainIdentifierParams != null) {
+			this.onChainIdentifier = generateOnChainIdentifier(
+				overrides.onChainIdentifierParams.project,
+				overrides.onChainIdentifierParams.platform,
+				overrides.onChainIdentifierParams.tool,
+				overrides.onChainIdentifierParams.toolVersion,
+			);
+		} else if (overrides.onChainIdentifier != null) {
+			let onChainIdentifier = overrides.onChainIdentifier;
+			if (onChainIdentifier.startsWith("0x")) {
+				onChainIdentifier = onChainIdentifier.slice(2);
+			}
+			if (onChainIdentifier.length !== 64) {
+				throw new RangeError("onChainIdentifier length must be 64.");
+			}
+			this.onChainIdentifier = onChainIdentifier;
+		} else {
+			this.onChainIdentifier = null;
+		}
+		this.safeAccountSingleton = overrides.safeAccountSingleton ?? Safe_L2_V1_4_1;
 	}
 
 	/**
-	 * calculate proxy/account address using initilizer call data
+	 * calculate proxy/account address using initializer call data
 	 * @param initializerCallData from createBaseInitializerCallData
 	 * @param overrides - overrides for the default values
 	 * @param overrides.c2Nonce - create2 nonce to generate different sender addresses from the same owners
 	 * defaults to zero
 	 * @param overrides.safeFactoryAddress - safeFactoryAddress, defaults to
 	 * SafeAccountFactory.DEFAULT_FACTORY_ADDRESS
-	 * @param overrides.singletonInitHash - a hash that includes the singleton address and thr proxy bytecode
+	 * @param overrides.singletonInitHash - a hash that includes the singleton address and the proxy bytecode
 	 * keccak256(solidityPacked(["bytes", "bytes"], [proxyByteCode, abiCoder.encode(["uint256"], [singletonAddress])]))
 	 * defaults to SafeAccount.safeAccountSingleton.singletonInitHash
 	 * @returns proxy/account address
@@ -196,15 +215,10 @@ export class SafeAccount extends SmartAccount {
 			throw new RangeError("c2Nonce can't be negative");
 		}
 		const safeFactoryAddress =
-			overrides.safeFactoryAddress ??
-			SafeAccountFactory.DEFAULT_FACTORY_ADDRESS;
-		const singletonInitHash =
-			overrides.singletonInitHash ?? Safe_L2_V1_4_1.singletonInitHash;
+			overrides.safeFactoryAddress ?? SafeAccountFactory.DEFAULT_FACTORY_ADDRESS;
+		const singletonInitHash = overrides.singletonInitHash ?? Safe_L2_V1_4_1.singletonInitHash;
 		const salt = keccak256(
-			solidityPacked(
-				["bytes32", "uint256"],
-				[keccak256(initializerCallData), c2Nonce],
-			),
+			solidityPacked(["bytes32", "uint256"], [keccak256(initializerCallData), c2Nonce]),
 		);
 
 		const proxyAdd = solidityPackedKeccak256(
@@ -212,7 +226,7 @@ export class SafeAccount extends SmartAccount {
 			["0xff", safeFactoryAddress, salt, singletonInitHash],
 		).slice(-40);
 
-		return getAddress("0x" + proxyAdd);//to checksummed
+		return getAddress(`0x${proxyAdd}`); //to checksummed
 	}
 
 	/**
@@ -273,17 +287,12 @@ export class SafeAccount extends SmartAccount {
 			overrides.safeModuleExecutorFunctionSelector ??
 			SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR;
 		const multisendContractAddress =
-			overrides.multisendContractAddress ??
-			SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS;
+			overrides.multisendContractAddress ?? SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS;
 
 		const multiData = encodeMultiSendCallData(metaTransactions);
 
 		const mutisendSelector = "0x8d80ff0a";
-		const multiSendCallData = createCallData(
-			mutisendSelector,
-			["bytes"],
-			[multiData],
-		);
+		const multiSendCallData = createCallData(mutisendSelector, ["bytes"], [multiData]);
 
 		const executorFunctionCallData = SafeAccount.createAccountCallData(
 			multisendContractAddress,
@@ -301,7 +310,7 @@ export class SafeAccount extends SmartAccount {
 	/**
 	 * encode calldata to be executed by Safe account
 	 * @param to - target address
-	 * @param value - amount of natic token to transafer to target address
+	 * @param value - amount of native token to transfer to target address
 	 * @param data - calldata
 	 * @param operation - either call or delegate call
 	 * @param overrides - overrides for the default values
@@ -339,24 +348,16 @@ export class SafeAccount extends SmartAccount {
 	public static decodeAccountCallData(
 		callData: string,
 	): [MetaTransaction, SafeModuleExecutorFunctionSelector] {
-		let safeModuleExecutorFunctionSelector: SafeModuleExecutorFunctionSelector | null =
-			null;
-		if (
-			callData.startsWith(
-				SafeModuleExecutorFunctionSelector.executeUserOpWithErrorString,
-			)
-		) {
+		let safeModuleExecutorFunctionSelector: SafeModuleExecutorFunctionSelector | null = null;
+		if (callData.startsWith(SafeModuleExecutorFunctionSelector.executeUserOpWithErrorString)) {
 			safeModuleExecutorFunctionSelector =
 				SafeModuleExecutorFunctionSelector.executeUserOpWithErrorString;
-		} else if (
-			callData.startsWith(SafeModuleExecutorFunctionSelector.executeUserOp)
-		) {
-			safeModuleExecutorFunctionSelector =
-				SafeModuleExecutorFunctionSelector.executeUserOp;
+		} else if (callData.startsWith(SafeModuleExecutorFunctionSelector.executeUserOp)) {
+			safeModuleExecutorFunctionSelector = SafeModuleExecutorFunctionSelector.executeUserOp;
 		}
 		if (safeModuleExecutorFunctionSelector != null) {
 			const abiCoder = AbiCoder.defaultAbiCoder();
-			const params = "0x" + callData.slice(10);
+			const params = `0x${callData.slice(10)}`;
 			const decodedParams = abiCoder.decode(
 				[
 					"address", //to
@@ -366,7 +367,7 @@ export class SafeAccount extends SmartAccount {
 				],
 				params,
 			);
-			let accountCallDataString;
+			let accountCallDataString: string;
 			if (typeof decodedParams[2] !== "string") {
 				accountCallDataString = new TextDecoder().decode(decodedParams[2]);
 			} else {
@@ -420,15 +421,12 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): string {
 		const multisendContractAddress =
-			overrides.multisendContractAddress ??
-			SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS;
+			overrides.multisendContractAddress ?? SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS;
 		const [metaTransaction, safeModuleExecutorFunctionSelector] =
 			SafeAccount.decodeAccountCallData(callData);
 
 		const approveFunctionSignature = "approve(address,uint256)";
-		const approveFunctionSelector = getFunctionSelector(
-			approveFunctionSignature,
-		);
+		const approveFunctionSelector = getFunctionSelector(approveFunctionSignature);
 		const approveCallData = createCallData(
 			approveFunctionSelector,
 			["address", "uint256"],
@@ -440,21 +438,16 @@ export class SafeAccount extends SmartAccount {
 			data: approveCallData,
 			operation: Operation.Call,
 		};
-		const encodedApproveMetatransaction = encodeMultiSendCallData([
-			approveMetatransaction,
-		]);
+		const encodedApproveMetatransaction = encodeMultiSendCallData([approveMetatransaction]);
 
 		let multiSendCallDataParams = "";
 		const mutisendSelector = "0x8d80ff0a";
 		if (metaTransaction.data.startsWith(mutisendSelector)) {
 			//multisend
 			const decodedCalldata = decodeMultiSendCallData(metaTransaction.data);
-			multiSendCallDataParams =
-				encodedApproveMetatransaction + decodedCalldata.slice(2);
+			multiSendCallDataParams = encodedApproveMetatransaction + decodedCalldata.slice(2);
 		} else {
-			const encodedCallDataMetaTransaction = encodeMultiSendCallData([
-				metaTransaction,
-			]);
+			const encodedCallDataMetaTransaction = encodeMultiSendCallData([metaTransaction]);
 			multiSendCallDataParams =
 				encodedApproveMetatransaction + encodedCallDataMetaTransaction.slice(2);
 		}
@@ -478,8 +471,8 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-     * @deprecated 
-	 * formate a list of eip712 signatures to a useroperation signature
+	 * @deprecated
+	 * format a list of eip712 signatures to a useroperation signature
 	 * @param signersAddresses - signers public addresses
 	 * @param signatures - list of eip712 signatures
 	 * @param overrides - overrides for the default values
@@ -493,38 +486,32 @@ export class SafeAccount extends SmartAccount {
 		overrides: {
 			validAfter?: bigint;
 			validUntil?: bigint;
-            isMultiChainSignature?: boolean;
+			isMultiChainSignature?: boolean;
 			merkleProof?: string;
 		} = {},
 	): string {
-		if (signersAddresses.length != signatures.length) {
-			throw new RangeError(
-				"signersAddresses and signatures arrays should be the same length",
-			);
+		if (signersAddresses.length !== signatures.length) {
+			throw new RangeError("signersAddresses and signatures arrays should be the same length");
 		}
 
 		const signersSignatures: SignerSignaturePair[] = [];
 
 		signersAddresses.forEach((signer, index) => {
-			signersSignatures.push(
-				{
-					signer: signer.toLowerCase(),
-					signature: signatures[index]
-				}
-			);
+			signersSignatures.push({
+				signer: signer.toLowerCase(),
+				signature: signatures[index],
+			});
 		});
 
-		return SafeAccount.formatSignaturesToUseroperationSignature(
-			signersSignatures, {
-				validAfter: overrides.validAfter,
-				validUntil: overrides.validUntil,
-				isMultiChainSignature: overrides.isMultiChainSignature,
-				multiChainMerkleProof: overrides.merkleProof,
-			},
-		);
+		return SafeAccount.formatSignaturesToUseroperationSignature(signersSignatures, {
+			validAfter: overrides.validAfter,
+			validUntil: overrides.validUntil,
+			isMultiChainSignature: overrides.isMultiChainSignature,
+			multiChainMerkleProof: overrides.merkleProof,
+		});
 	}
-    
-    /**
+
+	/**
 	 * create a v0.07 or v0.06 useroperation eip712 data
 	 * @param useroperation - useroperation to hash
 	 * @param chainId - target chain id
@@ -532,7 +519,7 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.validAfter - timestamp the signature will be valid after
 	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @param overrides.entrypoint - target entrypoint
-	 * @param overrides.safe4337ModuleAddress - target module address 
+	 * @param overrides.safe4337ModuleAddress - target module address
 	 * @returns useroperation hash
 	 */
 	protected static getUserOperationEip712Hash(
@@ -546,37 +533,25 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): string {
 		if ("initCode" in useroperation) {
-			return SafeAccount.getUserOperationEip712Hash_V6(
-				useroperation,
-				chainId,
-				overrides,
-			);
+			return SafeAccount.getUserOperationEip712Hash_V6(useroperation, chainId, overrides);
 		} else {
-            if(overrides.entrypointAddress){
-                if(overrides.entrypointAddress.toLowerCase() === ENTRYPOINT_V9.toLowerCase()){
-                    return SafeAccount.getUserOperationEip712Hash_V9(
-                        useroperation as UserOperationV9,
-                        chainId,
-                        overrides,
-                    );
-                }else{
-                    return SafeAccount.getUserOperationEip712Hash_V7(
-                        useroperation,
-                        chainId,
-                        overrides,
-                    );
-                }
-            }else{
-                return SafeAccount.getUserOperationEip712Hash_V7(
-                    useroperation,
-                    chainId,
-                    overrides,
-                );
-            }
+			if (overrides.entrypointAddress) {
+				if (overrides.entrypointAddress.toLowerCase() === ENTRYPOINT_V9.toLowerCase()) {
+					return SafeAccount.getUserOperationEip712Hash_V9(
+						useroperation as UserOperationV9,
+						chainId,
+						overrides,
+					);
+				} else {
+					return SafeAccount.getUserOperationEip712Hash_V7(useroperation, chainId, overrides);
+				}
+			} else {
+				return SafeAccount.getUserOperationEip712Hash_V7(useroperation, chainId, overrides);
+			}
 		}
 	}
-    
-    /**
+
+	/**
 	 * create a v0.07 or v0.06 useroperation eip712 data
 	 * @param useroperation - useroperation to hash
 	 * @param chainId - target chain id
@@ -584,11 +559,11 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.validAfter - timestamp the signature will be valid after
 	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @param overrides.entrypoint - target entrypoint
-	 * @param overrides.safe4337ModuleAddress - target module address 
+	 * @param overrides.safe4337ModuleAddress - target module address
 	 * @returns an object containing the typed data domain, type and typed data vales
-     * object needed for hashing and signing
+	 * object needed for hashing and signing
 	 */
-    protected static getUserOperationEip712Data(
+	protected static getUserOperationEip712Data(
 		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV9,
 		chainId: bigint,
 		overrides?: {
@@ -598,56 +573,46 @@ export class SafeAccount extends SmartAccount {
 			safe4337ModuleAddress?: string;
 		},
 	): {
-        domain: SafeUserOperationTypedDataDomain,
-        types:Record<string, {name: string;type: string;}[]>,
-        messageValue:
-            | SafeUserOperationV6TypedMessageValue
-            | SafeUserOperationV7TypedMessageValue
-            | SafeUserOperationV9TypedMessageValue
-    }  {
+		domain: SafeUserOperationTypedDataDomain;
+		types: Record<string, { name: string; type: string }[]>;
+		messageValue:
+			| SafeUserOperationV6TypedMessageValue
+			| SafeUserOperationV7TypedMessageValue
+			| SafeUserOperationV9TypedMessageValue;
+	} {
 		if ("initCode" in useroperation) {
-			const data = SafeAccount.getUserOperationEip712Data_V6(
-				useroperation,
-				chainId,
-				overrides,
-			);
-            return {
-                domain: data.domain,
-                types: data.types,
-                messageValue: data.messageValue
-            }
+			const data = SafeAccount.getUserOperationEip712Data_V6(useroperation, chainId, overrides);
+			return {
+				domain: data.domain,
+				types: data.types,
+				messageValue: data.messageValue,
+			};
 		} else {
-            let data;
-            if(overrides?.entrypointAddress){
-                if(overrides.entrypointAddress.toLowerCase() === ENTRYPOINT_V9.toLowerCase()){
-                    data = SafeAccount.getUserOperationEip712Data_V9(
-                        useroperation as UserOperationV9,
-                        chainId,
-                        overrides,
-                    );
-                }else{
-                    data = SafeAccount.getUserOperationEip712Data_V7(
-                        useroperation,
-                        chainId,
-                        overrides,
-                    );
-                }
-            }else{
-                data = SafeAccount.getUserOperationEip712Data_V7(
-                    useroperation,
-                    chainId,
-                    overrides,
-                );
-            }
-            return {
-                domain: data.domain,
-                types: data.types,
-                messageValue: data.messageValue
-            }
+			let data:
+				| ReturnType<typeof SafeAccount.getUserOperationEip712Data_V7>
+				| ReturnType<typeof SafeAccount.getUserOperationEip712Data_V9>;
+			if (overrides?.entrypointAddress) {
+				if (overrides.entrypointAddress.toLowerCase() === ENTRYPOINT_V9.toLowerCase()) {
+					data = SafeAccount.getUserOperationEip712Data_V9(
+						useroperation as UserOperationV9,
+						chainId,
+						overrides,
+					);
+				} else {
+					data = SafeAccount.getUserOperationEip712Data_V7(useroperation, chainId, overrides);
+				}
+			} else {
+				data = SafeAccount.getUserOperationEip712Data_V7(useroperation, chainId, overrides);
+			}
+			return {
+				domain: data.domain,
+				types: data.types,
+				messageValue: data.messageValue,
+			};
 		}
 	}
 
-    /**
+	/**
 	 * create a v0.06 useroperation eip712 data
 	 * @param useroperation - useroperation to hash
 	 * @param chainId - target chain id
@@ -658,7 +623,7 @@ export class SafeAccount extends SmartAccount {
 	 * defaults to ENTRYPOINT_V6
 	 * @param overrides.safe4337ModuleAddress - defaults to "0xa581c4A4DB7175302464fF3C06380BC3270b4037"
 	 * @returns an object containing the typed data domain, type and typed data vales
-     * object needed for hashing and signing
+	 * object needed for hashing and signing
 	 */
 	public static getUserOperationEip712Data_V6(
 		useroperation: UserOperationV6,
@@ -670,17 +635,16 @@ export class SafeAccount extends SmartAccount {
 			safe4337ModuleAddress?: string;
 		} = {},
 	): {
-        domain: SafeUserOperationTypedDataDomain,
-        types:Record<string, {name: string;type: string;}[]>,
-        messageValue: SafeUserOperationV6TypedMessageValue
-    } {
+		domain: SafeUserOperationTypedDataDomain;
+		types: Record<string, { name: string; type: string }[]>;
+		messageValue: SafeUserOperationV6TypedMessageValue;
+	} {
 		const validAfter = overrides.validAfter ?? 0n;
 		const validUntil = overrides.validUntil ?? 0n;
 
 		const entrypointAddress = overrides.entrypointAddress ?? ENTRYPOINT_V6;
 		const safe4337ModuleAddress =
-			overrides.safe4337ModuleAddress ??
-			"0xa581c4A4DB7175302464fF3C06380BC3270b4037";
+			overrides.safe4337ModuleAddress ?? "0xa581c4A4DB7175302464fF3C06380BC3270b4037";
 
 		const messageValue: SafeUserOperationV6TypedMessageValue = {
 			safe: useroperation.sender,
@@ -707,9 +671,8 @@ export class SafeAccount extends SmartAccount {
 			domain,
 			types: EIP712_SAFE_OPERATION_V6_TYPE,
 			messageValue,
-        };
+		};
 	}
-
 
 	/**
 	 * create a v0.06 useroperation eip712 data
@@ -733,16 +696,11 @@ export class SafeAccount extends SmartAccount {
 			safe4337ModuleAddress?: string;
 		} = {},
 	): string {
-	    const data = SafeAccount.getUserOperationEip712Data_V6(
-            useroperation, chainId, overrides)	
-		return TypedDataEncoder.hash(
-			data.domain,
-			data.types,
-			data.messageValue,
-		);
+		const data = SafeAccount.getUserOperationEip712Data_V6(useroperation, chainId, overrides);
+		return TypedDataEncoder.hash(data.domain, data.types, data.messageValue);
 	}
 
-    private static baseGetUserOperationEip712DataV7V8V9(
+	private static baseGetUserOperationEip712DataV7V8V9(
 		useroperation: UserOperationV7,
 		chainId: bigint,
 		entrypointAddress: string,
@@ -750,19 +708,18 @@ export class SafeAccount extends SmartAccount {
 			validAfter?: bigint;
 			validUntil?: bigint;
 			safe4337ModuleAddress?: string;
-            is_v9?: boolean
+			is_v9?: boolean;
 		} = {},
-    ): {
-        domain: SafeUserOperationTypedDataDomain,
-        types:Record<string, {name: string;type: string;}[]>,
-        messageValue: SafeUserOperationV6TypedMessageValue
-    } {
+	): {
+		domain: SafeUserOperationTypedDataDomain;
+		types: Record<string, { name: string; type: string }[]>;
+		messageValue: SafeUserOperationV6TypedMessageValue;
+	} {
 		const validAfter = overrides.validAfter ?? 0n;
 		const validUntil = overrides.validUntil ?? 0n;
 
 		const safe4337ModuleAddress =
-			overrides.safe4337ModuleAddress ??
-			"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226";
+			overrides.safe4337ModuleAddress ?? "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226";
 
 		const abiCoder = AbiCoder.defaultAbiCoder();
 
@@ -788,21 +745,23 @@ export class SafeAccount extends SmartAccount {
 					.slice(34);
 			}
 			if (useroperation.paymasterData != null) {
-	      const PAYMASTER_SIG_MAGIC = '22e325a297439656';
-	      if(
-	          overrides.is_v9 &&
-	          useroperation.paymasterData.toLowerCase().endsWith(PAYMASTER_SIG_MAGIC)
-	      ){
-	          const sigLenHex = useroperation.paymasterData.slice(
-	            useroperation.paymasterData.length - 16 - 4,
-	            useroperation.paymasterData.length - 16
-	          );
-	          const sigLen = parseInt(sigLenHex, 16);
-	          const prefixEnd = useroperation.paymasterData.length - 16 - 4 - sigLen * 2;
-	          paymasterAndData += useroperation.paymasterData.slice(0, prefixEnd).replaceAll("0x", "") + PAYMASTER_SIG_MAGIC;
-	      }else{
-	        paymasterAndData += useroperation.paymasterData.slice(2);
-	      }
+				const PAYMASTER_SIG_MAGIC = "22e325a297439656";
+				if (
+					overrides.is_v9 &&
+					useroperation.paymasterData.toLowerCase().endsWith(PAYMASTER_SIG_MAGIC)
+				) {
+					const sigLenHex = useroperation.paymasterData.slice(
+						useroperation.paymasterData.length - 16 - 4,
+						useroperation.paymasterData.length - 16,
+					);
+					const sigLen = parseInt(sigLenHex, 16);
+					const prefixEnd = useroperation.paymasterData.length - 16 - 4 - sigLen * 2;
+					paymasterAndData +=
+						useroperation.paymasterData.slice(0, prefixEnd).replaceAll("0x", "") +
+						PAYMASTER_SIG_MAGIC;
+				} else {
+					paymasterAndData += useroperation.paymasterData.slice(2);
+				}
 			}
 		}
 		const messageValue: SafeUserOperationV7TypedMessageValue = {
@@ -815,7 +774,7 @@ export class SafeAccount extends SmartAccount {
 			preVerificationGas: useroperation.preVerificationGas,
 			maxPriorityFeePerGas: useroperation.maxPriorityFeePerGas,
 			maxFeePerGas: useroperation.maxFeePerGas,
-			paymasterAndData, 
+			paymasterAndData,
 			validAfter: validAfter,
 			validUntil: validUntil,
 			entryPoint: entrypointAddress,
@@ -824,14 +783,14 @@ export class SafeAccount extends SmartAccount {
 			chainId: Number(chainId),
 			verifyingContract: safe4337ModuleAddress,
 		};
-        return {
+		return {
 			domain,
 			types: EIP712_SAFE_OPERATION_V7_TYPE,
 			messageValue,
-        };
-    }
+		};
+	}
 
-    /**
+	/**
 	 * create a v0.07 useroperation eip712 hash
 	 * @param useroperation - useroperation to hash
 	 * @param chainId - target chain id
@@ -841,8 +800,8 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.entrypoint - target entrypoint
 	 * defaults to ENTRYPOINT_V7
 	 * @param overrides.safe4337ModuleAddress - defaults to "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226"
-     * @returns an object containing the typed data domain, type and typed data vales
-     * object needed for hashing and signing
+	 * @returns an object containing the typed data domain, type and typed data vales
+	 * object needed for hashing and signing
 	 */
 	public static getUserOperationEip712Data_V7(
 		useroperation: UserOperationV7,
@@ -853,18 +812,18 @@ export class SafeAccount extends SmartAccount {
 			entrypointAddress?: string;
 			safe4337ModuleAddress?: string;
 		} = {},
-    ): {
-        domain: SafeUserOperationTypedDataDomain,
-        types:Record<string, {name: string;type: string;}[]>,
-        messageValue: SafeUserOperationV6TypedMessageValue
-    } {
-        return SafeAccount.baseGetUserOperationEip712DataV7V8V9(
-            useroperation,
-            chainId,
-            overrides.entrypointAddress??ENTRYPOINT_V7,
-            overrides
-        );
-    }
+	): {
+		domain: SafeUserOperationTypedDataDomain;
+		types: Record<string, { name: string; type: string }[]>;
+		messageValue: SafeUserOperationV6TypedMessageValue;
+	} {
+		return SafeAccount.baseGetUserOperationEip712DataV7V8V9(
+			useroperation,
+			chainId,
+			overrides.entrypointAddress ?? ENTRYPOINT_V7,
+			overrides,
+		);
+	}
 
 	/**
 	 * create a v0.07 useroperation eip712 hash
@@ -888,16 +847,11 @@ export class SafeAccount extends SmartAccount {
 			safe4337ModuleAddress?: string;
 		} = {},
 	): string {
-        const data = SafeAccount.getUserOperationEip712Data_V7(
-            useroperation, chainId, overrides)	
-		return TypedDataEncoder.hash(
-			data.domain,
-			data.types,
-			data.messageValue,
-		);
+		const data = SafeAccount.getUserOperationEip712Data_V7(useroperation, chainId, overrides);
+		return TypedDataEncoder.hash(data.domain, data.types, data.messageValue);
 	}
 
-    /**
+	/**
 	 * create a v0.09 useroperation eip712 hash
 	 * @param useroperation - useroperation to hash
 	 * @param chainId - target chain id
@@ -907,8 +861,8 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.entrypoint - target entrypoint
 	 * defaults to ENTRYPOINT_V9
 	 * @param overrides.safe4337ModuleAddress - defaults to "0xee8005d7e79f9a6829ea61A81Fc2A85055fB2a42"
-     * @returns an object containing the typed data domain, type and typed data vales
-     * object needed for hashing and signing
+	 * @returns an object containing the typed data domain, type and typed data vales
+	 * object needed for hashing and signing
 	 */
 	public static getUserOperationEip712Data_V9(
 		useroperation: UserOperationV9,
@@ -919,26 +873,25 @@ export class SafeAccount extends SmartAccount {
 			entrypointAddress?: string;
 			safe4337ModuleAddress?: string;
 		} = {},
-    ): {
-        domain: SafeUserOperationTypedDataDomain,
-        types:Record<string, {name: string;type: string;}[]>,
-        messageValue: SafeUserOperationV9TypedMessageValue
-    } {
+	): {
+		domain: SafeUserOperationTypedDataDomain;
+		types: Record<string, { name: string; type: string }[]>;
+		messageValue: SafeUserOperationV9TypedMessageValue;
+	} {
 		const safe4337ModuleAddress =
-			overrides.safe4337ModuleAddress ??
-			"0xee8005d7e79f9a6829ea61A81Fc2A85055fB2a42";
+			overrides.safe4337ModuleAddress ?? "0xee8005d7e79f9a6829ea61A81Fc2A85055fB2a42";
 
-        return SafeAccount.baseGetUserOperationEip712DataV7V8V9(
-            useroperation,
-            chainId,
-            overrides.entrypointAddress??ENTRYPOINT_V9,
-            {
-                ...overrides,
-                safe4337ModuleAddress,
-                is_v9: true
-            }
-        );
-    }
+		return SafeAccount.baseGetUserOperationEip712DataV7V8V9(
+			useroperation,
+			chainId,
+			overrides.entrypointAddress ?? ENTRYPOINT_V9,
+			{
+				...overrides,
+				safe4337ModuleAddress,
+				is_v9: true,
+			},
+		);
+	}
 
 	/**
 	 * create a v0.09 useroperation eip712 hash
@@ -962,38 +915,35 @@ export class SafeAccount extends SmartAccount {
 			safe4337ModuleAddress?: string;
 		} = {},
 	): string {
-        const data = SafeAccount.getUserOperationEip712Data_V9(
-            useroperation, chainId, overrides)	
-		return TypedDataEncoder.hash(
-			data.domain,
-			data.types,
-			data.messageValue,
-		);
+		const data = SafeAccount.getUserOperationEip712Data_V9(useroperation, chainId, overrides);
+		return TypedDataEncoder.hash(data.domain, data.types, data.messageValue);
 	}
 
 	/**
-     * @deprecated
-	 * formate an eip712 signature to a useroperation signature
+	 * @deprecated
+	 * format an eip712 signature to a useroperation signature
 	 * @param signature - an eip712 signature
 	 * @param overrides - overrides for the default values
 	 * @param overrides.validAfter - timestamp the signature will be valid after
 	 * @param overrides.validUntil - timestamp the signature will be valid until
-	 * @returns formated signature
+	 * @returns formatted signature
 	 */
 	public static formatEip712SingleSignatureToUseroperationSignature(
 		signature: string,
 		overrides: {
 			validAfter?: bigint;
 			validUntil?: bigint;
-            isMultiChainSignature?: boolean;
+			isMultiChainSignature?: boolean;
 		} = {},
 	): string {
 		return SafeAccount.formatSignaturesToUseroperationSignature(
-			[{
-				signer: "0x0000000000000000000000000000000000000000", // any random address
-				signature
-			}],
-			overrides
+			[
+				{
+					signer: "0x0000000000000000000000000000000000000000", // any random address
+					signature,
+				},
+			],
+			overrides,
 		);
 	}
 
@@ -1013,11 +963,7 @@ export class SafeAccount extends SmartAccount {
 			this.entrypointAddress,
 		);
 
-		return new SendUseroperationResponse(
-			sendUserOperationRes,
-			bundler,
-			this.entrypointAddress,
-		);
+		return new SendUseroperationResponse(sendUserOperationRes, bundler, this.entrypointAddress);
 	}
 
 	/**
@@ -1040,27 +986,22 @@ export class SafeAccount extends SmartAccount {
 			overrides.threshold ?? 1,
 			safe4337ModuleAddress,
 			safeModuleSetupAddress,
-			overrides.multisendContractAddress ??
-				SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
-			overrides.webAuthnSharedSigner ??
-				SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+			overrides.multisendContractAddress ?? SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
+			overrides.webAuthnSharedSigner ?? SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
 			overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner ??
 				SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
 				SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER,
 		);
 
-		let safeAccountFactory;
+		let safeAccountFactory: SafeAccountFactory;
 		if (overrides.safeAccountFactoryAddress != null) {
-			safeAccountFactory = new SafeAccountFactory(
-				overrides.safeAccountFactoryAddress,
-			);
+			safeAccountFactory = new SafeAccountFactory(overrides.safeAccountFactoryAddress);
 		} else {
 			safeAccountFactory = new SafeAccountFactory();
 		}
-		const safeSingleton =
-			overrides.safeAccountSingleton ?? Safe_L2_V1_4_1;
-		const sender = this.createProxyAddress(initializerCallData, {
+		const safeSingleton = overrides.safeAccountSingleton ?? Safe_L2_V1_4_1;
+		const sender = SafeAccount.createProxyAddress(initializerCallData, {
 			c2Nonce: overrides.c2Nonce ?? 0n,
 			safeFactoryAddress: safeAccountFactory.address,
 			singletonInitHash: safeSingleton.singletonInitHash,
@@ -1072,16 +1013,11 @@ export class SafeAccount extends SmartAccount {
 			overrides.c2Nonce ?? 0n,
 		];
 
-		const factoryGeneratorFunctionCallData =
-			safeAccountFactory.getFactoryGeneratorFunctionCallData(
-				generatorFunctionInputParameters,
-			);
+		const factoryGeneratorFunctionCallData = safeAccountFactory.getFactoryGeneratorFunctionCallData(
+			generatorFunctionInputParameters,
+		);
 
-		return [
-			sender,
-			safeAccountFactory.address,
-			factoryGeneratorFunctionCallData,
-		];
+		return [sender, safeAccountFactory.address, factoryGeneratorFunctionCallData];
 	}
 
 	protected static createBaseInitializerCallData(
@@ -1112,11 +1048,11 @@ export class SafeAccount extends SmartAccount {
 			[[safe4337ModuleAddress]],
 		);
 		let isInitWebAuthn = false;
-		let initializerFunctionInputParameters;
+		let initializerFunctionInputParameters: AbiInputValue[];
 
 		const owners_str: string[] = [];
 		for (const owner of owners) {
-			if (typeof owner != "string") {
+			if (typeof owner !== "string") {
 				isInitWebAuthn = true;
 			} else {
 				owners_str.push(owner);
@@ -1136,11 +1072,9 @@ export class SafeAccount extends SmartAccount {
 
 			let numOfWebAuthnOwners = 0;
 			for (const owner of owners) {
-				if (typeof owner != "string") {
+				if (typeof owner !== "string") {
 					if (numOfWebAuthnOwners > 0) {
-						throw new RangeError(
-							"Only one WebAuthn owner can be set during initialization",
-						);
+						throw new RangeError("Only one WebAuthn owner can be set during initialization");
 					}
 					const addWebauthnSigner = createCallData(
 						"0x0dd9692f", //configure
@@ -1171,11 +1105,7 @@ export class SafeAccount extends SmartAccount {
 			const encodedInit = encodeMultiSendCallData(txs);
 
 			const mutisendSelector = "0x8d80ff0a";
-			const multiSendCallData = createCallData(
-				mutisendSelector,
-				["bytes"],
-				[encodedInit],
-			);
+			const multiSendCallData = createCallData(mutisendSelector, ["bytes"], [encodedInit]);
 
 			initializerFunctionInputParameters = [
 				modOwners,
@@ -1241,27 +1171,22 @@ export class SafeAccount extends SmartAccount {
 			overrides.threshold ?? 1,
 			safe4337ModuleAddress,
 			safeModuleSetupAddress,
-			overrides.multisendContractAddress ??
-				SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
-			overrides.webAuthnSharedSigner ??
-				SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+			overrides.multisendContractAddress ?? SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
+			overrides.webAuthnSharedSigner ?? SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
 			overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner ??
 				SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
 				SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER,
 		);
 
-		let safeAccountFactory;
+		let safeAccountFactory: SafeAccountFactory;
 		if (overrides.safeAccountFactoryAddress != null) {
-			safeAccountFactory = new SafeAccountFactory(
-				overrides.safeAccountFactoryAddress,
-			);
+			safeAccountFactory = new SafeAccountFactory(overrides.safeAccountFactoryAddress);
 		} else {
 			safeAccountFactory = new SafeAccountFactory();
 		}
 
-		const safeSingleton =
-			overrides.safeAccountSingleton ?? Safe_L2_V1_4_1;
+		const safeSingleton = overrides.safeAccountSingleton ?? Safe_L2_V1_4_1;
 
 		const generatorFunctionInputParameters = [
 			safeSingleton.singletonAddress,
@@ -1269,10 +1194,9 @@ export class SafeAccount extends SmartAccount {
 			c2Nonce,
 		];
 
-		const factoryGeneratorFunctionCallData =
-			safeAccountFactory.getFactoryGeneratorFunctionCallData(
-				generatorFunctionInputParameters,
-			);
+		const factoryGeneratorFunctionCallData = safeAccountFactory.getFactoryGeneratorFunctionCallData(
+			generatorFunctionInputParameters,
+		);
 
 		return [safeAccountFactory.address, factoryGeneratorFunctionCallData];
 	}
@@ -1300,8 +1224,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): string {
 		const multisendContractAddress =
-			overrides.multisendContractAddress ??
-			SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS;
+			overrides.multisendContractAddress ?? SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS;
 		return SafeAccount.prependTokenPaymasterApproveToCallDataStatic(
 			callData,
 			tokenAddress,
@@ -1329,84 +1252,77 @@ export class SafeAccount extends SmartAccount {
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
 			dummySignerSignaturePairs?: SignerSignaturePair[];
-            expectedSigners?: Signer[];
-            webAuthnSharedSigner?: string;
-            webAuthnSignerFactory?: string;
-            webAuthnSignerSingleton?: string;
-            webAuthnSignerProxyCreationCode?: string;
-            eip7212WebAuthnPrecompileVerifier?: string;
-            eip7212WebAuthnContractVerifier?: string;
-            isMultiChainSignature?: boolean;
+			expectedSigners?: Signer[];
+			webAuthnSharedSigner?: string;
+			webAuthnSignerFactory?: string;
+			webAuthnSignerSingleton?: string;
+			webAuthnSignerProxyCreationCode?: string;
+			eip7212WebAuthnPrecompileVerifier?: string;
+			eip7212WebAuthnContractVerifier?: string;
+			isMultiChainSignature?: boolean;
 		} = {},
 	): Promise<[bigint, bigint, bigint]> {
-        const validAfter = 0xffffffffffffn;
+		const validAfter = 0xffffffffffffn;
 		const validUntil = 0xffffffffffffn;
 
 		if (overrides.dummySignerSignaturePairs != null) {
-            if(overrides.expectedSigners != null){
-                throw new RangeError(
-                    "Can't use both dummySignerSignaturePairs and expectedSigners overrides.",
-                );
-            }
-			if (overrides.dummySignerSignaturePairs.length < 1) {
+			if (overrides.expectedSigners != null) {
 				throw new RangeError(
-					"Number of dummy signers signature pairs can't be less than 1",
+					"Can't use both dummySignerSignaturePairs and expectedSigners overrides.",
 				);
 			}
-		    userOperation.signature =
-				SafeAccount.formatSignaturesToUseroperationSignature(
-					overrides.dummySignerSignaturePairs,
-					{
-						validAfter,
-						validUntil,
-                        isMultiChainSignature: overrides.isMultiChainSignature
-					},
-				);
+			if (overrides.dummySignerSignaturePairs.length < 1) {
+				throw new RangeError("Number of dummy signers signature pairs can't be less than 1");
+			}
+			userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
+				overrides.dummySignerSignaturePairs,
+				{
+					validAfter,
+					validUntil,
+					isMultiChainSignature: overrides.isMultiChainSignature,
+				},
+			);
 		} else if (overrides.expectedSigners != null) {
-            let initCode;
+			let initCode: string | null;
 
-            if ("initCode" in userOperation) {
-                initCode = userOperation.initCode;
-            }else{
-                initCode = userOperation.factory;
-            }
-            const isInit = initCode != null && initCode != "0x";
-            
-            const dummySignerSignaturePairs = SafeAccount.createDummySignerSignaturePairForExpectedSigners(
-                overrides.expectedSigners,
-                {
-                    isInit,
-                    webAuthnSharedSigner:overrides.webAuthnSharedSigner,
-                    eip7212WebAuthnPrecompileVerifier:overrides.eip7212WebAuthnPrecompileVerifier,
-                    eip7212WebAuthnContractVerifier:overrides.eip7212WebAuthnContractVerifier,
-                    webAuthnSignerFactory:overrides.webAuthnSignerFactory,
-                    webAuthnSignerSingleton:overrides.webAuthnSignerSingleton,
-                    webAuthnSignerProxyCreationCode:overrides.webAuthnSignerProxyCreationCode,
-                    validAfter,
-                    validUntil,
-                }
-            )
-            userOperation.signature =
-                SafeAccount.formatSignaturesToUseroperationSignature(
-                    dummySignerSignaturePairs,
-                    {
-                        validAfter,
-                        validUntil,
-                        isMultiChainSignature: overrides.isMultiChainSignature
-                    },
-                );
+			if ("initCode" in userOperation) {
+				initCode = userOperation.initCode;
+			} else {
+				initCode = userOperation.factory;
+			}
+			const isInit = initCode != null && initCode !== "0x";
+
+			const dummySignerSignaturePairs =
+				SafeAccount.createDummySignerSignaturePairForExpectedSigners(overrides.expectedSigners, {
+					isInit,
+					webAuthnSharedSigner: overrides.webAuthnSharedSigner,
+					eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
+					eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
+					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
+					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
+					webAuthnSignerProxyCreationCode: overrides.webAuthnSignerProxyCreationCode,
+					validAfter,
+					validUntil,
+				});
+			userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
+				dummySignerSignaturePairs,
+				{
+					validAfter,
+					validUntil,
+					isMultiChainSignature: overrides.isMultiChainSignature,
+				},
+			);
 		} else if (userOperation.signature.length < 3) {
-            userOperation.signature =
-                SafeAccount.formatSignaturesToUseroperationSignature(
-                    [EOADummySignerSignaturePair],
-                    {
-                        validAfter,
-                        validUntil,
-                        isMultiChainSignature: overrides.isMultiChainSignature
-                    },
-                );
-        }
-        
+			userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
+				[EOADummySignerSignaturePair],
+				{
+					validAfter,
+					validUntil,
+					isMultiChainSignature: overrides.isMultiChainSignature,
+				},
+			);
+		}
+
 		const bundler = new Bundler(bundlerRpc);
 
 		const inputMaxFeePerGas = userOperation.maxFeePerGas;
@@ -1459,156 +1375,137 @@ export class SafeAccount extends SmartAccount {
 			throw new RangeError("There should be at least one transaction");
 		}
 		const webAuthnSharedSigner =
-			overrides.webAuthnSharedSigner ??
-			SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
+			overrides.webAuthnSharedSigner ?? SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
 		const safeModuleExecutorFunctionSelector =
 			overrides.safeModuleExecutorFunctionSelector ??
 			SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR;
 		const multisendContractAddress =
-			overrides.multisendContractAddress ??
-			SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS;
+			overrides.multisendContractAddress ?? SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS;
 
-		let nonce:bigint | null = null;
-		let nonceOp:Promise<bigint> | null = null;
+		let nonce: bigint | null = null;
+		let nonceOp: Promise<bigint> | null = null;
 
 		if (overrides.nonce == null) {
 			if (providerRpc != null) {
-				nonceOp = fetchAccountNonce(
-					providerRpc,
-					this.entrypointAddress,
-					this.accountAddress,
-				);
+				nonceOp = fetchAccountNonce(providerRpc, this.entrypointAddress, this.accountAddress);
 			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					"providerRpc cant't be null if nonce is not overriden",
+					"providerRpc can't be null if nonce is not overridden",
 				);
 			}
 		} else {
 			nonce = overrides.nonce;
 		}
 
-        if (
-			typeof overrides.maxFeePerGas === "bigint" &&
-			overrides.maxFeePerGas < 0n
-		) {
+		if (typeof overrides.maxFeePerGas === "bigint" && overrides.maxFeePerGas < 0n) {
 			throw new RangeError("maxFeePerGas overrid can't be negative");
 		}
 
-		if (
-			typeof overrides.maxPriorityFeePerGas === "bigint" &&
-			overrides.maxPriorityFeePerGas < 0n
-		) {
+		if (typeof overrides.maxPriorityFeePerGas === "bigint" && overrides.maxPriorityFeePerGas < 0n) {
 			throw new RangeError("maxPriorityFeePerGas overrid can't be negative");
 		}
-        let maxFeePerGas = BaseUserOperationDummyValues.maxFeePerGas;
-		let maxPriorityFeePerGas =
-			BaseUserOperationDummyValues.maxPriorityFeePerGas;
+		let maxFeePerGas = BaseUserOperationDummyValues.maxFeePerGas;
+		let maxPriorityFeePerGas = BaseUserOperationDummyValues.maxPriorityFeePerGas;
 
-        let gasPriceOp:Promise<[bigint, bigint]> | null = null;
-        if (
-			overrides.maxFeePerGas == null ||
-			overrides.maxPriorityFeePerGas == null
-		) {
-            gasPriceOp = handlefetchGasPrice(
-                providerRpc, overrides.polygonGasStation, overrides.gasLevel
-            )
-        }
-        
-        if(gasPriceOp != null && nonceOp != null){
-            await Promise.all([nonceOp, gasPriceOp]).then((values) => {
-                nonce = values[0];
-                [maxFeePerGas, maxPriorityFeePerGas] = values[1]; 
-            });
-        }else if(gasPriceOp != null){
-            [maxFeePerGas, maxPriorityFeePerGas] = await gasPriceOp; 
-        }else if(nonceOp != null){
-            nonce = await nonceOp;
-        }
- 
-		maxFeePerGas = overrides.maxFeePerGas ??
-            maxFeePerGas * BigInt((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100) / 100n;
-		maxPriorityFeePerGas = overrides.maxPriorityFeePerGas ??
-            maxPriorityFeePerGas * BigInt((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100) / 100n;
+		let gasPriceOp: Promise<[bigint, bigint]> | null = null;
+		if (overrides.maxFeePerGas == null || overrides.maxPriorityFeePerGas == null) {
+			gasPriceOp = handlefetchGasPrice(
+				providerRpc,
+				overrides.polygonGasStation,
+				overrides.gasLevel,
+			);
+		}
 
-        const eip7212WebAuthnPrecompileVerifier =
-            overrides.eip7212WebAuthnPrecompileVerifier ??
-            SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
-        const eip7212WebAuthnContractVerifier =
-            overrides.eip7212WebAuthnContractVerifier ??
-            SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
-        const webAuthnSignerFactory =
-            overrides.webAuthnSignerFactory ??
-            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
-        const webAuthnSignerSingleton =
-            overrides.webAuthnSignerSingleton ??
-            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
-        const webAuthnSignerProxyCreationCode =
-            overrides.webAuthnSignerProxyCreationCode ??
-            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+		if (gasPriceOp != null && nonceOp != null) {
+			await Promise.all([nonceOp, gasPriceOp]).then((values) => {
+				nonce = values[0];
+				[maxFeePerGas, maxPriorityFeePerGas] = values[1];
+			});
+		} else if (gasPriceOp != null) {
+			[maxFeePerGas, maxPriorityFeePerGas] = await gasPriceOp;
+		} else if (nonceOp != null) {
+			nonce = await nonceOp;
+		}
+
+		maxFeePerGas =
+			overrides.maxFeePerGas ??
+			(maxFeePerGas * BigInt((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100)) / 100n;
+		maxPriorityFeePerGas =
+			overrides.maxPriorityFeePerGas ??
+			(maxPriorityFeePerGas *
+				BigInt((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100)) /
+				100n;
+
+		const eip7212WebAuthnPrecompileVerifier =
+			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+		const eip7212WebAuthnContractVerifier =
+			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+		const webAuthnSignerFactory =
+			overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+		const webAuthnSignerSingleton =
+			overrides.webAuthnSignerSingleton ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+		const webAuthnSignerProxyCreationCode =
+			overrides.webAuthnSignerProxyCreationCode ??
+			SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
 		let factoryAddress: string | null = this.factoryAddress;
 		let factoryData: string | null = this.factoryData;
-        
-        if(nonce == null){
+
+		if (nonce == null) {
 			throw new RangeError("failed to determine nonce");
-        }
-        else if (nonce < 0n) {
+		} else if (nonce < 0n) {
 			throw new RangeError("nonce can't be negative");
-		}
-        else if (nonce > 0n) {
+		} else if (nonce > 0n) {
 			factoryAddress = null;
 			factoryData = null;
-		} 
-        else if (this.isInitWebAuthn) { //nonce = 0
+		} else if (this.isInitWebAuthn) {
+			//nonce = 0
 			if (this.x == null || this.y == null) {
 				throw new RangeError(
-					"Invalide account initialization with Webauthnn signer." +
-						"Webauthnn signer publickey can be null!!",
+					"Invalid account initialization with Webauthn signer." +
+						"Webauthn signer publickey can be null!!",
 				);
 			}
 
 			const createDeterministicWebAuthnVerifierOwner: MetaTransaction =
-				SafeAccount.createDeployWebAuthnVerifierMetaTransaction(
-					this.x,
-					this.y,
-					{
-						eip7212WebAuthnPrecompileVerifier,
-						eip7212WebAuthnContractVerifier,
-						webAuthnSignerFactory,
-					},
-				);
+				SafeAccount.createDeployWebAuthnVerifierMetaTransaction(this.x, this.y, {
+					eip7212WebAuthnPrecompileVerifier,
+					eip7212WebAuthnContractVerifier,
+					webAuthnSignerFactory,
+				});
 
-			const deterministicWebAuthnVerifierAddress =
-				SafeAccount.createWebAuthnSignerVerifierAddress(this.x, this.y, {
+			const deterministicWebAuthnVerifierAddress = SafeAccount.createWebAuthnSignerVerifierAddress(
+				this.x,
+				this.y,
+				{
 					eip7212WebAuthnPrecompileVerifier,
 					eip7212WebAuthnContractVerifier,
 					webAuthnSignerFactory,
 					webAuthnSignerSingleton,
-                    webAuthnSignerProxyCreationCode
-				});
+					webAuthnSignerProxyCreationCode,
+				},
+			);
 
-			const swapSingletonWithDeterministicWebAuthnVerifierOwnerCallData =
-				createCallData(
-					"0xe318b52b", //swapOwner
-					[
-						"address", //prevOwner
-						"address", //oldOwner
-						"address", //newOwner
-					],
-					[
-						"0x0000000000000000000000000000000000000001", //SENTINEL_OWNERS
-						webAuthnSharedSigner,
-						deterministicWebAuthnVerifierAddress,
-					],
-				);
+			const swapSingletonWithDeterministicWebAuthnVerifierOwnerCallData = createCallData(
+				"0xe318b52b", //swapOwner
+				[
+					"address", //prevOwner
+					"address", //oldOwner
+					"address", //newOwner
+				],
+				[
+					"0x0000000000000000000000000000000000000001", //SENTINEL_OWNERS
+					webAuthnSharedSigner,
+					deterministicWebAuthnVerifierAddress,
+				],
+			);
 
-			const swapSingletonWithDeterministicWebAuthnVerifierOwner: MetaTransaction =
-				{
-					to: this.accountAddress,
-					value: 0n,
-					data: swapSingletonWithDeterministicWebAuthnVerifierOwnerCallData,
-				};
+			const swapSingletonWithDeterministicWebAuthnVerifierOwner: MetaTransaction = {
+				to: this.accountAddress,
+				value: 0n,
+				data: swapSingletonWithDeterministicWebAuthnVerifierOwnerCallData,
+			};
 
 			/*const clearWebauthnSharedSignerCallData = createCallData(
 				"0x0dd9692f", //configure
@@ -1630,33 +1527,25 @@ export class SafeAccount extends SmartAccount {
 			].concat(transactions);
 		}
 
-
 		let callData = "0x" as string;
 		if (overrides.callData == null) {
-			if (transactions.length == 1) {
-				callData = SafeAccount.createAccountCallDataSingleTransaction(
-					transactions[0],
-					{
-						safeModuleExecutorFunctionSelector,
-					},
-				);
+			if (transactions.length === 1) {
+				callData = SafeAccount.createAccountCallDataSingleTransaction(transactions[0], {
+					safeModuleExecutorFunctionSelector,
+				});
 			} else {
-				callData = SafeAccount.createAccountCallDataBatchTransactions(
-					transactions,
-					{
-						safeModuleExecutorFunctionSelector:
-							safeModuleExecutorFunctionSelector,
-						multisendContractAddress: multisendContractAddress,
-					},
-				);
+				callData = SafeAccount.createAccountCallDataBatchTransactions(transactions, {
+					safeModuleExecutorFunctionSelector: safeModuleExecutorFunctionSelector,
+					multisendContractAddress: multisendContractAddress,
+				});
 			}
 		} else {
 			callData = overrides.callData;
 		}
 
-        if(this.onChainIdentifier != null){
-            callData = callData + this.onChainIdentifier;
-        }
+		if (this.onChainIdentifier != null) {
+			callData = callData + this.onChainIdentifier;
+		}
 
 		const userOperation = {
 			...BaseUserOperationDummyValues,
@@ -1668,8 +1557,7 @@ export class SafeAccount extends SmartAccount {
 		};
 
 		let preVerificationGas = BaseUserOperationDummyValues.preVerificationGas;
-		let verificationGasLimit =
-			BaseUserOperationDummyValues.verificationGasLimit;
+		let verificationGasLimit = BaseUserOperationDummyValues.verificationGasLimit;
 		let callGasLimit = BaseUserOperationDummyValues.callGasLimit;
 
 		if (
@@ -1712,132 +1600,117 @@ export class SafeAccount extends SmartAccount {
 						paymasterData: null,
 					};
 
-                    const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
-                    if(parallelPaymasterInitValues != null){
-                        if(
-                            !parallelPaymasterInitValues.paymasterData.endsWith("22e325a297439656")
-                        ){
-                            throw new RangeError(
-                                "Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'."
-                            );
-                        }
-                        if(this.entrypointAddress != ENTRYPOINT_V9){
-                            throw new RangeError(
-                                "parallelPaymasterInitValues only works with ep v0.9"
-                            );
-                        }
-                        userOperationToEstimate.paymaster = parallelPaymasterInitValues.paymaster;
-                        userOperationToEstimate.paymasterVerificationGasLimit =
-                            parallelPaymasterInitValues.paymasterVerificationGasLimit;
-                        userOperationToEstimate.paymasterPostOpGasLimit =
-                            parallelPaymasterInitValues.paymasterPostOpGasLimit;
-                        userOperationToEstimate.paymasterData =
-                            parallelPaymasterInitValues.paymasterData;
-                    }
+					const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
+					if (parallelPaymasterInitValues != null) {
+						if (!parallelPaymasterInitValues.paymasterData.endsWith("22e325a297439656")) {
+							throw new RangeError(
+								"Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'.",
+							);
+						}
+						if (this.entrypointAddress !== ENTRYPOINT_V9) {
+							throw new RangeError("parallelPaymasterInitValues only works with ep v0.9");
+						}
+						userOperationToEstimate.paymaster = parallelPaymasterInitValues.paymaster;
+						userOperationToEstimate.paymasterVerificationGasLimit =
+							parallelPaymasterInitValues.paymasterVerificationGasLimit;
+						userOperationToEstimate.paymasterPostOpGasLimit =
+							parallelPaymasterInitValues.paymasterPostOpGasLimit;
+						userOperationToEstimate.paymasterData = parallelPaymasterInitValues.paymasterData;
+					}
 				}
-                const validAfter = 0xffffffffffffn;
-                const validUntil = 0xffffffffffffn;
+				const validAfter = 0xffffffffffffn;
+				const validUntil = 0xffffffffffffn;
 
-				let dummySignerSignaturePairs;
+				let dummySignerSignaturePairs: SignerSignaturePair[];
 				if (overrides.dummySignerSignaturePairs != null) {
-                    if(overrides.expectedSigners != null){
-                        throw new RangeError(
+					if (overrides.expectedSigners != null) {
+						throw new RangeError(
 							"Can't use both dummySignerSignaturePairs and expectedSigners overrides.",
 						);
-                    }
+					}
 					if (overrides.dummySignerSignaturePairs.length < 1) {
-						throw new RangeError(
-							"Number of dummySignerSignaturePairs can't be less than 1",
-						);
+						throw new RangeError("Number of dummySignerSignaturePairs can't be less than 1");
 					}
 					dummySignerSignaturePairs = overrides.dummySignerSignaturePairs;
 				} else {
-                    if(overrides.expectedSigners == null){
-                        dummySignerSignaturePairs = [EOADummySignerSignaturePair];
-                    }else{
-                        const isInit = factoryAddress != null && factoryAddress != "0x";
-                        dummySignerSignaturePairs = SafeAccount.createDummySignerSignaturePairForExpectedSigners(
-                            overrides.expectedSigners,
-                            {
-                                isInit,
-                                webAuthnSharedSigner,
-                                eip7212WebAuthnPrecompileVerifier,
-                                eip7212WebAuthnContractVerifier,
-                                webAuthnSignerFactory,
-                                webAuthnSignerSingleton,
-                                webAuthnSignerProxyCreationCode,
-                                validAfter,
-                                validUntil,
-                            }
-                        )
-                    }
+					if (overrides.expectedSigners == null) {
+						dummySignerSignaturePairs = [EOADummySignerSignaturePair];
+					} else {
+						const isInit = factoryAddress != null && factoryAddress !== "0x";
+						dummySignerSignaturePairs =
+							SafeAccount.createDummySignerSignaturePairForExpectedSigners(
+								overrides.expectedSigners,
+								{
+									isInit,
+									webAuthnSharedSigner,
+									eip7212WebAuthnPrecompileVerifier,
+									eip7212WebAuthnContractVerifier,
+									webAuthnSignerFactory,
+									webAuthnSignerSingleton,
+									webAuthnSignerProxyCreationCode,
+									validAfter,
+									validUntil,
+								},
+							);
+					}
 				}
-				userOperation.signature =
-					SafeAccount.formatSignaturesToUseroperationSignature(
-						dummySignerSignaturePairs,
-						{
-							validAfter,
-							validUntil,
-							webAuthnSharedSigner,
-                            isMultiChainSignature: overrides.isMultiChainSignature
-						},
-					);
+				userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
+					dummySignerSignaturePairs,
+					{
+						validAfter,
+						validUntil,
+						webAuthnSharedSigner,
+						isMultiChainSignature: overrides.isMultiChainSignature,
+					},
+				);
 
 				[preVerificationGas, verificationGasLimit, callGasLimit] =
-					await this.baseEstimateUserOperationGas(
-						userOperationToEstimate,
-						bundlerRpc,
-						{
-							stateOverrideSet: overrides.state_override_set,
-							isMultiChainSignature:overrides.isMultiChainSignature
-						},
-					);
-				verificationGasLimit +=
-					BigInt(dummySignerSignaturePairs.length) * 55_000n;
+					await this.baseEstimateUserOperationGas(userOperationToEstimate, bundlerRpc, {
+						stateOverrideSet: overrides.state_override_set,
+						isMultiChainSignature: overrides.isMultiChainSignature,
+					});
+				verificationGasLimit += BigInt(dummySignerSignaturePairs.length) * 55_000n;
 
 				userOperation.maxFeePerGas = inputMaxFeePerGas;
 				userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas;
 			} else {
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					"bundlerRpc cant't be null if preVerificationGas," +
-						"verificationGasLimit and callGasLimit are not overriden",
+					"bundlerRpc can't be null if preVerificationGas," +
+						"verificationGasLimit and callGasLimit are not overridden",
 				);
 			}
 		}
-		if (
-			typeof overrides.preVerificationGas === "bigint" &&
-			overrides.preVerificationGas < 0n
-		) {
+		if (typeof overrides.preVerificationGas === "bigint" && overrides.preVerificationGas < 0n) {
 			throw new RangeError("preVerificationGas overrid can't be negative");
 		}
 
-		if (
-			typeof overrides.verificationGasLimit === "bigint" &&
-			overrides.verificationGasLimit < 0n
-		) {
+		if (typeof overrides.verificationGasLimit === "bigint" && overrides.verificationGasLimit < 0n) {
 			throw new RangeError("verificationGasLimit overrid can't be negative");
 		}
 
-		if (
-			typeof overrides.callGasLimit === "bigint" &&
-			overrides.callGasLimit < 0n
-		) {
+		if (typeof overrides.callGasLimit === "bigint" && overrides.callGasLimit < 0n) {
 			throw new RangeError("callGasLimit overrid can't be negative");
 		}
 
-		userOperation.preVerificationGas = overrides.preVerificationGas ??
-            preVerificationGas * BigInt((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100) / 100n;
+		userOperation.preVerificationGas =
+			overrides.preVerificationGas ??
+			(preVerificationGas * BigInt((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100)) /
+				100n;
 
-		userOperation.verificationGasLimit = overrides.verificationGasLimit ??
-            verificationGasLimit * BigInt((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100) / 100n;
+		userOperation.verificationGasLimit =
+			overrides.verificationGasLimit ??
+			(verificationGasLimit *
+				BigInt((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100)) /
+				100n;
 
-		userOperation.callGasLimit = overrides.callGasLimit ??
-            callGasLimit * BigInt((overrides.callGasLimitPercentageMultiplier ?? 0) + 100) / 100n;
+		userOperation.callGasLimit =
+			overrides.callGasLimit ??
+			(callGasLimit * BigInt((overrides.callGasLimitPercentageMultiplier ?? 0) + 100)) / 100n;
 
 		return [userOperation, factoryAddress, factoryData];
 	}
-    
+
 	/**
 	 * create a useroperation signature
 	 * @param useroperation - useroperation to sign
@@ -1876,37 +1749,28 @@ export class SafeAccount extends SmartAccount {
 			throw new RangeError("validUntil can't be negative");
 		}
 
-		const userOperationEip712Hash = SafeAccount.getUserOperationEip712Hash(
-			useroperation,
-			chainId,
-			{
-				validAfter,
-				validUntil,
-				entrypointAddress,
-				safe4337ModuleAddress,
-			},
-		);
+		const userOperationEip712Hash = SafeAccount.getUserOperationEip712Hash(useroperation, chainId, {
+			validAfter,
+			validUntil,
+			entrypointAddress,
+			safe4337ModuleAddress,
+		});
 
-        const signerSignaturePairs: SignerSignaturePair[] = [];
+		const signerSignaturePairs: SignerSignaturePair[] = [];
 		for (const privateKey of privateKeys) {
 			const wallet = new Wallet(privateKey);
-			const signature = wallet.signingKey.sign(
-				userOperationEip712Hash,
-			).serialized;
-            signerSignaturePairs.push({
-                signer: wallet.address,
-                signature
-            });
+			const signature = wallet.signingKey.sign(userOperationEip712Hash).serialized;
+			signerSignaturePairs.push({
+				signer: wallet.address,
+				signature,
+			});
 		}
 
-		return SafeAccount.formatSignaturesToUseroperationSignature(
-            signerSignaturePairs,
-			{
-				validAfter,
-				validUntil,
-                isMultiChainSignature:overrides.isMultiChainSignature
-			},
-		);
+		return SafeAccount.formatSignaturesToUseroperationSignature(signerSignaturePairs, {
+			validAfter,
+			validUntil,
+			isMultiChainSignature: overrides.isMultiChainSignature,
+		});
 	}
 
 	/**
@@ -1915,10 +1779,7 @@ export class SafeAccount extends SmartAccount {
 	 * rather than a hex blob; `hash` is accepted as a fallback for signers
 	 * that only support raw ECDSA.
 	 */
-	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = [
-		"typedData",
-		"hash",
-	];
+	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = ["typedData", "hash"];
 
 	/**
 	 * Sign a UserOperation using one or more {@link Signer}s. This is the
@@ -1961,11 +1822,12 @@ export class SafeAccount extends SmartAccount {
 			throw new RangeError("There should be at least one signer");
 		}
 
-		const typedDataRaw = SafeAccount.getUserOperationEip712Data(
-			useroperation,
-			chainId,
-			{ validAfter, validUntil, entrypointAddress, safe4337ModuleAddress },
-		);
+		const typedDataRaw = SafeAccount.getUserOperationEip712Data(useroperation, chainId, {
+			validAfter,
+			validUntil,
+			entrypointAddress,
+			safe4337ModuleAddress,
+		});
 		const userOpHash = TypedDataEncoder.hash(
 			typedDataRaw.domain,
 			typedDataRaw.types,
@@ -1975,7 +1837,8 @@ export class SafeAccount extends SmartAccount {
 		// Strip EIP712Domain; every downstream signTypedData API rejects it
 		// when it appears alongside the primary type.
 		const { EIP712Domain: _drop, ...primaryTypes } = typedDataRaw.types as Record<
-			string, { name: string; type: string }[]
+			string,
+			{ name: string; type: string }[]
 		>;
 		const typedData: TypedData = {
 			domain: typedDataRaw.domain as TypedData["domain"],
@@ -1991,9 +1854,7 @@ export class SafeAccount extends SmartAccount {
 		// calling any signer. Catches malformed addresses offline instead
 		// of after an external signer (HSM, hardware wallet) has already
 		// been prompted.
-		const normalizedAddresses = signers.map((signer) =>
-			getAddress(signer.address),
-		);
+		const normalizedAddresses = signers.map((signer) => getAddress(signer.address));
 
 		// Offline capability check: throws with an actionable message if
 		// any signer can't produce what Safe accepts.
@@ -2019,14 +1880,11 @@ export class SafeAccount extends SmartAccount {
 			signature,
 		}));
 
-		return SafeAccount.formatSignaturesToUseroperationSignature(
-			signerSignaturePairs,
-			{
-				validAfter,
-				validUntil,
-				isMultiChainSignature: overrides.isMultiChainSignature,
-			},
-		);
+		return SafeAccount.formatSignaturesToUseroperationSignature(signerSignaturePairs, {
+			validAfter,
+			validUntil,
+			isMultiChainSignature: overrides.isMultiChainSignature,
+		});
 	}
 
 	/**
@@ -2049,24 +1907,20 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): string {
 		const eip7212WebAuthnPrecompileVerifier =
-			overrides.eip7212WebAuthnPrecompileVerifier ??
-			SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
 		const eip7212WebAuthnContractVerifier =
-			overrides.eip7212WebAuthnContractVerifier ??
-			SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
 		const webAuthnSignerFactory =
-			overrides.webAuthnSignerFactory ??
-			SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+			overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 		const webAuthnSignerSingleton =
-			overrides.webAuthnSignerSingleton ??
-			SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+			overrides.webAuthnSignerSingleton ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
 
 		if (
-			eip7212WebAuthnPrecompileVerifier.length != 42 ||
-			eip7212WebAuthnPrecompileVerifier.slice(0, 38) != ZeroAddress.slice(0, 38)
+			eip7212WebAuthnPrecompileVerifier.length !== 42 ||
+			eip7212WebAuthnPrecompileVerifier.slice(0, 38) !== ZeroAddress.slice(0, 38)
 		) {
 			throw new RangeError(
-				"Invalide precompile address. " +
+				"Invalid precompile address. " +
 					"It should have the format 0x000000000000000000000000000000000000____",
 			);
 		}
@@ -2074,8 +1928,8 @@ export class SafeAccount extends SmartAccount {
 			solidityPacked(
 				["bytes", "uint256", "uint256", "uint256", "uint256"],
 				[
-					overrides.webAuthnSignerProxyCreationCode??
-                        SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
+					overrides.webAuthnSignerProxyCreationCode ??
+						SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
 					webAuthnSignerSingleton,
 					x,
 					y,
@@ -2096,11 +1950,11 @@ export class SafeAccount extends SmartAccount {
 			],
 		).slice(-40);
 
-		return "0x" + proxyAdd;
+		return `0x${proxyAdd}`;
 	}
 
 	/**
-	 * formate a list of eip712 signatures to a useroperation signature
+	 * format a list of eip712 signatures to a useroperation signature
 	 * @param signerSignaturePairs - a list of a pair of a signer and it's signature
 	 * @param overrides - overrides for the default values
 	 * @returns signature
@@ -2112,60 +1966,56 @@ export class SafeAccount extends SmartAccount {
 		const validAfter = overrides.validAfter ?? 0n;
 		const validUntil = overrides.validUntil ?? 0n;
 
-		const signature = this.buildSignaturesFromSingerSignaturePairs(
+		const signature = SafeAccount.buildSignaturesFromSingerSignaturePairs(
 			signerSignaturePairs,
 			overrides,
 		);
 
-		if(overrides.isMultiChainSignature){
-			if(overrides.multiChainMerkleProof != null){
-                const merkleProofLength =
-                    overrides.multiChainMerkleProof.slice(2).length; // wihout 0x prefix
-				if(
-                    // 1 byte has a length of 2 hex chars
-                    // minimum proof consist of at least two hashes, 2 * 2 * 32 = 128
+		if (overrides.isMultiChainSignature) {
+			if (overrides.multiChainMerkleProof != null) {
+				const merkleProofLength = overrides.multiChainMerkleProof.slice(2).length; // wihout 0x prefix
+				if (
+					// 1 byte has a length of 2 hex chars
+					// minimum proof consist of at least two hashes, 2 * 2 * 32 = 128
 					merkleProofLength < 128 ||
-                    // a valid proof length should be a multiple of 2 * 32 = 64
-					merkleProofLength % 64 != 0
-				){
+					// a valid proof length should be a multiple of 2 * 32 = 64
+					merkleProofLength % 64 !== 0
+				) {
 					throw new RangeError("invalid multiChainMerkleProof length.");
 				}
-				const merkleTreeDepth = (merkleProofLength / 64) - 1;
+				const merkleTreeDepth = merkleProofLength / 64 - 1;
 				let merkleTreeDepthHex = merkleTreeDepth.toString(16);
 
-                // create a 0x prefixed hex with an even length of chars
-                if(merkleTreeDepthHex.length % 2 == 0){
-                    merkleTreeDepthHex = "0x" + merkleTreeDepthHex;
-                }else{
-                    merkleTreeDepthHex = "0x0" + merkleTreeDepthHex;
-                }
+				// create a 0x prefixed hex with an even length of chars
+				if (merkleTreeDepthHex.length % 2 === 0) {
+					merkleTreeDepthHex = `0x${merkleTreeDepthHex}`;
+				} else {
+					merkleTreeDepthHex = `0x0${merkleTreeDepthHex}`;
+				}
 
 				return solidityPacked(
 					["bytes1", "uint48", "uint48", "bytes"],
 					[
-                        merkleTreeDepthHex,
-                        validAfter,
-                        validUntil,
-                        overrides.multiChainMerkleProof + signature.slice(2)
-                    ],
+						merkleTreeDepthHex,
+						validAfter,
+						validUntil,
+						overrides.multiChainMerkleProof + signature.slice(2),
+					],
 				);
-			}else{
-                //no proof means a single useroperation
+			} else {
+				//no proof means a single useroperation
 				return solidityPacked(
 					["bytes1", "uint48", "uint48", "bytes"],
 					[
-                        "0x00", // single useroperation - merkle depth is 0
-                        validAfter,
-                        validUntil,
-                        signature
-                    ],
+						"0x00", // single useroperation - merkle depth is 0
+						validAfter,
+						validUntil,
+						signature,
+					],
 				);
 			}
-		}else{
-			return solidityPacked(
-				["uint48", "uint48", "bytes"],
-				[validAfter, validUntil, signature],
-			);
+		} else {
+			return solidityPacked(["uint48", "uint48", "bytes"], [validAfter, validUntil, signature]);
 		}
 	}
 
@@ -2179,36 +2029,28 @@ export class SafeAccount extends SmartAccount {
 		signer: Signer,
 		overrides: WebAuthnSignatureOverrides = {},
 	): string {
-		if (typeof signer == "string") {
+		if (typeof signer === "string") {
 			return signer.toLowerCase();
 		} else {
 			const eip7212WebAuthnPrecompileVerifier =
-				overrides.eip7212WebAuthnPrecompileVerifier ??
-				SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+				overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
 			const eip7212WebAuthnContractVerifier =
-				overrides.eip7212WebAuthnContractVerifier ??
-				SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+				overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
 			const webAuthnSignerFactory =
-				overrides.webAuthnSignerFactory ??
-				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+				overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 			const webAuthnSignerSingleton =
-				overrides.webAuthnSignerSingleton ??
-				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
-            const webAuthnSignerProxyCreationCode =
-                overrides.webAuthnSignerProxyCreationCode ??
-                SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+				overrides.webAuthnSignerSingleton ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+			const webAuthnSignerProxyCreationCode =
+				overrides.webAuthnSignerProxyCreationCode ??
+				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
-			return SafeAccount.createWebAuthnSignerVerifierAddress(
-				signer.x,
-				signer.y,
-				{
-					eip7212WebAuthnPrecompileVerifier,
-					eip7212WebAuthnContractVerifier,
-					webAuthnSignerFactory,
-					webAuthnSignerSingleton,
-                    webAuthnSignerProxyCreationCode
-				},
-			).toLowerCase();
+			return SafeAccount.createWebAuthnSignerVerifierAddress(signer.x, signer.y, {
+				eip7212WebAuthnPrecompileVerifier,
+				eip7212WebAuthnContractVerifier,
+				webAuthnSignerFactory,
+				webAuthnSignerSingleton,
+				webAuthnSignerProxyCreationCode,
+			}).toLowerCase();
 		}
 	}
 
@@ -2224,17 +2066,14 @@ export class SafeAccount extends SmartAccount {
 		overrides: WebAuthnSignatureOverrides = {},
 	) {
 		signerSignaturePairs.sort((left, right) =>
-			SafeAccount.getSignerLowerCaseAddress(
-				left.signer,
-				overrides,
-			).localeCompare(
+			SafeAccount.getSignerLowerCaseAddress(left.signer, overrides).localeCompare(
 				SafeAccount.getSignerLowerCaseAddress(right.signer, overrides),
 			),
 		);
 	}
 
 	/**
-	 * formate a list of eip712 signatures to a safe signature(without the time range)
+	 * format a list of eip712 signatures to a safe signature (without the time range)
 	 * @param signerSignaturePairs - a list of a pair of a signer and it's signature
 	 * @param overrides - overrides for the default values
 	 * @returns signature
@@ -2243,23 +2082,17 @@ export class SafeAccount extends SmartAccount {
 		signerSignaturePairs: SignerSignaturePair[],
 		webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
 	): string {
-		SafeAccount.sortSignatures(
-			signerSignaturePairs,
-			webAuthnSignatureOverrides,
-		);
+		SafeAccount.sortSignatures(signerSignaturePairs, webAuthnSignatureOverrides);
 		const start = 65 * signerSignaturePairs.length;
 		const { segments } = signerSignaturePairs.reduce(
 			({ segments, offset }, { signer, signature, isContractSignature }) => {
-				isContractSignature = isContractSignature || typeof signer != "string";
+				isContractSignature = isContractSignature || typeof signer !== "string";
 				if (isContractSignature) {
-					if (typeof signer != "string") { //webauthn signature
-                        //check if this is a webAuthn signature to replace 
-                        //the signer address with the shared signer address
-                        //if init
+					if (typeof signer !== "string") {
+						// webauthn signature — on init, use the shared signer address
+						// instead of the per-owner WebAuthn verifier address
 						if (webAuthnSignatureOverrides.isInit == null) {
-							throw new RangeError(
-								"Must define isInit parameter when using WebAuthn",
-							);
+							throw new RangeError("Must define isInit parameter when using WebAuthn");
 						}
 						if (webAuthnSignatureOverrides.isInit) {
 							const webauthnsharedsigner =
@@ -2279,39 +2112,29 @@ export class SafeAccount extends SmartAccount {
 							const webAuthnSignerSingleton =
 								webAuthnSignatureOverrides.webAuthnSignerSingleton ??
 								SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
-                            const webAuthnSignerProxyCreationCode =
-                                webAuthnSignatureOverrides.webAuthnSignerProxyCreationCode ??
-                                SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+							const webAuthnSignerProxyCreationCode =
+								webAuthnSignatureOverrides.webAuthnSignerProxyCreationCode ??
+								SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
-							signer = SafeAccount.createWebAuthnSignerVerifierAddress(
-								signer.x,
-								signer.y,
-								{
-									eip7212WebAuthnPrecompileVerifier,
-									eip7212WebAuthnContractVerifier,
-									webAuthnSignerFactory,
-									webAuthnSignerSingleton,
-                                    webAuthnSignerProxyCreationCode
-								},
-							);
+							signer = SafeAccount.createWebAuthnSignerVerifierAddress(signer.x, signer.y, {
+								eip7212WebAuthnPrecompileVerifier,
+								eip7212WebAuthnContractVerifier,
+								webAuthnSignerFactory,
+								webAuthnSignerSingleton,
+								webAuthnSignerProxyCreationCode,
+							});
 						}
-                    }
-                    return {
-                        segments: [
-                            ...segments,
-                            ethers.solidityPacked(
-                                ["uint256", "uint256", "uint8"],
-                                [signer, start + offset, 0],
-                            ),
-                        ],
-                        offset: offset + 32 + ethers.dataLength(signature),
-                    };
-				} else {
+					}
 					return {
 						segments: [
 							...segments,
-							ethers.solidityPacked(["bytes"], [signature]),
+							ethers.solidityPacked(["uint256", "uint256", "uint8"], [signer, start + offset, 0]),
 						],
+						offset: offset + 32 + ethers.dataLength(signature),
+					};
+				} else {
+					return {
+						segments: [...segments, ethers.solidityPacked(["bytes"], [signature])],
 						offset: offset,
 					};
 				}
@@ -2321,18 +2144,17 @@ export class SafeAccount extends SmartAccount {
 		return ethers.concat([
 			...segments,
 			...signerSignaturePairs.map(({ signer, signature, isContractSignature }) => {
-                    isContractSignature = isContractSignature || typeof signer != "string";
-                    if (isContractSignature) {
-                        return ethers.solidityPacked(
-                            ["uint256", "bytes"],
-                            [ethers.dataLength(signature), signature],
-                        )
-                    }else{
-                        //only append signatures if a contract signature
-                        return "0x";
-                    }
-                },
-			),
+				isContractSignature = isContractSignature || typeof signer !== "string";
+				if (isContractSignature) {
+					return ethers.solidityPacked(
+						["uint256", "bytes"],
+						[ethers.dataLength(signature), signature],
+					);
+				} else {
+					//only append signatures if a contract signature
+					return "0x";
+				}
+			}),
 		]);
 	}
 
@@ -2341,9 +2163,7 @@ export class SafeAccount extends SmartAccount {
 	 * @param signatureData - signature data to format
 	 * @returns formatted signature
 	 */
-	public static createWebAuthnSignature(
-		signatureData: WebauthnSignatureData,
-	): string {
+	public static createWebAuthnSignature(signatureData: WebauthnSignatureData): string {
 		return ethers.AbiCoder.defaultAbiCoder().encode(
 			["bytes", "bytes", "uint256[2]"],
 			[
@@ -2357,15 +2177,15 @@ export class SafeAccount extends SmartAccount {
 	/**
 	 * create a swapOwner metatransaction and create a metatransaction to
 	 * deploy a webauthn verifier owner if not deployed and it will automatically
-	 * fetch the prevowner needed for the swap
+	 * fetch the prevOwner needed for the swap
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
-	 * (to get the prevOwner paramter) and to check if a webauthn newowner verifier 
-     * is already deployed.
+	 * (to get the prevOwner parameter) and to check if a webauthn newowner verifier
+	 * is already deployed.
 	 * @param newOwner - newOwner public address
 	 * @param oldOwner - oldOwner to replace public address
 	 * @param overrides - overrides for the default values
 	 * @param overrides.prevOwner - if set, it will be used as the previous owner and
-	 * nideRpcUrl won't be used to fetch it
+	 * nodeRpcUrl won't be used to fetch it
 	 * @returns a promise of a list of metaTransactions
 	 */
 	public async createSwapOwnerMetaTransactions(
@@ -2378,67 +2198,45 @@ export class SafeAccount extends SmartAccount {
 			eip7212WebAuthnContractVerifier?: string;
 			webAuthnSignerFactory?: string;
 			webAuthnSignerSingleton?: string;
-	        webAuthnSignerProxyCreationCode?: string;
+			webAuthnSignerProxyCreationCode?: string;
 		} = {},
 	): Promise<MetaTransaction[]> {
 		let deployNewOwnerSignerMetaTransaction: MetaTransaction | null = null;
 		let newOwnerT: string;
 		let oldOwnerT: string;
-        const webAuthnSignerProxyCreationCode =
-            overrides.webAuthnSignerProxyCreationCode ??
-            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+		const webAuthnSignerProxyCreationCode =
+			overrides.webAuthnSignerProxyCreationCode ??
+			SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
-		if (typeof newOwner != "string") {
-			newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(
-				newOwner.x,
-				newOwner.y,
-				{
-					eip7212WebAuthnPrecompileVerifier:
-						overrides.eip7212WebAuthnPrecompileVerifier,
-					eip7212WebAuthnContractVerifier:
-						overrides.eip7212WebAuthnContractVerifier,
-					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-                    webAuthnSignerProxyCreationCode
-				},
-			);
-			const newOwnerCode = await sendEthGetCodeRequest(
-				nodeRpcUrl,
-				newOwnerT,
-				"latest",
-			);
+		if (typeof newOwner !== "string") {
+			newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(newOwner.x, newOwner.y, {
+				eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
+				eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
+				webAuthnSignerFactory: overrides.webAuthnSignerFactory,
+				webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
+				webAuthnSignerProxyCreationCode,
+			});
+			const newOwnerCode = await sendEthGetCodeRequest(nodeRpcUrl, newOwnerT, "latest");
 			const newOwnerNotDeployed = newOwnerCode.length < 3;
 			if (newOwnerNotDeployed) {
 				deployNewOwnerSignerMetaTransaction =
-					SafeAccount.createDeployWebAuthnVerifierMetaTransaction(
-						newOwner.x,
-						newOwner.y,
-						{
-							eip7212WebAuthnPrecompileVerifier:
-								overrides.eip7212WebAuthnPrecompileVerifier,
-							eip7212WebAuthnContractVerifier:
-								overrides.eip7212WebAuthnContractVerifier,
-							webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-						},
-					);
+					SafeAccount.createDeployWebAuthnVerifierMetaTransaction(newOwner.x, newOwner.y, {
+						eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
+						eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
+						webAuthnSignerFactory: overrides.webAuthnSignerFactory,
+					});
 			}
 		} else {
 			newOwnerT = newOwner;
 		}
-		if (typeof oldOwner != "string") {
-			oldOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(
-				oldOwner.x,
-				oldOwner.y,
-				{
-					eip7212WebAuthnPrecompileVerifier:
-						overrides.eip7212WebAuthnPrecompileVerifier,
-					eip7212WebAuthnContractVerifier:
-						overrides.eip7212WebAuthnContractVerifier,
-					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-                    webAuthnSignerProxyCreationCode
-				},
-			);
+		if (typeof oldOwner !== "string") {
+			oldOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(oldOwner.x, oldOwner.y, {
+				eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
+				eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
+				webAuthnSignerFactory: overrides.webAuthnSignerFactory,
+				webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
+				webAuthnSignerProxyCreationCode,
+			});
 		} else {
 			oldOwnerT = oldOwner;
 		}
@@ -2447,9 +2245,9 @@ export class SafeAccount extends SmartAccount {
 		if (prevOwnerT == null) {
 			const owners = await this.getOwners(nodeRpcUrl);
 			const oldOwnerIndex = owners.indexOf(oldOwnerT);
-			if (oldOwnerIndex == -1) {
+			if (oldOwnerIndex === -1) {
 				throw new RangeError("oldOwner is not a current owner.");
-			} else if (oldOwnerIndex == 0) {
+			} else if (oldOwnerIndex === 0) {
 				prevOwnerT = "0x0000000000000000000000000000000000000001";
 			} else {
 				prevOwnerT = owners[oldOwnerIndex - 1];
@@ -2468,15 +2266,15 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * create a removeOwner metatransaction, and fetch the prevowner
+	 * create a removeOwner metatransaction, and fetch the prevOwner
 	 * needed for the remove
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
-	 * (to get the prevOwner paramter).
+	 * (to get the prevOwner parameter).
 	 * @param ownerToDelete - owner to delete public address
 	 * @param threshold - new threshold
 	 * @param overrides - overrides for the default values
 	 * @param overrides.prevOwner - if set, it will be used as the previous owner and
-	 * nideRpcUrl won't be used to fetch it
+	 * nodeRpcUrl won't be used to fetch it
 	 * @returns a promise of a metaTransaction
 	 */
 	public async createRemoveOwnerMetaTransaction(
@@ -2489,27 +2287,25 @@ export class SafeAccount extends SmartAccount {
 			eip7212WebAuthnContractVerifier?: string;
 			webAuthnSignerFactory?: string;
 			webAuthnSignerSingleton?: string;
-	        webAuthnSignerProxyCreationCode?: string;
+			webAuthnSignerProxyCreationCode?: string;
 		} = {},
 	): Promise<MetaTransaction> {
 		let ownerToDeleteT: string;
 
-		if (typeof ownerToDelete != "string") {
-            const webAuthnSignerProxyCreationCode =
-                overrides.webAuthnSignerProxyCreationCode ??
-                SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+		if (typeof ownerToDelete !== "string") {
+			const webAuthnSignerProxyCreationCode =
+				overrides.webAuthnSignerProxyCreationCode ??
+				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
 			ownerToDeleteT = SafeAccount.createWebAuthnSignerVerifierAddress(
 				ownerToDelete.x,
 				ownerToDelete.y,
 				{
-					eip7212WebAuthnPrecompileVerifier:
-						overrides.eip7212WebAuthnPrecompileVerifier,
-					eip7212WebAuthnContractVerifier:
-						overrides.eip7212WebAuthnContractVerifier,
+					eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
+					eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
 					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
 					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-                    webAuthnSignerProxyCreationCode
+					webAuthnSignerProxyCreationCode,
 				},
 			);
 		} else {
@@ -2520,28 +2316,24 @@ export class SafeAccount extends SmartAccount {
 		if (prevOwnerT == null) {
 			const owners = await this.getOwners(nodeRpcUrl);
 			const ownerToDeleteIndex = owners.indexOf(ownerToDeleteT);
-			if (ownerToDeleteIndex == -1) {
+			if (ownerToDeleteIndex === -1) {
 				throw new RangeError("ownerToDelete is not a current owner.");
-			} else if (ownerToDeleteIndex == 0) {
+			} else if (ownerToDeleteIndex === 0) {
 				prevOwnerT = "0x0000000000000000000000000000000000000001";
 			} else {
 				prevOwnerT = owners[ownerToDeleteIndex - 1];
 			}
 		}
-		return this.createStandardRemoveOwnerMetaTransaction(
-			ownerToDeleteT,
-			threshold,
-			prevOwnerT,
-		);
+		return this.createStandardRemoveOwnerMetaTransaction(ownerToDeleteT, threshold, prevOwnerT);
 	}
 
-    /**
+	/**
 	 * create an addOwner metatransaction and create a metatransaction to
 	 * deploy a webauthn verifier owner if it is not deployed
 	 * @param newOwner - newOwner public address
 	 * @param threshold - new threshold
 	 * @param overrides - overrides for the default values
-     * @param overrides.nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * @param overrides.nodeRpcUrl - The JSON-RPC API url for the target chain
 	 * (to check if the new webauthn owner is deployed or not).
 	 * @returns a promise of a list of metaTransactions
 	 */
@@ -2549,66 +2341,49 @@ export class SafeAccount extends SmartAccount {
 		newOwner: Signer,
 		threshold: number,
 		overrides: {
-            nodeRpcUrl?: string,
+			nodeRpcUrl?: string;
 			eip7212WebAuthnPrecompileVerifier?: string;
 			eip7212WebAuthnContractVerifier?: string;
 			webAuthnSignerFactory?: string;
 			webAuthnSignerSingleton?: string;
-	        webAuthnSignerProxyCreationCode?: string;
+			webAuthnSignerProxyCreationCode?: string;
 		} = {},
 	): Promise<MetaTransaction[]> {
 		let deployNewOwnerSignerMetaTransaction: MetaTransaction | null = null;
 		let newOwnerT: string;
 
-		if (typeof newOwner != "string") {
-            const webAuthnSignerProxyCreationCode =
-                overrides.webAuthnSignerProxyCreationCode ??
-                SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+		if (typeof newOwner !== "string") {
+			const webAuthnSignerProxyCreationCode =
+				overrides.webAuthnSignerProxyCreationCode ??
+				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
-			newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(
-				newOwner.x,
-				newOwner.y,
-				{
-					eip7212WebAuthnPrecompileVerifier:
-						overrides.eip7212WebAuthnPrecompileVerifier,
-					eip7212WebAuthnContractVerifier:
-						overrides.eip7212WebAuthnContractVerifier,
-					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-                    webAuthnSignerProxyCreationCode
-				},
-			);
-            if(overrides.nodeRpcUrl == null){
-				throw new RangeError(
-                    "overrides.nodeRpcUrl can't be null if adding a webauthn owner");
-            }
-			const newOwnerCode = await sendEthGetCodeRequest(
-				overrides.nodeRpcUrl,
-				newOwnerT,
-				"latest",
-			);
+			newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(newOwner.x, newOwner.y, {
+				eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
+				eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
+				webAuthnSignerFactory: overrides.webAuthnSignerFactory,
+				webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
+				webAuthnSignerProxyCreationCode,
+			});
+			if (overrides.nodeRpcUrl == null) {
+				throw new RangeError("overrides.nodeRpcUrl can't be null if adding a webauthn owner");
+			}
+			const newOwnerCode = await sendEthGetCodeRequest(overrides.nodeRpcUrl, newOwnerT, "latest");
 			const newOwnerNotDeployed = newOwnerCode.length < 3;
 			if (newOwnerNotDeployed) {
 				deployNewOwnerSignerMetaTransaction =
-					SafeAccount.createDeployWebAuthnVerifierMetaTransaction(
-						newOwner.x,
-						newOwner.y,
-						{
-							eip7212WebAuthnPrecompileVerifier:
-								overrides.eip7212WebAuthnPrecompileVerifier,
-							eip7212WebAuthnContractVerifier:
-								overrides.eip7212WebAuthnContractVerifier,
-							webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-						},
-					);
+					SafeAccount.createDeployWebAuthnVerifierMetaTransaction(newOwner.x, newOwner.y, {
+						eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
+						eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
+						webAuthnSignerFactory: overrides.webAuthnSignerFactory,
+					});
 			}
 		} else {
 			newOwnerT = newOwner;
 		}
-		
-        const addMetaTransaction = this.createStandardAddOwnerWithThresholdMetaTransaction(
+
+		const addMetaTransaction = this.createStandardAddOwnerWithThresholdMetaTransaction(
 			newOwnerT,
-            threshold
+			threshold,
 		);
 		if (deployNewOwnerSignerMetaTransaction == null) {
 			return [addMetaTransaction];
@@ -2709,15 +2484,15 @@ export class SafeAccount extends SmartAccount {
 		};
 	}
 
-    /**
-	 * create a change threshold metatransaction 
+	/**
+	 * create a change threshold metatransaction
 	 * @param threshold - new threshold
 	 * @returns a metaTransactions
 	 */
 	public createChangeThresholdMetaTransaction(threshold: number): MetaTransaction {
-        if(threshold < 1){
-            throw new RangeError("threshold can't be less than 1.");
-        }
+		if (threshold < 1) {
+			throw new RangeError("threshold can't be less than 1.");
+		}
 
 		const changeThresholdCallData = createCallData(
 			"0x694e80c3", //changeThreshold
@@ -2732,8 +2507,8 @@ export class SafeAccount extends SmartAccount {
 		};
 	}
 
-    /**
-	 * create an approve hash metatransaction 
+	/**
+	 * create an approve hash metatransaction
 	 * @param hashToApprove - hash to approve
 	 * @returns a metaTransactions
 	 */
@@ -2768,14 +2543,11 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): MetaTransaction {
 		const eip7212WebAuthnPrecompileVerifier =
-			overrides.eip7212WebAuthnPrecompileVerifier ??
-			SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
 		const eip7212WebAuthnContractVerifier =
-			overrides.eip7212WebAuthnContractVerifier ??
-			SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
 		const webAuthnSignerFactory =
-			overrides.webAuthnSignerFactory ??
-			SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+			overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 
 		const createDeterministicWebAuthnVerifierOwnerCallData = createCallData(
 			"0x0d2f0489", //createSigner
@@ -2810,17 +2582,10 @@ export class SafeAccount extends SmartAccount {
 			to: this.accountAddress,
 			data: callData,
 		};
-		const getOwnersResult = await sendEthCallRequest(
-			nodeRpcUrl,
-			ethCallParams,
-			"latest",
-		);
+		const getOwnersResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
 
 		const abiCoder = AbiCoder.defaultAbiCoder();
-		const decodedCalldata = abiCoder.decode(
-			["address[]"],
-			getOwnersResult,
-		);
+		const decodedCalldata = abiCoder.decode(["address[]"], getOwnersResult);
 
 		return decodedCalldata[0];
 	}
@@ -2838,537 +2603,506 @@ export class SafeAccount extends SmartAccount {
 			to: this.accountAddress,
 			data: callData,
 		};
-		const getThresholdResult = await sendEthCallRequest(
-			nodeRpcUrl,
-			ethCallParams,
-			"latest",
-		);
+		const getThresholdResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
 
 		const abiCoder = AbiCoder.defaultAbiCoder();
-		const decodedCalldata = abiCoder.decode(
-			["uint256"],
-			getThresholdResult,
-		);
+		const decodedCalldata = abiCoder.decode(["uint256"], getThresholdResult);
 
 		return Number(decodedCalldata[0]);
 	}
-    
-    /**
-	 * fetches a list of the account owners public addresses
+
+	/**
+	 * fetches a paginated list of enabled modules for this account.
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
-	 * @returns a promise of a list of owners public addresses and
-     * next Start of the next page
+	 * @param overrides - pagination overrides
+	 * @param overrides.start - module address to start from (defaults to the sentinel 0x...0001)
+	 * @param overrides.pageSize - maximum number of modules to return (default 10)
+	 * @returns a promise of [moduleAddresses, nextPageStart]; pass nextPageStart back in overrides.start to continue
 	 */
 	public async getModules(
-        nodeRpcUrl: string, 
-        overrides: {
+		nodeRpcUrl: string,
+		overrides: {
 			start?: string;
-            pageSize?: bigint
-		} = {}
-    ): Promise<[string[], string]> {
-        try{
-            let start = overrides.start;
-            if(start == null){
-                start = "0x0000000000000000000000000000000000000001";
-            }
-            let pageSize = overrides.pageSize;
-            if(pageSize == null){
-                pageSize = 10n;
-            }
+			pageSize?: bigint;
+		} = {},
+	): Promise<[string[], string]> {
+		try {
+			let start = overrides.start;
+			if (start == null) {
+				start = "0x0000000000000000000000000000000000000001";
+			}
+			let pageSize = overrides.pageSize;
+			if (pageSize == null) {
+				pageSize = 10n;
+			}
 
-            const callData = createCallData(
-                "0xcc2f8452", //getModulesPaginated(address,uint256)
-                ["address", "uint256"],
-                [start, pageSize]
-            );
+			const callData = createCallData(
+				"0xcc2f8452", //getModulesPaginated(address,uint256)
+				["address", "uint256"],
+				[start, pageSize],
+			);
 
-            const ethCallParams = {
-                to: this.accountAddress,
-                data: callData,
-            };
-            const getModulesResult = await sendEthCallRequest(
-                nodeRpcUrl,
-                ethCallParams,
-                "latest",
-            );
-            if (getModulesResult == "0x"){
-                throw new AbstractionKitError(
+			const ethCallParams = {
+				to: this.accountAddress,
+				data: callData,
+			};
+			const getModulesResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+			if (getModulesResult === "0x") {
+				throw new AbstractionKitError(
 					"BAD_DATA",
-					"getModules retuned an empty result, the target account is " + 
-                    "probably not deployed yet.",
+					"getModules returned an empty result, the target account is " +
+						"probably not deployed yet.",
 				);
-            }
-            const abiCoder = AbiCoder.defaultAbiCoder();
-            const decodedCalldata = abiCoder.decode(
-                ["address[]", "address"],
-                getModulesResult,
-            );
-            return [decodedCalldata[0], decodedCalldata[1]];
-        }catch (err) {
+			}
+			const abiCoder = AbiCoder.defaultAbiCoder();
+			const decodedCalldata = abiCoder.decode(["address[]", "address"], getModulesResult);
+			return [decodedCalldata[0], decodedCalldata[1]];
+		} catch (err) {
 			const error = ensureError(err);
 
-			throw new AbstractionKitError(
-				"BAD_DATA",
-				"getModules failed",
-				{
-					cause: error,
-				},
-			);
+			throw new AbstractionKitError("BAD_DATA", "getModules failed", {
+				cause: error,
+			});
 		}
 	}
 
-    /**
-	 * check if a module is enabled 
+	/**
+	 * check if a module is enabled
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
-	 * @param moduleAddress - the module address to check if enabled 
-	 * @returns a promise of boolean 
+	 * @param moduleAddress - the module address to check if enabled
+	 * @returns a promise of boolean
 	 */
-	public async isModuleEnabled(
-        nodeRpcUrl: string, moduleAddress: string
-    ): Promise<boolean> {
+	public async isModuleEnabled(nodeRpcUrl: string, moduleAddress: string): Promise<boolean> {
 		const functionSignature = "isModuleEnabled(address)";
 		const functionSelector = getFunctionSelector(functionSignature);
-		const callData = createCallData(
-            functionSelector, ["address"], [moduleAddress]);
+		const callData = createCallData(functionSelector, ["address"], [moduleAddress]);
 
 		const ethCallParams = {
 			to: this.accountAddress,
 			data: callData,
 		};
-		const isModuleEnabledResult = await sendEthCallRequest(
-			nodeRpcUrl,
-			ethCallParams,
-			"latest",
-		);
+		const isModuleEnabledResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
 
 		const abiCoder = AbiCoder.defaultAbiCoder();
-		const decodedCalldata = abiCoder.decode(
-			["bool"],
-			isModuleEnabledResult,
-		);
+		const decodedCalldata = abiCoder.decode(["bool"], isModuleEnabledResult);
 
 		return decodedCalldata[0];
 	}
-    
-    /**
-	 * create a list of dummy signer signature pair list based on the expected signers
-	 * @param expectedSigners - webauthn public key x parameter
-	 * @param webAuthnSignatureOverrides - overrides for the default values
-	 * @returns a list of dummy SignerSignaturePair
+
+	/**
+	 * create a list of dummy signer/signature pairs for gas estimation based on the expected signers.
+	 * @param expectedSigners - signers whose signatures will be produced at sign time
+	 * @param webAuthnSignatureOverrides - WebAuthn verifier/module configuration
+	 * @returns a list of dummy SignerSignaturePair entries, one per expected signer
 	 */
 	public static createDummySignerSignaturePairForExpectedSigners(
 		expectedSigners: Signer[],
 		webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
-    ): SignerSignaturePair[] {
-        const signers = [...expectedSigners]; 
-        const dummySignerSignatures: SignerSignaturePair[] = [];
-        for (let signer of signers){
-            let signerSignaturePair: SignerSignaturePair;
-            if (typeof signer == "string") {
-                signerSignaturePair = EOADummySignerSignaturePair;
-            }else{
-                if (webAuthnSignatureOverrides.isInit == null) {
-                    throw new RangeError(
-                        "Must define isInit parameter when using WebAuthn",
-                    );
-                }
-                signerSignaturePair = { ...WebauthnDummySignerSignaturePair };
-                if (webAuthnSignatureOverrides.isInit) {
-                    const webauthnsharedsigner =
-                        webAuthnSignatureOverrides.webAuthnSharedSigner ??
-                        SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
-                    signerSignaturePair.signer = webauthnsharedsigner;
-                } else {
-                    const eip7212WebAuthnPrecompileVerifier =
-                        webAuthnSignatureOverrides.eip7212WebAuthnPrecompileVerifier ??
-                        SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
-                    const eip7212WebAuthnContractVerifier =
-                        webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier ??
-                        SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
-                    const webAuthnSignerFactory =
-                        webAuthnSignatureOverrides.webAuthnSignerFactory ??
-                        SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
-                    const webAuthnSignerSingleton =
-                        webAuthnSignatureOverrides.webAuthnSignerSingleton ??
-                        SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
-                    const webAuthnSignerProxyCreationCode =
-                        webAuthnSignatureOverrides.webAuthnSignerProxyCreationCode ??
-                        SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+	): SignerSignaturePair[] {
+		const signers = [...expectedSigners];
+		const dummySignerSignatures: SignerSignaturePair[] = [];
+		for (const signer of signers) {
+			let signerSignaturePair: SignerSignaturePair;
+			if (typeof signer === "string") {
+				signerSignaturePair = EOADummySignerSignaturePair;
+			} else {
+				if (webAuthnSignatureOverrides.isInit == null) {
+					throw new RangeError("Must define isInit parameter when using WebAuthn");
+				}
+				signerSignaturePair = { ...WebauthnDummySignerSignaturePair };
+				if (webAuthnSignatureOverrides.isInit) {
+					const webauthnsharedsigner =
+						webAuthnSignatureOverrides.webAuthnSharedSigner ??
+						SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
+					signerSignaturePair.signer = webauthnsharedsigner;
+				} else {
+					const eip7212WebAuthnPrecompileVerifier =
+						webAuthnSignatureOverrides.eip7212WebAuthnPrecompileVerifier ??
+						SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+					const eip7212WebAuthnContractVerifier =
+						webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier ??
+						SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+					const webAuthnSignerFactory =
+						webAuthnSignatureOverrides.webAuthnSignerFactory ??
+						SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+					const webAuthnSignerSingleton =
+						webAuthnSignatureOverrides.webAuthnSignerSingleton ??
+						SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+					const webAuthnSignerProxyCreationCode =
+						webAuthnSignatureOverrides.webAuthnSignerProxyCreationCode ??
+						SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
-                    signerSignaturePair.signer = SafeAccount.createWebAuthnSignerVerifierAddress(
-                        signer.x,
-                        signer.y,
-                        {
-                            eip7212WebAuthnPrecompileVerifier,
-                            eip7212WebAuthnContractVerifier,
-                            webAuthnSignerFactory,
-                            webAuthnSignerSingleton,
-                            webAuthnSignerProxyCreationCode
-                        },
-                    );
-                }
-            }
-            dummySignerSignatures.push(signerSignaturePair);
-        }
-        return dummySignerSignatures;
-    }
-    
-    /**
-	 * verify a webauthn signature against a signer and a message hash 
-     * @note: this function works by constructing the bytecode of a webatuhn
-     * verifying contract proxy that represent the input signer, then overriding
-     * an arbitrary address code and caling "isValidSignature" using eth_call 
-     * this way we can check a signature even if the verifying contract is not
-     * deployed
+					signerSignaturePair.signer = SafeAccount.createWebAuthnSignerVerifierAddress(
+						signer.x,
+						signer.y,
+						{
+							eip7212WebAuthnPrecompileVerifier,
+							eip7212WebAuthnContractVerifier,
+							webAuthnSignerFactory,
+							webAuthnSignerSingleton,
+							webAuthnSignerProxyCreationCode,
+						},
+					);
+				}
+			}
+			dummySignerSignatures.push(signerSignaturePair);
+		}
+		return dummySignerSignatures;
+	}
+
+	/**
+	 * verify a webauthn signature against a signer and a message hash
+	 * @note: this function works by constructing the bytecode of a webauthn
+	 * verifying contract proxy that represent the input signer, then overriding
+	 * an arbitrary address code and caling "isValidSignature" using eth_call
+	 * this way we can check a signature even if the verifying contract is not
+	 * deployed
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
-	 * @param signer - a signer to check the signature against 
-	 * @param messageHash - a messageHash to check the signature against 
+	 * @param signer - a signer to check the signature against
+	 * @param messageHash - a messageHash to check the signature against
 	 * @param signature - a webauthn signature to check
 	 * @param overrides - overrides for the default values
 	 * @returns a promise of boolean - True if a valid signature
 	 */
-    public static async verifyWebAuthnSignatureForMessageHash(
+	public static async verifyWebAuthnSignatureForMessageHash(
 		nodeRpcUrl: string,
-        signer: WebauthnPublicKey,
-        messageHash: string, 
-        signature: string,
-        overrides:{
-            eip7212WebAuthnPrecompileVerifier?: string,
-            eip7212WebAuthnContractVerifier?: string,
-            webAuthnSignerSingleton?: string,
-        } = {}
-    ):Promise<boolean> {
-        if (messageHash.length != 66 || messageHash.slice(0, 2) != "0x") {
-			throw new RangeError(
-			    "Invalide messageHash ,must be a 0x prefixed keccak256 hash.",
-			);
+		signer: WebauthnPublicKey,
+		messageHash: string,
+		signature: string,
+		overrides: {
+			eip7212WebAuthnPrecompileVerifier?: string;
+			eip7212WebAuthnContractVerifier?: string;
+			webAuthnSignerSingleton?: string;
+		} = {},
+	): Promise<boolean> {
+		if (messageHash.length !== 66 || messageHash.slice(0, 2) !== "0x") {
+			throw new RangeError("Invalid messageHash, must be a 0x-prefixed keccak256 hash.");
 		}
 
-        const eip7212WebAuthnPrecompileVerifier =
-            overrides.eip7212WebAuthnPrecompileVerifier ??
-            SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
-        const eip7212WebAuthnContractVerifier =
-            overrides.eip7212WebAuthnContractVerifier ??
-            SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
-        const webAuthnSignerSingleton =
-            overrides.webAuthnSignerSingleton ??
-            SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
-        
-        if (
-			eip7212WebAuthnPrecompileVerifier.length != 42 ||
-			eip7212WebAuthnPrecompileVerifier.slice(0, 38) != ZeroAddress.slice(0, 38)
+		const eip7212WebAuthnPrecompileVerifier =
+			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+		const eip7212WebAuthnContractVerifier =
+			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+		const webAuthnSignerSingleton =
+			overrides.webAuthnSignerSingleton ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+
+		if (
+			eip7212WebAuthnPrecompileVerifier.length !== 42 ||
+			eip7212WebAuthnPrecompileVerifier.slice(0, 38) !== ZeroAddress.slice(0, 38)
 		) {
 			throw new RangeError(
-				"Invalide precompile address. " +
-                "It should have the format 0x000000000000000000000000000000000000____",
+				"Invalid precompile address. " +
+					"It should have the format 0x000000000000000000000000000000000000____",
 			);
 		}
 		const functionSelector = "0x1626ba7e"; //isValidSignature(bytes32,bytes)
 		const callData = createCallData(
-            functionSelector,
-            ["bytes32", "bytes"],
-            [messageHash, signature]
-        );
-        
-        const arbitraryAddress = "0x1111111111111111111111111111111111111111";
+			functionSelector,
+			["bytes32", "bytes"],
+			[messageHash, signature],
+		);
+
+		const arbitraryAddress = "0x1111111111111111111111111111111111111111";
 		const ethCallParams = {
 			to: arbitraryAddress,
 			data: callData,
 		};
-        const deployedByteCode = SafeAccount.createSafeWebAuthnSignerProxyDeployedByteCode(
-            signer,
-            eip7212WebAuthnPrecompileVerifier,
-            eip7212WebAuthnContractVerifier,
-            webAuthnSignerSingleton
-        )
-
-		const isModuleEnabledResult = await sendEthCallRequest(
-			nodeRpcUrl,
-			ethCallParams,
-			"latest",
-            {[arbitraryAddress]: {"code": deployedByteCode}}
+		const deployedByteCode = SafeAccount.createSafeWebAuthnSignerProxyDeployedByteCode(
+			signer,
+			eip7212WebAuthnPrecompileVerifier,
+			eip7212WebAuthnContractVerifier,
+			webAuthnSignerSingleton,
 		);
 
-		const decodedCalldata = AbiCoder.defaultAbiCoder().decode(
-			["bool"],
-			isModuleEnabledResult,
-		);
+		const isModuleEnabledResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest", {
+			[arbitraryAddress]: { code: deployedByteCode },
+		});
+
+		const decodedCalldata = AbiCoder.defaultAbiCoder().decode(["bool"], isModuleEnabledResult);
 
 		return decodedCalldata[0];
-    }
+	}
 
-    private static createSafeWebAuthnSignerProxyDeployedByteCode(
-        signer: WebauthnPublicKey, 
-        eip7212WebAuthnPrecompileVerifier: string,
-        eip7212WebAuthnContractVerifier: string,
-        webAuthnSignerSingleton: string,
-    ):string {
+	private static createSafeWebAuthnSignerProxyDeployedByteCode(
+		signer: WebauthnPublicKey,
+		eip7212WebAuthnPrecompileVerifier: string,
+		eip7212WebAuthnContractVerifier: string,
+		webAuthnSignerSingleton: string,
+	): string {
 		const abiCoder = AbiCoder.defaultAbiCoder();
-        const x = abiCoder.encode(["uint256"], [signer.x])
-        const y = abiCoder.encode(["uint256"], [signer.y])
-        const verifiers = abiCoder.encode(
-            ["uint176"],
-            [
-                "0x" +
-				eip7212WebAuthnPrecompileVerifier.slice(-4) +
-				eip7212WebAuthnContractVerifier.slice(2),
-            ]
-        )
-        const byteCode = 
-            "0x608060408190527f" + verifiers.slice(2) +
-            "3660b681018290527f" + y.slice(2) +
-            "60a082018190527f" + x.slice(2) + 
-            "8285018190527f000000000000000000000000" +
-            webAuthnSignerSingleton.slice(2) +
-            "9490939192600082376000806056360183885af490503d6000803e8060c3573d6000fd5b503d6000f3fea2646970667358221220ddd9bb059ba7a6497d560ca97aadf4dbf0476f578378554a50d41c6bb654beae64736f6c63430008180033";
-        return byteCode;
-    }
+		const x = abiCoder.encode(["uint256"], [signer.x]);
+		const y = abiCoder.encode(["uint256"], [signer.y]);
+		const verifiers = abiCoder.encode(
+			["uint176"],
+			[
+				"0x" +
+					eip7212WebAuthnPrecompileVerifier.slice(-4) +
+					eip7212WebAuthnContractVerifier.slice(2),
+			],
+		);
+		const byteCode =
+			"0x608060408190527f" +
+			verifiers.slice(2) +
+			"3660b681018290527f" +
+			y.slice(2) +
+			"60a082018190527f" +
+			x.slice(2) +
+			"8285018190527f000000000000000000000000" +
+			webAuthnSignerSingleton.slice(2) +
+			"9490939192600082376000806056360183885af490503d6000803e8060c3573d6000fd5b503d6000f3fea2646970667358221220ddd9bb059ba7a6497d560ca97aadf4dbf0476f578378554a50d41c6bb654beae64736f6c63430008180033";
+		return byteCode;
+	}
 
-    /**
-     * create MetaTransaction to enable a module
-     * @param accountAddress - Safe account to enable the module for
-     * @returns a MetaTransaction
-     */
-    public static createEnableModuleMetaTransaction(
-        moduleAddress: string,
-        accountAddress: string,
-    ):MetaTransaction{
-        const callData = createCallData(
-            "0x610b5925", //"enableModule(address)"
-            ["address"],
-            [moduleAddress],
-        );
-        return {
-            to:accountAddress,
-            data: callData,
-            value: 0n
-        }
-    }
-    
-    /**
-     * create a standard disable a module MetaTransaction
-     * @param moduleAddress - Module to disable
-     * @param prevModuleAddress - previous module to moudle to disable 
-     * @param accountAddress - Safe account to enable the module for
-     * @returns a MetaTransaction
-     */
-    public async createDisableModuleMetaTransaction(
+	/**
+	 * create MetaTransaction to enable a module on a Safe account
+	 * @param moduleAddress - Module to enable
+	 * @param accountAddress - Safe account to enable the module for
+	 * @returns a MetaTransaction
+	 */
+	public static createEnableModuleMetaTransaction(
+		moduleAddress: string,
+		accountAddress: string,
+	): MetaTransaction {
+		const callData = createCallData(
+			"0x610b5925", //"enableModule(address)"
+			["address"],
+			[moduleAddress],
+		);
+		return {
+			to: accountAddress,
+			data: callData,
+			value: 0n,
+		};
+	}
+
+	/**
+	 * create a MetaTransaction that disables a module on this Safe account,
+	 * fetching the previous module in the linked list automatically when not provided.
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain (used when prevModuleAddress is not provided)
+	 * @param moduleToDisableAddress - Module to disable
+	 * @param accountAddress - Safe account to disable the module on
+	 * @param overrides - overrides for the default values
+	 * @param overrides.prevModuleAddress - previous module in the linked list (skips the RPC lookup when set)
+	 * @param overrides.modulesStart - pagination start when scanning modules to find the previous one
+	 * @param overrides.modulesPageSize - pagination page size when scanning modules
+	 * @returns a promise of a MetaTransaction
+	 */
+	public async createDisableModuleMetaTransaction(
 		nodeRpcUrl: string,
-        moduleToDisableAddress: string,
-        accountAddress: string,
+		moduleToDisableAddress: string,
+		accountAddress: string,
 		overrides: {
 			prevModuleAddress?: string;
 			modulesStart?: string;
-            modulesPageSize?: bigint
+			modulesPageSize?: bigint;
 		} = {},
-    ):Promise<MetaTransaction>{
-        try{
-            let prevModuleAddressT = overrides.prevModuleAddress;
-            if (prevModuleAddressT == null) {
-                const [modules, _] = await this.getModules(
-                    nodeRpcUrl,
-                    {
-                        start:overrides.modulesStart,
-                        pageSize:overrides.modulesPageSize
-                    }
-                );
-                
-                const moduleToDisableIndex = modules.indexOf(moduleToDisableAddress);
-                if (moduleToDisableIndex == -1) {
-                    throw new RangeError(
-                        "moduleToDisable " + moduleToDisableAddress +
-                        " is not an enabled module."
-                    );
-                } else if (moduleToDisableIndex == 0) {
-                    prevModuleAddressT = "0x0000000000000000000000000000000000000001";
-                } else if (moduleToDisableIndex > 0) {
-                    prevModuleAddressT = modules[moduleToDisableIndex - 1];
-                } else {
-                    throw new RangeError(
-                        "Invalid module index for " + moduleToDisableAddress);
-                }
-            }
-            return SafeAccount.createStandardDisableModuleMetaTransaction(
-                moduleToDisableAddress, prevModuleAddressT, accountAddress
-            );
-        } catch (err) {
+	): Promise<MetaTransaction> {
+		try {
+			let prevModuleAddressT = overrides.prevModuleAddress;
+			if (prevModuleAddressT == null) {
+				const [modules, _] = await this.getModules(nodeRpcUrl, {
+					start: overrides.modulesStart,
+					pageSize: overrides.modulesPageSize,
+				});
+
+				const moduleToDisableIndex = modules.indexOf(moduleToDisableAddress);
+				if (moduleToDisableIndex === -1) {
+					throw new RangeError(
+						`moduleToDisable ${moduleToDisableAddress} is not an enabled module.`,
+					);
+				} else if (moduleToDisableIndex === 0) {
+					prevModuleAddressT = "0x0000000000000000000000000000000000000001";
+				} else if (moduleToDisableIndex > 0) {
+					prevModuleAddressT = modules[moduleToDisableIndex - 1];
+				} else {
+					throw new RangeError(`Invalid module index for ${moduleToDisableAddress}`);
+				}
+			}
+			return SafeAccount.createStandardDisableModuleMetaTransaction(
+				moduleToDisableAddress,
+				prevModuleAddressT,
+				accountAddress,
+			);
+		} catch (err) {
 			const error = ensureError(err);
 
-			throw new AbstractionKitError(
-				"BAD_DATA",
-				"createDisableModuleMetaTransaction failed",
-				{
-					cause: error,
-				},
-			);
+			throw new AbstractionKitError("BAD_DATA", "createDisableModuleMetaTransaction failed", {
+				cause: error,
+			});
 		}
-    }
+	}
 
-    /**
-     * create a standard disable a module MetaTransaction
-     * @param moduleAddress - Module to disable
-     * @param prevModuleAddress - previous module to moudle to disable 
-     * @param accountAddress - Safe account to enable the module for
-     * @returns a MetaTransaction
-     */
-    public static createStandardDisableModuleMetaTransaction(
-        moduleAddress: string,
-        prevModuleAddress: string,
-        accountAddress: string,
-    ):MetaTransaction{
-        const callData = createCallData(
-            "0xe009cfde", //"disableModule(address)"
-            ["address", "address"],
-            [prevModuleAddress, moduleAddress],
-        );
-        return {
-            to:accountAddress,
-            data: callData,
-            value: 0n
-        }
-    }
+	/**
+	 * create a standard disable-module MetaTransaction (callers provide the previous module).
+	 * @param moduleAddress - Module to disable
+	 * @param prevModuleAddress - previous module in the linked list
+	 * @param accountAddress - Safe account to disable the module on
+	 * @returns a MetaTransaction
+	 */
+	public static createStandardDisableModuleMetaTransaction(
+		moduleAddress: string,
+		prevModuleAddress: string,
+		accountAddress: string,
+	): MetaTransaction {
+		const callData = createCallData(
+			"0xe009cfde", //"disableModule(address)"
+			["address", "address"],
+			[prevModuleAddress, moduleAddress],
+		);
+		return {
+			to: accountAddress,
+			data: callData,
+			value: 0n,
+		};
+	}
 
-    async simulateCallDataWithTenderlyAndCreateShareLink(
-        tenderlyAccountSlug:string,
-        tenderlyProjectSlug:string,
-        tenderlyAccessKey: string,
+	/**
+	 * Simulate the encoded calldata for this account on Tenderly and optionally return a share link.
+	 * When `isInit` isn't provided, nonce is fetched via `nodeRpcUrl` to decide whether to include
+	 * factory address/data in the simulation.
+	 * @param tenderlyAccountSlug - The Tenderly account slug
+	 * @param tenderlyProjectSlug - The Tenderly project slug
+	 * @param tenderlyAccessKey - The Tenderly API access key
+	 * @param nodeRpcUrl - Ethereum JSON-RPC node URL (only used when overrides.isInit is not set)
+	 * @param chainId - Target chain ID
+	 * @param metaTransactions - Transactions to simulate (ignored if overrides.callData is set)
+	 * @param blockNumber - Optional block number for the simulation
+	 * @param overrides - overrides for the default values
+	 * @param overrides.safeModuleExecutorFunctionSelector - executor function to use
+	 * @param overrides.multisendContractAddress - multisend address for batch transactions
+	 * @param overrides.callData - pre-encoded calldata, overriding metaTransactions
+	 * @param overrides.createShareLink - if true (default), also create a shareable dashboard link
+	 * @param overrides.isInit - skip the nonce RPC check and explicitly set whether this is a deployment simulation
+	 * @returns The simulation result, and optionally `callDataSimulationShareLink` / `accountDeploymentSimulationShareLink`
+	 */
+	async simulateCallDataWithTenderlyAndCreateShareLink(
+		tenderlyAccountSlug: string,
+		tenderlyProjectSlug: string,
+		tenderlyAccessKey: string,
 		nodeRpcUrl: string | null = null,
-        chainId: bigint,
+		chainId: bigint,
 		metaTransactions: MetaTransaction[],
-        blockNumber: number | null = null,
-        overrides: {
+		blockNumber: number | null = null,
+		overrides: {
 			safeModuleExecutorFunctionSelector?: SafeModuleExecutorFunctionSelector;
 			multisendContractAddress?: string;
-            callData?: string;
-            createShareLink?: boolean;
-            isInit?: boolean,
+			callData?: string;
+			createShareLink?: boolean;
+			isInit?: boolean;
 		} = {},
-    ): Promise<{
-        simulation:TenderlySimulationResult,
-        callDataSimulationShareLink?: string,
-        accountDeploymentSimulationShareLink?: string,
-    }> {
-        let isInit:boolean = false;
-        if(nodeRpcUrl == null && overrides.isInit == null){
-            throw new RangeError(
-                "nodeRpcUrl and overrides.isInit can't both be null"
-            );
-        }else if(overrides.isInit == null){
-            const accountNonce =
-                await fetchAccountNonce(
-                    nodeRpcUrl as string,
-                    this.entrypointAddress,
-                    this.accountAddress,
-                )
-            isInit = accountNonce == 0n;
-        }else{
-            isInit = overrides.isInit;
-        }
+	): Promise<{
+		simulation: TenderlySimulationResult;
+		callDataSimulationShareLink?: string;
+		accountDeploymentSimulationShareLink?: string;
+	}> {
+		let isInit: boolean = false;
+		if (nodeRpcUrl == null && overrides.isInit == null) {
+			throw new RangeError("nodeRpcUrl and overrides.isInit can't both be null");
+		} else if (overrides.isInit == null) {
+			const accountNonce = await fetchAccountNonce(
+				nodeRpcUrl as string,
+				this.entrypointAddress,
+				this.accountAddress,
+			);
+			isInit = accountNonce === 0n;
+		} else {
+			isInit = overrides.isInit;
+		}
 
-        let callData = "0x" as string;
+		let callData = "0x" as string;
 		if (overrides.callData == null) {
-			if (metaTransactions.length == 1) {
-				callData = SafeAccount.createAccountCallDataSingleTransaction(
-					metaTransactions[0],
-					{
-						safeModuleExecutorFunctionSelector:overrides.safeModuleExecutorFunctionSelector,
-					},
-				);
+			if (metaTransactions.length === 1) {
+				callData = SafeAccount.createAccountCallDataSingleTransaction(metaTransactions[0], {
+					safeModuleExecutorFunctionSelector: overrides.safeModuleExecutorFunctionSelector,
+				});
 			} else {
-				callData = SafeAccount.createAccountCallDataBatchTransactions(
-					metaTransactions,
-					{
-						safeModuleExecutorFunctionSelector:
-							overrides.safeModuleExecutorFunctionSelector,
-						multisendContractAddress: overrides.multisendContractAddress,
-					},
-				);
+				callData = SafeAccount.createAccountCallDataBatchTransactions(metaTransactions, {
+					safeModuleExecutorFunctionSelector: overrides.safeModuleExecutorFunctionSelector,
+					multisendContractAddress: overrides.multisendContractAddress,
+				});
 			}
 		} else {
 			callData = overrides.callData;
 		}
 
-        const createShareLink = overrides.createShareLink?? true;
-        if(createShareLink){
-            return await simulateSenderCallDataWithTenderlyAndCreateShareLink(
-                tenderlyAccountSlug,
-                tenderlyProjectSlug,
-                tenderlyAccessKey,
-                chainId,
-                this.entrypointAddress,
-                this.accountAddress,
-                callData,
-                isInit?this.factoryAddress:null,
-                isInit?this.factoryData:null,
-                blockNumber
-            )
-        }else{
-            const simulation = await simulateSenderCallDataWithTenderly(
-                tenderlyAccountSlug,
-                tenderlyProjectSlug,
-                tenderlyAccessKey,
-                chainId,
-                this.entrypointAddress,
-                this.accountAddress,
-                callData,
-                isInit?this.factoryAddress:null,
-                isInit?this.factoryData:null,
-                blockNumber
-            )
-            return {simulation};
-        }
-    }
+		const createShareLink = overrides.createShareLink ?? true;
+		if (createShareLink) {
+			return await simulateSenderCallDataWithTenderlyAndCreateShareLink(
+				tenderlyAccountSlug,
+				tenderlyProjectSlug,
+				tenderlyAccessKey,
+				chainId,
+				this.entrypointAddress,
+				this.accountAddress,
+				callData,
+				isInit ? this.factoryAddress : null,
+				isInit ? this.factoryData : null,
+				blockNumber,
+			);
+		} else {
+			const simulation = await simulateSenderCallDataWithTenderly(
+				tenderlyAccountSlug,
+				tenderlyProjectSlug,
+				tenderlyAccessKey,
+				chainId,
+				this.entrypointAddress,
+				this.accountAddress,
+				callData,
+				isInit ? this.factoryAddress : null,
+				isInit ? this.factoryData : null,
+				blockNumber,
+			);
+			return { simulation };
+		}
+	}
 
-    /**
-	 * create eip712 signing data for a safe message
-	 * @param useroperation - useroperation to hash
+	/**
+	 * create EIP-712 signing data for a Safe message, scoped to this account.
 	 * @param chainId - target chain id
-	 * @param message - message to hash
-	 * @returns an object containing the typed data domain, type and typed data vales
-     * object needed for hashing and signing a sae message
+	 * @param message - message string to sign
+	 * @returns an object containing the typed data domain, types, and message value
+	 * needed for hashing and signing a Safe message
 	 */
-    getSafeMessageEip712Data(
-        chainId: bigint,
-        message: string
-    ): {
-        domain: SafeMessageTypedDataDomain,
-        types:Record<string, {name: string;type: string;}[]>,
-        messageValue: SafeMessageTypedMessageValue
-    } {
-        return getSafeMessageEip712Data(
-            this.accountAddress,
-            chainId,
-            message
-        );
-    }
+	getSafeMessageEip712Data(
+		chainId: bigint,
+		message: string,
+	): {
+		domain: SafeMessageTypedDataDomain;
+		types: Record<string, { name: string; type: string }[]>;
+		messageValue: SafeMessageTypedMessageValue;
+	} {
+		return getSafeMessageEip712Data(this.accountAddress, chainId, message);
+	}
 }
 
 /**
- * generate  Safe on-chain identifier as per https://docs.safe.global/sdk/onchain-tracking
+ * generate a Safe on-chain identifier per https://docs.safe.global/sdk/onchain-tracking
  * @param project - project name
- * @param platform - "Web" or "Mobile" or "Safe App" or "Widget", defaults to "Web".
- * @param tool - tool used, defaults to "abstractionkit"
- * @param toolVersion - tool version, defaults to current abstractionkit version
- * @returns the onchain idenetifier as a hex string (not 0x prefixed)
+ * @param platform - "Web", "Mobile", "Safe App", or "Widget"; defaults to "Web"
+ * @param tool - tool name; defaults to "abstractionkit"
+ * @param toolVersion - tool version; defaults to the current abstractionkit version
+ * @returns the on-chain identifier as a hex string (not 0x prefixed)
  */
 function generateOnChainIdentifier(
-    project: string,
-    platform: "Web" | "Mobile" | "Safe App" | "Widget" = "Web",
-    tool: string = "abstractionkit",
-    toolVersion: string = "0.3.2"
+	project: string,
+	platform: "Web" | "Mobile" | "Safe App" | "Widget" = "Web",
+	tool: string = "abstractionkit",
+	toolVersion: string = "0.3.2"
 ): string {
-    const identifierPrefix = '5afe'; // Safe identifier prefix
-    const identifierVersion = '00'; // First version
-    const projectHash = keccak256("0x" + Buffer.from(project, 'utf8').toString('hex')).slice(-20);
-    const platformHash = keccak256("0x" + Buffer.from(platform, 'utf8').toString('hex')).slice(-3);
-    const toolHash = keccak256("0x" + Buffer.from(tool, 'utf8').toString('hex')).slice(-3);
-    const toolVersionHash = keccak256("0x" + Buffer.from(toolVersion, 'utf8').toString('hex')).slice(-3);
-    
-    const projectHashEncoded = Buffer.from(projectHash, 'utf8').toString('hex');
-    const platformHashEncoded = Buffer.from(platformHash, 'utf8').toString('hex');
-    const toolHashEncoded = Buffer.from(toolHash, 'utf8').toString('hex');
-    const toolVersionHashEncoded = Buffer.from(toolVersionHash, 'utf8').toString('hex');
+	const identifierPrefix = "5afe"; // Safe identifier prefix
+	const identifierVersion = "00"; // First version
+	const projectHash = keccak256(`0x${Buffer.from(project, "utf8").toString("hex")}`).slice(-20);
+	const platformHash = keccak256(`0x${Buffer.from(platform, "utf8").toString("hex")}`).slice(-3);
+	const toolHash = keccak256(`0x${Buffer.from(tool, "utf8").toString("hex")}`).slice(-3);
+	const toolVersionHash = keccak256(`0x${Buffer.from(toolVersion, "utf8").toString("hex")}`).slice(
+		-3,
+	);
 
-    const res = `${identifierPrefix}${identifierVersion}${projectHashEncoded}${platformHashEncoded}${toolHashEncoded}${toolVersionHashEncoded}`;
-    return res;
+	const projectHashEncoded = Buffer.from(projectHash, "utf8").toString("hex");
+	const platformHashEncoded = Buffer.from(platformHash, "utf8").toString("hex");
+	const toolHashEncoded = Buffer.from(toolHash, "utf8").toString("hex");
+	const toolVersionHashEncoded = Buffer.from(toolVersionHash, "utf8").toString("hex");
+
+	const res = `${identifierPrefix}${identifierVersion}${projectHashEncoded}${platformHashEncoded}${toolHashEncoded}${toolVersionHashEncoded}`;
+	return res;
 }

@@ -1,5 +1,5 @@
 import { AbstractionKitError } from "../errors";
-import { Signer, SigningScheme, TypedData } from "./types";
+import type { Signer, SigningScheme, TypedData } from "./types";
 
 /**
  * Pick the best mutually-supported signing scheme for one signer against an
@@ -15,10 +15,9 @@ export function pickScheme<C>(
 	accepted: readonly SigningScheme[],
 	context: { accountName: string; signerIndex: number },
 ): SigningScheme {
-	// Use `typeof === "function"` (not truthiness) so a malformed signer
-	// like `{ signHash: true }` (e.g. from a JS caller bypassing types) is
-	// rejected via pickScheme's AbstractionKitError instead of crashing
-	// later with a raw TypeError on the call site.
+	// Typeof-check (not truthiness) so malformed signers like
+	// `{ signHash: true }` from JS callers bypassing types get a clear
+	// AbstractionKitError here instead of a raw TypeError at the call site.
 	const signerCan: SigningScheme[] = [];
 	if (typeof signer.signTypedData === "function") signerCan.push("typedData");
 	if (typeof signer.signHash === "function") signerCan.push("hash");
@@ -27,13 +26,16 @@ export function pickScheme<C>(
 		if (signerCan.includes(scheme)) return scheme;
 	}
 
-	throw new AbstractionKitError("BAD_DATA", buildMismatchMessage({
-		accountName: context.accountName,
-		signerIndex: context.signerIndex,
-		signerAddress: signer.address,
-		accepted,
-		signerCan,
-	}));
+	throw new AbstractionKitError(
+		"BAD_DATA",
+		buildMismatchMessage({
+			accountName: context.accountName,
+			signerIndex: context.signerIndex,
+			signerAddress: signer.address,
+			accepted,
+			signerCan,
+		}),
+	);
 }
 
 function buildMismatchMessage(params: {
@@ -75,18 +77,21 @@ export async function invokeSigner<C>(
 ): Promise<`0x${string}`> {
 	if (scheme === "typedData") {
 		if (typeof signer.signTypedData !== "function") {
-			throw new AbstractionKitError("BAD_DATA",
-				`signer ${signer.address} is missing signTypedData`);
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`signer ${signer.address} is missing signTypedData`,
+			);
 		}
 		if (!payload.typedData) {
-			throw new AbstractionKitError("BAD_DATA",
-				`scheme "typedData" selected but no typedData payload provided`);
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`scheme "typedData" selected but no typedData payload provided`,
+			);
 		}
 		return signer.signTypedData(payload.typedData, payload.context);
 	}
 	if (typeof signer.signHash !== "function") {
-		throw new AbstractionKitError("BAD_DATA",
-			`signer ${signer.address} is missing signHash`);
+		throw new AbstractionKitError("BAD_DATA", `signer ${signer.address} is missing signHash`);
 	}
 	return signer.signHash(payload.hash, payload.context);
 }

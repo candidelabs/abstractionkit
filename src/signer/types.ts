@@ -1,4 +1,4 @@
-import { BaseUserOperation } from "../types";
+import type { BaseUserOperation } from "../types";
 
 /**
  * Narrow EIP-712 typed data payload. All hex fields are typed as
@@ -94,22 +94,16 @@ export type SignTypedDataFn<C = SignContext> = (
 
 /**
  * A capability-oriented signer. Must declare at least one of `signHash` or
- * `signTypedData`; the account picks the best match at sign time.
+ * `signTypedData`; the account picks the best match at sign time. Declared
+ * as a discriminated union so TypeScript rejects `{ address }` with neither
+ * method at compile time.
  *
- * Declared as a discriminated union so TypeScript rejects
- * `{ address }` with neither method at compile time (not just at runtime).
- * Implementations that provide both (the common case: `fromViem`,
- * `fromEthersWallet`, `fromPrivateKey`) satisfy either variant.
+ * Re-exported at the package root as `ExternalSigner` (the unqualified
+ * `Signer` name is already a Safe owner-identifier union).
  *
- * Structural typing means you don't need to import from this file to
- * implement it; any object of this shape works. At the package root this
- * type is re-exported as `ExternalSigner` to avoid colliding with the
- * pre-existing `Signer` owner-identifier union.
- *
- * Notably absent: `signMessage` (EIP-191). It's intentionally omitted. The
- * `v`-byte mismatch between default tooling and Safe's on-chain validator
- * makes it a footgun. Use `signTypedData` for JSON-RPC wallets (the
- * structured-UX equivalent) or `signHash` for local keys.
+ * `signMessage` (EIP-191) is intentionally omitted: the `v`-byte mismatch
+ * between default tooling and Safe's on-chain validator makes it a footgun.
+ * Use `signTypedData` for JSON-RPC wallets or `signHash` for local keys.
  *
  * @example Built-in adapters cover the common cases:
  * ```ts

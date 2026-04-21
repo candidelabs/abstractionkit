@@ -35,9 +35,7 @@ export class SmartAccountFactory {
 	 * @param generatorFunctionInputParameters - Values to ABI-encode as the factory function parameters
 	 * @returns ABI-encoded calldata as a hex string
 	 */
-	getFactoryGeneratorFunctionCallData(
-		generatorFunctionInputParameters: AbiInputValue[],
-	): string {
+	getFactoryGeneratorFunctionCallData(generatorFunctionInputParameters: AbiInputValue[]): string {
 		const callData = createCallData(
 			this.generatorFunctionSelector,
 			this.generatorFunctionInputAbi,

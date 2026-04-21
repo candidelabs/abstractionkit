@@ -1,9 +1,7 @@
 //https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md
 //rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, destination, value, data, access_list, authorization_list, yParity, r, s])
 //authorization_list = [[chain_id, address, nonce, yParity, r, s], ...]
-import {
-    encodeRlp, Wallet, getBytes, toBeArray, keccak256,
-} from "ethers";
+import { encodeRlp, getBytes, keccak256, toBeArray, Wallet } from "ethers";
 
 const SET_CODE_TX_TYPE = "0x04";
 
@@ -12,18 +10,18 @@ const SET_CODE_TX_TYPE = "0x04";
  * Represents a signed authorization that delegates an EOA's code to a contract.
  */
 export type Authorization7702 = {
-    /** The chain ID the authorization is valid for. */
-    chainId: bigint,
-    /** The contract address to delegate code from. */
-    address: string,
-    /** The EOA's nonce at the time of signing. */
-    nonce: bigint,
-    /** The parity of the signature's y-coordinate (0 or 1). */
-    yParity: 0 | 1,
-    /** The r component of the ECDSA signature. */
-    r: bigint,
-    /** The s component of the ECDSA signature. */
-    s: bigint
+	/** The chain ID the authorization is valid for. */
+	chainId: bigint;
+	/** The contract address to delegate code from. */
+	address: string;
+	/** The EOA's nonce at the time of signing. */
+	nonce: bigint;
+	/** The parity of the signature's y-coordinate (0 or 1). */
+	yParity: 0 | 1;
+	/** The r component of the ECDSA signature. */
+	r: bigint;
+	/** The s component of the ECDSA signature. */
+	s: bigint;
 };
 
 /**
@@ -31,18 +29,18 @@ export type Authorization7702 = {
  * Same as {@link Authorization7702} but with all numeric fields as hex strings.
  */
 export type Authorization7702Hex = {
-    /** The chain ID as a hex string. */
-    chainId: string,
-    /** The contract address to delegate code from. */
-    address: string,
-    /** The EOA's nonce as a hex string. */
-    nonce: string,
-    /** The parity of the signature's y-coordinate as a hex string. */
-    yParity: string,
-    /** The r component of the ECDSA signature as a hex string. */
-    r: string,
-    /** The s component of the ECDSA signature as a hex string. */
-    s: string
+	/** The chain ID as a hex string. */
+	chainId: string;
+	/** The contract address to delegate code from. */
+	address: string;
+	/** The EOA's nonce as a hex string. */
+	nonce: string;
+	/** The parity of the signature's y-coordinate as a hex string. */
+	yParity: string;
+	/** The r component of the ECDSA signature as a hex string. */
+	r: string;
+	/** The s component of the ECDSA signature as a hex string. */
+	s: string;
 };
 
 /**
@@ -58,60 +56,57 @@ export type Authorization7702Hex = {
  * @returns The RLP-encoded signed transaction as a hex string.
  */
 export function createAndSignLegacyRawTransaction(
-    chainId: bigint,
-    nonce: bigint,
-    gas_price: bigint,
-    gas_limit: bigint,
-    destination: string,
-    value: bigint,
-    data: string,
-    eoaPrivateKey: string
+	chainId: bigint,
+	nonce: bigint,
+	gas_price: bigint,
+	gas_limit: bigint,
+	destination: string,
+	value: bigint,
+	data: string,
+	eoaPrivateKey: string,
 ): string {
-    if (chainId >= 2**64){
+	if (chainId >= 2 ** 64) {
 		throw new RangeError("Invalid chainId.");
-    }
+	}
 
-    if (nonce >= 2**64){
+	if (nonce >= 2 ** 64) {
 		throw new RangeError("Invalid nonce.");
-    }
+	}
 
-    if (destination.length != 42){
+	if (destination.length !== 42) {
 		throw new RangeError("Invalid destination.");
-    }
+	}
 
-    let payload = [
-        bigintToBytes(nonce),
-        bigintToBytes(gas_price),
-        bigintToBytes(gas_limit),
-        destination,
-        bigintToBytes(value),
-        data,
-        bigintToBytes(chainId),
-        bigintToBytes(0n),
-        bigintToBytes(0n)
-    ]
-    
-    const txHash = keccak256(encodeRlp(payload));
-    
-    const eoa = new Wallet(eoaPrivateKey);
-    const signature = eoa.signingKey.sign(
-        txHash,
-    );
+	let payload = [
+		bigintToBytes(nonce),
+		bigintToBytes(gas_price),
+		bigintToBytes(gas_limit),
+		destination,
+		bigintToBytes(value),
+		data,
+		bigintToBytes(chainId),
+		bigintToBytes(0n),
+		bigintToBytes(0n),
+	];
 
-    payload = [
-        bigintToBytes(nonce),
-        bigintToBytes(gas_price),
-        bigintToBytes(gas_limit),
-        destination,
-        bigintToBytes(value),
-        data,
-        bigintToBytes(
-            BigInt(signature.yParity + (Number(chainId) * 2) + 35)),
-        getBytes(signature.r),
-        getBytes(signature.s)
-    ]
-    const transactionPayload = encodeRlp(payload);
-    return transactionPayload;
+	const txHash = keccak256(encodeRlp(payload));
+
+	const eoa = new Wallet(eoaPrivateKey);
+	const signature = eoa.signingKey.sign(txHash);
+
+	payload = [
+		bigintToBytes(nonce),
+		bigintToBytes(gas_price),
+		bigintToBytes(gas_limit),
+		destination,
+		bigintToBytes(value),
+		data,
+		bigintToBytes(BigInt(signature.yParity + Number(chainId) * 2 + 35)),
+		getBytes(signature.r),
+		getBytes(signature.s),
+	];
+	const transactionPayload = encodeRlp(payload);
+	return transactionPayload;
 }
 
 /**
@@ -129,49 +124,48 @@ export function createAndSignLegacyRawTransaction(
  * @returns The signed authorization with all numeric values as hex strings.
  */
 export function createAndSignEip7702DelegationAuthorization(
-    chainId: bigint,
-    address: string,
-    nonce: bigint,
-    signer: string,
+	chainId: bigint,
+	address: string,
+	nonce: bigint,
+	signer: string,
 ): Authorization7702Hex;
 export function createAndSignEip7702DelegationAuthorization(
-    chainId: bigint,
-    address: string,
-    nonce: bigint,
-    signer: (hash: string) => Promise<string>,
+	chainId: bigint,
+	address: string,
+	nonce: bigint,
+	signer: (hash: string) => Promise<string>,
 ): Promise<Authorization7702Hex>;
 export function createAndSignEip7702DelegationAuthorization(
-    chainId: bigint,
-    address: string,
-    nonce: bigint,
-    signer: string | ((hash: string) => Promise<string>),
+	chainId: bigint,
+	address: string,
+	nonce: bigint,
+	signer: string | ((hash: string) => Promise<string>),
 ): Authorization7702Hex | Promise<Authorization7702Hex> {
-    const authHash = createEip7702DelegationAuthorizationHash(
-        chainId, address, nonce);
+	const authHash = createEip7702DelegationAuthorizationHash(chainId, address, nonce);
 
-    if (typeof signer === "string") {
-        const signature = signHash(authHash, signer);
-        return {
-            chainId: bigintToHex(chainId),
-            address,
-            nonce: bigintToHex(nonce),
-            yParity: bigintToHex(BigInt(signature.yParity)),
-            r: bigintToHex(signature.r),
-            s: bigintToHex(signature.s),
-        };
-    }
+	if (typeof signer === "string") {
+		const signature = signHash(authHash, signer);
+		return {
+			chainId: bigintToHex(chainId),
+			address,
+			nonce: bigintToHex(nonce),
+			yParity: bigintToHex(BigInt(signature.yParity)),
+			r: bigintToHex(signature.r),
+			s: bigintToHex(signature.s),
+		};
+	}
 
-    return signer(authHash).then((rawSig) => {
-        const sig = parseRawSignature(rawSig);
-        return {
-            chainId: bigintToHex(chainId),
-            address,
-            nonce: bigintToHex(nonce),
-            yParity: bigintToHex(BigInt(sig.yParity)),
-            r: bigintToHex(sig.r),
-            s: bigintToHex(sig.s),
-        };
-    });
+	return signer(authHash).then((rawSig) => {
+		const sig = parseRawSignature(rawSig);
+		return {
+			chainId: bigintToHex(chainId),
+			address,
+			nonce: bigintToHex(nonce),
+			yParity: bigintToHex(BigInt(sig.yParity)),
+			r: bigintToHex(sig.r),
+			s: bigintToHex(sig.s),
+		};
+	});
 }
 
 /**
@@ -185,14 +179,12 @@ export function createAndSignEip7702DelegationAuthorization(
  * @returns The signed delegation revocation authorization with hex-encoded values.
  */
 export function createRevokeDelegationAuthorization(
-    chainId: bigint,
-    nonce: bigint,
-    eoaPrivateKey: string,
+	chainId: bigint,
+	nonce: bigint,
+	eoaPrivateKey: string,
 ): Authorization7702Hex {
-    const ZeroAddress = "0x0000000000000000000000000000000000000000";
-    return createAndSignEip7702DelegationAuthorization(
-        chainId, ZeroAddress, nonce, eoaPrivateKey
-    );
+	const ZeroAddress = "0x0000000000000000000000000000000000000000";
+	return createAndSignEip7702DelegationAuthorization(chainId, ZeroAddress, nonce, eoaPrivateKey);
 }
 
 /**
@@ -204,18 +196,14 @@ export function createRevokeDelegationAuthorization(
  * @returns The authorization hash as a hex string.
  */
 export function createEip7702DelegationAuthorizationHash(
-    chainId: bigint,
-    address: string,
-    nonce: bigint
-):string {
-    const auth_arr = [
-        bigintToBytes(chainId),
-        address,
-        bigintToBytes(nonce),
-    ]
-    const encoded_auth = encodeRlp(auth_arr);
-    const MAGIC = "0x05";
-    return keccak256(MAGIC + encoded_auth.slice(2));
+	chainId: bigint,
+	address: string,
+	nonce: bigint,
+): string {
+	const auth_arr = [bigintToBytes(chainId), address, bigintToBytes(nonce)];
+	const encoded_auth = encodeRlp(auth_arr);
+	const MAGIC = "0x05";
+	return keccak256(MAGIC + encoded_auth.slice(2));
 }
 
 /**
@@ -225,18 +213,16 @@ export function createEip7702DelegationAuthorizationHash(
  * @returns An object containing the signature components: yParity, r, and s.
  */
 export function signHash(
-    authHash: string,
-    eoaPrivateKey: string
-): {yParity: 0 | 1, r:bigint, s: bigint}{
-    const eoa = new Wallet(eoaPrivateKey);
-    const signature = eoa.signingKey.sign(
-        authHash,
-    );
-    return {
-        yParity: signature.yParity,
-        r: BigInt(signature.r),
-        s: BigInt(signature.s)
-    };
+	authHash: string,
+	eoaPrivateKey: string,
+): { yParity: 0 | 1; r: bigint; s: bigint } {
+	const eoa = new Wallet(eoaPrivateKey);
+	const signature = eoa.signingKey.sign(authHash);
+	return {
+		yParity: signature.yParity,
+		r: BigInt(signature.r),
+		s: BigInt(signature.s),
+	};
 }
 
 /**
@@ -256,55 +242,54 @@ export function signHash(
  * @returns The signed, RLP-encoded transaction with 0x04 type prefix.
  */
 export function createAndSignEip7702RawTransaction(
-    chainId: bigint,
-    nonce: bigint,
-    max_priority_fee_per_gas: bigint,
-    max_fee_per_gas: bigint,
-    gas_limit: bigint,
-    destination: string,
-    value: bigint,
-    data: string,
-    access_list: [string, string[]][],
-    authorization_list: Authorization7702[],
-    eoaPrivateKey: string
+	chainId: bigint,
+	nonce: bigint,
+	max_priority_fee_per_gas: bigint,
+	max_fee_per_gas: bigint,
+	gas_limit: bigint,
+	destination: string,
+	value: bigint,
+	data: string,
+	access_list: [string, string[]][],
+	authorization_list: Authorization7702[],
+	eoaPrivateKey: string,
 ): string {
-    const txHash = createEip7702TransactionHash(
-        chainId,
-        nonce,
-        max_priority_fee_per_gas,
-        max_fee_per_gas,
-        gas_limit,
-        destination,
-        value,
-        data,
-        access_list,
-        authorization_list,
-    )
+	const txHash = createEip7702TransactionHash(
+		chainId,
+		nonce,
+		max_priority_fee_per_gas,
+		max_fee_per_gas,
+		gas_limit,
+		destination,
+		value,
+		data,
+		access_list,
+		authorization_list,
+	);
 
-    const basePayload = encodeEip7702TransactionBaseList(
-        chainId,
-        nonce,
-        max_priority_fee_per_gas,
-        max_fee_per_gas,
-        gas_limit,
-        destination,
-        value,
-        data,
-        access_list,
-        authorization_list,
-    );
+	const basePayload = encodeEip7702TransactionBaseList(
+		chainId,
+		nonce,
+		max_priority_fee_per_gas,
+		max_fee_per_gas,
+		gas_limit,
+		destination,
+		value,
+		data,
+		access_list,
+		authorization_list,
+	);
 
-    const signature = signHash(txHash, eoaPrivateKey);
-    const payload = basePayload.concat([
-        bigintToBytes(BigInt(signature.yParity)),
-        bigintToBytes(signature.r),
-        bigintToBytes(signature.s)
-    ]);
-    const transactionPayload = encodeRlp(payload);
+	const signature = signHash(txHash, eoaPrivateKey);
+	const payload = basePayload.concat([
+		bigintToBytes(BigInt(signature.yParity)),
+		bigintToBytes(signature.r),
+		bigintToBytes(signature.s),
+	]);
+	const transactionPayload = encodeRlp(payload);
 
-    return SET_CODE_TX_TYPE + transactionPayload.slice(2);
+	return SET_CODE_TX_TYPE + transactionPayload.slice(2);
 }
-
 
 /**
  * Computes the keccak256 hash of an EIP-7702 transaction for signing.
@@ -321,31 +306,31 @@ export function createAndSignEip7702RawTransaction(
  * @returns The transaction hash as a hex string.
  */
 export function createEip7702TransactionHash(
-    chainId: bigint,
-    nonce: bigint,
-    max_priority_fee_per_gas: bigint,
-    max_fee_per_gas: bigint,
-    gas_limit: bigint,
-    destination: string,
-    value: bigint,
-    data: string,
-    access_list: [string, string[]][],
-    authorization_list: Authorization7702[],
-):string {
-    const payload = encodeEip7702TransactionBaseList(
-        chainId,
-        nonce,
-        max_priority_fee_per_gas,
-        max_fee_per_gas,
-        gas_limit,
-        destination,
-        value,
-        data,
-        access_list,
-        authorization_list,
-    );
+	chainId: bigint,
+	nonce: bigint,
+	max_priority_fee_per_gas: bigint,
+	max_fee_per_gas: bigint,
+	gas_limit: bigint,
+	destination: string,
+	value: bigint,
+	data: string,
+	access_list: [string, string[]][],
+	authorization_list: Authorization7702[],
+): string {
+	const payload = encodeEip7702TransactionBaseList(
+		chainId,
+		nonce,
+		max_priority_fee_per_gas,
+		max_fee_per_gas,
+		gas_limit,
+		destination,
+		value,
+		data,
+		access_list,
+		authorization_list,
+	);
 
-    return keccak256(SET_CODE_TX_TYPE + encodeRlp(payload).slice(2));
+	return keccak256(SET_CODE_TX_TYPE + encodeRlp(payload).slice(2));
 }
 
 /**
@@ -353,93 +338,90 @@ export function createEip7702TransactionHash(
  * Used internally to build the payload that gets hashed and signed.
  */
 function encodeEip7702TransactionBaseList(
-    chainId: bigint,
-    nonce: bigint,
-    max_priority_fee_per_gas: bigint,
-    max_fee_per_gas: bigint,
-    gas_limit: bigint,
-    destination: string,
-    value: bigint,
-    data: string,
-    access_list: [string, string[]][],
-    authorization_list: Authorization7702[],
-){
-    if (chainId >= 2**64){
+	chainId: bigint,
+	nonce: bigint,
+	max_priority_fee_per_gas: bigint,
+	max_fee_per_gas: bigint,
+	gas_limit: bigint,
+	destination: string,
+	value: bigint,
+	data: string,
+	access_list: [string, string[]][],
+	authorization_list: Authorization7702[],
+) {
+	if (chainId >= 2 ** 64) {
 		throw new RangeError("Invalid chainId.");
-    }
+	}
 
-    if (nonce >= 2**64){
+	if (nonce >= 2 ** 64) {
 		throw new RangeError("Invalid nonce.");
-    }
+	}
 
-    if (destination.length != 42){
+	if (destination.length !== 42) {
 		throw new RangeError("Invalid destination.");
-    }
+	}
 
-    const encoded_auth_list = encodeAuthList(authorization_list); 
-    const encoded_access_list = encodeAccessList(access_list);
+	const encoded_auth_list = encodeAuthList(authorization_list);
+	const encoded_access_list = encodeAccessList(access_list);
 
-    const payload = [
-        bigintToBytes(chainId),
-        bigintToBytes(nonce),
-        bigintToBytes(max_priority_fee_per_gas),
-        bigintToBytes(max_fee_per_gas),
-        bigintToBytes(gas_limit),
-        destination,
-        bigintToBytes(value),
-        data,
-        encoded_access_list,
-        encoded_auth_list,
-    ]
-    return payload;
+	const payload = [
+		bigintToBytes(chainId),
+		bigintToBytes(nonce),
+		bigintToBytes(max_priority_fee_per_gas),
+		bigintToBytes(max_fee_per_gas),
+		bigintToBytes(gas_limit),
+		destination,
+		bigintToBytes(value),
+		data,
+		encoded_access_list,
+		encoded_auth_list,
+	];
+	return payload;
 }
 
 /** Encodes an array of EIP-7702 authorizations into RLP-compatible nested arrays. */
-function encodeAuthList(authorization_list: Authorization7702[]){
-    let encoded_auth_list = [];
-    for (const auth of authorization_list){
-        if (auth.address.length != 42){
-			throw new RangeError("Invalid authorization list address: " + auth);
-        }
-        const encoded_auth = [
-            bigintToBytes(auth.chainId),
-            auth.address,
-            bigintToBytes(auth.nonce),
-            bigintToBytes(BigInt(auth.yParity)),
-            bigintToBytes(auth.r),
-            bigintToBytes(auth.s)
-        ]
-        encoded_auth_list.push(encoded_auth);
-    }
-    return encoded_auth_list;
+function encodeAuthList(authorization_list: Authorization7702[]) {
+	const encoded_auth_list = [];
+	for (const auth of authorization_list) {
+		if (auth.address.length !== 42) {
+			throw new RangeError(`Invalid authorization list address: ${auth}`);
+		}
+		const encoded_auth = [
+			bigintToBytes(auth.chainId),
+			auth.address,
+			bigintToBytes(auth.nonce),
+			bigintToBytes(BigInt(auth.yParity)),
+			bigintToBytes(auth.r),
+			bigintToBytes(auth.s),
+		];
+		encoded_auth_list.push(encoded_auth);
+	}
+	return encoded_auth_list;
 }
 
 /** Encodes an EIP-2930 access list into RLP-compatible nested arrays. */
-function encodeAccessList(access_list: [string, string[]][]){
-    let encoded_access_list = [];
-    for (const [access_add, storage_arr] of access_list){
-        if (access_add.length != 42){
-			throw new RangeError("Invalid access list address: " + access_add);
-        }
-        let encoded_storage_list = [];
-        for (const storage of storage_arr){
-            if (storage.length != 66){
-			    throw new RangeError("Invalid access list storage: " + storage);
-            }
-            encoded_storage_list.push(getBytes(storage));
-        }
-        encoded_access_list.push(
-            [getBytes(access_add), encoded_storage_list]
-        );
-    }
-    return encoded_access_list;
+function encodeAccessList(access_list: [string, string[]][]) {
+	const encoded_access_list = [];
+	for (const [access_add, storage_arr] of access_list) {
+		if (access_add.length !== 42) {
+			throw new RangeError(`Invalid access list address: ${access_add}`);
+		}
+		const encoded_storage_list = [];
+		for (const storage of storage_arr) {
+			if (storage.length !== 66) {
+				throw new RangeError(`Invalid access list storage: ${storage}`);
+			}
+			encoded_storage_list.push(getBytes(storage));
+		}
+		encoded_access_list.push([getBytes(access_add), encoded_storage_list]);
+	}
+	return encoded_access_list;
 }
 
 /** Converts a bigint to a Uint8Array of its big-endian byte representation. */
-function bigintToBytes(bi: bigint){
-    return getBytes(toBeArray(bi))
+function bigintToBytes(bi: bigint) {
+	return getBytes(toBeArray(bi));
 }
-
 
 /**
  * Parse a raw ECDSA signature into its components.
@@ -448,30 +430,30 @@ function bigintToBytes(bi: bigint){
  * @returns An object with yParity (0 or 1), r, and s components
  */
 function parseRawSignature(rawSig: string): { yParity: 0 | 1; r: bigint; s: bigint } {
-    const sig = rawSig.startsWith("0x") ? rawSig.slice(2) : rawSig;
-    if (sig.length !== 128 && sig.length !== 130) {
-        throw new RangeError(
-            `invalid signature length: expected 128 (EIP-2098 compact) or 130 (standard) hex chars, got ${sig.length}`
-        );
-    }
-    const r = BigInt("0x" + sig.slice(0, 64));
+	const sig = rawSig.startsWith("0x") ? rawSig.slice(2) : rawSig;
+	if (sig.length !== 128 && sig.length !== 130) {
+		throw new RangeError(
+			`invalid signature length: expected 128 (EIP-2098 compact) or 130 (standard) hex chars, got ${sig.length}`,
+		);
+	}
+	const r = BigInt(`0x${sig.slice(0, 64)}`);
 
-    if (sig.length === 128) {
-        // EIP-2098 compact signature (64 bytes): r (32) + yParity||s (32)
-        const yParityAndS = BigInt("0x" + sig.slice(64, 128));
-        const yParity = Number((yParityAndS >> 255n) & 1n) as 0 | 1;
-        const s = yParityAndS & ((1n << 255n) - 1n);
-        return { yParity, r, s };
-    }
+	if (sig.length === 128) {
+		// EIP-2098 compact signature (64 bytes): r (32) + yParity||s (32)
+		const yParityAndS = BigInt(`0x${sig.slice(64, 128)}`);
+		const yParity = Number((yParityAndS >> 255n) & 1n) as 0 | 1;
+		const s = yParityAndS & ((1n << 255n) - 1n);
+		return { yParity, r, s };
+	}
 
-    // Standard 65-byte signature: r (32) + s (32) + v (1)
-    const s = BigInt("0x" + sig.slice(64, 128));
-    const v = parseInt(sig.slice(128, 130), 16);
-    if (v !== 0 && v !== 1 && v !== 27 && v !== 28) {
-        throw new RangeError(`invalid signature v value: ${v}`);
-    }
-    const yParity = (v >= 27 ? v - 27 : v) as 0 | 1;
-    return { yParity, r, s };
+	// Standard 65-byte signature: r (32) + s (32) + v (1)
+	const s = BigInt(`0x${sig.slice(64, 128)}`);
+	const v = parseInt(sig.slice(128, 130), 16);
+	if (v !== 0 && v !== 1 && v !== 27 && v !== 28) {
+		throw new RangeError(`invalid signature v value: ${v}`);
+	}
+	const yParity = (v >= 27 ? v - 27 : v) as 0 | 1;
+	return { yParity, r, s };
 }
 
 /**
@@ -480,6 +462,6 @@ function parseRawSignature(rawSig: string): { yParity: 0 | 1; r: bigint; s: bigi
  * @returns The hex string representation (e.g., "0x01", "0xff").
  */
 export function bigintToHex(value: bigint): string {
-    let hex = value.toString(16);
-    return hex.length % 2 ? "0x0" + hex : "0x" + hex;
+	const hex = value.toString(16);
+	return hex.length % 2 ? `0x0${hex}` : `0x${hex}`;
 }

@@ -1,5 +1,5 @@
-import { Wallet, getAddress } from "ethers";
-import { Signer, TypedData } from "./types";
+import { getAddress, Wallet } from "ethers";
+import type { Signer, TypedData } from "./types";
 
 // Structural types for well-known signers. NO imports from viem / ethers
 // at the type level (beyond the already-present ethers runtime dep used by
@@ -9,13 +9,10 @@ import { Signer, TypedData } from "./types";
 /**
  * Shape matching viem's `PrivateKeyAccount` / `LocalAccount`.
  *
- * @remarks Requires viem &gt;= 2.0. The `sign({ hash })` method was added in
- * the viem 2.0 account refactor; viem 1.x callers see a type error and
- * should upgrade.
- *
- * @internal Not exported from the package root — pass concrete viem
- * instances directly to {@link fromViem}. If you need to type a wrapper,
- * use `Parameters<typeof fromViem>[0]`.
+ * @remarks Requires viem &gt;= 2.0 (the `sign({ hash })` method was added in
+ * the 2.0 account refactor; viem 1.x errors structurally).
+ * @internal Pass concrete viem instances to {@link fromViem}. For wrapper
+ * typing, use `Parameters<typeof fromViem>[0]`.
  */
 export interface ViemLocalAccountLike {
 	address: `0x${string}`;
@@ -29,16 +26,13 @@ export interface ViemLocalAccountLike {
 }
 
 /**
- * Minimal shape required by {@link fromViemWalletClient}. We only need to
- * read `account.address` structurally; `signTypedData` is invoked via a
- * localized cast inside the adapter because viem types it with const
- * generics that can't be reproduced without re-exporting viem's type
- * system. The runtime call shape is stable across viem 2.x.
+ * Minimal shape required by {@link fromViemWalletClient}: `account.address`
+ * read structurally, `signTypedData` cast locally inside the adapter because
+ * viem's const generics can't be reproduced without re-exporting viem's
+ * types. Runtime call shape is stable across viem 2.x.
  *
  * @remarks Requires viem &gt;= 2.0.
- *
- * @internal Not exported from the package root — pass concrete viem
- * `WalletClient` instances directly to {@link fromViemWalletClient}.
+ * @internal Pass concrete `WalletClient` instances to {@link fromViemWalletClient}.
  */
 export interface ViemWalletClientLike {
 	account?: { address: `0x${string}` } | undefined;
@@ -58,19 +52,13 @@ type ViemSignTypedDataCall = (args: {
 }) => Promise<`0x${string}`>;
 
 /**
- * Shape matching ethers `Wallet` / `HDNodeWallet`.
+ * Shape matching ethers `Wallet` / `HDNodeWallet`. Parameter types
+ * deliberately widen ethers' `TypedDataDomain` / `TypedDataField[]` so the
+ * interface doesn't import from ethers while still accepting a Wallet
+ * instance without casts.
  *
- * @remarks Requires ethers &gt;= 6.0. In ethers 5.x the typed-data method was
- * the private `_signTypedData`; the structural match fails there and callers
- * should upgrade.
- *
- * Parameter types intentionally widen ethers' concrete `TypedDataDomain` /
- * `TypedDataField[]` so the interface doesn't depend on ethers' type
- * exports while still accepting an ethers Wallet instance without casts
- * at the call site.
- *
- * @internal Not exported from the package root — pass concrete ethers
- * `Wallet` / `HDNodeWallet` instances directly to {@link fromEthersWallet}.
+ * @remarks Requires ethers &gt;= 6.0 (ethers 5.x used private `_signTypedData`).
+ * @internal Pass concrete `Wallet` / `HDNodeWallet` instances to {@link fromEthersWallet}.
  */
 export interface EthersWalletLike {
 	address: string;
@@ -91,14 +79,10 @@ export interface EthersWalletLike {
 }
 
 /**
- * Build a Signer from a raw private key. Uses the library's existing
- * ethers dependency internally, so no additional packages are required on
- * the caller side. Supports both raw-hash and typed-data signing.
- *
- * Prefer this when all you have is a private key (test suites, server-side
- * scripts, scripts with env-injected keys, etc.). If you already hold a
- * viem Account or ethers Wallet from elsewhere in your app, pass it to
- * {@link fromViem} or {@link fromEthersWallet} instead.
+ * Build a Signer from a raw private-key hex string. Supports both raw-hash
+ * and typed-data signing, via the library's existing ethers dep (no extra
+ * packages needed). If you already hold a viem Account or ethers Wallet,
+ * use {@link fromViem} or {@link fromEthersWallet} instead.
  *
  * @example
  * import { fromPrivateKey } from "abstractionkit";
@@ -109,14 +93,9 @@ export function fromPrivateKey(privateKey: string): Signer<unknown> {
 	const wallet = new Wallet(privateKey);
 	return {
 		address: getAddress(wallet.address) as `0x${string}`,
-		signHash: async (hash) =>
-			wallet.signingKey.sign(hash).serialized as `0x${string}`,
+		signHash: async (hash) => wallet.signingKey.sign(hash).serialized as `0x${string}`,
 		signTypedData: async (td) =>
-			(await wallet.signTypedData(
-				td.domain,
-				td.types,
-				td.message,
-			)) as `0x${string}`,
+			(await wallet.signTypedData(td.domain, td.types, td.message)) as `0x${string}`,
 	};
 }
 
@@ -141,13 +120,11 @@ export function fromViem(account: ViemLocalAccountLike): Signer<unknown> {
 }
 
 /**
- * Adapt a viem WalletClient to a Signer. WalletClient is the client-style
- * API dApps use to drive browser / JSON-RPC wallets, so only typed-data
- * signing is exposed (JSON-RPC wallets can't sign raw hashes).
- *
- * Requires the client to have been constructed with an `account` (local or
- * JSON-RPC). For local accounts, pass that directly to `fromViem` instead
- * if you want raw-hash fallback.
+ * Adapt a viem `WalletClient` to a Signer. Only typed-data signing is
+ * exposed, because `WalletClient` drives browser/JSON-RPC wallets which
+ * can't sign raw hashes. Requires the client to have been constructed with
+ * an `account`; for local accounts, prefer `fromViem` so you also get
+ * raw-hash fallback.
  *
  * @remarks Requires viem &gt;= 2.0.
  */
@@ -158,10 +135,9 @@ export function fromViemWalletClient(client: ViemWalletClientLike): Signer<unkno
 				"Construct with `createWalletClient({ account, transport, chain })`.",
 		);
 	}
-	// Capture the full account object (at runtime it may expose local
-	// signing methods that cause viem to sign without hitting JSON-RPC).
-	// Passing just the address string here would force a route to
-	// `eth_signTypedData_v4`, which fails against an HTTP transport.
+	// Capture the full account object: passing just the address would force
+	// viem to route to `eth_signTypedData_v4` (fails on HTTP transports),
+	// whereas the object may carry local signing methods.
 	const account = client.account;
 	const signTypedData = client.signTypedData as ViemSignTypedDataCall;
 	return {
@@ -188,8 +164,7 @@ export function fromEthersWallet(wallet: EthersWalletLike): Signer<unknown> {
 	// checksummed 0x-prefixed hex.
 	return {
 		address: wallet.address as `0x${string}`,
-		signHash: async (hash) =>
-			wallet.signingKey.sign(hash).serialized as `0x${string}`,
+		signHash: async (hash) => wallet.signingKey.sign(hash).serialized as `0x${string}`,
 		signTypedData: async (td) =>
 			(await wallet.signTypedData(td.domain, td.types, td.message)) as `0x${string}`,
 	};

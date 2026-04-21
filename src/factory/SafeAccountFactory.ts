@@ -5,8 +5,7 @@ import { SmartAccountFactory } from "./SmartAccountFactory";
  */
 export class SafeAccountFactory extends SmartAccountFactory {
 	/** Default Safe proxy factory contract address */
-	static readonly DEFAULT_FACTORY_ADDRESS =
-		"0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67";
+	static readonly DEFAULT_FACTORY_ADDRESS = "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67";
 	/**
 	 * @param address - Safe proxy factory contract address
 	 * @defaultValue "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67"
