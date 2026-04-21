@@ -1,4 +1,4 @@
-import { AbstractionKitError, Jsonable } from "../errors";
+import { AbstractionKitError, type Jsonable } from "../errors";
 
 /**
  * Reduce an RPC URL to its origin so a malformed or credential-bearing URL
@@ -9,14 +9,14 @@ import { AbstractionKitError, Jsonable } from "../errors";
  * @internal
  */
 function sanitizeRpcUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    // `.origin` is protocol + host + port, with path, query, hash, and
-    // userinfo (credentials) all stripped.
-    return u.origin;
-  } catch {
-    return "[invalid-url]";
-  }
+	try {
+		const u = new URL(url);
+		// `.origin` is protocol + host + port, with path, query, hash, and
+		// userinfo (credentials) all stripped.
+		return u.origin;
+	} catch {
+		return "[invalid-url]";
+	}
 }
 
 /**
@@ -27,19 +27,19 @@ function sanitizeRpcUrl(url: string): string {
  * handle any verification failure from this module.
  */
 export class StateProofVerificationError extends AbstractionKitError {
-  constructor(message: string, context?: Jsonable) {
-    super("UNKNOWN_ERROR", message, { context });
-  }
+	constructor(message: string, context?: Jsonable) {
+		super("UNKNOWN_ERROR", message, { context });
+	}
 }
 
 /** Per-node block header data captured when verifiers disagree. */
 export type ConsensusDisagreementNode = {
-  url: string;
-  stateRoot: string;
-  blockHash: string;
-  parentHash: string;
-  /** Block timestamp as returned by the node (hex or decimal string). */
-  timestamp: string;
+	url: string;
+	stateRoot: string;
+	blockHash: string;
+	parentHash: string;
+	/** Block timestamp as returned by the node (hex or decimal string). */
+	timestamp: string;
 };
 
 /**
@@ -51,28 +51,28 @@ export type ConsensusDisagreementNode = {
  * identify which endpoint(s) returned what.
  */
 export class ConsensusHeaderDisagreementError extends StateProofVerificationError {
-  /**
-   * Names of the header fields on which the nodes disagreed. Valid values:
-   * `"stateRoot"`, `"blockHash"`, `"parentHash"`, `"timestamp"`.
-   */
-  public readonly fields: string[];
-  /** Each responding node and the full header fields it returned. */
-  public readonly nodes: ConsensusDisagreementNode[];
+	/**
+	 * Names of the header fields on which the nodes disagreed. Valid values:
+	 * `"stateRoot"`, `"blockHash"`, `"parentHash"`, `"timestamp"`.
+	 */
+	public readonly fields: string[];
+	/** Each responding node and the full header fields it returned. */
+	public readonly nodes: ConsensusDisagreementNode[];
 
-  constructor(fields: string[], nodes: ConsensusDisagreementNode[]) {
-    const sanitized: ConsensusDisagreementNode[] = nodes.map((n) => ({
-      ...n,
-      url: sanitizeRpcUrl(n.url),
-    }));
-    super(
-      `Verification nodes disagree on block header field(s) [${fields.join(", ")}]: ${sanitized
-        .map((n) => `${n.url}={stateRoot:${n.stateRoot},blockHash:${n.blockHash}}`)
-        .join(", ")}`,
-      { fields, nodes: sanitized },
-    );
-    this.fields = fields;
-    this.nodes = sanitized;
-  }
+	constructor(fields: string[], nodes: ConsensusDisagreementNode[]) {
+		const sanitized: ConsensusDisagreementNode[] = nodes.map((n) => ({
+			...n,
+			url: sanitizeRpcUrl(n.url),
+		}));
+		super(
+			`Verification nodes disagree on block header field(s) [${fields.join(", ")}]: ${sanitized
+				.map((n) => `${n.url}={stateRoot:${n.stateRoot},blockHash:${n.blockHash}}`)
+				.join(", ")}`,
+			{ fields, nodes: sanitized },
+		);
+		this.fields = fields;
+		this.nodes = sanitized;
+	}
 }
 
 /**
@@ -82,30 +82,31 @@ export class ConsensusHeaderDisagreementError extends StateProofVerificationErro
  * Check `failures` for per-node error messages to diagnose connectivity issues.
  */
 export class ConsensusQuorumNotMetError extends StateProofVerificationError {
-  /** Number of nodes that responded in time without errors. */
-  public readonly responded: number;
-  /** Minimum number of successful responses that was required. */
-  public readonly required: number;
-  /** Per-node error messages for all nodes that failed. */
-  public readonly failures: Array<{ url: string; error: string }>;
+	/** Number of nodes that responded in time without errors. */
+	public readonly responded: number;
+	/** Minimum number of successful responses that was required. */
+	public readonly required: number;
+	/** Per-node error messages for all nodes that failed. */
+	public readonly failures: Array<{ url: string; error: string }>;
 
-  constructor(
-    responded: number,
-    required: number,
-    failures: Array<{ url: string; error: string }>,
-  ) {
-    const sanitized = failures.map((f) => ({
-      ...f,
-      url: sanitizeRpcUrl(f.url),
-    }));
-    super(
-      `Consensus quorum not met: ${responded}/${required} nodes responded`,
-      { responded, required, failures: sanitized },
-    );
-    this.responded = responded;
-    this.required = required;
-    this.failures = sanitized;
-  }
+	constructor(
+		responded: number,
+		required: number,
+		failures: Array<{ url: string; error: string }>,
+	) {
+		const sanitized = failures.map((f) => ({
+			...f,
+			url: sanitizeRpcUrl(f.url),
+		}));
+		super(`Consensus quorum not met: ${responded}/${required} nodes responded`, {
+			responded,
+			required,
+			failures: sanitized,
+		});
+		this.responded = responded;
+		this.required = required;
+		this.failures = sanitized;
+	}
 }
 
 /**
@@ -114,22 +115,23 @@ export class ConsensusQuorumNotMetError extends StateProofVerificationError {
  * a bug in the proof generation on the node.
  */
 export class AccountProofInvalidError extends StateProofVerificationError {
-  /** The address whose proof was being verified. */
-  public readonly address: string;
-  /** The state root the proof was checked against. */
-  public readonly stateRoot: string;
-  /** The block number at which verification was attempted. */
-  public readonly blockNumber: bigint;
+	/** The address whose proof was being verified. */
+	public readonly address: string;
+	/** The state root the proof was checked against. */
+	public readonly stateRoot: string;
+	/** The block number at which verification was attempted. */
+	public readonly blockNumber: bigint;
 
-  constructor(address: string, stateRoot: string, blockNumber: bigint, detail: string) {
-    super(
-      `Account proof invalid for ${address} at state root ${stateRoot}: ${detail}`,
-      { address, stateRoot, blockNumber: blockNumber.toString() },
-    );
-    this.address = address;
-    this.stateRoot = stateRoot;
-    this.blockNumber = blockNumber;
-  }
+	constructor(address: string, stateRoot: string, blockNumber: bigint, detail: string) {
+		super(`Account proof invalid for ${address} at state root ${stateRoot}: ${detail}`, {
+			address,
+			stateRoot,
+			blockNumber: blockNumber.toString(),
+		});
+		this.address = address;
+		this.stateRoot = stateRoot;
+		this.blockNumber = blockNumber;
+	}
 }
 
 /**
@@ -138,22 +140,23 @@ export class AccountProofInvalidError extends StateProofVerificationError {
  * a mismatch between the proof and the account's `storageHash` field.
  */
 export class StorageProofInvalidError extends StateProofVerificationError {
-  /** The account address, if provided at call site. */
-  public readonly address?: string;
-  /** 0x-prefixed slot key that failed verification. */
-  public readonly slot: string;
-  /** The storage hash the proof was checked against. */
-  public readonly storageHash: string;
+	/** The account address, if provided at call site. */
+	public readonly address?: string;
+	/** 0x-prefixed slot key that failed verification. */
+	public readonly slot: string;
+	/** The storage hash the proof was checked against. */
+	public readonly storageHash: string;
 
-  constructor(slot: string, storageHash: string, detail: string, address?: string) {
-    super(
-      `Storage proof invalid for slot ${slot} at storage hash ${storageHash}: ${detail}`,
-      { address, slot, storageHash },
-    );
-    this.address = address;
-    this.slot = slot;
-    this.storageHash = storageHash;
-  }
+	constructor(slot: string, storageHash: string, detail: string, address?: string) {
+		super(`Storage proof invalid for slot ${slot} at storage hash ${storageHash}: ${detail}`, {
+			address,
+			slot,
+			storageHash,
+		});
+		this.address = address;
+		this.slot = slot;
+		this.storageHash = storageHash;
+	}
 }
 
 /**
@@ -162,20 +165,21 @@ export class StorageProofInvalidError extends StateProofVerificationError {
  * serving inconsistent state: the account proof and the code response disagree.
  */
 export class CodeHashMismatchError extends StateProofVerificationError {
-  /** The address whose code was fetched. */
-  public readonly address: string;
-  /** The codeHash from the verified account proof. */
-  public readonly expectedCodeHash: string;
-  /** keccak256 of the bytecode returned by eth_getCode. */
-  public readonly actualCodeHash: string;
+	/** The address whose code was fetched. */
+	public readonly address: string;
+	/** The codeHash from the verified account proof. */
+	public readonly expectedCodeHash: string;
+	/** keccak256 of the bytecode returned by eth_getCode. */
+	public readonly actualCodeHash: string;
 
-  constructor(address: string, expectedCodeHash: string, actualCodeHash: string) {
-    super(
-      `Code at ${address} hashes to ${actualCodeHash}, expected ${expectedCodeHash}`,
-      { address, expectedCodeHash, actualCodeHash },
-    );
-    this.address = address;
-    this.expectedCodeHash = expectedCodeHash;
-    this.actualCodeHash = actualCodeHash;
-  }
+	constructor(address: string, expectedCodeHash: string, actualCodeHash: string) {
+		super(`Code at ${address} hashes to ${actualCodeHash}, expected ${expectedCodeHash}`, {
+			address,
+			expectedCodeHash,
+			actualCodeHash,
+		});
+		this.address = address;
+		this.expectedCodeHash = expectedCodeHash;
+		this.actualCodeHash = actualCodeHash;
+	}
 }

@@ -1,7 +1,12 @@
-import { StateOverrideSet, UserOperationV9 } from "src/types";
-import { BaseSimple7702Account, CreateUserOperationOverrides, SimpleMetaTransaction } from "./Simple7702Account";
 import { ENTRYPOINT_V9 } from "src/constants";
-import { SendUseroperationResponse } from "../SendUseroperationResponse";
+import type { Signer as AkSigner } from "src/signer/types";
+import type { StateOverrideSet, UserOperationV9 } from "src/types";
+import type { SendUseroperationResponse } from "../SendUseroperationResponse";
+import {
+	BaseSimple7702Account,
+	type CreateUserOperationOverrides,
+	type SimpleMetaTransaction,
+} from "./Simple7702Account";
 
 /**
  * EIP-7702 simple smart account targeting EntryPoint v0.9
@@ -20,19 +25,19 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	 */
 	constructor(
 		accountAddress: string,
-        overrides: {
+		overrides: {
 			entrypointAddress?: string;
-            delegateeAddress?:string;
+			delegateeAddress?: string;
 		} = {},
 	) {
 		super(
-            accountAddress,
-            overrides.entrypointAddress ?? ENTRYPOINT_V9,
-            overrides.delegateeAddress ?? Simple7702AccountV09.DEFAULT_DELEGATEE_ADDRESS
-        );
+			accountAddress,
+			overrides.entrypointAddress ?? ENTRYPOINT_V9,
+			overrides.delegateeAddress ?? Simple7702AccountV09.DEFAULT_DELEGATEE_ADDRESS,
+		);
 	}
 
-    /**
+	/**
 	 * Create a {@link UserOperationV9} for EntryPoint v0.9.
 	 * Determines nonce, fetches gas prices, estimates gas limits, and returns
 	 * an unsigned UserOperation. All auto-determined values can be overridden.
@@ -42,21 +47,16 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	 * @param overrides - Optional overrides for gas, nonce, and EIP-7702 auth fields
 	 * @returns A promise resolving to an unsigned {@link UserOperationV9}
 	 */
-    public async createUserOperation(
+	public async createUserOperation(
 		transactions: SimpleMetaTransaction[],
 		providerRpc?: string,
 		bundlerRpc?: string,
 		overrides: CreateUserOperationOverrides = {},
 	): Promise<UserOperationV9> {
-        return this.baseCreateUserOperation(
-            transactions,
-            providerRpc,
-            bundlerRpc,
-            overrides,
-        );
-    }
+		return this.baseCreateUserOperation(transactions, providerRpc, bundlerRpc, overrides);
+	}
 
-    /**
+	/**
 	 * Estimate gas limits for a {@link UserOperationV9}.
 	 * @param userOperation - The UserOperation to estimate gas for
 	 * @param bundlerRpc - Bundler RPC endpoint for gas estimation
@@ -65,22 +65,18 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	 * @param overrides.dummySignature - Custom dummy signature for estimation
 	 * @returns A promise resolving to `[preVerificationGas, verificationGasLimit, callGasLimit]`
 	 */
-    public async estimateUserOperationGas(
+	public async estimateUserOperationGas(
 		userOperation: UserOperationV9,
 		bundlerRpc: string,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
-	        dummySignature?: string;
+			dummySignature?: string;
 		} = {},
 	): Promise<[bigint, bigint, bigint]> {
-        return this.baseEstimateUserOperationGas(
-            userOperation,
-            bundlerRpc,
-            overrides
-        );
-    }
+		return this.baseEstimateUserOperationGas(userOperation, bundlerRpc, overrides);
+	}
 
-    /**
+	/**
 	 * Sign a {@link UserOperationV9} with an EOA private key.
 	 * Computes the UserOperation hash and produces an ECDSA signature.
 	 * @param useroperation - The UserOperation to sign
@@ -88,15 +84,29 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	 * @param chainId - Target chain ID
 	 * @returns Hex-encoded ECDSA signature
 	 */
-    public signUserOperation(
+	public signUserOperation(
 		useroperation: UserOperationV9,
 		privateKey: string,
 		chainId: bigint,
-    ): string {
-        return this.baseSignUserOperation(useroperation, privateKey, chainId);
-    }
+	): string {
+		return this.baseSignUserOperation(useroperation, privateKey, chainId);
+	}
 
-    /**
+	/**
+	 * Sign a {@link UserOperationV9} using an {@link ExternalSigner}.
+	 * Simple7702 only accepts raw-hash ECDSA; signers without `signHash`
+	 * fail offline with an actionable error. For a raw pk string, use the
+	 * sync {@link signUserOperation} method or wrap with `fromPrivateKey`.
+	 */
+	public async signUserOperationWithSigner(
+		useroperation: UserOperationV9,
+		signer: AkSigner,
+		chainId: bigint,
+	): Promise<string> {
+		return this.baseSignUserOperationWithSigner(useroperation, signer, chainId);
+	}
+
+	/**
 	 * Send a signed {@link UserOperationV9} to a bundler for on-chain inclusion.
 	 * @param userOperation - The signed UserOperation to submit
 	 * @param bundlerRpc - Bundler RPC endpoint
@@ -106,6 +116,6 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 		userOperation: UserOperationV9,
 		bundlerRpc: string,
 	): Promise<SendUseroperationResponse> {
-        return this.baseSendUserOperation(userOperation, bundlerRpc);
-    }
+		return this.baseSendUserOperation(userOperation, bundlerRpc);
+	}
 }

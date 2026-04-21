@@ -1,5 +1,5 @@
+import type { ParallelPaymasterInitValues, UserOperationV9 } from "../types";
 import { Paymaster } from "./Paymaster";
-import { ParallelPaymasterInitValues, UserOperationV9 } from "../types";
 
 /**
  * A paymaster that sponsors all UserOperations unconditionally.
@@ -29,28 +29,31 @@ export class ExperimentalAllowAllParallelPaymaster extends Paymaster {
 	 * @param chainId - The chain ID (unused, kept for interface compatibility)
 	 * @returns Paymaster fields with the magic signature as paymasterData
 	 */
-	async getPaymasterFieldsInitValues(
-        chainId: bigint
-    ):Promise<ParallelPaymasterInitValues>{
-        return {
-            paymaster: this.address,
-            paymasterVerificationGasLimit: 45_000n,
-            paymasterPostOpGasLimit: 45_000n,
-            paymasterData:"0x010101010101010101010101010101010101010101010101010101010101011c"+"0020"+"22e325a297439656" // DUMMY SIG + PAYMASTER_SIG_LEN + PAYMASTER_SIG_MAGIC
-        };
-    }
+	async getPaymasterFieldsInitValues(_chainId: bigint): Promise<ParallelPaymasterInitValues> {
+		return {
+			paymaster: this.address,
+			paymasterVerificationGasLimit: 45_000n,
+			paymasterPostOpGasLimit: 45_000n,
+			paymasterData:
+				"0x010101010101010101010101010101010101010101010101010101010101011c" +
+				"0020" +
+				"22e325a297439656", // DUMMY SIG + PAYMASTER_SIG_LEN + PAYMASTER_SIG_MAGIC
+		};
+	}
 
 	/**
 	 * getApprovedPaymasterData will return a valid paymasterData
-     * This function is async to simulate a paymaster service
-     * that require an http call to fetch approved data.
+	 * This function is async to simulate a paymaster service
+	 * that require an http call to fetch approved data.
 	 * @param userOperation - User operation to be sponsored
 	 * @returns a promise of string
 	 */
-	async getApprovedPaymasterData(userOperation: UserOperationV9):Promise<string>{
-        // the allow all paymaster only checks for this fixed signature
-        return "0x7603fbcd3c6cebdb7193b716f62fe7e9d4afd859df4bf7fcdb2e9d486f57a1ca"
-            + "0020" // signature length
-            + "22e325a297439656"; // PAYMASTER_SIG_MAGIC
-    }
+	async getApprovedPaymasterData(_userOperation: UserOperationV9): Promise<string> {
+		// the allow all paymaster only checks for this fixed signature
+		return (
+			"0x7603fbcd3c6cebdb7193b716f62fe7e9d4afd859df4bf7fcdb2e9d486f57a1ca" +
+			"0020" + // signature length
+			"22e325a297439656"
+		); // PAYMASTER_SIG_MAGIC
+	}
 }

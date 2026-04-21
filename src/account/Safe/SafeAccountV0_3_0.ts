@@ -1,16 +1,22 @@
+import { ENTRYPOINT_V7 } from "src/constants";
+import type { Signer as AkSigner, SignContext } from "src/signer/types";
+
+import type {
+	MetaTransaction,
+	OnChainIdentifierParamsType,
+	StateOverrideSet,
+	UserOperationV7,
+} from "../../types";
 import { SafeAccount } from "./SafeAccount";
-import {
-	InitCodeOverrides,
-	Signer,
+import type {
 	CreateUserOperationV7Overrides,
-    SafeUserOperationTypedDataDomain,
-    SafeUserOperationV7TypedMessageValue,
-    SafeAccountSingleton,
+	InitCodeOverrides,
+	SafeAccountSingleton,
+	SafeUserOperationTypedDataDomain,
+	SafeUserOperationV7TypedMessageValue,
+	Signer,
 	SignerSignaturePair,
 } from "./types";
-
-import { UserOperationV7, MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet } from "../../types";
-import { ENTRYPOINT_V7, Safe_L2_V1_4_1 } from "src/constants";
 
 /**
  * Safe smart account implementation for EntryPoint v0.7.
@@ -26,10 +32,8 @@ import { ENTRYPOINT_V7, Safe_L2_V1_4_1 } from "src/constants";
  */
 export class SafeAccountV0_3_0 extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V7;
-	static readonly DEFAULT_SAFE_4337_MODULE_ADDRESS =
-		"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226";
-	static readonly DEFAULT_SAFE_MODULE_SETUP_ADDRESS =
-		"0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47";
+	static readonly DEFAULT_SAFE_4337_MODULE_ADDRESS = "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226";
+	static readonly DEFAULT_SAFE_MODULE_SETUP_ADDRESS = "0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47";
 
 	/**
 	 * Create a SafeAccountV0_3_0 instance for an existing deployed account.
@@ -43,26 +47,21 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		overrides: {
 			safe4337ModuleAddress?: string;
 			entrypointAddress?: string;
-            onChainIdentifierParams?: OnChainIdentifierParamsType;
-            onChainIdentifier?: string
-            safeAccountSingleton?: SafeAccountSingleton;
+			onChainIdentifierParams?: OnChainIdentifierParamsType;
+			onChainIdentifier?: string;
+			safeAccountSingleton?: SafeAccountSingleton;
 		} = {},
 	) {
 		const safe4337ModuleAddress =
-			overrides.safe4337ModuleAddress ??
-			SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+			overrides.safe4337ModuleAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 		const entrypointAddress =
-			overrides.entrypointAddress ??
-			SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS;
-    
-        super(
-            accountAddress, safe4337ModuleAddress, entrypointAddress,
-            {
-                onChainIdentifierParams: overrides.onChainIdentifierParams,
-                onChainIdentifier: overrides.onChainIdentifier,
-                safeAccountSingleton: overrides.safeAccountSingleton
-            }
-        );
+			overrides.entrypointAddress ?? SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS;
+
+		super(accountAddress, safe4337ModuleAddress, entrypointAddress, {
+			onChainIdentifierParams: overrides.onChainIdentifierParams,
+			onChainIdentifier: overrides.onChainIdentifier,
+			safeAccountSingleton: overrides.safeAccountSingleton,
+		});
 	}
 
 	/**
@@ -73,19 +72,13 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 	 * @param overrides - Override default initialization values
 	 * @returns The deterministic account address
 	 */
-	public static createAccountAddress(
-		owners: Signer[],
-		overrides: InitCodeOverrides = {},
-	): string {
-		const [accountAddress, ,] =
-			SafeAccount.createAccountAddressAndFactoryAddressAndData(
-				owners,
-				overrides,
-				overrides.safe4337ModuleAddress ??
-					SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
-				overrides.safeModuleSetupAddress ??
-					SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
-			);
+	public static createAccountAddress(owners: Signer[], overrides: InitCodeOverrides = {}): string {
+		const [accountAddress, ,] = SafeAccount.createAccountAddressAndFactoryAddressAndData(
+			owners,
+			overrides,
+			overrides.safe4337ModuleAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+			overrides.safeModuleSetupAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
+		);
 
 		return accountAddress;
 	}
@@ -110,17 +103,13 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		let x = 0n;
 		let y = 0n;
 		for (const owner of owners) {
-			if (typeof owner != "string") {
+			if (typeof owner !== "string") {
 				if (isInitWebAuthn) {
-					throw new RangeError(
-						"Only one Webauthn signer is allowed during initialization",
-					);
+					throw new RangeError("Only one Webauthn signer is allowed during initialization");
 				}
-                if(owners.indexOf(owner) != 0){
-                    throw new RangeError(
-						"Webauthn owner has to be the first owner for an init transaction.",
-					);
-                }
+				if (owners.indexOf(owner) !== 0) {
+					throw new RangeError("Webauthn owner has to be the first owner for an init transaction.");
+				}
 				isInitWebAuthn = true;
 				x = owner.x;
 				y = owner.y;
@@ -130,17 +119,15 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			SafeAccount.createAccountAddressAndFactoryAddressAndData(
 				owners,
 				overrides,
-				overrides.safe4337ModuleAddress ??
-					SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
-				overrides.safeModuleSetupAddress ??
-					SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
+				overrides.safe4337ModuleAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+				overrides.safeModuleSetupAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
 		const safe = new SafeAccountV0_3_0(accountAddress, {
 			safe4337ModuleAddress: overrides.safe4337ModuleAddress,
 			entrypointAddress: overrides.entrypointAddress,
-            onChainIdentifierParams: overrides.onChainIdentifierParams,
-            onChainIdentifier: overrides.onChainIdentifier,
+			onChainIdentifierParams: overrides.onChainIdentifierParams,
+			onChainIdentifier: overrides.onChainIdentifier,
 			safeAccountSingleton: overrides.safeAccountSingleton,
 		});
 		safe.factoryAddress = factoryAddress;
@@ -175,11 +162,9 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		const validAfter = overrides.validAfter ?? 0n;
 		const validUntil = overrides.validUntil ?? 0n;
 		const entrypointAddress =
-			overrides.entrypointAddress ??
-			SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS;
+			overrides.entrypointAddress ?? SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS;
 		const safe4337ModuleAddress =
-			overrides.safe4337ModuleAddress ??
-			SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+			overrides.safe4337ModuleAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 
 		return SafeAccount.getUserOperationEip712Hash(useroperation, chainId, {
 			validAfter,
@@ -188,8 +173,8 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			safe4337ModuleAddress,
 		});
 	}
-    
-    /**
+
+	/**
 	 * Get the EIP-712 typed data components for a UserOperation.
 	 * Useful for signing with external signers that need domain, types, and message separately.
 	 *
@@ -208,19 +193,16 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			safe4337ModuleAddress?: string;
 		} = {},
 	): {
-        domain: SafeUserOperationTypedDataDomain,
-        types:Record<string, {name: string;type: string;}[]>,
-        messageValue: SafeUserOperationV7TypedMessageValue
-    } 
-     {
+		domain: SafeUserOperationTypedDataDomain;
+		types: Record<string, { name: string; type: string }[]>;
+		messageValue: SafeUserOperationV7TypedMessageValue;
+	} {
 		const validAfter = overrides.validAfter ?? 0n;
 		const validUntil = overrides.validUntil ?? 0n;
 		const entrypointAddress =
-			overrides.entrypointAddress ??
-			SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS;
+			overrides.entrypointAddress ?? SafeAccountV0_3_0.DEFAULT_ENTRYPOINT_ADDRESS;
 		const safe4337ModuleAddress =
-			overrides.safe4337ModuleAddress ??
-			SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+			overrides.safe4337ModuleAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 
 		return SafeAccount.getUserOperationEip712Data(useroperation, chainId, {
 			validAfter,
@@ -252,11 +234,9 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		} = {},
 	): string {
 		const safe4337ModuleAddress =
-			overrides.safe4337ModuleAddress ??
-			SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+			overrides.safe4337ModuleAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 		const safeModuleSetupAddress =
-			overrides.safeModuleSetupAddress ??
-			SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS;
+			overrides.safeModuleSetupAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS;
 
 		return SafeAccount.createBaseInitializerCallData(
 			owners,
@@ -284,10 +264,8 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		return SafeAccount.createFactoryAddressAndData(
 			owners,
 			overrides,
-			overrides.safe4337ModuleAddress ??
-				SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
-			overrides.safeModuleSetupAddress ??
-				SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
+			overrides.safe4337ModuleAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+			overrides.safeModuleSetupAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 		);
 	}
 
@@ -360,11 +338,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			eip7212WebAuthnContractVerifier?: string;
 		} = {},
 	): Promise<[bigint, bigint, bigint]> {
-		return this.baseEstimateUserOperationGas(
-			userOperation,
-			bundlerRpc,
-			overrides
-		);
+		return this.baseEstimateUserOperationGas(userOperation, bundlerRpc, overrides);
 	}
 
 	/**
@@ -395,8 +369,57 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			chainId,
 			this.entrypointAddress,
 			this.safe4337ModuleAddress,
-			overrides
-		)
+			overrides,
+		);
+	}
+
+	/**
+	 * Sign a UserOperation with one or more {@link ExternalSigner} instances
+	 * (viem, ethers, hardware wallets, MPC, HSMs). Each signer declares its
+	 * capabilities (`signHash`, `signTypedData`, or both) and the account picks
+	 * the best match; incompatible signers fail offline with an actionable error.
+	 *
+	 * For a raw private-key string, use the sync {@link signUserOperation}
+	 * instead or wrap with `fromPrivateKey(pk)`. Prebuilt adapters: `fromViem`,
+	 * `fromEthersWallet`, `fromViemWalletClient`, `fromPrivateKey`.
+	 *
+	 * @example
+	 * import { fromViem } from "abstractionkit";
+	 * import { privateKeyToAccount } from "viem/accounts";
+	 *
+	 * const signer = fromViem(privateKeyToAccount(pk));
+	 * userOp.signature = await account.signUserOperationWithSigners(userOp, [signer], chainId);
+	 *
+	 * @param useroperation - UserOperation to sign
+	 * @param signers - one ExternalSigner per owner (any order)
+	 * @param chainId - target chain ID
+	 * @param overrides - optional validAfter / validUntil / multi-chain flag
+	 * @returns Promise resolving to the formatted signature string
+	 */
+	public signUserOperationWithSigners(
+		useroperation: UserOperationV7,
+		signers: ReadonlyArray<AkSigner>,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			isMultiChainSignature?: boolean;
+		} = {},
+	): Promise<string> {
+		const context: SignContext<UserOperationV7> = {
+			userOperation: useroperation,
+			chainId,
+			entryPoint: this.entrypointAddress,
+		};
+		return SafeAccount.baseSignUserOperationWithSigners(
+			useroperation,
+			signers,
+			chainId,
+			this.entrypointAddress,
+			this.safe4337ModuleAddress,
+			context,
+			overrides,
+		);
 	}
 }
 
@@ -404,5 +427,4 @@ export class SafeAccountV0_3_0 extends SafeAccount {
  * Alias for {@link SafeAccountV0_3_0} representing Safe v1.4.1 singleton with module v0.3.0.
  * Uses the same defaults and behavior as SafeAccountV0_3_0.
  */
-export class SafeAccountV1_4_1_M_0_3_0 extends SafeAccountV0_3_0 {
-}
+export class SafeAccountV1_4_1_M_0_3_0 extends SafeAccountV0_3_0 {}

@@ -1,6 +1,6 @@
-import { Bundler } from "src/Bundler";
+import type { Bundler } from "src/Bundler";
 import { AbstractionKitError } from "src/errors";
-import { UserOperationReceiptResult } from "src/types";
+import type { UserOperationReceiptResult } from "src/types";
 
 /**
  * Response object returned after submitting a UserOperation to a bundler.
@@ -23,11 +23,7 @@ export class SendUseroperationResponse {
 	 * @param bundler - The bundler client to use for polling
 	 * @param entrypointAddress - The EntryPoint address
 	 */
-	constructor(
-		userOperationHash: string,
-		bundler: Bundler,
-		entrypointAddress: string,
-	) {
+	constructor(userOperationHash: string, bundler: Bundler, entrypointAddress: string) {
 		this.bundler = bundler;
 		this.userOperationHash = userOperationHash;
 		this.entrypointAddress = entrypointAddress;
@@ -56,16 +52,12 @@ export class SendUseroperationResponse {
 			);
 		}
 		if (timeoutInSeconds < requestIntervalInSeconds) {
-			throw new RangeError(
-				"timeoutInSeconds can't be less than requestIntervalInSeconds",
-			);
+			throw new RangeError("timeoutInSeconds can't be less than requestIntervalInSeconds");
 		}
 		let count = 0;
 		while (count <= timeoutInSeconds) {
 			await this.delay(requestIntervalInSeconds * 1000);
-			const res = await this.bundler.getUserOperationReceipt(
-				this.userOperationHash,
-			);
+			const res = await this.bundler.getUserOperationReceipt(this.userOperationHash);
 			if (res == null) {
 				count += requestIntervalInSeconds;
 			} else {

@@ -1,6 +1,6 @@
 //credits:https://medium.com/with-orus/the-5-commandments-of-clean-error-handling-in-typescript-93a9cbdf1af5
 
-import { Dictionary } from "./types";
+import type { Dictionary } from "./types";
 
 /**
  * General SDK error codes for non-bundler, non-RPC failures.
@@ -39,7 +39,7 @@ export type JsonRpcErrorCode =
 	| "INVALID_PARAMS"
 	| "INTERNAL_ERROR"
 	| "SERVER_ERROR"
-    | "TENDERLY_SIMULATION_ERROR";
+	| "TENDERLY_SIMULATION_ERROR";
 
 /**
  * Maps JSON-RPC numeric error codes to human-readable {@link BundlerErrorCode} values.
@@ -116,14 +116,7 @@ export class AbstractionKitError extends Error {
 	 * @returns JSON string of the error
 	 */
 	stringify(): string {
-		return JSON.stringify(this, [
-			"name",
-			"code",
-			"message",
-			"cause",
-			"errno",
-			"context",
-		]);
+		return JSON.stringify(this, ["name", "code", "message", "cause", "errno", "context"]);
 	}
 }
 
@@ -144,8 +137,6 @@ export function ensureError(value: unknown): Error {
 		/* empty */
 	}
 
-	const error = new Error(
-		`This value was thrown as is, not through an Error: ${stringified}`,
-	);
+	const error = new Error(`This value was thrown as is, not through an Error: ${stringified}`);
 	return error;
 }

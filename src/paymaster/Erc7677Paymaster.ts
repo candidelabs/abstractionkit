@@ -1,22 +1,17 @@
-import { Paymaster } from "./Paymaster";
 import { Bundler } from "../Bundler";
-import { calculateUserOperationMaxGasCost, sendJsonRpcRequest } from "../utils";
+import { ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8, ENTRYPOINT_V9 } from "../constants";
 import { AbstractionKitError, ensureError } from "../errors";
-import {
-	ENTRYPOINT_V6,
-	ENTRYPOINT_V7,
-	ENTRYPOINT_V8,
-	ENTRYPOINT_V9,
-} from "../constants";
 import type { StateOverrideSet } from "../types";
-import {
+import { calculateUserOperationMaxGasCost, sendJsonRpcRequest } from "../utils";
+import { Paymaster } from "./Paymaster";
+import type {
 	AnyUserOperation,
+	Erc7677PaymasterConstructorOptions,
+	Erc7677Provider,
+	GasPaymasterUserOperationOverrides,
+	PrependTokenPaymasterApproveAccount,
 	SameUserOp,
 	SmartAccountWithEntrypoint,
-	PrependTokenPaymasterApproveAccount,
-	GasPaymasterUserOperationOverrides,
-	Erc7677Provider,
-	Erc7677PaymasterConstructorOptions,
 } from "./types";
 
 /** Max value for uint256 */
@@ -173,11 +168,11 @@ interface CandideSupportedResponse {
 		dummyPaymasterAndData:
 			| string
 			| {
-				paymaster: string;
-				paymasterVerificationGasLimit: string;
-				paymasterPostOpGasLimit: string;
-				paymasterData: string;
-			};
+					paymaster: string;
+					paymasterVerificationGasLimit: string;
+					paymasterPostOpGasLimit: string;
+					paymasterData: string;
+			  };
 	};
 }
 
@@ -232,7 +227,7 @@ export class Erc7677Paymaster extends Paymaster {
 	constructor(rpcUrl: string, options: Erc7677PaymasterConstructorOptions = {}) {
 		super();
 		this.rpcUrl = rpcUrl;
-		this.chainId = options.chainId != null ? "0x" + options.chainId.toString(16) : null;
+		this.chainId = options.chainId != null ? `0x${options.chainId.toString(16)}` : null;
 		if (options.provider === undefined || options.provider === "auto") {
 			this.provider = Erc7677Paymaster.detectProvider(rpcUrl);
 		} else {
@@ -258,10 +253,7 @@ export class Erc7677Paymaster extends Paymaster {
 		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: AnyUserOperation,
 	): string {
-		if (
-			smartAccount.entrypointAddress != null &&
-			smartAccount.entrypointAddress.trim() !== ""
-		) {
+		if (smartAccount.entrypointAddress != null && smartAccount.entrypointAddress.trim() !== "") {
 			return smartAccount.entrypointAddress;
 		}
 		if ("initCode" in userOperation) return ENTRYPOINT_V6;
@@ -284,18 +276,17 @@ export class Erc7677Paymaster extends Paymaster {
 		context: Erc7677Context = {},
 	): Promise<Erc7677StubDataResult> {
 		try {
-			const result = await sendJsonRpcRequest(
-				this.rpcUrl,
-				"pm_getPaymasterStubData",
-				[userOperation, entrypoint, chainIdHex, context],
-			);
+			const result = await sendJsonRpcRequest(this.rpcUrl, "pm_getPaymasterStubData", [
+				userOperation,
+				entrypoint,
+				chainIdHex,
+				context,
+			]);
 			return result as Erc7677StubDataResult;
 		} catch (err) {
-			throw new AbstractionKitError(
-				"PAYMASTER_ERROR",
-				"pm_getPaymasterStubData failed",
-				{ cause: ensureError(err) },
-			);
+			throw new AbstractionKitError("PAYMASTER_ERROR", "pm_getPaymasterStubData failed", {
+				cause: ensureError(err),
+			});
 		}
 	}
 
@@ -310,18 +301,17 @@ export class Erc7677Paymaster extends Paymaster {
 		context: Erc7677Context = {},
 	): Promise<Erc7677PaymasterFields> {
 		try {
-			const result = await sendJsonRpcRequest(
-				this.rpcUrl,
-				"pm_getPaymasterData",
-				[userOperation, entrypoint, chainIdHex, context],
-			);
+			const result = await sendJsonRpcRequest(this.rpcUrl, "pm_getPaymasterData", [
+				userOperation,
+				entrypoint,
+				chainIdHex,
+				context,
+			]);
 			return result as Erc7677PaymasterFields;
 		} catch (err) {
-			throw new AbstractionKitError(
-				"PAYMASTER_ERROR",
-				"pm_getPaymasterData failed",
-				{ cause: ensureError(err) },
-			);
+			throw new AbstractionKitError("PAYMASTER_ERROR", "pm_getPaymasterData failed", {
+				cause: ensureError(err),
+			});
 		}
 	}
 
@@ -333,18 +323,13 @@ export class Erc7677Paymaster extends Paymaster {
 	 * @param params - The JSON-RPC params array
 	 * @returns The `result` field from the JSON-RPC response
 	 */
-	async sendRPCRequest(
-		method: string,
-		params: unknown[] = [],
-	): Promise<unknown> {
+	async sendRPCRequest(method: string, params: unknown[] = []): Promise<unknown> {
 		try {
 			return await sendJsonRpcRequest(this.rpcUrl, method, params);
 		} catch (err) {
-			throw new AbstractionKitError(
-				"PAYMASTER_ERROR",
-				`sendRPCRequest(${method}) failed`,
-				{ cause: ensureError(err) },
-			);
+			throw new AbstractionKitError("PAYMASTER_ERROR", `sendRPCRequest(${method}) failed`, {
+				cause: ensureError(err),
+			});
 		}
 	}
 
@@ -371,15 +356,11 @@ export class Erc7677Paymaster extends Paymaster {
 	): Promise<SameUserOp<T>> {
 		try {
 			const userOp = { ...userOperation } as T;
-			const entrypoint =
-				overrides.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
+			const entrypoint = overrides.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
 			const chainIdHex = await this.getChainId(bundlerRpc);
 
 			// Token paymaster flow: triggered when context.token is set
-			if (
-				context.token != null &&
-				typeof context.token === "string"
-			) {
+			if (context.token != null && typeof context.token === "string") {
 				return this.tokenPaymasterFlow(
 					smartAccount as unknown as PrependTokenPaymasterApproveAccount,
 					userOp,
@@ -393,22 +374,13 @@ export class Erc7677Paymaster extends Paymaster {
 			}
 
 			// Delegate to the sponsored flow (stub → estimate → final).
-			return this.sponsoredFlow(
-				userOp,
-				bundlerRpc,
-				entrypoint,
-				chainIdHex,
-				context,
-				overrides,
-			);
+			return this.sponsoredFlow(userOp, bundlerRpc, entrypoint, chainIdHex, context, overrides);
 		} catch (err) {
 			const error = ensureError(err);
 			if (error instanceof AbstractionKitError) throw error;
-			throw new AbstractionKitError(
-				"PAYMASTER_ERROR",
-				"createPaymasterUserOperation failed",
-				{ cause: error },
-			);
+			throw new AbstractionKitError("PAYMASTER_ERROR", "createPaymasterUserOperation failed", {
+				cause: error,
+			});
 		}
 	}
 
@@ -416,10 +388,7 @@ export class Erc7677Paymaster extends Paymaster {
 	 * Merge paymaster fields into a UserOperation. Handles both v0.6
 	 * (`paymasterAndData`) and v0.7+ split fields.
 	 */
-	private applyPaymasterFields(
-		userOp: AnyUserOperation,
-		fields: Erc7677PaymasterFields,
-	): void {
+	private applyPaymasterFields(userOp: AnyUserOperation, fields: Erc7677PaymasterFields): void {
 		if ("initCode" in userOp) {
 			if (fields.paymasterAndData != null) {
 				userOp.paymasterAndData = fields.paymasterAndData;
@@ -429,9 +398,7 @@ export class Erc7677Paymaster extends Paymaster {
 		if (fields.paymaster != null) userOp.paymaster = fields.paymaster;
 		if (fields.paymasterData != null) userOp.paymasterData = fields.paymasterData;
 		if (fields.paymasterVerificationGasLimit != null) {
-			userOp.paymasterVerificationGasLimit = BigInt(
-				fields.paymasterVerificationGasLimit,
-			);
+			userOp.paymasterVerificationGasLimit = BigInt(fields.paymasterVerificationGasLimit);
 		}
 		if (fields.paymasterPostOpGasLimit != null) {
 			userOp.paymasterPostOpGasLimit = BigInt(fields.paymasterPostOpGasLimit);
@@ -472,14 +439,11 @@ export class Erc7677Paymaster extends Paymaster {
 			userOp.callGasLimit = 0n;
 			userOp.verificationGasLimit = 0n;
 			userOp.preVerificationGas = 0n;
-			// Some bundlers reject estimation when fees are set and the sender
-			// has insufficient balance to pay them. Zero them during the
-			// estimate and restore after — same pattern as CandidePaymaster.
-			//
-			// Pimlico is an exception: estimating with maxFeePerGas = 0 makes
-			// its paymaster postOp divide by the fee and revert with
-			// "AA50 postOp reverted: divide by zero". Skip the zeroing for
-			// Pimlico and pass the user-supplied fees through unchanged.
+			// Zero fees during estimation (same pattern as CandidePaymaster):
+			// some bundlers reject estimation if the sender can't cover the
+			// set fees. Exception: Pimlico's paymaster postOp divides by fee
+			// and reverts "AA50 postOp reverted: divide by zero" on fee=0, so
+			// pass its fees through unchanged.
 			const skipFeeZeroing = this.provider === "pimlico";
 			const inputMaxFeePerGas = userOp.maxFeePerGas;
 			const inputMaxPriorityFeePerGas = userOp.maxPriorityFeePerGas;
@@ -511,50 +475,30 @@ export class Erc7677Paymaster extends Paymaster {
 
 			// Overwrite paymaster gas fields with bundler-reported values when
 			// available. Stub responses often leave these as placeholders.
-			if (
-				"paymaster" in userOp &&
-				estimation.paymasterVerificationGasLimit != null
-			) {
-				userOp.paymasterVerificationGasLimit =
-					estimation.paymasterVerificationGasLimit;
+			if ("paymaster" in userOp && estimation.paymasterVerificationGasLimit != null) {
+				userOp.paymasterVerificationGasLimit = estimation.paymasterVerificationGasLimit;
 			}
-			if (
-				"paymaster" in userOp &&
-				estimation.paymasterPostOpGasLimit != null
-			) {
+			if ("paymaster" in userOp && estimation.paymasterPostOpGasLimit != null) {
 				userOp.paymasterPostOpGasLimit = estimation.paymasterPostOpGasLimit;
 			}
 		}
 
-		if (
-			typeof overrides.preVerificationGas === "bigint" &&
-			overrides.preVerificationGas < 0n
-		) {
+		if (typeof overrides.preVerificationGas === "bigint" && overrides.preVerificationGas < 0n) {
 			throw new RangeError("preVerificationGas override can't be negative");
 		}
-		if (
-			typeof overrides.verificationGasLimit === "bigint" &&
-			overrides.verificationGasLimit < 0n
-		) {
+		if (typeof overrides.verificationGasLimit === "bigint" && overrides.verificationGasLimit < 0n) {
 			throw new RangeError("verificationGasLimit override can't be negative");
 		}
-		if (
-			typeof overrides.callGasLimit === "bigint" &&
-			overrides.callGasLimit < 0n
-		) {
+		if (typeof overrides.callGasLimit === "bigint" && overrides.callGasLimit < 0n) {
 			throw new RangeError("callGasLimit override can't be negative");
 		}
 
 		const applyMultiplier = (value: bigint, multiplier?: number): bigint =>
-			value +
-			(value * BigInt(Math.round((multiplier ?? 0) * 100))) / 10000n;
+			value + (value * BigInt(Math.round((multiplier ?? 0) * 100))) / 10000n;
 
 		userOp.preVerificationGas =
 			overrides.preVerificationGas ??
-			applyMultiplier(
-				preVerificationGas,
-				overrides.preVerificationGasPercentageMultiplier ?? 5,
-			);
+			applyMultiplier(preVerificationGas, overrides.preVerificationGasPercentageMultiplier ?? 5);
 		userOp.verificationGasLimit =
 			overrides.verificationGasLimit ??
 			applyMultiplier(
@@ -563,10 +507,7 @@ export class Erc7677Paymaster extends Paymaster {
 			);
 		userOp.callGasLimit =
 			overrides.callGasLimit ??
-			applyMultiplier(
-				callGasLimit,
-				overrides.callGasLimitPercentageMultiplier ?? 10,
-			);
+			applyMultiplier(callGasLimit, overrides.callGasLimitPercentageMultiplier ?? 10);
 
 		if (entrypoint.toLowerCase() === ENTRYPOINT_V6.toLowerCase()) {
 			// Align with CandidePaymaster: add paymaster verification overhead for v0.6.
@@ -593,11 +534,11 @@ export class Erc7677Paymaster extends Paymaster {
 		entrypoint: string,
 		chainIdHex: string,
 	): Promise<{ exchangeRate: bigint; paymasterAddress: string }> {
-		const result = await sendJsonRpcRequest(
-			this.rpcUrl,
-			"pimlico_getTokenQuotes",
-			[{ tokens: [tokenAddress] }, entrypoint, chainIdHex],
-		) as { quotes?: Array<{ paymaster: string; token: string; exchangeRate: string }> };
+		const result = (await sendJsonRpcRequest(this.rpcUrl, "pimlico_getTokenQuotes", [
+			{ tokens: [tokenAddress] },
+			entrypoint,
+			chainIdHex,
+		])) as { quotes?: Array<{ paymaster: string; token: string; exchangeRate: string }> };
 
 		const quotes = result?.quotes;
 		if (!Array.isArray(quotes) || quotes.length === 0) {
@@ -606,9 +547,7 @@ export class Erc7677Paymaster extends Paymaster {
 				`pimlico_getTokenQuotes returned no quotes for token ${tokenAddress}`,
 			);
 		}
-		const quote = quotes.find(
-			(q) => q.token.toLowerCase() === tokenAddress.toLowerCase(),
-		);
+		const quote = quotes.find((q) => q.token.toLowerCase() === tokenAddress.toLowerCase());
 		if (quote == null) {
 			throw new AbstractionKitError(
 				"PAYMASTER_ERROR",
@@ -639,15 +578,14 @@ export class Erc7677Paymaster extends Paymaster {
 	): Promise<CandideSupportedResponse> {
 		const key = entrypoint.toLowerCase();
 		const cached = this.candideCache.get(key);
-		const isStale = cached != null
-			&& options.enforceTTL === true
-			&& Date.now() - cached.fetchedAt > CANDIDE_TOKEN_QUOTE_TTL_MS;
+		const isStale =
+			cached != null &&
+			options.enforceTTL === true &&
+			Date.now() - cached.fetchedAt > CANDIDE_TOKEN_QUOTE_TTL_MS;
 		if (cached != null && !isStale) return cached.data;
-		const result = await sendJsonRpcRequest(
-			this.rpcUrl,
-			"pm_supportedERC20Tokens",
-			[entrypoint],
-		) as unknown as CandideSupportedResponse;
+		const result = (await sendJsonRpcRequest(this.rpcUrl, "pm_supportedERC20Tokens", [
+			entrypoint,
+		])) as unknown as CandideSupportedResponse;
 		this.candideCache.set(key, { data: result, fetchedAt: Date.now() });
 		return result;
 	}
@@ -765,11 +703,7 @@ export class Erc7677Paymaster extends Paymaster {
 		let exchangeRate: bigint;
 		let paymasterAddress: string | null = null;
 
-		const providerQuote = await this.fetchProviderTokenQuote(
-			tokenAddress,
-			entrypoint,
-			chainIdHex,
-		);
+		const providerQuote = await this.fetchProviderTokenQuote(tokenAddress, entrypoint, chainIdHex);
 
 		if (providerQuote != null) {
 			// Case A: provider detected.
@@ -795,26 +729,14 @@ export class Erc7677Paymaster extends Paymaster {
 			}
 		} else {
 			// Case C: no provider, no exchangeRate — fall through to regular flow.
-			return this.sponsoredFlow(
-				userOp,
-				bundlerRpc,
-				entrypoint,
-				chainIdHex,
-				context,
-				overrides,
-			);
+			return this.sponsoredFlow(userOp, bundlerRpc, entrypoint, chainIdHex, context, overrides);
 		}
 
 		// Step 2 — stub paymaster data for gas estimation.
 		// For Candide, this is derived from the cached `pm_supportedERC20Tokens`
 		// response (same RPC call used for the exchange rate above) — no extra
 		// `pm_getPaymasterStubData` round-trip.
-		const stub = await this.getStubData(
-			userOp,
-			entrypoint,
-			chainIdHex,
-			context,
-		);
+		const stub = await this.getStubData(userOp, entrypoint, chainIdHex, context);
 		this.applyPaymasterFields(userOp, stub);
 
 		// For Case B, resolve paymasterAddress from stub or context override.
@@ -823,22 +745,23 @@ export class Erc7677Paymaster extends Paymaster {
 				paymasterAddress = context.paymasterAddress as string;
 			} else if ("initCode" in userOp && stub.paymasterAndData != null) {
 				// v0.6: extract address from first 20 bytes of paymasterAndData.
-				paymasterAddress = "0x" + stub.paymasterAndData.slice(2, 42);
+				paymasterAddress = `0x${stub.paymasterAndData.slice(2, 42)}`;
 			} else if (stub.paymaster != null) {
 				paymasterAddress = stub.paymaster;
 			} else {
 				throw new AbstractionKitError(
 					"PAYMASTER_ERROR",
 					"pm_getPaymasterStubData did not return a paymaster address. " +
-					"Pass paymasterAddress in the context or set a provider.",
+						"Pass paymasterAddress in the context or set a provider.",
 				);
 			}
 		}
 
 		// Step 3 — save original callData, prepend approve(paymaster, UINT256_MAX).
 		const originalCallData = userOp.callData;
-		const requiresAllowanceReset = overrides.resetApproval
-			?? TOKENS_REQUIRING_ALLOWANCE_RESET.includes(tokenAddress.toLowerCase());
+		const requiresAllowanceReset =
+			overrides.resetApproval ??
+			TOKENS_REQUIRING_ALLOWANCE_RESET.includes(tokenAddress.toLowerCase());
 
 		let callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
 			userOp.callData,
@@ -861,7 +784,7 @@ export class Erc7677Paymaster extends Paymaster {
 
 		// Step 5 — calculate real token cost.
 		const maxGasCostWei = calculateUserOperationMaxGasCost(userOp);
-		const tokenCost = (exchangeRate * maxGasCostWei) / (10n ** 18n);
+		const tokenCost = (exchangeRate * maxGasCostWei) / 10n ** 18n;
 		const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
 
 		// Step 6 — replace dummy approval with calculated amount on original callData.
@@ -881,17 +804,10 @@ export class Erc7677Paymaster extends Paymaster {
 		}
 		userOp.callData = callDataWithApprove;
 
-		// Step 7 — final paymaster data (signature over the fully-populated
-		// userOp). The token flow always fetches fresh paymaster data: the
-		// stub's `isFinal` cannot be honored here because callData was mutated
-		// after the stub was generated, so any stub signature is over a
-		// different UserOp hash than the one we're about to return.
-		const final = await this.getPaymasterData(
-			userOp,
-			entrypoint,
-			chainIdHex,
-			context,
-		);
+		// Step 7 — final paymaster data. The token flow always refetches:
+		// callData was mutated after the stub, so any stub `isFinal` signature
+		// would be over a different UserOp hash.
+		const final = await this.getPaymasterData(userOp, entrypoint, chainIdHex, context);
 		this.applyPaymasterFields(userOp, final);
 
 		return userOp as unknown as SameUserOp<T>;
@@ -912,21 +828,11 @@ export class Erc7677Paymaster extends Paymaster {
 		// Step 1 — stub paymaster data for gas estimation.
 		// Candide-hosted paymasters skip `pm_getPaymasterStubData` and use the
 		// cached `pm_supportedERC20Tokens` response instead.
-		const stub = await this.getStubData(
-			userOp,
-			entrypoint,
-			chainIdHex,
-			context,
-		);
+		const stub = await this.getStubData(userOp, entrypoint, chainIdHex, context);
 		this.applyPaymasterFields(userOp, stub);
 
 		// Step 2 — gas estimation with the stub paymaster applied.
-		await this.estimateAndApplyGasLimits(
-			userOp,
-			bundlerRpc,
-			entrypoint,
-			overrides,
-		);
+		await this.estimateAndApplyGasLimits(userOp, bundlerRpc, entrypoint, overrides);
 
 		// Step 3 — if the stub was already final, we're done.
 		if (stub.isFinal === true) {
@@ -934,12 +840,7 @@ export class Erc7677Paymaster extends Paymaster {
 		}
 
 		// Step 4 — final paymaster data (signature over the fully-populated userOp).
-		const final = await this.getPaymasterData(
-			userOp,
-			entrypoint,
-			chainIdHex,
-			context,
-		);
+		const final = await this.getPaymasterData(userOp, entrypoint, chainIdHex, context);
 		this.applyPaymasterFields(userOp, final);
 
 		return userOp as unknown as SameUserOp<T>;
