@@ -3,6 +3,15 @@ import { AccountProofInvalidError, StorageProofInvalidError } from "./errors";
 import { bytesEqual, hexToBytes, Nibbles, parseMptNode } from "./mpt";
 import type { EthGetProofResult } from "./types";
 
+/** Canonical empty storage trie root: keccak256(RLP("")) */
+export const EMPTY_STORAGE_HASH =
+	"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
+
+/** Canonical empty code hash: keccak256("") */
+export const EMPTY_CODE_HASH = "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470";
+
+const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
 /**
  * Walks an MPT proof from `rootHash`, following keccak256(key) as nibbles.
  *
@@ -26,6 +35,20 @@ export function verifyMptProof(params: {
 	expectedValue?: Uint8Array;
 }): boolean {
 	const { rootHash, key, proof, expectedValue } = params;
+
+	// Empty-trie absence short-circuit: an empty storage trie has a single,
+	// well-known root (keccak256(RLP(""))). A node can legitimately return
+	// `proof: []` for any key against that root; the key is absent by virtue
+	// of the trie being empty. Without this short-circuit the walker would
+	// fall through to `return false` and reject a genuinely valid proof.
+	if (proof.length === 0) {
+		const rootHex = toHex(rootHash).toLowerCase();
+		if (rootHex === EMPTY_STORAGE_HASH) {
+			return !expectedValue || expectedValue.length === 0;
+		}
+		return false;
+	}
+
 	const keyHash = hexToBytes(keccak256(key));
 	const keyNibbles = Nibbles.fromBytes(keyHash);
 
@@ -92,18 +115,17 @@ function matchesExpected(valueHex: string, expectedValue: Uint8Array | undefined
 	return bytesEqual(valueBytes, expectedValue);
 }
 
+/**
+ * Runtime-neutral bytes-to-0x-hex. Avoids `Buffer`, which is undefined in
+ * browsers and other non-Node environments where this module may be imported.
+ */
 function toHex(b: Uint8Array): string {
-	return "0x" + Buffer.from(b).toString("hex");
+	let s = "0x";
+	for (let i = 0; i < b.length; i++) {
+		s += b[i].toString(16).padStart(2, "0");
+	}
+	return s;
 }
-
-/** Canonical empty storage trie root: keccak256(RLP("")) */
-export const EMPTY_STORAGE_HASH =
-	"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
-
-/** Canonical empty code hash: keccak256("") */
-export const EMPTY_CODE_HASH = "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470";
-
-const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 function stripLeadingZeros(hex: string): string {
 	let h = hex.replace(/^0x/, "").replace(/^0+/, "");
@@ -221,12 +243,16 @@ export function verifyStorageProof(params: {
 }): boolean {
 	const { storageHash, storageKey, storageValue, storageProof, address } = params;
 
+	// Normalize the value first: strip leading zero bytes so that "0x0",
+	// "0x00", and "0x000...00" all collapse to the empty/absent value "0x".
+	// Anything that survives stripping is a genuine non-zero value which
+	// gets RLP-encoded as its minimal bytes (storage-value encoding per
+	// Yellow Paper).
+	const stripped = stripLeadingZeros(storageValue);
+	const valueBytes = hexToBytes(stripped);
 	let expectedValue: Uint8Array | undefined;
-	const normalizedValue = evenHex(storageValue);
-	const valueBytes = hexToBytes(normalizedValue);
-	if (valueBytes.length > 0 && !(valueBytes.length === 1 && valueBytes[0] === 0)) {
-		// Storage values are RLP-encoded as their minimal bytes.
-		const rlpHex = encodeRlp(stripLeadingZeros(normalizedValue));
+	if (valueBytes.length > 0) {
+		const rlpHex = encodeRlp(stripped);
 		expectedValue = hexToBytes(rlpHex);
 	}
 
@@ -261,8 +287,3 @@ function padSlot32(slot: string): string {
 	return "0x" + stripped.padStart(64, "0");
 }
 
-/** Ensure hex string has an even number of nibbles (required by ethers getBytes). */
-function evenHex(hex: string): string {
-	const h = hex.replace(/^0x/, "");
-	return "0x" + (h.length % 2 === 0 ? h : "0" + h);
-}
