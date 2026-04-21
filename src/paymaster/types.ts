@@ -180,6 +180,4 @@ export interface GasPaymasterUserOperationOverrides extends BasePaymasterUserOpe
 
 	/** pass some state overrides for gas estimation */
 	state_override_set?: StateOverrideSet;
-
-	context?: CandidePaymasterContext;
 }

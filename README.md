@@ -38,10 +38,9 @@ npm install abstractionkit
 
 ### Upgrading to v0.3.0
 
-v0.3.0 is a major release. Two API changes are likely to break existing paymaster code:
+v0.3.0 is a major release. The following API change is likely to break existing paymaster code:
 
-- `CandidePaymaster.createSponsorPaymasterUserOperation(...)` now takes `smartAccount` as the **first** argument: `(smartAccount, userOp, bundlerRpc, sponsorshipPolicyId?, overrides?)`.
-- `CandidePaymasterContext` is no longer a separate argument. Pass it via `overrides.context` on `GasPaymasterUserOperationOverrides`.
+- `CandidePaymaster.createSponsorPaymasterUserOperation(...)` now takes `smartAccount` as the **first** argument: `(smartAccount, userOp, bundlerRpc, sponsorshipPolicyId?, context?, overrides?)`.
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full list of new features, renames, type export changes, and fixes.
 
@@ -187,7 +186,7 @@ const response = await smartAccount.sendUserOperation(tokenOp, bundlerRpc);
 
 ### Pass paymaster context (sponsorship policy, parallel signing)
 
-As of v0.3.0, `CandidePaymasterContext` is passed via the `overrides.context` field on `GasPaymasterUserOperationOverrides`. Previously it was a separate top level argument.
+`CandidePaymasterContext` is passed as its own argument, separate from gas overrides.
 
 ```typescript
 const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
@@ -196,11 +195,11 @@ const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
   bundlerRpc,
   sponsorshipPolicyId,
   {
-    context: {
-      // For EntryPoint v0.9 parallel signing flows:
-      // signingPhase: "commit" | "finalize",
-    },
-    // gas overrides also live here:
+    // For EntryPoint v0.9 parallel signing flows:
+    // signingPhase: "commit" | "finalize",
+  },
+  {
+    // gas overrides:
     callGasLimitPercentageMultiplier: 110,
   },
 );
