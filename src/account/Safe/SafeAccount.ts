@@ -1560,10 +1560,61 @@ export class SafeAccount extends SmartAccount {
 		let verificationGasLimit = BaseUserOperationDummyValues.verificationGasLimit;
 		let callGasLimit = BaseUserOperationDummyValues.callGasLimit;
 
+		// Build the dummy signature up-front and attach it to the user operation
+		// so the returned op always carries a valid placeholder signature
+		// whether gas estimation runs below or is skipped.
+		const validAfter = 0xffffffffffffn;
+		const validUntil = 0xffffffffffffn;
+
+		let dummySignerSignaturePairs: SignerSignaturePair[];
+		if (overrides.dummySignerSignaturePairs != null) {
+			if (overrides.expectedSigners != null) {
+				throw new RangeError(
+					"Can't use both dummySignerSignaturePairs and expectedSigners overrides.",
+				);
+			}
+			if (overrides.dummySignerSignaturePairs.length < 1) {
+				throw new RangeError("Number of dummySignerSignaturePairs can't be less than 1");
+			}
+			dummySignerSignaturePairs = overrides.dummySignerSignaturePairs;
+		} else {
+			if (overrides.expectedSigners == null) {
+				dummySignerSignaturePairs = [EOADummySignerSignaturePair];
+			} else {
+				const isInit = factoryAddress != null && factoryAddress !== "0x";
+				dummySignerSignaturePairs = SafeAccount.createDummySignerSignaturePairForExpectedSigners(
+					overrides.expectedSigners,
+					{
+						isInit,
+						webAuthnSharedSigner,
+						eip7212WebAuthnPrecompileVerifier,
+						eip7212WebAuthnContractVerifier,
+						webAuthnSignerFactory,
+						webAuthnSignerSingleton,
+						webAuthnSignerProxyCreationCode,
+						validAfter,
+						validUntil,
+					},
+				);
+			}
+		}
+		userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
+			dummySignerSignaturePairs,
+			{
+				validAfter,
+				validUntil,
+				webAuthnSharedSigner,
+				isMultiChainSignature: overrides.isMultiChainSignature,
+			},
+		);
+
+		const skipGasEstimation = overrides.skipGasEstimation ?? false;
+
 		if (
-			overrides.preVerificationGas == null ||
-			overrides.verificationGasLimit == null ||
-			overrides.callGasLimit == null
+			!skipGasEstimation &&
+			(overrides.preVerificationGas == null ||
+				overrides.verificationGasLimit == null ||
+				overrides.callGasLimit == null)
 		) {
 			if (bundlerRpc != null) {
 				userOperation.callGasLimit = 0n;
@@ -1618,51 +1669,6 @@ export class SafeAccount extends SmartAccount {
 						userOperationToEstimate.paymasterData = parallelPaymasterInitValues.paymasterData;
 					}
 				}
-				const validAfter = 0xffffffffffffn;
-				const validUntil = 0xffffffffffffn;
-
-				let dummySignerSignaturePairs: SignerSignaturePair[];
-				if (overrides.dummySignerSignaturePairs != null) {
-					if (overrides.expectedSigners != null) {
-						throw new RangeError(
-							"Can't use both dummySignerSignaturePairs and expectedSigners overrides.",
-						);
-					}
-					if (overrides.dummySignerSignaturePairs.length < 1) {
-						throw new RangeError("Number of dummySignerSignaturePairs can't be less than 1");
-					}
-					dummySignerSignaturePairs = overrides.dummySignerSignaturePairs;
-				} else {
-					if (overrides.expectedSigners == null) {
-						dummySignerSignaturePairs = [EOADummySignerSignaturePair];
-					} else {
-						const isInit = factoryAddress != null && factoryAddress !== "0x";
-						dummySignerSignaturePairs =
-							SafeAccount.createDummySignerSignaturePairForExpectedSigners(
-								overrides.expectedSigners,
-								{
-									isInit,
-									webAuthnSharedSigner,
-									eip7212WebAuthnPrecompileVerifier,
-									eip7212WebAuthnContractVerifier,
-									webAuthnSignerFactory,
-									webAuthnSignerSingleton,
-									webAuthnSignerProxyCreationCode,
-									validAfter,
-									validUntil,
-								},
-							);
-					}
-				}
-				userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
-					dummySignerSignaturePairs,
-					{
-						validAfter,
-						validUntil,
-						webAuthnSharedSigner,
-						isMultiChainSignature: overrides.isMultiChainSignature,
-					},
-				);
 
 				[preVerificationGas, verificationGasLimit, callGasLimit] =
 					await this.baseEstimateUserOperationGas(userOperationToEstimate, bundlerRpc, {
@@ -3087,7 +3093,7 @@ function generateOnChainIdentifier(
 	project: string,
 	platform: "Web" | "Mobile" | "Safe App" | "Widget" = "Web",
 	tool: string = "abstractionkit",
-	toolVersion: string = "0.3.2"
+	toolVersion: string = "0.3.2",
 ): string {
 	const identifierPrefix = "5afe"; // Safe identifier prefix
 	const identifierVersion = "00"; // First version

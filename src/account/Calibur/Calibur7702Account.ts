@@ -468,10 +468,13 @@ export class Calibur7702Account
 		let verificationGasLimit = BaseUserOperationDummyValues.verificationGasLimit;
 		let callGasLimit = BaseUserOperationDummyValues.callGasLimit;
 
+		const skipGasEstimation = overrides.skipGasEstimation ?? false;
+
 		if (
-			overrides.preVerificationGas == null ||
-			overrides.verificationGasLimit == null ||
-			overrides.callGasLimit == null
+			!skipGasEstimation &&
+			(overrides.preVerificationGas == null ||
+				overrides.verificationGasLimit == null ||
+				overrides.callGasLimit == null)
 		) {
 			if (bundlerRpc != null) {
 				userOperation.callGasLimit = 0n;

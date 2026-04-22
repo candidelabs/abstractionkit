@@ -79,6 +79,14 @@ export interface CreateUserOperationOverrides {
 	/** pass some state overrides for gas estimation */
 	state_override_set?: StateOverrideSet;
 
+	/**
+	 * Skip calling the bundler's gas estimation entirely. When true, the returned
+	 * UserOperation still gets a dummy signature, but its gas limits come from the
+	 * provided overrides (or stay at 0n). Useful when estimation is run separately
+	 * — for example, by a paymaster sponsorship call that returns its own limits.
+	 */
+	skipGasEstimation?: boolean;
+
 	/** Override the dummy signature used during gas estimation */
 	dummySignature?: string;
 
@@ -581,10 +589,18 @@ export class BaseSimple7702Account extends SmartAccount {
 		let verificationGasLimit = BaseUserOperationDummyValues.verificationGasLimit;
 		let callGasLimit = BaseUserOperationDummyValues.callGasLimit;
 
+		// Set the dummy signature on the user operation regardless of whether
+		// gas estimation runs below, so the returned op always has a valid
+		// placeholder signature (required by paymaster sponsorship calls).
+		userOperation.signature = overrides.dummySignature ?? BaseSimple7702Account.dummySignature;
+
+		const skipGasEstimation = overrides.skipGasEstimation ?? false;
+
 		if (
-			overrides.preVerificationGas == null ||
-			overrides.verificationGasLimit == null ||
-			overrides.callGasLimit == null
+			!skipGasEstimation &&
+			(overrides.preVerificationGas == null ||
+				overrides.verificationGasLimit == null ||
+				overrides.callGasLimit == null)
 		) {
 			const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
 			if (parallelPaymasterInitValues != null) {
@@ -609,7 +625,6 @@ export class BaseSimple7702Account extends SmartAccount {
 
 				const userOperationToEstimate = { ...userOperation };
 
-				userOperation.signature = overrides.dummySignature ?? BaseSimple7702Account.dummySignature;
 				[preVerificationGas, verificationGasLimit, callGasLimit] =
 					await this.baseEstimateUserOperationGas(userOperationToEstimate, bundlerRpc, {
 						stateOverrideSet: overrides.state_override_set,
