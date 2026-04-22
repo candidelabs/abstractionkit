@@ -133,6 +133,7 @@ export type {
 	JsonRpcResult,
 	MetaTransaction,
 	ParallelPaymasterInitValues,
+	SponsorInfo,
 	SponsorMetadata,
 	StateOverrideSet,
 	UserOperationByHashResult,
