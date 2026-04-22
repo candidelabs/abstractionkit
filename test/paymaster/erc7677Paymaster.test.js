@@ -472,7 +472,7 @@ describe('Erc7677Paymaster', () => {
       const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
       const userOp = v7UserOp();
 
-      const { userOperation: out } = await paymaster.createPaymasterUserOperation(
+      const { userOperation: out, tokenQuote } = await paymaster.createPaymasterUserOperation(
         smartAccount,
         userOp,
         server.url,
@@ -490,6 +490,12 @@ describe('Erc7677Paymaster', () => {
 
       expect(out.paymasterData).toBe('0xfinalcandide');
       expect(smartAccount.calls.length).toBeGreaterThanOrEqual(2);
+
+      // tokenQuote populated on the token flow.
+      expect(tokenQuote).toBeDefined();
+      expect(tokenQuote.token.toLowerCase()).toBe(TOKEN_ADDR.toLowerCase());
+      expect(tokenQuote.exchangeRate > 0n).toBe(true);
+      expect(tokenQuote.tokenCost > 0n).toBe(true);
     } finally {
       await server.close();
     }
