@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+### New Features
+
+- **`TokenQuote` type** exported from the package root: `{ token: string; exchangeRate: bigint; tokenCost: bigint }`. Surfaces the exchange rate and maximum token cost the paymaster applied when paying gas with an ERC-20 token, so consumers can display the cost to users or log/meter it without a second RPC round-trip.
+- **`CandidePaymaster.createTokenPaymasterUserOperation` and `Erc7677Paymaster.createPaymasterUserOperation` now return `tokenQuote`** alongside the UserOperation. Populated on the token-payment flow; absent on sponsored flows and on Candide's `signingPhase: "finalize"` path (no gas estimation → no cost computation).
+
+### Breaking Changes
+
+- **Three paymaster methods changed return shape** from a raw UserOperation / tuple to a named-field object. All now return `{ userOperation, tokenQuote? | sponsorMetadata? }`:
+  - `CandidePaymaster.createTokenPaymasterUserOperation` — returns `{ userOperation, tokenQuote? }` (was `SameUserOp<T>`).
+  - `CandidePaymaster.createSponsorPaymasterUserOperation` — returns `{ userOperation, sponsorMetadata? }` (was `[SameUserOp<T>, SponsorMetadata | undefined]`).
+  - `Erc7677Paymaster.createPaymasterUserOperation` — returns `{ userOperation, tokenQuote? }` (was `SameUserOp<T>`).
+
+  Migration:
+  ```ts
+  // Before
+  const [sponsoredOp, sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(...);
+  const tokenOp = await paymaster.createTokenPaymasterUserOperation(...);
+  const userOp = await erc7677.createPaymasterUserOperation(...);
+
+  // After
+  const { userOperation: sponsoredOp, sponsorMetadata } = await paymaster.createSponsorPaymasterUserOperation(...);
+  const { userOperation: tokenOp, tokenQuote } = await paymaster.createTokenPaymasterUserOperation(...);
+  const { userOperation, tokenQuote } = await erc7677.createPaymasterUserOperation(...);
+  ```
+
 ## 0.3.2
 
 ### New Features

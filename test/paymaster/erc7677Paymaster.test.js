@@ -112,7 +112,7 @@ describe('Erc7677Paymaster', () => {
       const userOp = v7UserOp();
       const context = { sponsorshipPolicyId: 'sp_test' };
 
-      const out = await paymaster.createPaymasterUserOperation(
+      const { userOperation: out } = await paymaster.createPaymasterUserOperation(
         smartAccount,
         userOp,
         server.url,
@@ -166,7 +166,7 @@ describe('Erc7677Paymaster', () => {
 
     try {
       const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID });
-      const out = await paymaster.createPaymasterUserOperation(
+      const { userOperation: out } = await paymaster.createPaymasterUserOperation(
         { entrypointAddress: ENTRYPOINT_V7 },
         v7UserOp(),
         server.url,
@@ -307,7 +307,7 @@ describe('Erc7677Paymaster', () => {
 
     try {
       const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID });
-      const out = await paymaster.createPaymasterUserOperation(
+      const { userOperation: out } = await paymaster.createPaymasterUserOperation(
         { entrypointAddress: ENTRYPOINT_V7 },
         v7UserOp(),
         server.url,
@@ -402,7 +402,7 @@ describe('Erc7677Paymaster', () => {
       const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
       const userOp = v7UserOp();
 
-      const out = await paymaster.createPaymasterUserOperation(
+      const { userOperation: out, tokenQuote } = await paymaster.createPaymasterUserOperation(
         smartAccount,
         userOp,
         server.url,
@@ -420,6 +420,12 @@ describe('Erc7677Paymaster', () => {
 
       // Final paymaster data applied.
       expect(out.paymasterData).toBe('0xfinaltoken');
+
+      // tokenQuote populated on the token flow.
+      expect(tokenQuote).toBeDefined();
+      expect(tokenQuote.token.toLowerCase()).toBe(TOKEN_ADDR.toLowerCase());
+      expect(tokenQuote.exchangeRate > 0n).toBe(true);
+      expect(tokenQuote.tokenCost > 0n).toBe(true);
 
       // prependTokenPaymasterApproveToCallData was called (first with MAX, then with calculated).
       expect(smartAccount.calls.length).toBeGreaterThanOrEqual(2);
@@ -466,7 +472,7 @@ describe('Erc7677Paymaster', () => {
       const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
       const userOp = v7UserOp();
 
-      const out = await paymaster.createPaymasterUserOperation(
+      const { userOperation: out } = await paymaster.createPaymasterUserOperation(
         smartAccount,
         userOp,
         server.url,
@@ -520,7 +526,7 @@ describe('Erc7677Paymaster', () => {
 
     try {
       const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'candide' });
-      const out = await paymaster.createPaymasterUserOperation(
+      const { userOperation: out } = await paymaster.createPaymasterUserOperation(
         { entrypointAddress: ENTRYPOINT_V7 },
         v7UserOp(),
         server.url,
@@ -741,7 +747,7 @@ describe('Erc7677Paymaster', () => {
       const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
       const userOp = v7UserOp();
 
-      const out = await paymaster.createPaymasterUserOperation(
+      const { userOperation: out } = await paymaster.createPaymasterUserOperation(
         smartAccount,
         userOp,
         server.url,
@@ -794,7 +800,7 @@ describe('Erc7677Paymaster', () => {
       const originalCallData = '0xoriginal';
       const userOp = v7UserOp({ callData: originalCallData });
 
-      const out = await paymaster.createPaymasterUserOperation(
+      const { userOperation: out } = await paymaster.createPaymasterUserOperation(
         smartAccount,
         userOp,
         server.url,
@@ -849,7 +855,7 @@ describe('Erc7677Paymaster', () => {
       const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: null });
       const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
 
-      const out = await paymaster.createPaymasterUserOperation(
+      const { userOperation: out } = await paymaster.createPaymasterUserOperation(
         smartAccount,
         v7UserOp(),
         server.url,

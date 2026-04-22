@@ -35,7 +35,7 @@ export type SameUserOp<T extends AnyUserOperation> = T extends UserOperationV9
  *
  * @example Sponsored (gasless) UserOperation
  * ```ts
- * const [userOp, sponsorMeta] = await paymaster.createSponsorPaymasterUserOperation(
+ * const { userOperation, sponsorMetadata } = await paymaster.createSponsorPaymasterUserOperation(
  *   smartAccount, userOp, bundlerRpc,
  *   "my-sponsorship-policy-id",
  * );
@@ -43,7 +43,7 @@ export type SameUserOp<T extends AnyUserOperation> = T extends UserOperationV9
  *
  * @example ERC-20 token gas payment
  * ```ts
- * const userOp = await paymaster.createTokenPaymasterUserOperation(
+ * const { userOperation, tokenQuote } = await paymaster.createTokenPaymasterUserOperation(
  *   smartAccount, userOp, USDC_ADDRESS, bundlerRpc,
  * );
  * ```
@@ -55,7 +55,7 @@ export type SameUserOp<T extends AnyUserOperation> = T extends UserOperationV9
  * // The paymaster returns gas limits and init paymasterData (ending with
  * // PAYMASTER_SIG_MAGIC) so owners can sign in parallel without waiting
  * // for the final paymaster signature.
- * const [commitOp] = await paymaster.createSponsorPaymasterUserOperation(
+ * const { userOperation: commitOp } = await paymaster.createSponsorPaymasterUserOperation(
  *   smartAccount, userOp, bundlerRpc,
  *   sponsorshipPolicyId,
  *   { signingPhase: "commit" },
@@ -72,7 +72,7 @@ export type SameUserOp<T extends AnyUserOperation> = T extends UserOperationV9
  * // Send the already-signed UserOperation back to the paymaster.
  * // The paymaster replaces the init paymasterData with the final
  * // paymaster signature. Gas estimation is skipped (already done in commit).
- * const [finalOp] = await paymaster.createSponsorPaymasterUserOperation(
+ * const { userOperation: finalOp } = await paymaster.createSponsorPaymasterUserOperation(
  *   smartAccount, commitOp, bundlerRpc,
  *   sponsorshipPolicyId,
  *   { signingPhase: "finalize" },

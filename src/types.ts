@@ -224,6 +224,19 @@ export type SponsorMetadata = {
 };
 
 /**
+ * Quote describing the ERC-20 token payment for a gas-sponsored UserOperation.
+ * Populated when a paymaster successfully applies a token-payment flow.
+ */
+export type TokenQuote = {
+	/** ERC-20 token contract address used to pay gas */
+	token: string;
+	/** Exchange rate scaled by 10^18 (1 ETH expressed in the token's smallest unit) */
+	exchangeRate: bigint;
+	/** Maximum token cost charged for this UserOperation (token's smallest unit) */
+	tokenCost: bigint;
+};
+
+/**
  * Raw sponsor info shape returned by `pm_getPaymasterData` per ERC-7677
  * (singular `icon`). Normalized into {@link SponsorMetadata} by
  * `applyPaymasterResult`.
