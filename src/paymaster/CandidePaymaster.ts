@@ -520,7 +520,10 @@ export class CandidePaymaster extends Paymaster {
 		overrides?: GasPaymasterUserOperationOverrides,
 	): Promise<[SameUserOp<T>, SponsorMetadata | undefined]> {
 		const userOp = { ...userOperation } as T;
-		context = { ...(context || {}), sponsorshipPolicyId };
+		context = {
+			...(context || {}),
+			...(sponsorshipPolicyId !== undefined ? { sponsorshipPolicyId } : {}),
+		};
 		const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
 		await this.ensureInitialized(entrypoint);
 		const epData = this.getEntrypointData(entrypoint);
