@@ -1,5 +1,10 @@
 import { getAddress, Wallet } from "ethers";
-import type { Signer, TypedData } from "./types";
+import type {
+	Signer,
+	TypedData,
+	WebAuthnAssertion,
+	WebauthnPublicKeyCoordinates,
+} from "./types";
 
 // Structural types for well-known signers. NO imports from viem / ethers
 // at the type level (beyond the already-present ethers runtime dep used by
@@ -168,4 +173,266 @@ export function fromEthersWallet(wallet: EthersWalletLike): Signer<unknown> {
 		signTypedData: async (td) =>
 			(await wallet.signTypedData(td.domain, td.types, td.message)) as `0x${string}`,
 	};
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// WebAuthn adapter
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Structural shape matching the browser `AuthenticatorAssertionResponse`,
+ * `ox/WebAuthnP256` sign output, `@simplewebauthn/browser`, and raw
+ * `navigator.credentials.get()` results. Consumers can pass any of these
+ * without an adapter-specific wrapper.
+ *
+ * The three fields are normalized individually: `authenticatorData` may be
+ * an `ArrayBuffer` (browser) or `Uint8Array` (libraries); `clientDataJSON`
+ * may be a UTF-8 string (already-decoded, as `ox` returns) or a buffer (raw
+ * browser API); `signature` may be pre-decoded `{ r, s }` bigints (as `ox`
+ * returns) or a DER-encoded buffer (raw browser API).
+ */
+export interface AuthenticatorAssertionResponseLike {
+	authenticatorData: ArrayBuffer | Uint8Array;
+	clientDataJSON: ArrayBuffer | Uint8Array | string;
+	signature: ArrayBuffer | Uint8Array | { r: bigint; s: bigint };
+}
+
+/**
+ * Turn a structural {@link AuthenticatorAssertionResponseLike} into a
+ * normalized {@link WebAuthnAssertion}. The inverse of `ox` / raw-browser
+ * plumbing. Works for consumers building custom WebAuthn flows (server-side
+ * ceremony, transcript replay) who don't want the full {@link fromWebAuthn}
+ * signer.
+ *
+ * @example
+ * ```ts
+ * import { webauthnSignatureFromAssertion } from "abstractionkit";
+ * const assertion = webauthnSignatureFromAssertion(response);
+ * // assertion: { authenticatorData: Uint8Array, clientDataJSON: string, signature: { r, s } }
+ * ```
+ */
+export function webauthnSignatureFromAssertion(
+	response: AuthenticatorAssertionResponseLike,
+): WebAuthnAssertion {
+	return {
+		authenticatorData: toUint8Array(response.authenticatorData),
+		clientDataJSON: toUtf8String(response.clientDataJSON),
+		signature: toRSPair(response.signature),
+	};
+}
+
+/**
+ * Optional custom sign function for {@link fromWebAuthn}. Defaults to
+ * `navigator.credentials.get(...)` on the browser. Supply this for Node
+ * (server-side ceremony), tests, or any environment without
+ * `navigator.credentials`.
+ *
+ * The challenge passed in is the raw 32-byte UserOperation hash, already
+ * decoded to bytes — pass it directly to the WebAuthn API as
+ * `publicKey.challenge`.
+ */
+export type WebAuthnSignFn = (
+	challenge: Uint8Array,
+) => Promise<AuthenticatorAssertionResponseLike>;
+
+/**
+ * Adapter options for {@link fromWebAuthn}.
+ */
+export interface FromWebAuthnOptions {
+	/**
+	 * Base64url-encoded credential id (as returned by
+	 * `navigator.credentials.create().id`). Used to narrow
+	 * `allowCredentials` on the assertion ceremony.
+	 */
+	credentialId: string;
+	/**
+	 * P-256 public-key coordinates extracted from the credential. Safe and
+	 * Calibur derive the on-chain signer identity deterministically from
+	 * these values.
+	 */
+	pubkey: WebauthnPublicKeyCoordinates;
+	/**
+	 * Override the default browser ceremony. Supply for Node /
+	 * server-side / test harnesses. If omitted, uses
+	 * `navigator.credentials.get({ publicKey: { challenge, allowCredentials,
+	 * userVerification: "required" } })`.
+	 */
+	signFn?: WebAuthnSignFn;
+}
+
+/**
+ * Build an {@link Signer} backed by a WebAuthn passkey. Accepts any signer
+ * that matches the `AuthenticatorAssertionResponse` shape — raw
+ * `navigator.credentials`, `ox/WebAuthnP256`, `@simplewebauthn/browser`, or
+ * `viem/webauthn` all work.
+ *
+ * The returned signer reports `ACCEPTED_SIGNING_SCHEMES` as `["webauthn"]`
+ * via its `signWebauthn` method. Passing it to an account that only
+ * accepts `["hash"]` (Simple7702) fails offline with an actionable error
+ * instead of a silent bundler rejection.
+ *
+ * @example Safe (browser, defaults):
+ * ```ts
+ * import { fromWebAuthn } from "abstractionkit";
+ * const signer = fromWebAuthn({
+ *   credentialId: passkey.id,
+ *   pubkey: passkey.pubkeyCoordinates,
+ * });
+ * userOp.signature = await safe.signUserOperationWithSigners(
+ *   userOp, [signer], chainId,
+ * );
+ * ```
+ *
+ * @example Server-side / Node (inject `signFn`):
+ * ```ts
+ * const signer = fromWebAuthn({
+ *   credentialId,
+ *   pubkey,
+ *   signFn: async (challenge) => await myServerCeremony(challenge),
+ * });
+ * ```
+ */
+export function fromWebAuthn(opts: FromWebAuthnOptions): Signer<unknown> {
+	if (!opts || typeof opts.credentialId !== "string" || opts.credentialId.length === 0) {
+		throw new Error("fromWebAuthn: `credentialId` (base64url string) is required");
+	}
+	if (!opts.pubkey || typeof opts.pubkey.x !== "bigint" || typeof opts.pubkey.y !== "bigint") {
+		throw new Error("fromWebAuthn: `pubkey` must be `{ x: bigint, y: bigint }`");
+	}
+
+	const signFn: WebAuthnSignFn = opts.signFn ?? defaultBrowserSignFn(opts.credentialId);
+
+	return {
+		pubkey: opts.pubkey,
+		signWebauthn: async (challenge) => {
+			const challengeBytes = hexToBytes(challenge);
+			const response = await signFn(challengeBytes);
+			return webauthnSignatureFromAssertion(response);
+		},
+	};
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// WebAuthn internals (browser default + normalization helpers)
+// ────────────────────────────────────────────────────────────────────────────
+
+function defaultBrowserSignFn(credentialId: string): WebAuthnSignFn {
+	return async (challenge) => {
+		if (typeof navigator === "undefined" || !navigator.credentials?.get) {
+			throw new Error(
+				"fromWebAuthn: `navigator.credentials.get` is not available in this environment. " +
+					"Pass an explicit `signFn` for Node / server-side / test usage.",
+			);
+		}
+		const credIdBytes = base64UrlToBytes(credentialId);
+		// `navigator.credentials.get` requires `BufferSource`, which is
+		// `ArrayBufferView | ArrayBuffer`. Uint8Array is an ArrayBufferView,
+		// so no copy is needed in the browser.
+		const credential = (await navigator.credentials.get({
+			publicKey: {
+				challenge,
+				allowCredentials: [{ id: credIdBytes, type: "public-key" }],
+				userVerification: "required",
+			},
+		})) as (PublicKeyCredential & { response: AuthenticatorAssertionResponse }) | null;
+		if (!credential) {
+			throw new Error("fromWebAuthn: navigator.credentials.get returned null");
+		}
+		return credential.response;
+	};
+}
+
+function toUint8Array(input: ArrayBuffer | Uint8Array): Uint8Array {
+	return input instanceof Uint8Array ? input : new Uint8Array(input);
+}
+
+function toUtf8String(input: ArrayBuffer | Uint8Array | string): string {
+	if (typeof input === "string") return input;
+	const bytes = toUint8Array(input);
+	// TextDecoder is available in all modern browsers and Node 11+.
+	return new TextDecoder("utf-8").decode(bytes);
+}
+
+function toRSPair(
+	input: ArrayBuffer | Uint8Array | { r: bigint; s: bigint },
+): { r: bigint; s: bigint } {
+	if (
+		input !== null &&
+		typeof input === "object" &&
+		"r" in input &&
+		"s" in input &&
+		typeof (input as { r: bigint }).r === "bigint" &&
+		typeof (input as { s: bigint }).s === "bigint"
+	) {
+		return { r: (input as { r: bigint }).r, s: (input as { s: bigint }).s };
+	}
+	const bytes = toUint8Array(input as ArrayBuffer | Uint8Array);
+	return parseDerP256Signature(bytes);
+}
+
+/**
+ * Parse a DER-encoded ECDSA P-256 signature into its (r, s) bigint pair,
+ * with low-S normalization (per BIP-62 / WebAuthn spec expectations). The
+ * curve order n is fixed for P-256.
+ *
+ * DER layout: 0x30 | total-len | 0x02 | r-len | r-bytes | 0x02 | s-len | s-bytes
+ */
+function parseDerP256Signature(der: Uint8Array): { r: bigint; s: bigint } {
+	if (der.length < 8 || der[0] !== 0x30) {
+		throw new Error("fromWebAuthn: malformed DER signature");
+	}
+	let offset = 2;
+	if (der[1] === 0x81) offset = 3; // long-form length byte we can skip
+	if (der[offset] !== 0x02) throw new Error("fromWebAuthn: malformed DER signature (r tag)");
+	const rLen = der[offset + 1];
+	const rBytes = der.subarray(offset + 2, offset + 2 + rLen);
+	offset += 2 + rLen;
+	if (der[offset] !== 0x02) throw new Error("fromWebAuthn: malformed DER signature (s tag)");
+	const sLen = der[offset + 1];
+	const sBytes = der.subarray(offset + 2, offset + 2 + sLen);
+
+	const r = bytesToBigInt(rBytes);
+	let s = bytesToBigInt(sBytes);
+
+	// Low-S normalize: some authenticators return the high-S form; the Safe
+	// WebAuthn verifier and most P-256 checkers accept only the low-S form.
+	const P256_N = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
+	const P256_N_HALF = P256_N >> 1n;
+	if (s > P256_N_HALF) s = P256_N - s;
+
+	return { r, s };
+}
+
+function bytesToBigInt(bytes: Uint8Array): bigint {
+	let hex = "0x";
+	for (const b of bytes) hex += b.toString(16).padStart(2, "0");
+	return hex === "0x" ? 0n : BigInt(hex);
+}
+
+function hexToBytes(hex: `0x${string}`): Uint8Array {
+	const body = hex.slice(2);
+	if (body.length % 2 !== 0) throw new Error("fromWebAuthn: invalid hex challenge length");
+	const out = new Uint8Array(body.length / 2);
+	for (let i = 0; i < out.length; i++) {
+		out[i] = Number.parseInt(body.slice(i * 2, i * 2 + 2), 16);
+	}
+	return out;
+}
+
+function base64UrlToBytes(s: string): Uint8Array {
+	// Restore standard base64 alphabet and pad.
+	const padded = s.replace(/-/g, "+").replace(/_/g, "/").padEnd(s.length + ((4 - (s.length % 4)) % 4), "=");
+	// Buffer (Node) and atob (browser) both handle this; prefer atob for
+	// zero-dep feel, fall back to Buffer when running in Node.
+	const bin =
+		typeof atob === "function"
+			? atob(padded)
+			: typeof Buffer !== "undefined"
+				? Buffer.from(padded, "base64").toString("binary")
+				: (() => {
+						throw new Error("fromWebAuthn: no base64 decoder available");
+					})();
+	const out = new Uint8Array(bin.length);
+	for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+	return out;
 }

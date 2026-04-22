@@ -20,7 +20,32 @@ export interface TypedData {
 }
 
 /** Signing schemes accounts may accept and signers may provide. */
-export type SigningScheme = "hash" | "typedData";
+export type SigningScheme = "hash" | "typedData" | "webauthn";
+
+/**
+ * P-256 public key coordinates for a WebAuthn credential. Used as the
+ * identity of a WebAuthn signer in place of an Ethereum address.
+ */
+export interface WebauthnPublicKeyCoordinates {
+	readonly x: bigint;
+	readonly y: bigint;
+}
+
+/**
+ * Raw output of a WebAuthn assertion, normalized so account-side code can
+ * encode it into whatever on-chain format the target account expects
+ * (Safe's `abi.encode(bytes,bytes,uint256[2])` vs Calibur's
+ * `abi.encode(bytes32,bytes,bytes)` wrapper). Keeps the adapter
+ * account-agnostic.
+ */
+export interface WebAuthnAssertion {
+	/** `authenticatorData` from the assertion response. */
+	readonly authenticatorData: Uint8Array;
+	/** Raw `clientDataJSON` string (already UTF-8 decoded). */
+	readonly clientDataJSON: string;
+	/** ECDSA over the P-256 curve, split into its r and s components. */
+	readonly signature: { readonly r: bigint; readonly s: bigint };
+}
 
 /**
  * Context the SDK passes to a signer on every account's
@@ -93,6 +118,19 @@ export type SignTypedDataFn<C = SignContext> = (
 ) => Promise<`0x${string}`>;
 
 /**
+ * Perform a WebAuthn assertion over a challenge derived from the signing
+ * hash. The adapter is account-agnostic: it returns a raw
+ * {@link WebAuthnAssertion}, and the account encodes it into its own
+ * on-chain format.
+ *
+ * Generic over context — see {@link SignHashFn}.
+ */
+export type SignWebauthnFn<C = SignContext> = (
+	challenge: `0x${string}`,
+	context: C,
+) => Promise<WebAuthnAssertion>;
+
+/**
  * A capability-oriented signer. Must declare at least one of `signHash` or
  * `signTypedData`; the account picks the best match at sign time. Declared
  * as a discriminated union so TypeScript rejects `{ address }` with neither
@@ -137,8 +175,26 @@ export type SignTypedDataFn<C = SignContext> = (
  * }
  * ```
  */
-export type Signer<C = SignContext> = SignerBase &
-	(
-		| { signHash: SignHashFn<C>; signTypedData?: SignTypedDataFn<C> }
-		| { signHash?: SignHashFn<C>; signTypedData: SignTypedDataFn<C> }
-	);
+export type Signer<C = SignContext> =
+	| (SignerBase & {
+			signHash: SignHashFn<C>;
+			signTypedData?: SignTypedDataFn<C>;
+			signWebauthn?: never;
+			pubkey?: never;
+	  })
+	| (SignerBase & {
+			signHash?: SignHashFn<C>;
+			signTypedData: SignTypedDataFn<C>;
+			signWebauthn?: never;
+			pubkey?: never;
+	  })
+	| {
+			/** WebAuthn credential P-256 public key (`{ x, y }`) — the on-chain
+			 * identity of this signer. Accounts derive the verifier address
+			 * from these coordinates; no EOA `address` is present. */
+			readonly pubkey: WebauthnPublicKeyCoordinates;
+			readonly address?: never;
+			signWebauthn: SignWebauthnFn<C>;
+			signHash?: never;
+			signTypedData?: never;
+	  };

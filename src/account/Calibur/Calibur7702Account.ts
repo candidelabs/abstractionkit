@@ -8,7 +8,7 @@ import {
 } from "src/constants";
 import { AbstractionKitError } from "src/errors";
 import type { PrependTokenPaymasterApproveAccount } from "src/paymaster/types";
-import { invokeSigner, pickScheme } from "src/signer/negotiate";
+import { invokeSigner, invokeWebauthnSigner, pickScheme } from "src/signer/negotiate";
 import type { Signer as AkSigner, SignContext, SigningScheme } from "src/signer/types";
 import type { JsonRpcResult, UserOperationV8 } from "src/types";
 import {
@@ -599,26 +599,42 @@ export class Calibur7702Account
 	}
 
 	/**
-	 * Schemes Calibur accepts from a Signer. Only raw-hash ECDSA, since
-	 * the account verifies a plain signature over the userOp hash, then
-	 * wraps with `(keyHash, signature, hookData)`.
+	 * Schemes Calibur accepts from a Signer:
+	 *
+	 * - `"hash"` — raw ECDSA over the userOp hash, wrapped as
+	 *   `(keyHash, signature, hookData)` for secp256k1 root keys.
+	 * - `"webauthn"` — passkey assertion (from `fromWebAuthn(...)`) wrapped
+	 *   as `(keyHash, abi.encode(WebAuthnAuth), hookData)` against a
+	 *   registered WebAuthnP256 key. The assertion's challenge is the
+	 *   userOp hash directly (Calibur's contract expects
+	 *   `abi.encode(bytes32 userOpHash)`, which is the same 32 bytes).
 	 */
-	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = ["hash"];
+	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = ["hash", "webauthn"];
 
 	/**
-	 * Sign a UserOperation using an {@link ExternalSigner}. Calibur only
-	 * accepts raw-hash ECDSA; signers without `signHash` fail offline with
-	 * an actionable error.
+	 * Sign a UserOperation using an {@link ExternalSigner}. Accepts either
+	 * `"hash"` (raw-hash ECDSA) or `"webauthn"` (passkey assertion via
+	 * `fromWebAuthn(...)`). Signers without a compatible scheme fail
+	 * offline with an actionable error.
 	 *
 	 * For signing with a raw private-key string, use the sync
 	 * {@link signUserOperation} method, or wrap explicitly with
 	 * `fromPrivateKey(pk)`. For secondary (non-root) keys, pass the key
-	 * hash via `overrides.keyHash`.
+	 * hash via `overrides.keyHash` — for WebAuthn root keys, this is
+	 * computed automatically from the signer's pubkey.
 	 *
-	 * @example
-	 * import { fromViem, fromEthersWallet } from "abstractionkit";
+	 * @example ECDSA:
+	 * import { fromViem } from "abstractionkit";
 	 * userOp.signature = await account.signUserOperationWithSigner(
 	 *   userOp, fromViem(privateKeyToAccount(pk)), chainId,
+	 * );
+	 *
+	 * @example WebAuthn:
+	 * import { fromWebAuthn } from "abstractionkit";
+	 * userOp.signature = await account.signUserOperationWithSigner(
+	 *   userOp,
+	 *   fromWebAuthn({ credentialId, pubkey: { x, y } }),
+	 *   chainId,
 	 * );
 	 */
 	public async signUserOperationWithSigner(
@@ -628,7 +644,7 @@ export class Calibur7702Account
 		overrides: CaliburSignatureOverrides = {},
 	): Promise<string> {
 		const scheme = pickScheme(signer, Calibur7702Account.ACCEPTED_SIGNING_SCHEMES, {
-			accountName: "Calibur (raw ECDSA over userOpHash)",
+			accountName: "Calibur (raw ECDSA or WebAuthn over userOpHash)",
 			signerIndex: 0,
 		});
 		const hash = createUserOperationHash(
@@ -641,9 +657,44 @@ export class Calibur7702Account
 			chainId,
 			entryPoint: this.entrypointAddress,
 		};
+		const hookData = overrides.hookData ?? "0x";
+
+		if (scheme === "webauthn") {
+			const assertion = await invokeWebauthnSigner(signer, { challenge: hash, context });
+			// Derive keyHash from the pubkey unless the caller explicitly
+			// passed one (secondary WebAuthn keys would use a different key
+			// descriptor — document in JSDoc).
+			const keyHash =
+				overrides.keyHash ??
+				Calibur7702Account.getKeyHash(
+					Calibur7702Account.createWebAuthnP256Key(signer.pubkey!.x, signer.pubkey!.y),
+				);
+			const typeIdx = assertion.clientDataJSON.indexOf('"type":"webauthn.get"');
+			const challengeIdx = assertion.clientDataJSON.indexOf('"challenge":"');
+			if (typeIdx < 0 || challengeIdx < 0) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"Calibur WebAuthn: clientDataJSON missing expected `type` or `challenge` fields",
+				);
+			}
+			const authDataHex =
+				"0x" + Buffer.from(assertion.authenticatorData).toString("hex");
+			return this.formatWebAuthnSignature(
+				keyHash,
+				{
+					authenticatorData: authDataHex,
+					clientDataJSON: assertion.clientDataJSON,
+					challengeIndex: BigInt(challengeIdx),
+					typeIndex: BigInt(typeIdx),
+					r: assertion.signature.r,
+					s: assertion.signature.s,
+				},
+				overrides,
+			);
+		}
+
 		const signature = await invokeSigner(signer, scheme, { hash, context });
 		const keyHash = overrides.keyHash ?? ROOT_KEY_HASH;
-		const hookData = overrides.hookData ?? "0x";
 		return Calibur7702Account.wrapSignature(keyHash, signature, hookData);
 	}
 

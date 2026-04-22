@@ -273,7 +273,14 @@ export type Signer = ECDSAPublicAddress | WebauthnPublicKey;
 export type ECDSASignature = string;
 
 export interface WebauthnSignatureData {
-	authenticatorData: ArrayBuffer;
+	/**
+	 * Raw `authenticatorData` bytes from the WebAuthn assertion. Accepts
+	 * both `ArrayBuffer` (raw browser API) and `Uint8Array` (most WebAuthn
+	 * libraries, including `ox`). Normalized to `Uint8Array` internally
+	 * before ABI encoding — consumers no longer need the
+	 * `.buffer as ArrayBuffer` cast at every call site.
+	 */
+	authenticatorData: ArrayBuffer | Uint8Array;
 	clientDataFields: string;
 	rs: [bigint, bigint];
 }

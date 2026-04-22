@@ -110,6 +110,13 @@ export {
 	fromPrivateKey,
 	fromViem,
 	fromViemWalletClient,
+	fromWebAuthn,
+	webauthnSignatureFromAssertion,
+} from "./signer/adapters";
+export type {
+	AuthenticatorAssertionResponseLike,
+	FromWebAuthnOptions,
+	WebAuthnSignFn,
 } from "./signer/adapters";
 // ─── Signer interface design (capability-oriented) ──────────────────────
 // Exported as `ExternalSigner` because the old package-level `Signer` is
@@ -122,7 +129,10 @@ export type {
 	SignHashFn,
 	SigningScheme,
 	SignTypedDataFn,
+	SignWebauthnFn,
 	TypedData,
+	WebAuthnAssertion,
+	WebauthnPublicKeyCoordinates,
 } from "./signer/types";
 export type {
 	AbiInputValue,

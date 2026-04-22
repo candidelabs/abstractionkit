@@ -433,7 +433,7 @@ describe('Calibur7702Account signUserOperationWithSigner', () => {
         };
         await expect(
             calibur.signUserOperationWithSigner(op, tdOnly, CHAIN_ID),
-        ).rejects.toThrow(/accepts: \[hash\]/);
+        ).rejects.toThrow(/accepts: \[hash,\s*webauthn\].*signer provides: \[typedData\]/);
     });
 });
 

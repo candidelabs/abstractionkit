@@ -11,8 +11,13 @@ import {
 import { Bundler } from "src/Bundler";
 import { AbstractionKitError, ensureError } from "src/errors";
 import { SafeAccountFactory } from "src/factory/SafeAccountFactory";
-import { invokeSigner, pickScheme } from "src/signer/negotiate";
-import type { Signer as AkSigner, SigningScheme, TypedData } from "src/signer/types";
+import { invokeSigner, invokeWebauthnSigner, pickScheme } from "src/signer/negotiate";
+import type {
+	Signer as AkSigner,
+	SigningScheme,
+	TypedData,
+	WebAuthnAssertion,
+} from "src/signer/types";
 import {
 	BaseUserOperationDummyValues,
 	EIP712_SAFE_OPERATION_PRIMARY_TYPE,
@@ -1783,9 +1788,14 @@ export class SafeAccount extends SmartAccount {
 	 * Schemes Safe accepts from a {@link Signer}, in preference order.
 	 * `typedData` is preferred because wallets can display structured fields
 	 * rather than a hex blob; `hash` is accepted as a fallback for signers
-	 * that only support raw ECDSA.
+	 * that only support raw ECDSA. `webauthn` is accepted for passkey
+	 * signers produced by `fromWebAuthn(...)`.
 	 */
-	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = ["typedData", "hash"];
+	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = [
+		"typedData",
+		"hash",
+		"webauthn",
+	];
 
 	/**
 	 * Sign a UserOperation using one or more {@link Signer}s. This is the
@@ -1856,40 +1866,65 @@ export class SafeAccount extends SmartAccount {
 			message: typedDataRaw.messageValue as unknown as Record<string, unknown>,
 		};
 
-		// Preflight: validate + checksum every signer's address before
-		// calling any signer. Catches malformed addresses offline instead
-		// of after an external signer (HSM, hardware wallet) has already
-		// been prompted.
-		const normalizedAddresses = signers.map((signer) => getAddress(signer.address));
-
-		// Offline capability check: throws with an actionable message if
-		// any signer can't produce what Safe accepts.
+		// Preflight: capability check throws with an actionable message if
+		// any signer can't produce what Safe accepts. Also normalizes
+		// EOA-signer addresses in the same pass.
 		const schemes = signers.map((signer, signerIndex) =>
 			pickScheme(signer, SafeAccount.ACCEPTED_SIGNING_SCHEMES, {
 				accountName: "Safe (EIP-712 or raw hash over SafeOp digest)",
 				signerIndex,
 			}),
 		);
+		const normalizedAddresses = signers.map((signer) =>
+			// WebAuthn signers carry no `address`; the per-owner verifier
+			// address is computed later from `pubkey` by
+			// buildSignaturesFromSingerSignaturePairs.
+			signer.address ? getAddress(signer.address) : null,
+		);
 
-		const signatures = await Promise.all(
-			signers.map((signer, i) =>
-				invokeSigner(signer, schemes[i], {
+		// Dispatch per-scheme. Hash/typedData return a hex signature;
+		// webauthn returns a raw WebAuthnAssertion that we ABI-encode
+		// inline.
+		const results = await Promise.all(
+			signers.map(async (signer, i) => {
+				if (schemes[i] === "webauthn") {
+					const assertion = await invokeWebauthnSigner(signer, {
+						challenge: userOpHash,
+						context,
+					});
+					return {
+						kind: "webauthn" as const,
+						pubkey: signer.pubkey!,
+						signature: encodeSafeWebAuthnSignatureFromAssertion(assertion),
+					};
+				}
+				const signature = await invokeSigner(signer, schemes[i], {
 					hash: userOpHash,
 					typedData,
 					context,
-				}),
-			),
+				});
+				return { kind: "ecdsa" as const, address: normalizedAddresses[i]!, signature };
+			}),
 		);
 
-		const signerSignaturePairs = signatures.map((signature, i) => ({
-			signer: normalizedAddresses[i],
-			signature,
-		}));
+		const signerSignaturePairs = results.map((r) =>
+			r.kind === "webauthn"
+				? { signer: r.pubkey, signature: r.signature, isContractSignature: true as const }
+				: { signer: r.address, signature: r.signature },
+		);
 
+		const hasWebauthn = results.some((r) => r.kind === "webauthn");
 		return SafeAccount.formatSignaturesToUseroperationSignature(signerSignaturePairs, {
 			validAfter,
 			validUntil,
 			isMultiChainSignature: overrides.isMultiChainSignature,
+			// Safe's WebAuthn contract-signature path needs to know whether
+			// the verifier has been deployed yet: pre-init uses the shared
+			// signer address; post-init uses the per-owner deterministic
+			// verifier. Derive from the UserOp itself — factory on V7+,
+			// non-empty initCode on V6. Only set when relevant to avoid
+			// regressing EOA-only flows.
+			...(hasWebauthn ? { isInit: isUserOperationInit(useroperation) } : {}),
 		});
 	}
 
@@ -3111,4 +3146,56 @@ function generateOnChainIdentifier(
 
 	const res = `${identifierPrefix}${identifierVersion}${projectHashEncoded}${platformHashEncoded}${toolHashEncoded}${toolVersionHashEncoded}`;
 	return res;
+}
+
+/**
+ * Re-serialize every clientDataJSON field except `type` and `challenge`.
+ * Robust to authenticators adding or reordering keys (e.g. Safari's
+ * `crossOrigin`) — parses JSON instead of using a regex, so any
+ * spec-compliant clientDataJSON produces the correct `clientDataFields`
+ * hex that Safe's WebAuthn verifier contract expects.
+ *
+ * @internal Shared with SafeMultiChainSigAccount for multi-op signing.
+ */
+export function extractClientDataFieldsHex(clientDataJSON: string): string {
+	const parsed = JSON.parse(clientDataJSON) as Record<string, unknown>;
+	const { type: _type, challenge: _challenge, ...rest } = parsed;
+	const fields = Object.entries(rest)
+		.map(([key, value]) => `"${key}":${JSON.stringify(value)}`)
+		.join(",");
+	return "0x" + Buffer.from(fields, "utf8").toString("hex");
+}
+
+/**
+ * Convert a raw {@link WebAuthnAssertion} into the Safe WebAuthn verifier's
+ * expected ABI blob. Shared by single-op and multi-chain signing paths.
+ *
+ * @internal Shared with SafeMultiChainSigAccount for multi-op signing.
+ */
+export function encodeSafeWebAuthnSignatureFromAssertion(assertion: WebAuthnAssertion): string {
+	return SafeAccount.createWebAuthnSignature({
+		authenticatorData: assertion.authenticatorData,
+		clientDataFields: extractClientDataFieldsHex(assertion.clientDataJSON),
+		rs: [assertion.signature.r, assertion.signature.s],
+	});
+}
+
+/**
+ * Is this UserOperation deploying the account? True when the factory /
+ * initCode is populated. Used to route WebAuthn signatures through the
+ * shared-signer verifier (pre-init) vs the per-owner deterministic
+ * verifier (post-init).
+ *
+ * @internal Shared with SafeMultiChainSigAccount for multi-op signing.
+ */
+export function isUserOperationInit(
+	useroperation: UserOperationV6 | UserOperationV7 | UserOperationV9,
+): boolean {
+	if ("initCode" in useroperation) {
+		// V6: initCode is a concatenated (factory, factoryData) hex; empty
+		// is "0x".
+		return typeof useroperation.initCode === "string" && useroperation.initCode !== "0x";
+	}
+	// V7 / V8 / V9: separate `factory` field, null when not deploying.
+	return useroperation.factory != null && useroperation.factory !== "0x";
 }

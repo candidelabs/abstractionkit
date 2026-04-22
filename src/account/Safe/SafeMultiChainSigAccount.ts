@@ -1,7 +1,13 @@
 import { getAddress, TypedDataEncoder, Wallet } from "ethers";
 import { EIP712_MULTI_CHAIN_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants";
-import { invokeSigner, pickScheme } from "src/signer/negotiate";
-import type { Signer as AkSigner, MultiOpSignContext, SignContext } from "src/signer/types";
+import { invokeSigner, invokeWebauthnSigner, pickScheme } from "src/signer/negotiate";
+import type {
+	Signer as AkSigner,
+	MultiOpSignContext,
+	SignContext,
+	WebAuthnAssertion,
+	WebauthnPublicKeyCoordinates,
+} from "src/signer/types";
 import type { MetaTransaction, OnChainIdentifierParamsType, UserOperationV9 } from "../../types";
 import {
 	DEFAULT_WEB_AUTHN_DAIMO_VERIFIER_V_0_2_1,
@@ -12,7 +18,11 @@ import {
 	DEFAULT_WEB_AUTHN_SIGNER_SINGLETON_V_0_2_1,
 } from "./constants";
 import { generateMerkleProofs } from "./MerkleTree";
-import { SafeAccount } from "./SafeAccount";
+import {
+	encodeSafeWebAuthnSignatureFromAssertion,
+	isUserOperationInit,
+	SafeAccount,
+} from "./SafeAccount";
 import type {
 	CreateUserOperationV9Overrides,
 	InitCodeOverrides,
@@ -639,32 +649,48 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				{ merkleTreeRoot: root },
 			) as `0x${string}`;
 
-			// Preflight: validate + checksum every signer's address before
-			// calling any signer. Catches malformed addresses offline
-			// instead of after an external signer has been prompted.
-			const normalizedAddresses = signers.map((signer) => getAddress(signer.address));
-
-			// Merkle root is opaque; signTypedData has nothing meaningful to
-			// display, so we require raw-hash signing.
-			signers.forEach((signer, i) => {
-				pickScheme(signer, ["hash"], {
+			// Merkle root is opaque; `typedData` has nothing meaningful to
+			// display, so we require raw-hash or webauthn signing.
+			const schemes = signers.map((signer, i) =>
+				pickScheme(signer, ["hash", "webauthn"], {
 					accountName: "SafeMultiChainSigAccountV1 (multi-op Merkle root)",
 					signerIndex: i,
-				});
-			});
+				}),
+			);
+			const normalizedAddresses = signers.map((signer) =>
+				signer.address ? getAddress(signer.address) : null,
+			);
 
-			const signatures = await Promise.all(
-				signers.map((signer) =>
-					invokeSigner(signer, "hash", {
+			type Result =
+				| { kind: "ecdsa"; address: string; signature: string }
+				| { kind: "webauthn"; pubkey: WebauthnPublicKeyCoordinates; signature: string };
+			const results: Result[] = await Promise.all(
+				signers.map(async (signer, i): Promise<Result> => {
+					if (schemes[i] === "webauthn") {
+						const assertion: WebAuthnAssertion = await invokeWebauthnSigner(signer, {
+							challenge: merkleTreeRootHash,
+							context,
+						});
+						return {
+							kind: "webauthn",
+							pubkey: signer.pubkey!,
+							signature: encodeSafeWebAuthnSignatureFromAssertion(assertion),
+						};
+					}
+					const signature = await invokeSigner(signer, "hash", {
 						hash: merkleTreeRootHash,
 						context,
-					}),
-				),
+					});
+					return { kind: "ecdsa", address: normalizedAddresses[i]!, signature };
+				}),
 			);
-			const signerSignaturePairs: SignerSignaturePair[] = signers.map((_signer, i) => ({
-				signer: normalizedAddresses[i],
-				signature: signatures[i],
-			}));
+			const signerSignaturePairs: SignerSignaturePair[] = results.map((r) =>
+				r.kind === "webauthn"
+					? { signer: r.pubkey, signature: r.signature, isContractSignature: true }
+					: { signer: r.address, signature: r.signature },
+			);
+
+			const hasWebauthn = results.some((r) => r.kind === "webauthn");
 
 			const userOpSignatures: string[] = [];
 			userOperationsToSign.forEach((uopToSign, index) => {
@@ -674,6 +700,10 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 						validUntil: uopToSign.validUntil,
 						isMultiChainSignature: true,
 						multiChainMerkleProof: proofs[index],
+						// isInit depends on the specific UserOp being formatted,
+						// not the signers. Each op in the bundle may be either
+						// deploying or already-deployed.
+						...(hasWebauthn ? { isInit: isUserOperationInit(uopToSign.userOperation) } : {}),
 					}),
 				);
 			});
