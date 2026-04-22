@@ -304,6 +304,128 @@ describe('Simple7702Account rejects fromWebAuthn offline', () => {
     });
 });
 
+// ─── Regression: sortSignatures honors isInit for WebAuthn signers ─────
+// At isInit=true, a WebAuthn signer's on-chain signer field is the shared
+// signer address (0xfD90…), not its deterministic verifier. sortSignatures
+// must use the shared-signer address as its sort key, otherwise a mixed
+// WebAuthn + ECDSA packed signature can land out-of-order and Safe's
+// checkNSignatures reverts with GS026. Pre-fix, this triggered for roughly
+// half of random (passkey, EOA) pairs.
+describe('sortSignatures honors isInit for WebAuthn signers (GS026 regression)', () => {
+    // Specific (passkey, EOA) pair that demonstrated the bug: the passkey's
+    // deterministic verifier sorts BELOW the EOA, but the shared signer
+    // sorts ABOVE the EOA, so the sort key and the on-chain-packed address
+    // disagreed and produced a descending packed order at isInit=true.
+    const BUG_PASSKEY = {
+        x: 0x31498e606f771994a4d9b902dd812fbc0acc1cf4e34d688928293e1edc3fcc0en,
+        y: 0xf7946c434b3f968370d88e8cce861a1958aeeb21d04aee6a16b940e28a8dd7c6n,
+    };
+    const BUG_EOA = '0xC12598e6EF806335ca800A508C343A84e49Ceb4D';
+
+    // Read each 65-byte entry's v byte + signer-word from a packed Safe
+    // signature. ECDSA entries encode (r,s,v); only v is meaningful here
+    // (the signer is recovered on-chain). Contract-sig entries encode
+    // (signer,offset,v=0) with the signer in the first 32-byte word.
+    function readEntries(packed, n) {
+        const body = packed.slice(2);
+        const entries = [];
+        for (let i = 0; i < n; i++) {
+            const entry = body.slice(i * 130, (i + 1) * 130);
+            const v = parseInt(entry.slice(128, 130), 16);
+            if (v === 0) {
+                entries.push({
+                    kind: 'contract',
+                    signer: '0x' + entry.slice(24, 64).toLowerCase(),
+                });
+            } else {
+                entries.push({ kind: 'ecdsa', v });
+            }
+        }
+        return entries;
+    }
+
+    test('at isInit=true: contract-sig entry uses shared signer AND EOA sorts before it', () => {
+        // The bug would produce [contract(SHARED), ECDSA] here because
+        // the sort key (pre-fix) was the deterministic verifier
+        // (0xbdab… < EOA) while the packed signer for the contract-sig
+        // entry is SHARED (0xfd90… > EOA). Post-fix, the sort key is
+        // SHARED for WebAuthn at isInit=true, so EOA (0xc125…) sorts
+        // first, then the shared-signer contract entry.
+        const webauthnBlob = ak.SafeAccountV0_3_0.createWebAuthnSignature({
+            authenticatorData: new Uint8Array(37),
+            clientDataFields: '0x7b7d',
+            rs: [1n, 2n],
+        });
+        const pairs = [
+            { signer: BUG_PASSKEY, signature: webauthnBlob, isContractSignature: true },
+            { signer: BUG_EOA, signature: '0x' + '11'.repeat(32) + '22'.repeat(32) + '1c' },
+        ];
+        const packed = ak.SafeAccountV0_3_0.buildSignaturesFromSingerSignaturePairs(pairs, {
+            isInit: true,
+        });
+        const [entry0, entry1] = readEntries(packed, 2);
+
+        const SHARED = ak.SafeAccountV0_3_0.DEFAULT_WEB_AUTHN_SHARED_SIGNER.toLowerCase();
+        // EOA (0xc125…) < SHARED (0xfd90…), so ECDSA entry comes first,
+        // contract-sig entry with the shared signer comes second.
+        expect(entry0.kind).toBe('ecdsa');
+        expect(entry1.kind).toBe('contract');
+        expect(entry1.signer).toBe(SHARED);
+        // The EOA address is below the shared signer → invariant holds:
+        expect(BUG_EOA.toLowerCase() < SHARED).toBe(true);
+    });
+
+    test('at isInit=false: contract-sig entry uses deterministic verifier, passkey sorts first', () => {
+        const webauthnBlob = ak.SafeAccountV0_3_0.createWebAuthnSignature({
+            authenticatorData: new Uint8Array(37),
+            clientDataFields: '0x7b7d',
+            rs: [1n, 2n],
+        });
+        const pairs = [
+            { signer: BUG_PASSKEY, signature: webauthnBlob, isContractSignature: true },
+            { signer: BUG_EOA, signature: '0x' + '11'.repeat(32) + '22'.repeat(32) + '1c' },
+        ];
+        const packed = ak.SafeAccountV0_3_0.buildSignaturesFromSingerSignaturePairs(pairs, {
+            isInit: false,
+        });
+        const [entry0, entry1] = readEntries(packed, 2);
+
+        const DETERMINISTIC = ak.SafeAccountV0_3_0.createWebAuthnSignerVerifierAddress(
+            BUG_PASSKEY.x,
+            BUG_PASSKEY.y,
+        ).toLowerCase();
+        // For this specific pair, deterministic (0xbdab…) < EOA (0xc125…),
+        // so the passkey contract-sig entry sorts first.
+        expect(entry0.kind).toBe('contract');
+        expect(entry0.signer).toBe(DETERMINISTIC);
+        expect(entry1.kind).toBe('ecdsa');
+        expect(DETERMINISTIC < BUG_EOA.toLowerCase()).toBe(true);
+    });
+
+    test('getSignerLowerCaseAddress returns shared signer for WebAuthn at isInit=true', () => {
+        const SHARED = ak.SafeAccountV0_3_0.DEFAULT_WEB_AUTHN_SHARED_SIGNER.toLowerCase();
+        expect(
+            ak.SafeAccountV0_3_0.getSignerLowerCaseAddress(BUG_PASSKEY, { isInit: true }),
+        ).toBe(SHARED);
+    });
+
+    test('getSignerLowerCaseAddress returns deterministic verifier for WebAuthn at isInit=false', () => {
+        const DETERMINISTIC = ak.SafeAccountV0_3_0.createWebAuthnSignerVerifierAddress(
+            BUG_PASSKEY.x,
+            BUG_PASSKEY.y,
+        ).toLowerCase();
+        expect(
+            ak.SafeAccountV0_3_0.getSignerLowerCaseAddress(BUG_PASSKEY, { isInit: false }),
+        ).toBe(DETERMINISTIC);
+        // Default (undefined isInit) also returns deterministic — preserves
+        // backward compatibility for any external caller that wasn't
+        // passing isInit before the fix.
+        expect(ak.SafeAccountV0_3_0.getSignerLowerCaseAddress(BUG_PASSKEY, {})).toBe(
+            DETERMINISTIC,
+        );
+    });
+});
+
 // ─── Calibur webauthn encoding equivalence ──────────────────────────────
 
 describe('Calibur7702Account signUserOperationWithSigner + fromWebAuthn', () => {

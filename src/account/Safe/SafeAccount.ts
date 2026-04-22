@@ -2062,8 +2062,22 @@ export class SafeAccount extends SmartAccount {
 
 	/**
 	 * calculate a signer public address lowercase
+	 *
+	 * For WebAuthn signers, the returned address MUST match the address
+	 * that `buildSignaturesFromSingerSignaturePairs` will emit on-chain so
+	 * that sorting produces a pack order Safe's `checkNSignatures`
+	 * accepts (strictly ascending by signer address, else reverts
+	 * `GS026`):
+	 *   - `overrides.isInit === true`  → shared-signer address
+	 *   - `overrides.isInit === false` (or unset) → per-owner
+	 *     deterministic verifier address
+	 *
+	 * The two can sort on opposite sides of an EOA address, so mixed
+	 * WebAuthn + ECDSA signers at init would otherwise pack out of order.
+	 *
 	 * @param signer - a signer to compute address for
-	 * @param overrides - overrides for the default values
+	 * @param overrides - overrides for the default values; honor
+	 *   `overrides.isInit` for WebAuthn signers
 	 * @returns signer address
 	 */
 	public static getSignerLowerCaseAddress(
@@ -2072,27 +2086,31 @@ export class SafeAccount extends SmartAccount {
 	): string {
 		if (typeof signer === "string") {
 			return signer.toLowerCase();
-		} else {
-			const eip7212WebAuthnPrecompileVerifier =
-				overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
-			const eip7212WebAuthnContractVerifier =
-				overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
-			const webAuthnSignerFactory =
-				overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
-			const webAuthnSignerSingleton =
-				overrides.webAuthnSignerSingleton ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
-			const webAuthnSignerProxyCreationCode =
-				overrides.webAuthnSignerProxyCreationCode ??
-				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
-
-			return SafeAccount.createWebAuthnSignerVerifierAddress(signer.x, signer.y, {
-				eip7212WebAuthnPrecompileVerifier,
-				eip7212WebAuthnContractVerifier,
-				webAuthnSignerFactory,
-				webAuthnSignerSingleton,
-				webAuthnSignerProxyCreationCode,
-			}).toLowerCase();
 		}
+		if (overrides.isInit === true) {
+			const webauthnsharedsigner =
+				overrides.webAuthnSharedSigner ?? SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
+			return webauthnsharedsigner.toLowerCase();
+		}
+		const eip7212WebAuthnPrecompileVerifier =
+			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+		const eip7212WebAuthnContractVerifier =
+			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+		const webAuthnSignerFactory =
+			overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+		const webAuthnSignerSingleton =
+			overrides.webAuthnSignerSingleton ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+		const webAuthnSignerProxyCreationCode =
+			overrides.webAuthnSignerProxyCreationCode ??
+			SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+
+		return SafeAccount.createWebAuthnSignerVerifierAddress(signer.x, signer.y, {
+			eip7212WebAuthnPrecompileVerifier,
+			eip7212WebAuthnContractVerifier,
+			webAuthnSignerFactory,
+			webAuthnSignerSingleton,
+			webAuthnSignerProxyCreationCode,
+		}).toLowerCase();
 	}
 
 	/**
