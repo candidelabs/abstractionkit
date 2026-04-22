@@ -148,7 +148,8 @@ const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
   userOp,
   bundlerRpc,
   sponsorshipPolicyId,
-  // overrides (optional, includes context for parallel signing)
+  // context (optional — e.g. { signingPhase: "commit" } for EP v0.9 parallel signing)
+  // overrides (optional — gas limits and multipliers)
 );
 
 // Sign and send as usual
@@ -178,7 +179,8 @@ const tokenOp = await paymaster.createTokenPaymasterUserOperation(
   userOp,
   gasTokenAddress,
   bundlerRpc,
-  // overrides (optional)
+  // context (optional)
+  // overrides (optional — gas limits, multipliers, resetApproval)
 );
 
 tokenOp.signature = smartAccount.signUserOperation(tokenOp, [ownerPrivateKey], chainId);
