@@ -223,6 +223,18 @@ export type SponsorMetadata = {
 	icons: string[];
 };
 
+/**
+ * Raw sponsor info shape returned by `pm_getPaymasterData` per ERC-7677
+ * (singular `icon`). Normalized into {@link SponsorMetadata} by
+ * `applyPaymasterResult`.
+ *
+ * @see https://eips.ethereum.org/EIPS/eip-7677
+ */
+export type SponsorInfo = {
+	name: string;
+	icon?: string;
+};
+
 /** Paymaster fields returned by pm_getPaymasterData for EntryPoint v0.7+. */
 export type PmUserOperationV7Result = {
 	/** Paymaster contract address */
@@ -243,8 +255,8 @@ export type PmUserOperationV7Result = {
 	maxFeePerGas?: bigint;
 	/** Overridden max priority fee per gas (if provided by paymaster) */
 	maxPriorityFeePerGas?: bigint;
-	/** Metadata about the sponsor */
-	sponsorMetadata?: SponsorMetadata;
+	/** Raw sponsor info per ERC-7677 (normalized into {@link SponsorMetadata}) */
+	sponsor?: SponsorInfo;
 };
 
 /** Paymaster fields returned by pm_getPaymasterData for EntryPoint v0.8 (identical shape to v0.7). */
@@ -264,8 +276,8 @@ export type PmUserOperationV6Result = {
 	maxFeePerGas?: bigint;
 	/** Overridden max priority fee per gas (if provided by paymaster) */
 	maxPriorityFeePerGas?: bigint;
-	/** Metadata about the sponsor */
-	sponsorMetadata?: SponsorMetadata;
+	/** Raw sponsor info per ERC-7677 (normalized into {@link SponsorMetadata}) */
+	sponsor?: SponsorInfo;
 };
 
 /**

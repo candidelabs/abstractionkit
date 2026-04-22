@@ -466,7 +466,18 @@ export class CandidePaymaster extends Paymaster {
 			userOp.paymasterData = v7Result.paymasterData;
 		}
 
-		return result.sponsorMetadata ?? undefined;
+		// ERC-7677 returns sponsor info under `sponsor: { name, icon? }` (singular `icon`).
+		// Normalize into the public `SponsorMetadata` shape.
+		if (result.sponsor?.name != null) {
+			const { name, icon } = result.sponsor;
+			return {
+				name,
+				description: "",
+				url: "",
+				icons: icon ? [icon] : [],
+			};
+		}
+		return undefined;
 	}
 
 	// ── Core paymaster method (private) ──────────────────────────────
