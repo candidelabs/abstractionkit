@@ -38,10 +38,10 @@ npm install abstractionkit
 
 ### Upgrading to v0.3.0
 
-v0.3.0 is a major release. Two API changes are likely to break existing paymaster code:
+v0.3.0 is a major release. The following API changes are likely to break existing paymaster code:
 
-- `CandidePaymaster.createSponsorPaymasterUserOperation(...)` now takes `smartAccount` as the **first** argument: `(smartAccount, userOp, bundlerRpc, sponsorshipPolicyId?, overrides?)`.
-- `CandidePaymasterContext` is no longer a separate argument. Pass it via `overrides.context` on `GasPaymasterUserOperationOverrides`.
+- `CandidePaymaster.createSponsorPaymasterUserOperation(...)` now takes `smartAccount` as the **first** argument: `(smartAccount, userOp, bundlerRpc, sponsorshipPolicyId?, context?, overrides?)`.
+- `CandidePaymaster.createTokenPaymasterUserOperation(...)` adds a dedicated `context?` argument before `overrides?`: `(smartAccount, userOp, tokenAddress, bundlerRpc, context?, overrides?)`. Callers that previously passed `overrides` positionally at argument 5 must insert `undefined` (or an explicit context) so `overrides` shifts to argument 6.
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full list of new features, renames, type export changes, and fixes.
 
@@ -148,7 +148,8 @@ const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
   userOp,
   bundlerRpc,
   sponsorshipPolicyId,
-  // overrides (optional, includes context for parallel signing)
+  // context (optional — e.g. { signingPhase: "commit" } for EP v0.9 parallel signing)
+  // overrides (optional — gas limits and multipliers)
 );
 
 // Sign and send as usual
@@ -178,7 +179,8 @@ const tokenOp = await paymaster.createTokenPaymasterUserOperation(
   userOp,
   gasTokenAddress,
   bundlerRpc,
-  // overrides (optional)
+  // context (optional)
+  // overrides (optional — gas limits, multipliers, resetApproval)
 );
 
 tokenOp.signature = smartAccount.signUserOperation(tokenOp, [ownerPrivateKey], chainId);
@@ -187,7 +189,7 @@ const response = await smartAccount.sendUserOperation(tokenOp, bundlerRpc);
 
 ### Pass paymaster context (sponsorship policy, parallel signing)
 
-As of v0.3.0, `CandidePaymasterContext` is passed via the `overrides.context` field on `GasPaymasterUserOperationOverrides`. Previously it was a separate top level argument.
+`CandidePaymasterContext` is passed as its own argument, separate from gas overrides.
 
 ```typescript
 const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
@@ -196,11 +198,11 @@ const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
   bundlerRpc,
   sponsorshipPolicyId,
   {
-    context: {
-      // For EntryPoint v0.9 parallel signing flows:
-      // signingPhase: "commit" | "finalize",
-    },
-    // gas overrides also live here:
+    // For EntryPoint v0.9 parallel signing flows:
+    // signingPhase: "commit" | "finalize",
+  },
+  {
+    // gas overrides:
     callGasLimitPercentageMultiplier: 110,
   },
 );

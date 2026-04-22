@@ -517,7 +517,8 @@ export class CandidePaymaster extends Paymaster {
 	 * @param userOperation - The UserOperation to sponsor
 	 * @param bundlerRpc - Bundler RPC URL for gas estimation
 	 * @param sponsorshipPolicyId - Optional sponsorship policy ID
-	 * @param overrides - Override gas limits, multipliers, and optional context
+	 * @param context - Optional additional context to pass to the paymaster RPC
+	 * @param overrides - Override gas limits and multipliers
 	 * @returns A tuple of [UserOperation, SponsorMetadata | undefined]
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
 	 */
@@ -526,10 +527,14 @@ export class CandidePaymaster extends Paymaster {
 		userOperation: T,
 		bundlerRpc: string,
 		sponsorshipPolicyId?: string,
+		context?: CandidePaymasterContext,
 		overrides?: GasPaymasterUserOperationOverrides,
 	): Promise<[SameUserOp<T>, SponsorMetadata | undefined]> {
 		const userOp = { ...userOperation } as T;
-		const context: CandidePaymasterContext = { sponsorshipPolicyId, ...(overrides?.context || {}) };
+		context = {
+			...(context || {}),
+			...(sponsorshipPolicyId !== undefined ? { sponsorshipPolicyId } : {}),
+		};
 		const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
 		await this.ensureInitialized(entrypoint);
 		const epData = this.getEntrypointData(entrypoint);
@@ -552,7 +557,8 @@ export class CandidePaymaster extends Paymaster {
 	 * @param userOperation - The UserOperation to modify for token payment
 	 * @param tokenAddress - The ERC-20 token contract address to pay gas with
 	 * @param bundlerRpc - Bundler RPC URL for gas estimation
-	 * @param overrides - Override gas limits, multipliers, and optional context
+	 * @param context - Optional additional context to pass to the paymaster RPC
+	 * @param overrides - Override gas limits and multipliers
 	 * @returns The UserOperation with token approval prepended and paymaster fields set
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the token is not supported
 	 */
@@ -561,13 +567,14 @@ export class CandidePaymaster extends Paymaster {
 		userOperation: T,
 		tokenAddress: string,
 		bundlerRpc: string,
+		context?: CandidePaymasterContext,
 		overrides?: GasPaymasterUserOperationOverrides,
 	): Promise<SameUserOp<T>> {
 		try {
 			const userOp = { ...userOperation } as T;
-			const context: CandidePaymasterContext = {
+			context = {
+				...(context || {}),
 				token: tokenAddress,
-				...(overrides?.context || {}),
 			};
 			if (!context.token || context.token.trim().length === 0 || !isAddress(context.token)) {
 				throw new RangeError(`Invalid token ${context.token ?? "undefined"}`);
