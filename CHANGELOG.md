@@ -28,7 +28,7 @@
   const { userOperation: tokenOp, tokenQuote } = await paymaster.createTokenPaymasterUserOperation(...);
   const { userOperation, tokenQuote } = await erc7677.createPaymasterUserOperation(...);
   ```
-- **`CandidePaymasterContext` moved back to a dedicated parameter** on `CandidePaymaster.createSponsorPaymasterUserOperation` and `createTokenPaymasterUserOperation`. The `context` field was removed from `GasPaymasterUserOperationOverrides`. Migration:
+- **`CandidePaymasterContext` moved back to a dedicated parameter** on `CandidePaymaster.createSponsorPaymasterUserOperation` and `createTokenPaymasterUserOperation`. The `context` field was removed from `GasPaymasterUserOperationOverrides`, and `context` is now the second-to-last argument (optional) on both methods, with `overrides` as the last argument. Migration:
   ```ts
   // Before (0.3.2): context nested inside overrides
   await paymaster.createSponsorPaymasterUserOperation(
@@ -37,7 +37,7 @@
   );
   await paymaster.createTokenPaymasterUserOperation(
     smartAccount, userOp, tokenAddress, bundlerRpc,
-    { context: { token: tokenAddress }, maxFeePerGasMultiplier: 110n },
+    { context: { signingPhase: "commit" }, maxFeePerGasMultiplier: 110n },
   );
 
   // After (0.3.3): context is a dedicated argument
@@ -46,6 +46,9 @@
     { signingPhase: "commit" },
     { maxFeePerGasMultiplier: 110n },
   );
+  // For createTokenPaymasterUserOperation, `context` is optional: the method
+  // always derives `context.token` from the `tokenAddress` argument, so pass
+  // `undefined` unless you need other context fields (e.g. `signingPhase`).
   await paymaster.createTokenPaymasterUserOperation(
     smartAccount, userOp, tokenAddress, bundlerRpc,
     undefined,
