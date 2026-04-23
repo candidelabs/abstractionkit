@@ -3190,8 +3190,28 @@ function generateOnChainIdentifier(
  * @internal Shared with SafeMultiChainSigAccount for multi-op signing.
  */
 export function extractClientDataFieldsHex(clientDataJSON: string): string {
-	const parsed = JSON.parse(clientDataJSON) as Record<string, unknown>;
-	const { type: _type, challenge: _challenge, ...rest } = parsed;
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(clientDataJSON);
+	} catch (err) {
+		throw new AbstractionKitError(
+			"BAD_DATA",
+			`Safe WebAuthn: clientDataJSON is not valid JSON (${(err as Error).message})`,
+		);
+	}
+	// JSON.parse can yield a plain object, `null`, an array, or a
+	// primitive (string / number / boolean). Reject anything but a plain
+	// object — destructuring `null` throws raw TypeError, destructuring
+	// arrays or primitives silently produces wrong output that would
+	// land as malformed `clientDataFields` in the Safe WebAuthn verifier.
+	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+		throw new AbstractionKitError(
+			"BAD_DATA",
+			"Safe WebAuthn: clientDataJSON must parse to a plain object " +
+				`(got ${parsed === null ? "null" : Array.isArray(parsed) ? "array" : typeof parsed})`,
+		);
+	}
+	const { type: _type, challenge: _challenge, ...rest } = parsed as Record<string, unknown>;
 	const fields = Object.entries(rest)
 		.map(([key, value]) => `"${key}":${JSON.stringify(value)}`)
 		.join(",");

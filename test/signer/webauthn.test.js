@@ -234,6 +234,52 @@ describe('pickScheme rejects webauthn-like signers missing a valid pubkey', () =
     });
 });
 
+describe('extractClientDataFieldsHex rejects malformed clientDataJSON', () => {
+    // This helper is called during Safe WebAuthn signing — invalid
+    // clientDataJSON must fail with a clear AbstractionKitError("BAD_DATA")
+    // instead of a raw TypeError or a silently-wrong output.
+    const SafeAccount = ak.SafeAccountV0_3_0;
+
+    async function signWithClientData(clientDataJSON) {
+        const safe = SafeAccount.initializeNewAccount([FIXTURE_PUBKEY]);
+        const op = buildSafeV3Op(safe, { withFactory: true });
+        const signer = ak.fromWebAuthn({
+            credentialId: base64Url(new Uint8Array([1])),
+            pubkey: FIXTURE_PUBKEY,
+            signFn: async () => ({
+                authenticatorData: hexToBytes(FIXTURE_AUTHENTICATOR_DATA_HEX),
+                clientDataJSON, // arbitrary malformed value
+                signature: { r: 1n, s: 2n },
+            }),
+        });
+        return safe.signUserOperationWithSigners(op, [signer], CHAIN_ID);
+    }
+
+    test('syntactically invalid JSON throws BAD_DATA (not raw SyntaxError)', async () => {
+        await expect(signWithClientData('{not valid json')).rejects.toThrow(
+            /Safe WebAuthn: clientDataJSON is not valid JSON/,
+        );
+    });
+
+    test('clientDataJSON that parses to null is rejected', async () => {
+        await expect(signWithClientData('null')).rejects.toThrow(
+            /Safe WebAuthn: clientDataJSON must parse to a plain object.*null/,
+        );
+    });
+
+    test('clientDataJSON that parses to array is rejected', async () => {
+        await expect(signWithClientData('[1,2,3]')).rejects.toThrow(
+            /Safe WebAuthn: clientDataJSON must parse to a plain object.*array/,
+        );
+    });
+
+    test('clientDataJSON that parses to primitive is rejected', async () => {
+        await expect(signWithClientData('"foo"')).rejects.toThrow(
+            /Safe WebAuthn: clientDataJSON must parse to a plain object.*string/,
+        );
+    });
+});
+
 describe('ECDSA branch: missing signer.address fails fast with BAD_DATA', () => {
     test('handcrafted { signHash, no address } signing a Safe op throws actionable error', async () => {
         const safe = ak.SafeAccountV0_3_0.initializeNewAccount(['0x' + '11'.repeat(20)]);
