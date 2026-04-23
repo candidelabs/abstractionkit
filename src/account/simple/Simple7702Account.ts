@@ -596,24 +596,29 @@ export class BaseSimple7702Account extends SmartAccount {
 
 		const skipGasEstimation = overrides.skipGasEstimation ?? false;
 
+		// Apply v0.9 parallel paymaster placeholders unconditionally so the
+		// paymaster stub survives into signing/hashing regardless of whether
+		// gas estimation runs below. The UserOpHash must commit to these
+		// fields, so dropping them when skipGasEstimation is true or when
+		// gas limits are pre-specified would produce an invalid signature.
+		const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
+		if (parallelPaymasterInitValues != null) {
+			if (this.entrypointAddress !== ENTRYPOINT_V9) {
+				throw new RangeError("parallelPaymasterInitValues only works with ep v0.9");
+			}
+			userOperation.paymaster = parallelPaymasterInitValues.paymaster;
+			userOperation.paymasterVerificationGasLimit =
+				parallelPaymasterInitValues.paymasterVerificationGasLimit;
+			userOperation.paymasterPostOpGasLimit = parallelPaymasterInitValues.paymasterPostOpGasLimit;
+			userOperation.paymasterData = parallelPaymasterInitValues.paymasterData;
+		}
+
 		if (
 			!skipGasEstimation &&
 			(overrides.preVerificationGas == null ||
 				overrides.verificationGasLimit == null ||
 				overrides.callGasLimit == null)
 		) {
-			const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
-			if (parallelPaymasterInitValues != null) {
-				if (this.entrypointAddress !== ENTRYPOINT_V9) {
-					throw new RangeError("parallelPaymasterInitValues only works with ep v0.9");
-				}
-				userOperation.paymaster = parallelPaymasterInitValues.paymaster;
-				userOperation.paymasterVerificationGasLimit =
-					parallelPaymasterInitValues.paymasterVerificationGasLimit;
-				userOperation.paymasterPostOpGasLimit = parallelPaymasterInitValues.paymasterPostOpGasLimit;
-				userOperation.paymasterData = parallelPaymasterInitValues.paymasterData;
-			}
-
 			if (bundlerRpc != null) {
 				userOperation.callGasLimit = 0n;
 				userOperation.verificationGasLimit = 0n;

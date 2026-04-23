@@ -143,7 +143,7 @@ const userOp = await smartAccount.createUserOperation(
 
 // Sponsor it. Sets paymaster fields and re-estimates gas.
 // Note: as of v0.3.0, smartAccount is the first argument.
-const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
+const { userOperation: sponsoredOp, sponsorMetadata } = await paymaster.createSponsorPaymasterUserOperation(
   smartAccount,
   userOp,
   bundlerRpc,
@@ -174,7 +174,8 @@ const userOp = await smartAccount.createUserOperation(
 // Automatically prepends token approval + sets paymaster fields.
 // For tokens like USDT that require resetting allowance to 0 first, pass
 // { resetApproval: true } in the overrides.
-const tokenOp = await paymaster.createTokenPaymasterUserOperation(
+// `tokenQuote` carries the exchange rate and max token cost used for the approval.
+const { userOperation: tokenOp, tokenQuote } = await paymaster.createTokenPaymasterUserOperation(
   smartAccount,
   userOp,
   gasTokenAddress,
@@ -192,7 +193,7 @@ const response = await smartAccount.sendUserOperation(tokenOp, bundlerRpc);
 `CandidePaymasterContext` is passed as its own argument, separate from gas overrides.
 
 ```typescript
-const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
+const { userOperation: sponsoredOp } = await paymaster.createSponsorPaymasterUserOperation(
   smartAccount,
   userOp,
   bundlerRpc,

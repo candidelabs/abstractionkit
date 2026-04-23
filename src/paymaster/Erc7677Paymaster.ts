@@ -1,7 +1,7 @@
 import { Bundler } from "../Bundler";
 import { ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8, ENTRYPOINT_V9 } from "../constants";
 import { AbstractionKitError, ensureError } from "../errors";
-import type { StateOverrideSet } from "../types";
+import type { StateOverrideSet, TokenQuote } from "../types";
 import { calculateUserOperationMaxGasCost, sendJsonRpcRequest } from "../utils";
 import { Paymaster } from "./Paymaster";
 import type {
@@ -124,7 +124,7 @@ export interface Erc7677StubDataResult extends Erc7677PaymasterFields {
  * @example Sponsored UserOperation (Candide)
  * ```ts
  * const paymaster = new Erc7677Paymaster(candideUrl);
- * const sponsoredOp = await paymaster.createPaymasterUserOperation(
+ * const { userOperation: sponsoredOp } = await paymaster.createPaymasterUserOperation(
  *   smartAccount,
  *   userOp,
  *   bundlerRpc,
@@ -137,7 +137,7 @@ export interface Erc7677StubDataResult extends Erc7677PaymasterFields {
  * @example Token paymaster (Candide — automatic, provider auto-detected)
  * ```ts
  * const paymaster = new Erc7677Paymaster(candideUrl);
- * const tokenOp = await paymaster.createPaymasterUserOperation(
+ * const { userOperation: tokenOp, tokenQuote } = await paymaster.createPaymasterUserOperation(
  *   smartAccount,
  *   userOp,
  *   bundlerRpc,
@@ -148,7 +148,7 @@ export interface Erc7677StubDataResult extends Erc7677PaymasterFields {
  * @example Token paymaster (unknown provider, exchangeRate supplied)
  * ```ts
  * const paymaster = new Erc7677Paymaster(customUrl);
- * const tokenOp = await paymaster.createPaymasterUserOperation(
+ * const { userOperation: tokenOp, tokenQuote } = await paymaster.createPaymasterUserOperation(
  *   smartAccount,
  *   userOp,
  *   bundlerRpc,
@@ -345,7 +345,8 @@ export class Erc7677Paymaster extends Paymaster {
 	 *   (e.g. `{ sponsorshipPolicyId }` or `{ token }`).
 	 * @param overrides - Gas estimation overrides and state-override set.
 	 *
-	 * @returns The UserOperation with paymaster + gas fields populated.
+	 * @returns An object `{ userOperation, tokenQuote? }`. `tokenQuote` is only
+	 *   populated when the token-payment flow is taken (`context.token` set).
 	 */
 	async createPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: SmartAccountWithEntrypoint,
@@ -353,7 +354,7 @@ export class Erc7677Paymaster extends Paymaster {
 		bundlerRpc: string,
 		context: Erc7677Context = {},
 		overrides: GasPaymasterUserOperationOverrides = {},
-	): Promise<SameUserOp<T>> {
+	): Promise<{ userOperation: SameUserOp<T>; tokenQuote?: TokenQuote }> {
 		try {
 			const userOp = { ...userOperation } as T;
 			const entrypoint = overrides.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
@@ -698,7 +699,7 @@ export class Erc7677Paymaster extends Paymaster {
 		chainIdHex: string,
 		context: Erc7677Context,
 		overrides: GasPaymasterUserOperationOverrides,
-	): Promise<SameUserOp<T>> {
+	): Promise<{ userOperation: SameUserOp<T>; tokenQuote?: TokenQuote }> {
 		// Step 1 — resolve exchange rate + paymaster address.
 		let exchangeRate: bigint;
 		let paymasterAddress: string | null = null;
@@ -786,6 +787,7 @@ export class Erc7677Paymaster extends Paymaster {
 		const maxGasCostWei = calculateUserOperationMaxGasCost(userOp);
 		const tokenCost = (exchangeRate * maxGasCostWei) / 10n ** 18n;
 		const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
+		const tokenQuote: TokenQuote = { token: tokenAddress, exchangeRate, tokenCost };
 
 		// Step 6 — replace dummy approval with calculated amount on original callData.
 		callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
@@ -810,7 +812,7 @@ export class Erc7677Paymaster extends Paymaster {
 		const final = await this.getPaymasterData(userOp, entrypoint, chainIdHex, context);
 		this.applyPaymasterFields(userOp, final);
 
-		return userOp as unknown as SameUserOp<T>;
+		return { userOperation: userOp as unknown as SameUserOp<T>, tokenQuote };
 	}
 
 	/**
@@ -824,7 +826,7 @@ export class Erc7677Paymaster extends Paymaster {
 		chainIdHex: string,
 		context: Erc7677Context,
 		overrides: GasPaymasterUserOperationOverrides,
-	): Promise<SameUserOp<T>> {
+	): Promise<{ userOperation: SameUserOp<T> }> {
 		// Step 1 — stub paymaster data for gas estimation.
 		// Candide-hosted paymasters skip `pm_getPaymasterStubData` and use the
 		// cached `pm_supportedERC20Tokens` response instead.
@@ -836,13 +838,13 @@ export class Erc7677Paymaster extends Paymaster {
 
 		// Step 3 — if the stub was already final, we're done.
 		if (stub.isFinal === true) {
-			return userOp as unknown as SameUserOp<T>;
+			return { userOperation: userOp as unknown as SameUserOp<T> };
 		}
 
 		// Step 4 — final paymaster data (signature over the fully-populated userOp).
 		const final = await this.getPaymasterData(userOp, entrypoint, chainIdHex, context);
 		this.applyPaymasterFields(userOp, final);
 
-		return userOp as unknown as SameUserOp<T>;
+		return { userOperation: userOp as unknown as SameUserOp<T> };
 	}
 }

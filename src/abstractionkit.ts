@@ -149,6 +149,7 @@ export type {
 	SponsorInfo,
 	SponsorMetadata,
 	StateOverrideSet,
+	TokenQuote,
 	UserOperationByHashResult,
 	UserOperationReceipt,
 	UserOperationReceiptResult,
