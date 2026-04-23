@@ -753,7 +753,7 @@ describe('Erc7677Paymaster', () => {
       const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
       const userOp = v7UserOp();
 
-      const { userOperation: out } = await paymaster.createPaymasterUserOperation(
+      const { userOperation: out, tokenQuote } = await paymaster.createPaymasterUserOperation(
         smartAccount,
         userOp,
         server.url,
@@ -771,6 +771,12 @@ describe('Erc7677Paymaster', () => {
       // Paymaster address from stub was used in approve calls.
       expect(smartAccount.calls[0].paymasterAddress).toBe(PAYMASTER_ADDR);
       expect(out.paymasterData).toBe('0xfinalrate');
+
+      // tokenQuote populated from context.exchangeRate.
+      expect(tokenQuote).toBeDefined();
+      expect(tokenQuote.token.toLowerCase()).toBe(TOKEN_ADDR.toLowerCase());
+      expect(tokenQuote.exchangeRate).toBe(0xde0b6b3a7640000n);
+      expect(tokenQuote.tokenCost > 0n).toBe(true);
     } finally {
       await server.close();
     }
