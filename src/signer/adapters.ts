@@ -248,9 +248,15 @@ export interface FromWebAuthnOptions {
 	/**
 	 * P-256 public-key coordinates extracted from the credential. Safe and
 	 * Calibur derive the on-chain signer identity deterministically from
-	 * these values.
+	 * these values. Accepts `bigint` or string coords: hex (`"0x..."`) or
+	 * decimal strings are coerced via `BigInt()`. This handles the common
+	 * case where `{ x, y }` has been JSON-round-tripped through
+	 * localStorage / backend / network boundary and ended up as strings.
 	 */
-	pubkey: WebauthnPublicKeyCoordinates;
+	pubkey: {
+		x: bigint | string;
+		y: bigint | string;
+	};
 	/**
 	 * Override the default browser ceremony. Supply for Node /
 	 * server-side / test harnesses. If omitted, uses
@@ -296,20 +302,113 @@ export function fromWebAuthn(opts: FromWebAuthnOptions): Signer<unknown> {
 	if (!opts || typeof opts.credentialId !== "string" || opts.credentialId.length === 0) {
 		throw new Error("fromWebAuthn: `credentialId` (base64url string) is required");
 	}
-	if (!opts.pubkey || typeof opts.pubkey.x !== "bigint" || typeof opts.pubkey.y !== "bigint") {
-		throw new Error("fromWebAuthn: `pubkey` must be `{ x: bigint, y: bigint }`");
-	}
+	const pubkey = toBigintPubkey(opts?.pubkey);
 
 	const signFn: WebAuthnSignFn = opts.signFn ?? defaultBrowserSignFn(opts.credentialId);
 
 	return {
-		pubkey: opts.pubkey,
+		pubkey,
 		signWebauthn: async (challenge) => {
 			const challengeBytes = hexToBytes(challenge);
 			const response = await signFn(challengeBytes);
 			return webauthnSignatureFromAssertion(response);
 		},
 	};
+}
+
+/**
+ * Coerce a `{ x, y }` pair with any mix of `bigint` / `0x…` hex / decimal
+ * string values to a canonical `WebauthnPublicKeyCoordinates`. Used
+ * internally by {@link fromWebAuthn}; also exported for consumers
+ * reading the coords out of storage paths where they may have ended up
+ * as strings.
+ *
+ * @throws if either coordinate is missing, the wrong type, or an
+ * unparseable string.
+ */
+export function toBigintPubkey(pubkey: {
+	x: bigint | string | number;
+	y: bigint | string | number;
+}): WebauthnPublicKeyCoordinates {
+	if (!pubkey || pubkey.x == null || pubkey.y == null) {
+		throw new Error("fromWebAuthn: `pubkey` must be `{ x, y }` with both coords set");
+	}
+	return { x: coerceBigint(pubkey.x, "x"), y: coerceBigint(pubkey.y, "y") };
+}
+
+function coerceBigint(v: bigint | string | number, field: string): bigint {
+	if (typeof v === "bigint") return v;
+	if (typeof v === "string") {
+		try {
+			return BigInt(v);
+		} catch {
+			throw new Error(
+				`fromWebAuthn: pubkey.${field} ("${v}") is not a valid bigint string. ` +
+					`Accepted: bigint, decimal string, or 0x-prefixed hex string.`,
+			);
+		}
+	}
+	if (typeof v === "number") {
+		if (!Number.isSafeInteger(v)) {
+			throw new Error(
+				`fromWebAuthn: pubkey.${field} is a Number but not a safe integer. ` +
+					`Pass as bigint or hex string to avoid precision loss.`,
+			);
+		}
+		return BigInt(v);
+	}
+	throw new Error(`fromWebAuthn: pubkey.${field} must be bigint, string, or number (got ${typeof v})`);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Bigint-safe pubkey JSON round-trip helpers
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Serialize a WebAuthn pubkey to a JSON string with hex-encoded
+ * coordinates. Inverse of {@link pubkeyCoordinatesFromJson}.
+ *
+ * `JSON.stringify` can't serialize `bigint` without a custom replacer,
+ * and every consumer persisting `{ x, y }` ends up writing the same
+ * replacer. This helper ships the canonical version so the round-trip
+ * is consistent across call sites.
+ *
+ * @example
+ * ```ts
+ * localStorage.setItem("passkey", pubkeyCoordinatesToJson({ x: 0x7a..., y: 0x2e... }));
+ * // Stored as: {"x":"0x7a...","y":"0x2e..."}
+ * ```
+ */
+export function pubkeyCoordinatesToJson(pubkey: WebauthnPublicKeyCoordinates): string {
+	return JSON.stringify({
+		x: "0x" + pubkey.x.toString(16),
+		y: "0x" + pubkey.y.toString(16),
+	});
+}
+
+/**
+ * Parse a JSON string produced by {@link pubkeyCoordinatesToJson} (or
+ * any JSON object with `x` / `y` fields as bigint-compatible strings)
+ * back into a `WebauthnPublicKeyCoordinates` with `bigint` coords.
+ *
+ * Lenient about input shape — accepts hex (`"0x..."`) or decimal
+ * strings, as well as a pre-parsed object if you already ran
+ * `JSON.parse` yourself.
+ *
+ * @example
+ * ```ts
+ * const raw = localStorage.getItem("passkey");
+ * if (raw) {
+ *   const pubkey = pubkeyCoordinatesFromJson(raw);
+ *   // pubkey: { x: bigint, y: bigint }
+ * }
+ * ```
+ */
+export function pubkeyCoordinatesFromJson(
+	input: string | { x: bigint | string | number; y: bigint | string | number },
+): WebauthnPublicKeyCoordinates {
+	const parsed = typeof input === "string" ? JSON.parse(input) : input;
+	return toBigintPubkey(parsed);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

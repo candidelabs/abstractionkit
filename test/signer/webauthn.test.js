@@ -139,10 +139,110 @@ describe('fromWebAuthn adapter shape', () => {
         ).toThrow(/credentialId.*required/);
     });
 
-    test('rejects malformed pubkey', () => {
+    test('accepts bigint, hex-string, and decimal-string pubkey coords', () => {
+        // Bigint baseline
+        const asBigint = ak.fromWebAuthn({
+            credentialId: base64Url(new Uint8Array([1])),
+            pubkey: FIXTURE_PUBKEY,
+            signFn: makeStubSignFn((c) => buildClientDataJSON(c)),
+        });
+        expect(asBigint.pubkey).toEqual(FIXTURE_PUBKEY);
+
+        // Hex strings (common after localStorage round-trip with a
+        // bigint-to-hex replacer)
+        const asHex = ak.fromWebAuthn({
+            credentialId: base64Url(new Uint8Array([1])),
+            pubkey: {
+                x: '0x' + FIXTURE_PUBKEY.x.toString(16),
+                y: '0x' + FIXTURE_PUBKEY.y.toString(16),
+            },
+            signFn: makeStubSignFn((c) => buildClientDataJSON(c)),
+        });
+        expect(asHex.pubkey).toEqual(FIXTURE_PUBKEY);
+
+        // Decimal strings
+        const asDecimal = ak.fromWebAuthn({
+            credentialId: base64Url(new Uint8Array([1])),
+            pubkey: {
+                x: FIXTURE_PUBKEY.x.toString(10),
+                y: FIXTURE_PUBKEY.y.toString(10),
+            },
+            signFn: makeStubSignFn((c) => buildClientDataJSON(c)),
+        });
+        expect(asDecimal.pubkey).toEqual(FIXTURE_PUBKEY);
+    });
+
+    test('rejects pubkey with missing or invalid coords', () => {
         expect(() =>
-            ak.fromWebAuthn({ credentialId: 'abc', pubkey: { x: '1', y: '2' } }),
-        ).toThrow(/pubkey.*bigint/);
+            ak.fromWebAuthn({ credentialId: 'abc', pubkey: { x: undefined, y: 1n } }),
+        ).toThrow(/pubkey.*x, y.*both/);
+        expect(() =>
+            ak.fromWebAuthn({
+                credentialId: 'abc',
+                pubkey: { x: 'not-a-bigint', y: 1n },
+            }),
+        ).toThrow(/not a valid bigint/);
+        expect(() =>
+            ak.fromWebAuthn({
+                credentialId: 'abc',
+                pubkey: { x: true, y: 1n },
+            }),
+        ).toThrow(/bigint, string, or number/);
+    });
+});
+
+describe('pubkeyCoordinatesToJson / pubkeyCoordinatesFromJson', () => {
+    test('round-trips a WebAuthn pubkey bit-for-bit', () => {
+        const json = ak.pubkeyCoordinatesToJson(FIXTURE_PUBKEY);
+        const parsed = ak.pubkeyCoordinatesFromJson(json);
+        expect(parsed).toEqual(FIXTURE_PUBKEY);
+    });
+
+    test('serializes to hex-string form (backward-compat with existing localStorage replacers)', () => {
+        const json = ak.pubkeyCoordinatesToJson(FIXTURE_PUBKEY);
+        const obj = JSON.parse(json);
+        expect(obj.x.startsWith('0x')).toBe(true);
+        expect(obj.y.startsWith('0x')).toBe(true);
+        expect(BigInt(obj.x)).toBe(FIXTURE_PUBKEY.x);
+        expect(BigInt(obj.y)).toBe(FIXTURE_PUBKEY.y);
+    });
+
+    test('fromJson accepts pre-parsed object too (skip JSON.parse)', () => {
+        const obj = { x: '0x' + FIXTURE_PUBKEY.x.toString(16), y: '0x' + FIXTURE_PUBKEY.y.toString(16) };
+        expect(ak.pubkeyCoordinatesFromJson(obj)).toEqual(FIXTURE_PUBKEY);
+    });
+
+    test('fromJson accepts decimal strings too', () => {
+        const json = JSON.stringify({
+            x: FIXTURE_PUBKEY.x.toString(10),
+            y: FIXTURE_PUBKEY.y.toString(10),
+        });
+        expect(ak.pubkeyCoordinatesFromJson(json)).toEqual(FIXTURE_PUBKEY);
+    });
+
+    test('fromJson throws on malformed input', () => {
+        expect(() => ak.pubkeyCoordinatesFromJson('{"x":"not-hex","y":"0x1"}')).toThrow(
+            /not a valid bigint/,
+        );
+        expect(() => ak.pubkeyCoordinatesFromJson('{"x":"0x1"}')).toThrow(/x, y.*both/);
+    });
+});
+
+describe('toBigintPubkey direct usage', () => {
+    test('is idempotent on bigint input', () => {
+        expect(ak.toBigintPubkey(FIXTURE_PUBKEY)).toEqual(FIXTURE_PUBKEY);
+    });
+
+    test('coerces number input for small coords', () => {
+        const coerced = ak.toBigintPubkey({ x: 42, y: 7 });
+        expect(coerced.x).toBe(42n);
+        expect(coerced.y).toBe(7n);
+    });
+
+    test('rejects unsafe-integer numbers to prevent precision loss', () => {
+        expect(() =>
+            ak.toBigintPubkey({ x: Number.MAX_SAFE_INTEGER + 1, y: 1n }),
+        ).toThrow(/safe integer/);
     });
 });
 

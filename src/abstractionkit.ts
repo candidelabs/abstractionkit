@@ -111,6 +111,9 @@ export {
 	fromViem,
 	fromViemWalletClient,
 	fromWebAuthn,
+	pubkeyCoordinatesFromJson,
+	pubkeyCoordinatesToJson,
+	toBigintPubkey,
 	webauthnSignatureFromAssertion,
 } from "./signer/adapters";
 export type {
