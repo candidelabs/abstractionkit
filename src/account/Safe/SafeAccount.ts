@@ -1867,19 +1867,14 @@ export class SafeAccount extends SmartAccount {
 		};
 
 		// Preflight: capability check throws with an actionable message if
-		// any signer can't produce what Safe accepts. Also normalizes
-		// EOA-signer addresses in the same pass.
+		// any signer can't produce what Safe accepts. Address normalization
+		// is deferred into the ECDSA branch below — WebAuthn signers carry
+		// no `address` and shouldn't run `getAddress` unnecessarily.
 		const schemes = signers.map((signer, signerIndex) =>
 			pickScheme(signer, SafeAccount.ACCEPTED_SIGNING_SCHEMES, {
 				accountName: "Safe (EIP-712 or raw hash over SafeOp digest)",
 				signerIndex,
 			}),
-		);
-		const normalizedAddresses = signers.map((signer) =>
-			// WebAuthn signers carry no `address`; the per-owner verifier
-			// address is computed later from `pubkey` by
-			// buildSignaturesFromSingerSignaturePairs.
-			signer.address ? getAddress(signer.address) : null,
 		);
 
 		// Dispatch per-scheme. Hash/typedData return a hex signature;
@@ -1904,12 +1899,24 @@ export class SafeAccount extends SmartAccount {
 						signature: encodeSafeWebAuthnSignatureFromAssertion(assertion),
 					};
 				}
+				if (!signer.address) {
+					throw new AbstractionKitError(
+						"BAD_DATA",
+						`signer[${i}] negotiated the "${schemes[i]}" scheme but has no \`address\` — ` +
+							"EOA-shape signers must expose an `address` field " +
+							"(use fromPrivateKey / fromViem / fromEthersWallet to construct one)",
+					);
+				}
 				const signature = await invokeSigner(signer, schemes[i], {
 					hash: userOpHash,
 					typedData,
 					context,
 				});
-				return { kind: "ecdsa" as const, address: normalizedAddresses[i]!, signature };
+				return {
+					kind: "ecdsa" as const,
+					address: getAddress(signer.address),
+					signature,
+				};
 			}),
 		);
 

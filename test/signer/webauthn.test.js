@@ -226,9 +226,27 @@ describe('pickScheme rejects webauthn-like signers missing a valid pubkey', () =
         };
         // pickScheme requires bigint x/y — fromWebAuthn coerces, but
         // raw handcrafted signers must pass bigints directly.
+        // describeSignerIdentity must fall back to "(unknown signer)"
+        // instead of throwing TypeError on the malformed pubkey.
         await expect(
             safe.signUserOperationWithSigners(op, [badSigner], CHAIN_ID),
-        ).rejects.toThrow(/No compatible signing scheme/);
+        ).rejects.toThrow(/No compatible signing scheme.*\(unknown signer\)/s);
+    });
+});
+
+describe('ECDSA branch: missing signer.address fails fast with BAD_DATA', () => {
+    test('handcrafted { signHash, no address } signing a Safe op throws actionable error', async () => {
+        const safe = ak.SafeAccountV0_3_0.initializeNewAccount(['0x' + '11'.repeat(20)]);
+        const op = buildSafeV3Op(safe, { withFactory: true });
+        const hashOnly = {
+            // signHash-capable but no address — pickScheme advertises
+            // "hash" (the check is purely function-shape); the SafeAccount
+            // ECDSA branch then demands an address and rejects.
+            signHash: async () => '0x' + '11'.repeat(65),
+        };
+        await expect(
+            safe.signUserOperationWithSigners(op, [hashOnly], CHAIN_ID),
+        ).rejects.toThrow(/has no `address`.*fromPrivateKey|fromViem|fromEthersWallet/s);
     });
 });
 

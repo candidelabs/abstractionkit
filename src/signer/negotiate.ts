@@ -53,13 +53,21 @@ export function pickScheme<C>(
 }
 
 function describeSignerIdentity<C>(signer: Signer<C>): string {
-	if (typeof signer.signWebauthn === "function" && signer.pubkey) {
+	// Same bigint-shape gate as pickScheme, so describe() can never throw
+	// a raw TypeError on a handcrafted signer that declares signWebauthn
+	// but has malformed / missing pubkey coords.
+	if (
+		typeof signer.signWebauthn === "function" &&
+		signer.pubkey != null &&
+		typeof signer.pubkey === "object" &&
+		typeof signer.pubkey.x === "bigint"
+	) {
 		// Identify WebAuthn signers by a short hex of the x-coordinate so
 		// error messages distinguish them without leaking the full pubkey.
 		const xHex = signer.pubkey.x.toString(16).padStart(64, "0");
 		return `webauthn(x=0x${xHex.slice(0, 8)}…${xHex.slice(-8)})`;
 	}
-	return signer.address as string;
+	return signer.address ?? "(unknown signer)";
 }
 
 function buildMismatchMessage(params: {

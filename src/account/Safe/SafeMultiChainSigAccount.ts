@@ -1,5 +1,6 @@
 import { getAddress, TypedDataEncoder, Wallet } from "ethers";
 import { EIP712_MULTI_CHAIN_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants";
+import { AbstractionKitError } from "src/errors";
 import { invokeSigner, invokeWebauthnSigner, pickScheme } from "src/signer/negotiate";
 import type {
 	Signer as AkSigner,
@@ -650,15 +651,14 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			) as `0x${string}`;
 
 			// Merkle root is opaque; `typedData` has nothing meaningful to
-			// display, so we require raw-hash or webauthn signing.
+			// display, so we require raw-hash or webauthn signing. Address
+			// normalization is deferred into the ECDSA branch — WebAuthn
+			// signers have no `address` and shouldn't run `getAddress`.
 			const schemes = signers.map((signer, i) =>
 				pickScheme(signer, ["hash", "webauthn"], {
 					accountName: "SafeMultiChainSigAccountV1 (multi-op Merkle root)",
 					signerIndex: i,
 				}),
-			);
-			const normalizedAddresses = signers.map((signer) =>
-				signer.address ? getAddress(signer.address) : null,
 			);
 
 			type Result =
@@ -683,11 +683,19 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 							signature: encodeSafeWebAuthnSignatureFromAssertion(assertion),
 						};
 					}
+					if (!signer.address) {
+						throw new AbstractionKitError(
+							"BAD_DATA",
+							`signer[${i}] negotiated the "hash" scheme but has no \`address\` — ` +
+								"EOA-shape signers must expose an `address` field " +
+								"(use fromPrivateKey / fromViem / fromEthersWallet to construct one)",
+						);
+					}
 					const signature = await invokeSigner(signer, "hash", {
 						hash: merkleTreeRootHash,
 						context,
 					});
-					return { kind: "ecdsa", address: normalizedAddresses[i]!, signature };
+					return { kind: "ecdsa", address: getAddress(signer.address), signature };
 				}),
 			);
 			const signerSignaturePairs: SignerSignaturePair[] = results.map((r) =>
