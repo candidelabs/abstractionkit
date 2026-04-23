@@ -660,6 +660,13 @@ export class Calibur7702Account
 		const hookData = overrides.hookData ?? "0x";
 
 		if (scheme === "webauthn") {
+			if (!signer.pubkey) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"Calibur signer negotiated the `webauthn` scheme but has no `pubkey` — " +
+						"construct WebAuthn signers with `fromWebAuthn({ credentialId, pubkey })`",
+				);
+			}
 			const assertion = await invokeWebauthnSigner(signer, { challenge: hash, context });
 			// Derive keyHash from the pubkey unless the caller explicitly
 			// passed one (secondary WebAuthn keys would use a different key
@@ -667,14 +674,53 @@ export class Calibur7702Account
 			const keyHash =
 				overrides.keyHash ??
 				Calibur7702Account.getKeyHash(
-					Calibur7702Account.createWebAuthnP256Key(signer.pubkey!.x, signer.pubkey!.y),
+					Calibur7702Account.createWebAuthnP256Key(signer.pubkey.x, signer.pubkey.y),
 				);
+			// Validate clientDataJSON structure first — catches malformed
+			// input (bad JSON, wrong type, missing challenge) with a clear
+			// error instead of letting a bogus byte-offset propagate into
+			// on-chain verification.
+			let clientData: { type?: unknown; challenge?: unknown };
+			try {
+				clientData = JSON.parse(assertion.clientDataJSON) as Record<string, unknown>;
+			} catch {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"Calibur WebAuthn: clientDataJSON is not valid JSON",
+				);
+			}
+			if (clientData === null || typeof clientData !== "object") {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"Calibur WebAuthn: clientDataJSON did not parse to an object",
+				);
+			}
+			if (clientData.type !== "webauthn.get") {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					`Calibur WebAuthn: clientDataJSON.type must be "webauthn.get" (got ${JSON.stringify(clientData.type)})`,
+				);
+			}
+			if (typeof clientData.challenge !== "string" || clientData.challenge.length === 0) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"Calibur WebAuthn: clientDataJSON.challenge is missing or empty",
+				);
+			}
+			// Byte offsets the on-chain Calibur verifier uses to seek into
+			// clientDataJSON. These must match what the authenticator
+			// actually emitted, not normalized-whitespace regex positions,
+			// because the on-chain verifier compares bytes at these exact
+			// indices. Authenticators in the wild never emit whitespace
+			// here; if one ever does, indexOf returns -1 and we fail below.
 			const typeIdx = assertion.clientDataJSON.indexOf('"type":"webauthn.get"');
 			const challengeIdx = assertion.clientDataJSON.indexOf('"challenge":"');
 			if (typeIdx < 0 || challengeIdx < 0) {
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					"Calibur WebAuthn: clientDataJSON missing expected `type` or `challenge` fields",
+					"Calibur WebAuthn: clientDataJSON byte layout not recognized " +
+						"(expected canonical `\"type\":\"webauthn.get\"` and `\"challenge\":\"…\"` " +
+						"without whitespace, as produced by all mainstream authenticators)",
 				);
 			}
 			// Browser-safe bytes → hex. `Buffer` isn't defined in Vite /

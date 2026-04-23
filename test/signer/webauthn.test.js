@@ -191,6 +191,95 @@ describe('fromWebAuthn adapter shape', () => {
     });
 });
 
+// ─── Defensive guards: malformed signers bypass the type system ─────────
+// These tests exercise paths where a caller hand-rolls a signer and
+// skips `fromWebAuthn`'s constructor validation. The library must
+// reject with a clear error rather than a later opaque failure.
+
+describe('pickScheme rejects webauthn-like signers missing a valid pubkey', () => {
+    test('handcrafted { signWebauthn, no pubkey } is not advertised as webauthn-capable', async () => {
+        const safe = ak.SafeAccountV0_3_0.initializeNewAccount([FIXTURE_PUBKEY]);
+        const op = buildSafeV3Op(safe, { withFactory: true });
+        const badSigner = {
+            signWebauthn: async () => ({
+                authenticatorData: new Uint8Array(37),
+                clientDataJSON: '{"type":"webauthn.get","challenge":"AA"}',
+                signature: { r: 1n, s: 2n },
+            }),
+            // no pubkey
+        };
+        await expect(
+            safe.signUserOperationWithSigners(op, [badSigner], CHAIN_ID),
+        ).rejects.toThrow(/No compatible signing scheme.*provides.*none/s);
+    });
+
+    test('handcrafted { signWebauthn, pubkey: { x: "hex", y: "hex" } } is not advertised (pubkey must be bigint at pickScheme level)', async () => {
+        const safe = ak.SafeAccountV0_3_0.initializeNewAccount([FIXTURE_PUBKEY]);
+        const op = buildSafeV3Op(safe, { withFactory: true });
+        const badSigner = {
+            signWebauthn: async () => ({
+                authenticatorData: new Uint8Array(37),
+                clientDataJSON: '{"type":"webauthn.get","challenge":"AA"}',
+                signature: { r: 1n, s: 2n },
+            }),
+            pubkey: { x: '0x1', y: '0x2' }, // strings, not bigints
+        };
+        // pickScheme requires bigint x/y — fromWebAuthn coerces, but
+        // raw handcrafted signers must pass bigints directly.
+        await expect(
+            safe.signUserOperationWithSigners(op, [badSigner], CHAIN_ID),
+        ).rejects.toThrow(/No compatible signing scheme/);
+    });
+});
+
+describe('parseDerP256Signature rejects truncated/malformed DER', () => {
+    test('truncated DER throws, does not silently produce bogus r/s', () => {
+        // Valid DER prefix, but rLen claims 200 bytes when only ~6 remain
+        const truncated = new Uint8Array([
+            0x30, 0x46, // SEQUENCE, 70 bytes (but we'll give fewer)
+            0x02, 0xc8, // INTEGER, length 200 (impossibly large)
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, // only 6 bytes of r follow
+        ]);
+        expect(() =>
+            ak.webauthnSignatureFromAssertion({
+                authenticatorData: new Uint8Array(37),
+                clientDataJSON: '{"type":"webauthn.get","challenge":"AA"}',
+                signature: truncated,
+            }),
+        ).toThrow(/malformed DER signature/);
+    });
+
+    test('zero-length r or s throws', () => {
+        const zeroR = new Uint8Array([
+            0x30, 0x06,
+            0x02, 0x00, // INTEGER, length 0 (invalid for r)
+            0x02, 0x02, 0x11, 0x22, // valid s
+        ]);
+        expect(() =>
+            ak.webauthnSignatureFromAssertion({
+                authenticatorData: new Uint8Array(37),
+                clientDataJSON: '{"type":"webauthn.get","challenge":"AA"}',
+                signature: zeroR,
+            }),
+        ).toThrow(/malformed DER signature/);
+    });
+
+    test('wrong tag byte throws', () => {
+        const wrongTag = new Uint8Array([
+            0x30, 0x08,
+            0x03, 0x02, 0x11, 0x22, // OCTET STRING tag, not INTEGER
+            0x02, 0x02, 0x33, 0x44,
+        ]);
+        expect(() =>
+            ak.webauthnSignatureFromAssertion({
+                authenticatorData: new Uint8Array(37),
+                clientDataJSON: '{"type":"webauthn.get","challenge":"AA"}',
+                signature: wrongTag,
+            }),
+        ).toThrow(/malformed DER signature/);
+    });
+});
+
 describe('pubkeyCoordinatesToJson / pubkeyCoordinatesFromJson', () => {
     test('round-trips a WebAuthn pubkey bit-for-bit', () => {
         const json = ak.pubkeyCoordinatesToJson(FIXTURE_PUBKEY);

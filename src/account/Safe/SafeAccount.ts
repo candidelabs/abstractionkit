@@ -1888,13 +1888,19 @@ export class SafeAccount extends SmartAccount {
 		const results = await Promise.all(
 			signers.map(async (signer, i) => {
 				if (schemes[i] === "webauthn") {
+					if (!signer.pubkey) {
+						throw new Error(
+							`signer[${i}] negotiated the \`webauthn\` scheme but has no \`pubkey\` — ` +
+								"construct WebAuthn signers with `fromWebAuthn({ credentialId, pubkey })`",
+						);
+					}
 					const assertion = await invokeWebauthnSigner(signer, {
 						challenge: userOpHash,
 						context,
 					});
 					return {
 						kind: "webauthn" as const,
-						pubkey: signer.pubkey!,
+						pubkey: signer.pubkey,
 						signature: encodeSafeWebAuthnSignatureFromAssertion(assertion),
 					};
 				}

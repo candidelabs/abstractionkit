@@ -667,13 +667,19 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			const results: Result[] = await Promise.all(
 				signers.map(async (signer, i): Promise<Result> => {
 					if (schemes[i] === "webauthn") {
+						if (!signer.pubkey) {
+							throw new Error(
+								`signer[${i}] negotiated the \`webauthn\` scheme but has no \`pubkey\` — ` +
+									"construct WebAuthn signers with `fromWebAuthn({ credentialId, pubkey })`",
+							);
+						}
 						const assertion: WebAuthnAssertion = await invokeWebauthnSigner(signer, {
 							challenge: merkleTreeRootHash,
 							context,
 						});
 						return {
 							kind: "webauthn",
-							pubkey: signer.pubkey!,
+							pubkey: signer.pubkey,
 							signature: encodeSafeWebAuthnSignatureFromAssertion(assertion),
 						};
 					}

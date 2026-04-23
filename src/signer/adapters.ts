@@ -477,17 +477,27 @@ function toRSPair(
  * DER layout: 0x30 | total-len | 0x02 | r-len | r-bytes | 0x02 | s-len | s-bytes
  */
 function parseDerP256Signature(der: Uint8Array): { r: bigint; s: bigint } {
-	if (der.length < 8 || der[0] !== 0x30) {
-		throw new Error("fromWebAuthn: malformed DER signature");
-	}
+	// All out-of-bounds / malformed-length cases fold into one error so
+	// hostile or truncated DER input can't slip through and produce a
+	// silently-wrong r/s via Uint8Array.subarray's clamping behavior.
+	const malformed = () => new Error("fromWebAuthn: malformed DER signature");
+	if (der.length < 8 || der[0] !== 0x30) throw malformed();
 	let offset = 2;
 	if (der[1] === 0x81) offset = 3; // long-form length byte we can skip
-	if (der[offset] !== 0x02) throw new Error("fromWebAuthn: malformed DER signature (r tag)");
+
+	// r tag + length + body must fit
+	if (offset + 2 > der.length) throw malformed();
+	if (der[offset] !== 0x02) throw malformed();
 	const rLen = der[offset + 1];
+	if (rLen <= 0 || offset + 2 + rLen > der.length) throw malformed();
 	const rBytes = der.subarray(offset + 2, offset + 2 + rLen);
 	offset += 2 + rLen;
-	if (der[offset] !== 0x02) throw new Error("fromWebAuthn: malformed DER signature (s tag)");
+
+	// s tag + length + body must fit
+	if (offset + 2 > der.length) throw malformed();
+	if (der[offset] !== 0x02) throw malformed();
 	const sLen = der[offset + 1];
+	if (sLen <= 0 || offset + 2 + sLen > der.length) throw malformed();
 	const sBytes = der.subarray(offset + 2, offset + 2 + sLen);
 
 	const r = bytesToBigInt(rBytes);

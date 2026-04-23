@@ -21,7 +21,20 @@ export function pickScheme<C>(
 	const signerCan: SigningScheme[] = [];
 	if (typeof signer.signTypedData === "function") signerCan.push("typedData");
 	if (typeof signer.signHash === "function") signerCan.push("hash");
-	if (typeof signer.signWebauthn === "function") signerCan.push("webauthn");
+	// `webauthn` requires BOTH signWebauthn and a valid pubkey — signing
+	// alone isn't enough; downstream code (Safe, Calibur) uses pubkey to
+	// derive the on-chain signer identity. Checking here keeps the
+	// error readable ("no compatible scheme") instead of letting it
+	// surface later as a vague pubkey-access failure during packing.
+	if (
+		typeof signer.signWebauthn === "function" &&
+		signer.pubkey != null &&
+		typeof signer.pubkey === "object" &&
+		typeof signer.pubkey.x === "bigint" &&
+		typeof signer.pubkey.y === "bigint"
+	) {
+		signerCan.push("webauthn");
+	}
 
 	for (const scheme of accepted) {
 		if (signerCan.includes(scheme)) return scheme;
