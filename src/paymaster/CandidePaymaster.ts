@@ -12,6 +12,7 @@ import type {
 	SponsorMetadata,
 	SupportedERC20TokensAndMetadata,
 	SupportedERC20TokensAndMetadataWithExchangeRate,
+	TokenQuote,
 } from "../types";
 import { calculateUserOperationMaxGasCost, sendJsonRpcRequest } from "../utils";
 import { Paymaster } from "./Paymaster";
@@ -55,7 +56,7 @@ const TOKENS_REQUIRING_ALLOWANCE_RESET: string[] = [
  *
  * @example
  * const paymaster = new CandidePaymaster("https://api.candide.dev/public/v3/11155111");
- * const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(userOp, bundlerRpcUrl);
+ * const { userOperation: sponsoredOp } = await paymaster.createSponsorPaymasterUserOperation(userOp, bundlerRpcUrl);
  */
 export class CandidePaymaster extends Paymaster {
 	/** The paymaster JSON-RPC endpoint URL */
@@ -487,7 +488,7 @@ export class CandidePaymaster extends Paymaster {
 		userOperation: T,
 		context: CandidePaymasterContext = {},
 		overrides: GasPaymasterUserOperationOverrides = {},
-	): Promise<[SameUserOp<T>, SponsorMetadata | undefined]> {
+	): Promise<{ userOperation: SameUserOp<T>; sponsorMetadata?: SponsorMetadata }> {
 		try {
 			const entrypoint =
 				overrides.entrypoint ?? this.resolveEntrypoint(smartAccount, userOperation);
@@ -499,7 +500,10 @@ export class CandidePaymaster extends Paymaster {
 				context,
 			]);
 			const sponsorMetadata = this.applyPaymasterResult(userOperation, jsonRpcResult);
-			return [userOperation as unknown as SameUserOp<T>, sponsorMetadata];
+			return {
+				userOperation: userOperation as unknown as SameUserOp<T>,
+				sponsorMetadata,
+			};
 		} catch (err) {
 			const error = ensureError(err);
 			throw new AbstractionKitError("PAYMASTER_ERROR", "pm_getPaymasterData failed", {
@@ -519,7 +523,7 @@ export class CandidePaymaster extends Paymaster {
 	 * @param sponsorshipPolicyId - Optional sponsorship policy ID
 	 * @param context - Optional additional context to pass to the paymaster RPC
 	 * @param overrides - Override gas limits and multipliers
-	 * @returns A tuple of [UserOperation, SponsorMetadata | undefined]
+	 * @returns An object `{ userOperation, sponsorMetadata? }`
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
 	 */
 	async createSponsorPaymasterUserOperation<T extends AnyUserOperation>(
@@ -529,7 +533,7 @@ export class CandidePaymaster extends Paymaster {
 		sponsorshipPolicyId?: string,
 		context?: CandidePaymasterContext,
 		overrides?: GasPaymasterUserOperationOverrides,
-	): Promise<[SameUserOp<T>, SponsorMetadata | undefined]> {
+	): Promise<{ userOperation: SameUserOp<T>; sponsorMetadata?: SponsorMetadata }> {
 		const userOp = { ...userOperation } as T;
 		context = {
 			...(context || {}),
@@ -559,7 +563,8 @@ export class CandidePaymaster extends Paymaster {
 	 * @param bundlerRpc - Bundler RPC URL for gas estimation
 	 * @param context - Optional additional context to pass to the paymaster RPC
 	 * @param overrides - Override gas limits and multipliers
-	 * @returns The UserOperation with token approval prepended and paymaster fields set
+	 * @returns An object `{ userOperation, tokenQuote? }`. `tokenQuote` is absent
+	 *   when called under the `finalize` signing phase (no cost recomputation).
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the token is not supported
 	 */
 	async createTokenPaymasterUserOperation<T extends AnyUserOperation>(
@@ -569,7 +574,7 @@ export class CandidePaymaster extends Paymaster {
 		bundlerRpc: string,
 		context?: CandidePaymasterContext,
 		overrides?: GasPaymasterUserOperationOverrides,
-	): Promise<SameUserOp<T>> {
+	): Promise<{ userOperation: SameUserOp<T>; tokenQuote?: TokenQuote }> {
 		try {
 			const userOp = { ...userOperation } as T;
 			context = {
@@ -581,6 +586,7 @@ export class CandidePaymaster extends Paymaster {
 			}
 			const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
 			await this.ensureInitialized(entrypoint);
+			let tokenQuote: TokenQuote | undefined;
 			if (context.signingPhase !== "finalize") {
 				const epData = this.getEntrypointData(entrypoint);
 				if (epData == null) {
@@ -611,12 +617,11 @@ export class CandidePaymaster extends Paymaster {
 
 				await this.estimateAndApplyGasLimits(userOp, bundlerRpc, entrypoint, overrides ?? {});
 
-				const maxErc20Cost = await this.calculateUserOperationErc20TokenMaxGasCost(
-					smartAccount,
-					userOp,
-					context.token,
-				);
-				const approveAmount = maxErc20Cost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
+				const exchangeRate = await this.fetchTokenPaymasterExchangeRate(context.token, entrypoint);
+				const gasCostWei = calculateUserOperationMaxGasCost(userOp);
+				const tokenCost = (exchangeRate * gasCostWei) / 10n ** 18n;
+				tokenQuote = { token: context.token, exchangeRate, tokenCost };
+				const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
 				callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
 					oldCallData,
 					context.token,
@@ -634,13 +639,13 @@ export class CandidePaymaster extends Paymaster {
 				userOp.callData = callDataWithApprove;
 			}
 			const _overrides = { ...(overrides || {}), entrypoint: entrypoint };
-			const [resultUserOp] = await this.createPaymasterUserOperation(
+			const { userOperation: resultUserOp } = await this.createPaymasterUserOperation(
 				smartAccount,
 				userOp,
 				context,
 				_overrides,
 			);
-			return resultUserOp;
+			return { userOperation: resultUserOp, tokenQuote };
 		} catch (err) {
 			const error = ensureError(err);
 

@@ -33,7 +33,7 @@ describe('safe account migration', () => {
             paymasterRPC
         )
 
-        let [paymasterUserOperation, _sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
+        let { userOperation: paymasterUserOperation, sponsorMetadata: _sponsorMetadata } = await paymaster.createSponsorPaymasterUserOperation(
             accountToMigrate,
             testUserOperation,
             bundlerUrl
@@ -63,7 +63,7 @@ describe('safe account migration', () => {
             bundlerUrl,
         )
         
-        const [paymasterUserOperation2, _sponsorMetadata2] = await paymaster.createSponsorPaymasterUserOperation(
+        const { userOperation: paymasterUserOperation2, sponsorMetadata: _sponsorMetadata2 } = await paymaster.createSponsorPaymasterUserOperation(
             accountToMigrate,
             migrateUserOperation,
             bundlerUrl
@@ -103,7 +103,7 @@ describe('safe account migration', () => {
             bundlerUrl,
         )
         
-        const [paymasterUserOperation3, _sponsorMetadata3] = await paymaster.createSponsorPaymasterUserOperation(
+        const { userOperation: paymasterUserOperation3, sponsorMetadata: _sponsorMetadata3 } = await paymaster.createSponsorPaymasterUserOperation(
             migratedAccount,
             afterMigrationUserOperation,
             bundlerUrl
