@@ -1884,7 +1884,8 @@ export class SafeAccount extends SmartAccount {
 			signers.map(async (signer, i) => {
 				if (schemes[i] === "webauthn") {
 					if (!signer.pubkey) {
-						throw new Error(
+						throw new AbstractionKitError(
+							"BAD_DATA",
 							`signer[${i}] negotiated the \`webauthn\` scheme but has no \`pubkey\` — ` +
 								"construct WebAuthn signers with `fromWebAuthn({ credentialId, pubkey })`",
 						);

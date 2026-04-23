@@ -668,7 +668,8 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				signers.map(async (signer, i): Promise<Result> => {
 					if (schemes[i] === "webauthn") {
 						if (!signer.pubkey) {
-							throw new Error(
+							throw new AbstractionKitError(
+								"BAD_DATA",
 								`signer[${i}] negotiated the \`webauthn\` scheme but has no \`pubkey\` — ` +
 									"construct WebAuthn signers with `fromWebAuthn({ credentialId, pubkey })`",
 							);
