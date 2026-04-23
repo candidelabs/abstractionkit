@@ -677,8 +677,12 @@ export class Calibur7702Account
 					"Calibur WebAuthn: clientDataJSON missing expected `type` or `challenge` fields",
 				);
 			}
-			const authDataHex =
-				"0x" + Buffer.from(assertion.authenticatorData).toString("hex");
+			// Browser-safe bytes → hex. `Buffer` isn't defined in Vite /
+			// browser bundles without a polyfill.
+			let authDataHex = "0x";
+			for (const b of assertion.authenticatorData) {
+				authDataHex += b.toString(16).padStart(2, "0");
+			}
 			return this.formatWebAuthnSignature(
 				keyHash,
 				{

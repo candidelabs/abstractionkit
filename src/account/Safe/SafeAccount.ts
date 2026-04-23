@@ -3181,7 +3181,12 @@ export function extractClientDataFieldsHex(clientDataJSON: string): string {
 	const fields = Object.entries(rest)
 		.map(([key, value]) => `"${key}":${JSON.stringify(value)}`)
 		.join(",");
-	return "0x" + Buffer.from(fields, "utf8").toString("hex");
+	// Browser-safe utf-8 → hex. `Buffer` isn't defined in Vite / browser
+	// bundles without a polyfill.
+	const utf8 = new TextEncoder().encode(fields);
+	let hex = "0x";
+	for (const b of utf8) hex += b.toString(16).padStart(2, "0");
+	return hex;
 }
 
 /**
