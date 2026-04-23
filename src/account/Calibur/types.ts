@@ -1,4 +1,9 @@
-import { GasOption, ParallelPaymasterInitValues, PolygonChain, StateOverrideSet } from "src/types";
+import type {
+	GasOption,
+	ParallelPaymasterInitValues,
+	PolygonChain,
+	StateOverrideSet,
+} from "src/types";
 
 /**
  * Key types supported by the Calibur smart account.
@@ -103,6 +108,14 @@ export interface CaliburCreateUserOperationOverrides {
 	/** State overrides for gas estimation */
 	state_override_set?: StateOverrideSet;
 
+	/**
+	 * Skip calling the bundler's gas estimation entirely. When true, the returned
+	 * UserOperation still gets a dummy signature, but its gas limits come from the
+	 * provided overrides (or stay at 0n). Useful when estimation is run separately
+	 * — for example, by a paymaster sponsorship call that returns its own limits.
+	 */
+	skipGasEstimation?: boolean;
+
 	/** Override the dummy signature used during gas estimation */
 	dummySignature?: string;
 
@@ -145,4 +158,3 @@ export interface CaliburSignatureOverrides {
 	/** Key hash of a registered secondary key. If omitted, the root key hash is used. */
 	keyHash?: string;
 }
-

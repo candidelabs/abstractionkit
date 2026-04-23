@@ -1,18 +1,30 @@
-import type {StateOverrideSet, UserOperationV6, UserOperationV7, UserOperationV8, UserOperationV9} from "../types";
+import type {
+	StateOverrideSet,
+	UserOperationV6,
+	UserOperationV7,
+	UserOperationV8,
+	UserOperationV9,
+} from "../types";
 
 /** Union of all UserOperation versions supported by the Candide paymaster. */
-export type AnyUserOperation = UserOperationV9 | UserOperationV8 | UserOperationV7 | UserOperationV6;
+export type AnyUserOperation =
+	| UserOperationV9
+	| UserOperationV8
+	| UserOperationV7
+	| UserOperationV6;
 
 /**
  * Conditional type that maps an input UserOperation type to its matching output type.
  * Preserves type narrowing: pass V7 in → get V7 back.
  * Order matters: V9/V8 is checked first (V7 lacks `eip7702Auth` so won't match V8/V9).
  */
-export type SameUserOp<T extends AnyUserOperation> =
-	T extends UserOperationV9 ? UserOperationV9 :
-	T extends UserOperationV8 ? UserOperationV8 :
-	T extends UserOperationV7 ? UserOperationV7 :
-	UserOperationV6;
+export type SameUserOp<T extends AnyUserOperation> = T extends UserOperationV9
+	? UserOperationV9
+	: T extends UserOperationV8
+		? UserOperationV8
+		: T extends UserOperationV7
+			? UserOperationV7
+			: UserOperationV6;
 
 /**
  * Context passed to the Candide paymaster RPC when requesting sponsorship
@@ -23,7 +35,7 @@ export type SameUserOp<T extends AnyUserOperation> =
  *
  * @example Sponsored (gasless) UserOperation
  * ```ts
- * const [userOp, sponsorMeta] = await paymaster.createSponsorPaymasterUserOperation(
+ * const { userOperation, sponsorMetadata } = await paymaster.createSponsorPaymasterUserOperation(
  *   smartAccount, userOp, bundlerRpc,
  *   "my-sponsorship-policy-id",
  * );
@@ -31,7 +43,7 @@ export type SameUserOp<T extends AnyUserOperation> =
  *
  * @example ERC-20 token gas payment
  * ```ts
- * const userOp = await paymaster.createTokenPaymasterUserOperation(
+ * const { userOperation, tokenQuote } = await paymaster.createTokenPaymasterUserOperation(
  *   smartAccount, userOp, USDC_ADDRESS, bundlerRpc,
  * );
  * ```
@@ -43,7 +55,7 @@ export type SameUserOp<T extends AnyUserOperation> =
  * // The paymaster returns gas limits and init paymasterData (ending with
  * // PAYMASTER_SIG_MAGIC) so owners can sign in parallel without waiting
  * // for the final paymaster signature.
- * const [commitOp] = await paymaster.createSponsorPaymasterUserOperation(
+ * const { userOperation: commitOp } = await paymaster.createSponsorPaymasterUserOperation(
  *   smartAccount, userOp, bundlerRpc,
  *   sponsorshipPolicyId,
  *   { signingPhase: "commit" },
@@ -60,7 +72,7 @@ export type SameUserOp<T extends AnyUserOperation> =
  * // Send the already-signed UserOperation back to the paymaster.
  * // The paymaster replaces the init paymasterData with the final
  * // paymaster signature. Gas estimation is skipped (already done in commit).
- * const [finalOp] = await paymaster.createSponsorPaymasterUserOperation(
+ * const { userOperation: finalOp } = await paymaster.createSponsorPaymasterUserOperation(
  *   smartAccount, commitOp, bundlerRpc,
  *   sponsorshipPolicyId,
  *   { signingPhase: "finalize" },
@@ -76,50 +88,24 @@ export interface CandidePaymasterContext {
 	/** Sponsorship policy identifier for the Candide paymaster. */
 	sponsorshipPolicyId?: string;
 	/**
-	 * Signing phase for the **parallel signing** feature. Only relevant for
-	 * EntryPoint v0.9 accounts that use `PAYMASTER_SIG_MAGIC`-aware paymasters.
+	 * Opt into the **parallel signing** two-phase flow (EntryPoint v0.9 only).
 	 *
-	 * Parallel signing decouples owner signing from the paymaster's final
-	 * signature. This is useful when multiple owners need to co-sign a
-	 * UserOperation (e.g. multi-sig wallets) or when the signing step happens
-	 * on a separate device/service. Without parallel signing, you would need
-	 * the final paymaster signature before owners can sign, creating a
-	 * sequential dependency.
+	 * Decouples owner signing from the paymaster's final signature, so owners
+	 * can sign asynchronously on separate devices (multi-sig, hardware wallets,
+	 * cross-chain multi-sig) without waiting for the paymaster. Works because
+	 * EP v0.9 truncates `paymasterData` at the `PAYMASTER_SIG_MAGIC` boundary
+	 * (`22e325a297439656`) when computing the UserOperation hash — the hash is
+	 * identical whether `paymasterData` holds the init placeholder or the final
+	 * signature, so owners can sign before the paymaster commits.
 	 *
-	 * ## How it works
+	 * - `"commit"` — first call: stub fields, gas estimation, returns init
+	 *   `paymasterData` ending with `PAYMASTER_SIG_MAGIC`. Owners then sign.
+	 * - `"finalize"` — second call: skips gas estimation, swaps the placeholder
+	 *   for the real paymaster signature. Ready to send to the bundler.
 	 *
-	 * EntryPoint v0.9 introduces the `PAYMASTER_SIG_MAGIC` convention: when
-	 * computing the UserOperation hash, the `paymasterData` is truncated at
-	 * the magic boundary (`22e325a297439656`). This means the hash is
-	 * identical whether the paymasterData contains the init placeholder or
-	 * the final paymaster signature — so owners can safely sign the
-	 * UserOperation before the paymaster has issued its real signature.
-	 *
-	 * ## Two-phase flow
-	 *
-	 * **`"commit"`** — First call. The paymaster:
-	 *   1. Sets dummy paymaster fields for gas estimation.
-	 *   2. Estimates gas limits via the bundler.
-	 *   3. Returns init `paymasterData` ending with `PAYMASTER_SIG_MAGIC`.
-	 *   After this call, the UserOp is ready for owner signing.
-	 *
-	 * **`"finalize"`** — Second call. The paymaster:
-	 *   1. Skips gas estimation (already done in commit).
-	 *   2. Replaces the init `paymasterData` with the real paymaster signature.
-	 *   After this call, the UserOp is ready to be sent to the bundler.
-	 *
-	 * ## When to use
-	 *
-	 * - Multi-owner accounts where owners sign in parallel on different devices.
-	 * - Flows where the signing step is asynchronous (e.g. hardware wallets,
-	 *   approval queues, cross-chain multi-sig via `SafeMultiChainSigAccount`).
-	 * - Any scenario where you need a stable UserOp hash before the paymaster
-	 *   commits its final signature.
-	 *
-	 * If omitted, the default single-step flow is used: gas estimation,
-	 * paymaster signature, and owner signing all happen sequentially.
+	 * Omit for the default single-step (sequential) flow.
 	 */
-	signingPhase?: 'commit' | 'finalize';
+	signingPhase?: "commit" | "finalize";
 }
 
 export interface SmartAccountWithEntrypoint {
@@ -167,7 +153,7 @@ export interface Erc7677PaymasterConstructorOptions {
  * Allows manually specifying the EntryPoint address instead of auto-detection.
  */
 export interface BasePaymasterUserOperationOverrides {
-	/** set the entrypoint address intead of determining it from the useroperation structure.*/
+	/** set the entrypoint address instead of determining it from the useroperation structure. */
 	entrypoint?: string;
 	/** When true, prepend an approve(0) call before the actual token approval. Required for tokens like USDT that don't allow changing a non-zero allowance directly. */
 	resetApproval?: boolean;
@@ -192,8 +178,6 @@ export interface GasPaymasterUserOperationOverrides extends BasePaymasterUserOpe
 	/** set the preVerificationGasPercentageMultiplier instead of estimating gas using the bundler*/
 	preVerificationGasPercentageMultiplier?: number;
 
-	/** pass some state overrides for gas estimation"*/
+	/** pass some state overrides for gas estimation */
 	state_override_set?: StateOverrideSet;
-
-	context?: CandidePaymasterContext;
 }

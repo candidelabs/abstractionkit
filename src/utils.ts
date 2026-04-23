@@ -1,42 +1,38 @@
-import { id, AbiCoder, keccak256, JsonRpcProvider, solidityPacked, getAddress } from "ethers";
-
-import {
-	AbiInputValue,
-	UserOperationV6,
-	JsonRpcResponse,
-	JsonRpcParam,
-	JsonRpcError,
-	GasOption,
-	JsonRpcResult,
-	UserOperationV7,
-	UserOperationV8,
-    PolygonChain,
-    PolygonGasStationJsonRpcResponse,
-    UserOperationV9,
-} from "./types";
-import {
-	AbstractionKitError,
-	BundlerErrorCodeDict,
-	ensureError,
-} from "./errors";
+import { AbiCoder, getAddress, id, JsonRpcProvider, keccak256 } from "ethers";
 import { ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8, ENTRYPOINT_V9 } from "./constants";
+import { AbstractionKitError, BundlerErrorCodeDict, ensureError } from "./errors";
+import {
+	type AbiInputValue,
+	GasOption,
+	type GasPrice,
+	type JsonRpcError,
+	type JsonRpcParam,
+	type JsonRpcResponse,
+	type JsonRpcResult,
+	type PolygonChain,
+	type PolygonGasStationJsonRpcResponse,
+	type UserOperationV6,
+	type UserOperationV7,
+	type UserOperationV8,
+	type UserOperationV9,
+} from "./types";
 
-function buildDomainSeparator(chainId: bigint, entrypoint: string): string{
-    // DOMAIN_NAME = "ERC4337"
-    const hashed_name = "0x364da28a5c92bcc87fe97c8813a6c6b8a3a049b0ea0a328fcb0b4f0e00337586"; 
+function buildDomainSeparator(chainId: bigint, entrypoint: string): string {
+	// DOMAIN_NAME = "ERC4337"
+	const hashed_name = "0x364da28a5c92bcc87fe97c8813a6c6b8a3a049b0ea0a328fcb0b4f0e00337586";
 
-    // DOMAIN_VERSION = "1"
-    const hashed_version = "0xc89efdaa54c0f20c7adf612882df0950f5a951637e0307cdcb4c672f298b8bc6";
+	// DOMAIN_VERSION = "1"
+	const hashed_version = "0xc89efdaa54c0f20c7adf612882df0950f5a951637e0307cdcb4c672f298b8bc6";
 
-    // TYPE_HASH = keccak("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-    const type_hash = "0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f";
+	// TYPE_HASH = keccak("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+	const type_hash = "0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f";
 
-    const abiCoder = AbiCoder.defaultAbiCoder();
-    const encodedUserOperationHash = abiCoder.encode(
-        ["(bytes32,bytes32,bytes32,uint256,address)"],
-        [[type_hash, hashed_name, hashed_version, chainId, entrypoint]],
-    );
-    return keccak256(encodedUserOperationHash);
+	const abiCoder = AbiCoder.defaultAbiCoder();
+	const encodedUserOperationHash = abiCoder.encode(
+		["(bytes32,bytes32,bytes32,uint256,address)"],
+		[[type_hash, hashed_name, hashed_version, chainId, entrypoint]],
+	);
+	return keccak256(encodedUserOperationHash);
 }
 
 /**
@@ -55,43 +51,45 @@ export function createUserOperationHash(
 	chainId: bigint,
 ): string {
 	let packedUserOperationHash: string;
-    const abiCoder = AbiCoder.defaultAbiCoder();
-	let userOperationHash;
-	if (entrypointAddress.toLowerCase() == ENTRYPOINT_V6.toLowerCase()) {
+	const abiCoder = AbiCoder.defaultAbiCoder();
+	let userOperationHash: string;
+	if (entrypointAddress.toLowerCase() === ENTRYPOINT_V6.toLowerCase()) {
 		packedUserOperationHash = keccak256(
 			createPackedUserOperationV6(useroperation as UserOperationV6),
 		);
-        const encodedUserOperationHash = abiCoder.encode(
-            ["bytes32", "address", "uint256"],
-            [packedUserOperationHash, entrypointAddress, chainId],
-        );
-        userOperationHash = keccak256(encodedUserOperationHash);
-    }else if (entrypointAddress.toLowerCase() == ENTRYPOINT_V7.toLowerCase()) {
+		const encodedUserOperationHash = abiCoder.encode(
+			["bytes32", "address", "uint256"],
+			[packedUserOperationHash, entrypointAddress, chainId],
+		);
+		userOperationHash = keccak256(encodedUserOperationHash);
+	} else if (entrypointAddress.toLowerCase() === ENTRYPOINT_V7.toLowerCase()) {
 		packedUserOperationHash = keccak256(
 			createPackedUserOperationV7(useroperation as UserOperationV7),
 		);
-        const encodedUserOperationHash = abiCoder.encode(
-            ["bytes32", "address", "uint256"],
-            [packedUserOperationHash, entrypointAddress, chainId],
-        );
-        userOperationHash = keccak256(encodedUserOperationHash);
-    }else if (entrypointAddress.toLowerCase() == ENTRYPOINT_V8.toLowerCase()) {
-        packedUserOperationHash = keccak256(
+		const encodedUserOperationHash = abiCoder.encode(
+			["bytes32", "address", "uint256"],
+			[packedUserOperationHash, entrypointAddress, chainId],
+		);
+		userOperationHash = keccak256(encodedUserOperationHash);
+	} else if (entrypointAddress.toLowerCase() === ENTRYPOINT_V8.toLowerCase()) {
+		packedUserOperationHash = keccak256(
 			createPackedUserOperationV8(useroperation as UserOperationV8),
 		);
-        const domainSeparator = buildDomainSeparator(chainId, entrypointAddress);
-        userOperationHash = keccak256(
-            "0x1901" + domainSeparator.slice(2) + packedUserOperationHash.slice(2));
-    }else if (entrypointAddress.toLowerCase() == ENTRYPOINT_V9.toLowerCase()) {
-        packedUserOperationHash = keccak256(
+		const domainSeparator = buildDomainSeparator(chainId, entrypointAddress);
+		userOperationHash = keccak256(
+			`0x1901${domainSeparator.slice(2)}${packedUserOperationHash.slice(2)}`,
+		);
+	} else if (entrypointAddress.toLowerCase() === ENTRYPOINT_V9.toLowerCase()) {
+		packedUserOperationHash = keccak256(
 			createPackedUserOperationV9(useroperation as UserOperationV8),
 		);
-        const domainSeparator = buildDomainSeparator(chainId, entrypointAddress);
-        userOperationHash = keccak256(
-            "0x1901" + domainSeparator.slice(2) + packedUserOperationHash.slice(2));
-    }else{
-        throw new RangeError("unsupported entrypoint address: " + entrypointAddress);
-    }
+		const domainSeparator = buildDomainSeparator(chainId, entrypointAddress);
+		userOperationHash = keccak256(
+			`0x1901${domainSeparator.slice(2)}${packedUserOperationHash.slice(2)}`,
+		);
+	} else {
+		throw new RangeError(`unsupported entrypoint address: ${entrypointAddress}`);
+	}
 
 	return userOperationHash;
 }
@@ -103,9 +101,7 @@ export function createUserOperationHash(
  * @param useroperation - UserOperation to pack
  * @returns ABI-encoded packed UserOperation as a hex string
  */
-export function createPackedUserOperationV6(
-	useroperation: UserOperationV6,
-): string {
+export function createPackedUserOperationV6(useroperation: UserOperationV6): string {
 	const useroperationValuesArrayWithHashedByteValues = [
 		useroperation.sender,
 		useroperation.nonce,
@@ -145,9 +141,7 @@ export function createPackedUserOperationV6(
  * @param useroperation - UserOperation to pack
  * @returns ABI-encoded packed UserOperation as a hex string
  */
-export function createPackedUserOperationV7(
-	useroperation: UserOperationV7,
-): string {
+export function createPackedUserOperationV7(useroperation: UserOperationV7): string {
 	const abiCoder = AbiCoder.defaultAbiCoder();
 
 	let initCode = "0x";
@@ -160,16 +154,12 @@ export function createPackedUserOperationV7(
 
 	const accountGasLimits =
 		"0x" +
-		abiCoder
-			.encode(["uint128"], [useroperation.verificationGasLimit])
-			.slice(34) +
+		abiCoder.encode(["uint128"], [useroperation.verificationGasLimit]).slice(34) +
 		abiCoder.encode(["uint128"], [useroperation.callGasLimit]).slice(34);
 
 	const gasFees =
 		"0x" +
-		abiCoder
-			.encode(["uint128"], [useroperation.maxPriorityFeePerGas])
-			.slice(34) +
+		abiCoder.encode(["uint128"], [useroperation.maxPriorityFeePerGas]).slice(34) +
 		abiCoder.encode(["uint128"], [useroperation.maxFeePerGas]).slice(34);
 
 	let paymasterAndData = "0x";
@@ -202,16 +192,7 @@ export function createPackedUserOperationV7(
 	];
 
 	const packedUserOperation = abiCoder.encode(
-		[
-			"address",
-			"uint256",
-			"bytes32",
-			"bytes32",
-			"bytes32",
-			"uint256",
-			"bytes32",
-			"bytes32",
-		],
+		["address", "uint256", "bytes32", "bytes32", "bytes32", "uint256", "bytes32", "bytes32"],
 		useroperationValuesArrayWithHashedByteValues,
 	);
 	return packedUserOperation;
@@ -223,10 +204,8 @@ export function createPackedUserOperationV7(
  * @param useroperation - UserOperation to pack
  * @returns ABI-encoded packed UserOperation as a hex string
  */
-export function createPackedUserOperationV9(
-	useroperation: UserOperationV8,
-): string {
-    return baseCreatePackedUserOperationV8V9(useroperation, true);
+export function createPackedUserOperationV9(useroperation: UserOperationV8): string {
+	return baseCreatePackedUserOperationV8V9(useroperation, true);
 }
 
 /**
@@ -235,47 +214,43 @@ export function createPackedUserOperationV9(
  * @param useroperation - UserOperation to pack
  * @returns ABI-encoded packed UserOperation as a hex string
  */
-export function createPackedUserOperationV8(
-	useroperation: UserOperationV8,
-): string {
-    return baseCreatePackedUserOperationV8V9(useroperation, false);
+export function createPackedUserOperationV8(useroperation: UserOperationV8): string {
+	return baseCreatePackedUserOperationV8V9(useroperation, false);
 }
 
 /**
- * createPackedUserOperation for the standard entrypointv0.8 hash
- * @param useroperation -useroperation to pack
- * @returns packed UserOperation
+ * Shared packer for EntryPoint v0.8 and v0.9 UserOperations.
+ * @param useroperation - UserOperation to pack
+ * @param is_v9 - If true, strips the paymaster signature suffix (v0.9-specific)
+ * @returns ABI-encoded packed UserOperation as a hex string
  */
 function baseCreatePackedUserOperationV8V9(
-	useroperation: UserOperationV8 | UserOperationV9, is_v9: boolean
+	useroperation: UserOperationV8 | UserOperationV9,
+	is_v9: boolean,
 ): string {
 	const abiCoder = AbiCoder.defaultAbiCoder();
 
 	let initCode = "0x";
 	if (useroperation.factory != null) {
-        const eip7702Auth = useroperation.eip7702Auth;
-        if (eip7702Auth != null && eip7702Auth.address != null){
-            initCode = eip7702Auth.address; 
-        }else{
-            initCode = useroperation.factory;
-        }
-        if (useroperation.factoryData != null) {
-            initCode += useroperation.factoryData.slice(2);
-        }
+		const eip7702Auth = useroperation.eip7702Auth;
+		if (eip7702Auth != null && eip7702Auth.address != null) {
+			initCode = eip7702Auth.address;
+		} else {
+			initCode = useroperation.factory;
+		}
+		if (useroperation.factoryData != null) {
+			initCode += useroperation.factoryData.slice(2);
+		}
 	}
 
 	const accountGasLimits =
 		"0x" +
-		abiCoder
-			.encode(["uint128"], [useroperation.verificationGasLimit])
-			.slice(34) +
+		abiCoder.encode(["uint128"], [useroperation.verificationGasLimit]).slice(34) +
 		abiCoder.encode(["uint128"], [useroperation.callGasLimit]).slice(34);
 
 	const gasFees =
 		"0x" +
-		abiCoder
-			.encode(["uint128"], [useroperation.maxPriorityFeePerGas])
-			.slice(34) +
+		abiCoder.encode(["uint128"], [useroperation.maxPriorityFeePerGas]).slice(34) +
 		abiCoder.encode(["uint128"], [useroperation.maxFeePerGas]).slice(34);
 
 	let paymasterAndData = "0x";
@@ -292,27 +267,26 @@ function baseCreatePackedUserOperationV8V9(
 				.slice(34);
 		}
 		if (useroperation.paymasterData != null) {
-			const PAYMASTER_SIG_MAGIC = '22e325a297439656';
-			if(
-				is_v9 &&
-				useroperation.paymasterData.toLowerCase().endsWith(PAYMASTER_SIG_MAGIC)
-			){
+			const PAYMASTER_SIG_MAGIC = "22e325a297439656";
+			if (is_v9 && useroperation.paymasterData.toLowerCase().endsWith(PAYMASTER_SIG_MAGIC)) {
 				const sigLenHex = useroperation.paymasterData.slice(
 					useroperation.paymasterData.length - 16 - 4,
-					useroperation.paymasterData.length - 16
+					useroperation.paymasterData.length - 16,
 				);
 				const sigLen = parseInt(sigLenHex, 16);
 				const prefixEnd = useroperation.paymasterData.length - 16 - 4 - sigLen * 2;
-				paymasterAndData += useroperation.paymasterData.slice(0, prefixEnd).replaceAll("0x", "") + PAYMASTER_SIG_MAGIC;
-			}else{
+				paymasterAndData +=
+					useroperation.paymasterData.slice(0, prefixEnd).replaceAll("0x", "") +
+					PAYMASTER_SIG_MAGIC;
+			} else {
 				paymasterAndData += useroperation.paymasterData.slice(2);
 			}
 		}
 	}
 
 	const useroperationValuesArrayWithHashedByteValues = [
-        // PACKED_USEROP_TYPEHASH
-        "0x29a0bca4af4be3421398da00295e58e6d7de38cb492214754cb6a47507dd6f8e",
+		// PACKED_USEROP_TYPEHASH
+		"0x29a0bca4af4be3421398da00295e58e6d7de38cb492214754cb6a47507dd6f8e",
 		useroperation.sender,
 		useroperation.nonce,
 		keccak256(initCode),
@@ -361,10 +335,7 @@ export function createCallData(
 	functionInputParameters: AbiInputValue[],
 ): string {
 	const abiCoder = AbiCoder.defaultAbiCoder();
-    const params: string = abiCoder.encode(
-		functionInputAbi,
-		functionInputParameters,
-	);
+	const params: string = abiCoder.encode(functionInputAbi, functionInputParameters);
 	const callData = functionSelector + params.slice(2);
 
 	return callData;
@@ -386,24 +357,24 @@ export async function sendJsonRpcRequest(
 	rpcUrl: string,
 	method: string,
 	params: JsonRpcParam,
-    headers: Record<string, string> = { "Content-Type": "application/json" },
-    paramsKeyName: string = "params",
+	headers: Record<string, string> = { "Content-Type": "application/json" },
+	paramsKeyName: string = "params",
 ): Promise<JsonRpcResult> {
 	const raw = JSON.stringify(
 		{
 			method: method,
 			[paramsKeyName]: params,
-			id: new Date().getTime(), //semi unique id
+			id: Date.now(), //semi unique id
 			jsonrpc: "2.0",
 		},
-		(key, value) =>
+		(_key, value) =>
 			// change all bigint values to "0x" prefixed hex strings
 			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
-			typeof value === "bigint" ? "0x" + value.toString(16) : value,
+			typeof value === "bigint" ? `0x${value.toString(16)}` : value,
 	);
 	const requestOptions: RequestInit = {
 		method: "POST",
-		headers, 
+		headers,
 		body: raw,
 		redirect: "follow",
 	};
@@ -419,17 +390,13 @@ export async function sendJsonRpcRequest(
 		const codeString = String(err.code);
 
 		if (codeString in BundlerErrorCodeDict) {
-			throw new AbstractionKitError(
-				BundlerErrorCodeDict[codeString],
-				err.message,
-				{
-					errno: err.code,
-					context: {
-						url: rpcUrl,
-						requestOptions: JSON.stringify(requestOptions),
-					},
+			throw new AbstractionKitError(BundlerErrorCodeDict[codeString], err.message, {
+				errno: err.code,
+				context: {
+					url: rpcUrl,
+					requestOptions: JSON.stringify(requestOptions),
 				},
-			);
+			});
 		} else {
 			throw new AbstractionKitError("UNKNOWN_ERROR", err.message, {
 				errno: err.code,
@@ -443,13 +410,13 @@ export async function sendJsonRpcRequest(
 }
 
 /**
- * get function selector from the function signature
- * @param functionSignature - example of a function signature "mint(address)"
- * @returns fucntion selector - hexstring representation of the first four bytes of the hash of the signature of the function
+ * Get a 4-byte function selector from a Solidity-style function signature.
+ * Computed as the first 4 bytes of keccak256(signature).
+ * @param functionSignature - Solidity-style function signature, e.g. "mint(address)"
+ * @returns Function selector as a 0x-prefixed 10-character hex string
  *
  * @example
- * const getNonceFunctionSignature =  'getNonce(address,uint192)';
- * const getNonceFunctionSelector =  getFunctionSelector(getNonceFunctionSignature);
+ * getFunctionSelector("getNonce(address,uint192)"); // "0x35567e1a"
  */
 export function getFunctionSelector(functionSignature: string): string {
 	return id(functionSignature).slice(0, 10);
@@ -472,9 +439,7 @@ export async function fetchAccountNonce(
 	key: number = 0,
 ): Promise<bigint> {
 	const getNonceFunctionSignature = "getNonce(address,uint192)";
-	const getNonceFunctionSelector = getFunctionSelector(
-		getNonceFunctionSignature,
-	);
+	const getNonceFunctionSelector = getFunctionSelector(getNonceFunctionSignature);
 	const getNonceTransactionCallData = createCallData(
 		getNonceFunctionSelector,
 		["address", "uint192"],
@@ -499,22 +464,14 @@ export async function fetchAccountNonce(
 			} catch (err) {
 				const error = ensureError(err);
 
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					"getNonce returned ill formed data",
-					{
-						cause: error,
-					},
-				);
+				throw new AbstractionKitError("BAD_DATA", "getNonce returned ill formed data", {
+					cause: error,
+				});
 			}
 		} else {
-			throw new AbstractionKitError(
-				"BAD_DATA",
-				"getNonce returned ill formed data",
-				{
-					context: JSON.stringify(nonce),
-				},
-			);
+			throw new AbstractionKitError("BAD_DATA", "getNonce returned ill formed data", {
+				context: JSON.stringify(nonce),
+			});
 		}
 	} catch (err) {
 		const error = ensureError(err);
@@ -537,47 +494,38 @@ export async function fetchGasPrice(
 	provideRpc: string,
 	gasLevel: GasOption = GasOption.Medium,
 ): Promise<[bigint, bigint]> {
-    try{
-        const jsonRpcProvider = new JsonRpcProvider(provideRpc);
-        const feeData = await jsonRpcProvider.getFeeData();
-        let maxFeePerGas:bigint;
-        let maxPriorityFeePerGas:bigint;
+	try {
+		const jsonRpcProvider = new JsonRpcProvider(provideRpc);
+		const feeData = await jsonRpcProvider.getFeeData();
+		let maxFeePerGas: bigint;
+		let maxPriorityFeePerGas: bigint;
 
-        if(feeData.maxFeePerGas != null && feeData.maxPriorityFeePerGas != null){
-            maxFeePerGas = BigInt(
-                Math.ceil(Number(feeData.maxFeePerGas) * gasLevel),
-            );
-            maxPriorityFeePerGas = BigInt(
-                Math.ceil(Number(feeData.maxPriorityFeePerGas) * gasLevel),
-            );
-        }else if(feeData.gasPrice != null){
-            maxFeePerGas = BigInt(
-                Math.ceil(Number(feeData.gasPrice) * gasLevel),
-            );
-            maxPriorityFeePerGas = maxFeePerGas;
-        }
-        else{
-            maxFeePerGas = BigInt(Math.ceil(1000000000 * gasLevel));
-            maxPriorityFeePerGas = maxFeePerGas;
-        }
+		if (feeData.maxFeePerGas != null && feeData.maxPriorityFeePerGas != null) {
+			maxFeePerGas = BigInt(Math.ceil(Number(feeData.maxFeePerGas) * gasLevel));
+			maxPriorityFeePerGas = BigInt(Math.ceil(Number(feeData.maxPriorityFeePerGas) * gasLevel));
+		} else if (feeData.gasPrice != null) {
+			maxFeePerGas = BigInt(Math.ceil(Number(feeData.gasPrice) * gasLevel));
+			maxPriorityFeePerGas = maxFeePerGas;
+		} else {
+			maxFeePerGas = BigInt(Math.ceil(1000000000 * gasLevel));
+			maxPriorityFeePerGas = maxFeePerGas;
+		}
 
-        if (maxFeePerGas == 0n) {
-            maxFeePerGas = 1n;
-        }
-        if (maxPriorityFeePerGas == 0n) {
-            maxPriorityFeePerGas = 1n;
-        }
+		if (maxFeePerGas === 0n) {
+			maxFeePerGas = 1n;
+		}
+		if (maxPriorityFeePerGas === 0n) {
+			maxPriorityFeePerGas = 1n;
+		}
 
-        return [maxFeePerGas, maxPriorityFeePerGas];
-    }catch (err) {
-        const error = ensureError(err);
+		return [maxFeePerGas, maxPriorityFeePerGas];
+	} catch (err) {
+		const error = ensureError(err);
 
-        throw new AbstractionKitError(
-            "BAD_DATA",
-            "fetching gas prices from node failed.", {
-            cause: error,
-        });
-    }
+		throw new AbstractionKitError("BAD_DATA", "fetching gas prices from node failed.", {
+			cause: error,
+		});
+	}
 }
 
 /**
@@ -591,42 +539,36 @@ export async function fetchGasPricePolygon(
 	polygonChain: PolygonChain,
 	gasLevel: GasOption = GasOption.Medium,
 ): Promise<[bigint, bigint]> {
-    const gasStationUrl = 'https://gasstation.polygon.technology/' + polygonChain;
-    try{
-        const fetchResult = await fetch(gasStationUrl);
-        const response = (await fetchResult.json()) as PolygonGasStationJsonRpcResponse;
-        let gasPrice;
-        if(gasLevel == GasOption.Slow){
-           gasPrice = response.safeLow; 
-        }else if(gasLevel == GasOption.Medium){
-           gasPrice = response.standard; 
-        }else{
-           gasPrice = response.fast; 
-        }
-        let maxFeePerGas = BigInt(
-            Math.ceil(Number(gasPrice.maxFee) * 1000000000),
-        );
-        let maxPriorityFeePerGas = BigInt(
-            Math.ceil(Number(gasPrice.maxPriorityFee) * 1000000000),
-        );
+	const gasStationUrl = `https://gasstation.polygon.technology/${polygonChain}`;
+	try {
+		const fetchResult = await fetch(gasStationUrl);
+		const response = (await fetchResult.json()) as PolygonGasStationJsonRpcResponse;
+		let gasPrice: GasPrice;
+		if (gasLevel === GasOption.Slow) {
+			gasPrice = response.safeLow;
+		} else if (gasLevel === GasOption.Medium) {
+			gasPrice = response.standard;
+		} else {
+			gasPrice = response.fast;
+		}
+		let maxFeePerGas = BigInt(Math.ceil(Number(gasPrice.maxFee) * 1000000000));
+		let maxPriorityFeePerGas = BigInt(Math.ceil(Number(gasPrice.maxPriorityFee) * 1000000000));
 
-        if (maxFeePerGas == 0n) {
-            maxFeePerGas = 1n;
-        }
-        if (maxPriorityFeePerGas == 0n) {
-            maxPriorityFeePerGas = 1n;
-        }
+		if (maxFeePerGas === 0n) {
+			maxFeePerGas = 1n;
+		}
+		if (maxPriorityFeePerGas === 0n) {
+			maxPriorityFeePerGas = 1n;
+		}
 
-        return [maxFeePerGas, maxPriorityFeePerGas];
-    }catch (err) {
-        const error = ensureError(err);
+		return [maxFeePerGas, maxPriorityFeePerGas];
+	} catch (err) {
+		const error = ensureError(err);
 
-        throw new AbstractionKitError(
-            "BAD_DATA",
-            "fetching gas prices from " + gasStationUrl + " failed.", {
-            cause: error,
-        });
-    }
+		throw new AbstractionKitError("BAD_DATA", `fetching gas prices from ${gasStationUrl} failed.`, {
+			cause: error,
+		});
+	}
 }
 
 /**
@@ -641,8 +583,7 @@ export function calculateUserOperationMaxGasCost(
 ): bigint {
 	if ("initCode" in useroperation) {
 		const isPaymasterAndData =
-			useroperation.paymasterAndData != "0x" &&
-			useroperation.paymasterAndData != null;
+			useroperation.paymasterAndData !== "0x" && useroperation.paymasterAndData != null;
 		const mul = isPaymasterAndData ? 3n : 0n;
 		const requiredGas =
 			useroperation.callGasLimit +
@@ -665,11 +606,11 @@ export function calculateUserOperationMaxGasCost(
  * Deposit information for an address in the EntryPoint contract.
  */
 export type DepositInfo = {
-    deposit: bigint;
-    staked: boolean;
-    stake:bigint;
-    unstakeDelaySec: bigint;
-    withdrawTime: bigint;
+	deposit: bigint;
+	staked: boolean;
+	stake: bigint;
+	unstakeDelaySec: bigint;
+	withdrawTime: bigint;
 };
 
 /**
@@ -685,10 +626,8 @@ export async function getBalanceOf(
 	address: string,
 	entrypointAddress: string,
 ): Promise<bigint> {
-   const depositInfo = await getDepositInfo(
-        nodeRpcUrl, address, entrypointAddress
-    )
-    return depositInfo.deposit;
+	const depositInfo = await getDepositInfo(nodeRpcUrl, address, entrypointAddress);
+	return depositInfo.deposit;
 }
 
 /**
@@ -705,57 +644,43 @@ export async function getDepositInfo(
 	entrypointAddress: string,
 ): Promise<DepositInfo> {
 	const getDepositInfoSelector = "0x5287ce12"; //"getDepositInfo(address)"
-	const getDepositInfoCallData = createCallData(
-		getDepositInfoSelector,
-		["address"],
-		[address],
-	);
+	const getDepositInfoCallData = createCallData(getDepositInfoSelector, ["address"], [address]);
 
 	const params = {
-        from: "0x0000000000000000000000000000000000000000",
-        to: entrypointAddress,
-        data: getDepositInfoCallData,
-    };
+		from: "0x0000000000000000000000000000000000000000",
+		to: entrypointAddress,
+		data: getDepositInfoCallData,
+	};
 
 	try {
-        const depositInfoRequestResult = await sendEthCallRequest(
-            nodeRpcUrl, params, "latest");
+		const depositInfoRequestResult = await sendEthCallRequest(nodeRpcUrl, params, "latest");
 
-        const abiCoder = AbiCoder.defaultAbiCoder();
-	    const decodedCalldata = abiCoder.decode(
-            ["uint256", "bool", "uint112", "uint32", "uint48"],
-            depositInfoRequestResult
-        );
-
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		const decodedCalldata = abiCoder.decode(
+			["uint256", "bool", "uint112", "uint32", "uint48"],
+			depositInfoRequestResult,
+		);
 
 		if (decodedCalldata.length === 5) {
 			try {
 				return {
-                    deposit:BigInt(decodedCalldata[0]),
-                    staked:Boolean(decodedCalldata[1]),
-                    stake:BigInt(decodedCalldata[2]),
-                    unstakeDelaySec:BigInt(decodedCalldata[3]),
-                    withdrawTime:BigInt(decodedCalldata[4]),
-                };
+					deposit: BigInt(decodedCalldata[0]),
+					staked: Boolean(decodedCalldata[1]),
+					stake: BigInt(decodedCalldata[2]),
+					unstakeDelaySec: BigInt(decodedCalldata[3]),
+					withdrawTime: BigInt(decodedCalldata[4]),
+				};
 			} catch (err) {
 				const error = ensureError(err);
 
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					"getDepositInfo returned ill formed data",
-					{
-						cause: error,
-					},
-				);
+				throw new AbstractionKitError("BAD_DATA", "getDepositInfo returned ill formed data", {
+					cause: error,
+				});
 			}
 		} else {
-			throw new AbstractionKitError(
-				"BAD_DATA",
-				"getDepositInfo returned ill formed data",
-				{
-					context: JSON.stringify(decodedCalldata),
-				},
-			);
+			throw new AbstractionKitError("BAD_DATA", "getDepositInfo returned ill formed data", {
+				context: JSON.stringify(decodedCalldata),
+			});
 		}
 	} catch (err) {
 		const error = ensureError(err);
@@ -788,14 +713,14 @@ export async function sendEthCallRequest(
 	nodeRpcUrl: string,
 	ethCallTransaction: EthCallTransaction,
 	blockNumber: string | bigint,
-    stateOverrides?:object
+	stateOverrides?: object,
 ): Promise<string> {
-    let params = [];
-    if(stateOverrides == null){
-	    params = [ethCallTransaction, blockNumber];
-    }else{
-	    params = [ethCallTransaction, blockNumber, stateOverrides];
-    }
+	let params = [];
+	if (stateOverrides == null) {
+		params = [ethCallTransaction, blockNumber];
+	} else {
+		params = [ethCallTransaction, blockNumber, stateOverrides];
+	}
 
 	try {
 		const data = await sendJsonRpcRequest(nodeRpcUrl, "eth_call", params);
@@ -806,22 +731,14 @@ export async function sendEthCallRequest(
 			} catch (err) {
 				const error = ensureError(err);
 
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					"eth_call returned ill formed data",
-					{
-						cause: error,
-					},
-				);
+				throw new AbstractionKitError("BAD_DATA", "eth_call returned ill formed data", {
+					cause: error,
+				});
 			}
 		} else {
-			throw new AbstractionKitError(
-				"BAD_DATA",
-				"eth_call returned ill formed data",
-				{
-					context: JSON.stringify(data),
-				},
-			);
+			throw new AbstractionKitError("BAD_DATA", "eth_call returned ill formed data", {
+				context: JSON.stringify(data),
+			});
 		}
 	} catch (err) {
 		const error = ensureError(err);
@@ -856,22 +773,14 @@ export async function sendEthGetCodeRequest(
 			} catch (err) {
 				const error = ensureError(err);
 
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					"eth_getCode returned ill formed data",
-					{
-						cause: error,
-					},
-				);
+				throw new AbstractionKitError("BAD_DATA", "eth_getCode returned ill formed data", {
+					cause: error,
+				});
 			}
 		} else {
-			throw new AbstractionKitError(
-				"BAD_DATA",
-				"eth_getCode returned ill formed data",
-				{
-					context: JSON.stringify(data),
-				},
-			);
+			throw new AbstractionKitError("BAD_DATA", "eth_getCode returned ill formed data", {
+				context: JSON.stringify(data),
+			});
 		}
 	} catch (err) {
 		const error = ensureError(err);
@@ -891,14 +800,14 @@ export async function sendEthGetCodeRequest(
  * @returns The checksummed delegatee address, or `null` if not delegated
  */
 export async function getDelegatedAddress(
-    accountAddress: string,
-    providerRpc: string,
+	accountAddress: string,
+	providerRpc: string,
 ): Promise<string | null> {
-    const code = (await sendEthGetCodeRequest(providerRpc, accountAddress, "latest")).toLowerCase();
-    if (code.length === 48 && code.startsWith("0xef0100")) {
-        return getAddress("0x" + code.slice(8));
-    }
-    return null;
+	const code = (await sendEthGetCodeRequest(providerRpc, accountAddress, "latest")).toLowerCase();
+	if (code.length === 48 && code.startsWith("0xef0100")) {
+		return getAddress(`0x${code.slice(8)}`);
+	}
+	return null;
 }
 
 /**
@@ -910,26 +819,22 @@ export async function getDelegatedAddress(
  * @returns A tuple of [maxFeePerGas, maxPriorityFeePerGas] as bigints
  */
 export async function handlefetchGasPrice(
-    providerRpc: string | undefined,
-    polygonGasStation: PolygonChain | undefined,
-    gasLevel: GasOption = GasOption.Medium,
+	providerRpc: string | undefined,
+	polygonGasStation: PolygonChain | undefined,
+	gasLevel: GasOption = GasOption.Medium,
 ): Promise<[bigint, bigint]> {
-    let maxFeePerGas:bigint;
-    let maxPriorityFeePerGas:bigint;
+	let maxFeePerGas: bigint;
+	let maxPriorityFeePerGas: bigint;
 
-    if (polygonGasStation != null) {
-        [maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPricePolygon(
-                polygonGasStation, gasLevel);
-    }
-    else if (providerRpc != null) {
-        [maxFeePerGas, maxPriorityFeePerGas] =
-            await fetchGasPrice(providerRpc, gasLevel);
-    } else {
-        throw new AbstractionKitError(
-            "BAD_DATA",
-            "providerRpc can't be null if maxFeePerGas and " +
-                "maxPriorityFeePerGas are not overriden",
-        );
-    }
-    return [maxFeePerGas, maxPriorityFeePerGas];
+	if (polygonGasStation != null) {
+		[maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPricePolygon(polygonGasStation, gasLevel);
+	} else if (providerRpc != null) {
+		[maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPrice(providerRpc, gasLevel);
+	} else {
+		throw new AbstractionKitError(
+			"BAD_DATA",
+			"providerRpc can't be null if maxFeePerGas and " + "maxPriorityFeePerGas are not overridden",
+		);
+	}
+	return [maxFeePerGas, maxPriorityFeePerGas];
 }

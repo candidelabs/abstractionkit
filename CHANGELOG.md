@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.3.3
+
+### New Features
+
+- **`TokenQuote` type** exported from the package root: `{ token: string; exchangeRate: bigint; tokenCost: bigint }`. Surfaces the exchange rate and maximum token cost the paymaster applied when paying gas with an ERC-20 token, so consumers can display the cost to users or log/meter it without a second RPC round-trip.
+- **`CandidePaymaster.createTokenPaymasterUserOperation` and `Erc7677Paymaster.createPaymasterUserOperation` now return `tokenQuote`** alongside the UserOperation. Populated on the token-payment flow; absent on sponsored flows and on Candide's `signingPhase: "finalize"` path (no gas estimation → no cost computation).
+- **`skipGasEstimation` flag on `createUserOperation` overrides** for `SafeAccount`, `Calibur7702Account`, and `Simple7702Account`. When set, the UserOperation is returned with a dummy signature and zero (or override-provided) gas limits, skipping the bundler's `eth_estimateUserOperationGas` roundtrip. Useful when gas estimation is run separately, for example by a paymaster sponsorship call that returns its own gas limits.
+- **`SponsorInfo` type** exported from the package root. Represents the raw `{ name, icon? }` shape returned by paymasters per ERC-7677; `CandidePaymaster` normalizes it into the public `SponsorMetadata` shape.
+
+### Breaking Changes
+
+- **Three paymaster methods changed return shape** from a raw UserOperation / tuple to a named-field object. All now return `{ userOperation, tokenQuote? | sponsorMetadata? }`:
+  - `CandidePaymaster.createTokenPaymasterUserOperation` — returns `{ userOperation, tokenQuote? }` (was `SameUserOp<T>`).
+  - `CandidePaymaster.createSponsorPaymasterUserOperation` — returns `{ userOperation, sponsorMetadata? }` (was `[SameUserOp<T>, SponsorMetadata | undefined]`).
+  - `Erc7677Paymaster.createPaymasterUserOperation` — returns `{ userOperation, tokenQuote? }` (was `SameUserOp<T>`).
+
+  Migration:
+  ```ts
+  // Before
+  const [sponsoredOp, sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(...);
+  const tokenOp = await paymaster.createTokenPaymasterUserOperation(...);
+  const userOp = await erc7677.createPaymasterUserOperation(...);
+
+  // After
+  const { userOperation: sponsoredOp, sponsorMetadata } = await paymaster.createSponsorPaymasterUserOperation(...);
+  const { userOperation: tokenOp, tokenQuote } = await paymaster.createTokenPaymasterUserOperation(...);
+  const { userOperation, tokenQuote } = await erc7677.createPaymasterUserOperation(...);
+  ```
+- **`CandidePaymasterContext` moved back to a dedicated parameter** on `CandidePaymaster.createSponsorPaymasterUserOperation` and `createTokenPaymasterUserOperation`. The `context` field was removed from `GasPaymasterUserOperationOverrides`, and `context` is now the second-to-last argument (optional) on both methods, with `overrides` as the last argument. Migration:
+  ```ts
+  // Before (0.3.2): context nested inside overrides
+  await paymaster.createSponsorPaymasterUserOperation(
+    smartAccount, userOp, bundlerRpc, sponsorshipPolicyId,
+    { context: { signingPhase: "commit" }, maxFeePerGasMultiplier: 110n },
+  );
+  await paymaster.createTokenPaymasterUserOperation(
+    smartAccount, userOp, tokenAddress, bundlerRpc,
+    { context: { signingPhase: "commit" }, maxFeePerGasMultiplier: 110n },
+  );
+
+  // After (0.3.3): context is a dedicated argument
+  await paymaster.createSponsorPaymasterUserOperation(
+    smartAccount, userOp, bundlerRpc, sponsorshipPolicyId,
+    { signingPhase: "commit" },
+    { maxFeePerGasMultiplier: 110n },
+  );
+  // For createTokenPaymasterUserOperation, `context` is optional: the method
+  // always derives `context.token` from the `tokenAddress` argument, so pass
+  // `undefined` unless you need other context fields (e.g. `signingPhase`).
+  await paymaster.createTokenPaymasterUserOperation(
+    smartAccount, userOp, tokenAddress, bundlerRpc,
+    undefined,
+    { maxFeePerGasMultiplier: 110n },
+  );
+  ```
+
+### Bug Fixes
+
+- **`CandidePaymaster` now parses sponsor info per ERC-7677.** Paymasters return sponsor info under `sponsor: { name, icon? }` (singular `icon`); the previous code read a non-standard `sponsorMetadata` key and therefore always returned `undefined`. The raw response is now normalized into the public `SponsorMetadata` shape (`{ name, description, url, icons[] }`).
+
 ## 0.3.2
 
 ### New Features

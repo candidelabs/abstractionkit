@@ -131,8 +131,8 @@ describe('Calibur7702Account Sponsor Paymaster (v0.9 / EntryPoint v9)', () => {
             { eip7702Auth: { chainId } },
         );
 
-        const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
-            userOp, bundlerRpc, undefined, PM_V9,
+        const { userOperation: sponsoredOp } = await paymaster.createSponsorPaymasterUserOperation(
+            account, userOp, bundlerRpc, undefined, undefined, PM_V9,
         );
 
         // Verify paymaster fields
@@ -168,8 +168,8 @@ describe('Calibur7702Account Sponsor Paymaster (v0.9 / EntryPoint v9)', () => {
             bundlerRpc,
         );
 
-        const [sponsoredOp2] = await paymaster.createSponsorPaymasterUserOperation(
-            userOp2, bundlerRpc, undefined, PM_V9,
+        const { userOperation: sponsoredOp2 } = await paymaster.createSponsorPaymasterUserOperation(
+            account, userOp2, bundlerRpc, undefined, undefined, PM_V9,
         );
 
         sponsoredOp2.signature = account.signUserOperation(sponsoredOp2, eoa.privateKey, chainId);
@@ -193,8 +193,8 @@ describe('Calibur7702Account Sponsor Paymaster (v0.9 / EntryPoint v9)', () => {
             { eip7702Auth: { chainId } },
         );
 
-        const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
-            userOp, bundlerRpc, undefined, PM_V9,
+        const { userOperation: sponsoredOp } = await paymaster.createSponsorPaymasterUserOperation(
+            account, userOp, bundlerRpc, undefined, undefined, PM_V9,
         );
 
         sponsoredOp.eip7702Auth = ak.createAndSignEip7702DelegationAuthorization(
@@ -223,8 +223,8 @@ describe('Calibur7702Account Sponsor Paymaster (v0.9 / EntryPoint v9)', () => {
             { eip7702Auth: { chainId } },
         );
 
-        const [sponsoredDelegateOp] = await paymaster.createSponsorPaymasterUserOperation(
-            delegateOp, bundlerRpc, undefined, PM_V9,
+        const { userOperation: sponsoredDelegateOp } = await paymaster.createSponsorPaymasterUserOperation(
+            account, delegateOp, bundlerRpc, undefined, undefined, PM_V9,
         );
 
         sponsoredDelegateOp.eip7702Auth = ak.createAndSignEip7702DelegationAuthorization(
@@ -250,8 +250,8 @@ describe('Calibur7702Account Sponsor Paymaster (v0.9 / EntryPoint v9)', () => {
         });
 
         const regOp = await account.createUserOperation(registerTxs, providerRpc, bundlerRpc);
-        const [sponsoredRegOp] = await paymaster.createSponsorPaymasterUserOperation(
-            regOp, bundlerRpc, undefined, PM_V9,
+        const { userOperation: sponsoredRegOp } = await paymaster.createSponsorPaymasterUserOperation(
+            account, regOp, bundlerRpc, undefined, undefined, PM_V9,
         );
 
         sponsoredRegOp.signature = account.signUserOperation(sponsoredRegOp, eoa.privateKey, chainId);
@@ -270,8 +270,8 @@ describe('Calibur7702Account Sponsor Paymaster (v0.9 / EntryPoint v9)', () => {
             { dummySignature: dummyWebAuthnSig },
         );
 
-        const [sponsoredPasskeyOp] = await paymaster.createSponsorPaymasterUserOperation(
-            passkeyOp, bundlerRpc, undefined, PM_V9,
+        const { userOperation: sponsoredPasskeyOp } = await paymaster.createSponsorPaymasterUserOperation(
+            account, passkeyOp, bundlerRpc, undefined, undefined, PM_V9,
         );
 
         const userOpHash = account.getUserOperationHash(sponsoredPasskeyOp, chainId);
@@ -296,8 +296,8 @@ describe('Calibur7702Account Sponsor Paymaster (v0.9 / EntryPoint v9)', () => {
             bundlerRpc,
             { eip7702Auth: { chainId } },
         );
-        const [sponsoredDelegateOp] = await paymaster.createSponsorPaymasterUserOperation(
-            delegateOp, bundlerRpc, undefined, PM_V9,
+        const { userOperation: sponsoredDelegateOp } = await paymaster.createSponsorPaymasterUserOperation(
+            account, delegateOp, bundlerRpc, undefined, undefined, PM_V9,
         );
         sponsoredDelegateOp.eip7702Auth = ak.createAndSignEip7702DelegationAuthorization(
             BigInt(sponsoredDelegateOp.eip7702Auth.chainId),
@@ -319,8 +319,8 @@ describe('Calibur7702Account Sponsor Paymaster (v0.9 / EntryPoint v9)', () => {
             expiration: Math.floor(Date.now() / 1000) + 86400 * 365,
         });
         const regOp = await account.createUserOperation(registerTxs, providerRpc, bundlerRpc);
-        const [sponsoredRegOp] = await paymaster.createSponsorPaymasterUserOperation(
-            regOp, bundlerRpc, undefined, PM_V9,
+        const { userOperation: sponsoredRegOp } = await paymaster.createSponsorPaymasterUserOperation(
+            account, regOp, bundlerRpc, undefined, undefined, PM_V9,
         );
         sponsoredRegOp.signature = account.signUserOperation(sponsoredRegOp, eoa.privateKey, chainId);
         await sendAndWait(account, sponsoredRegOp, bundlerRpc);
@@ -330,8 +330,8 @@ describe('Calibur7702Account Sponsor Paymaster (v0.9 / EntryPoint v9)', () => {
         // Revoke it
         const revokeTx = ak.Calibur7702Account.createRevokeKeyMetaTransaction(keyHash);
         const revokeOp = await account.createUserOperation([revokeTx], providerRpc, bundlerRpc);
-        const [sponsoredRevokeOp] = await paymaster.createSponsorPaymasterUserOperation(
-            revokeOp, bundlerRpc, undefined, PM_V9,
+        const { userOperation: sponsoredRevokeOp } = await paymaster.createSponsorPaymasterUserOperation(
+            account, revokeOp, bundlerRpc, undefined, undefined, PM_V9,
         );
         sponsoredRevokeOp.signature = account.signUserOperation(
             sponsoredRevokeOp, eoa.privateKey, chainId,
@@ -355,8 +355,8 @@ describe('Calibur7702Account Sponsor Paymaster (v0.9 / EntryPoint v9)', () => {
             { eip7702Auth: { chainId } },
         );
 
-        const [sponsoredOp, sponsorMetadata] = await paymaster.createSponsorPaymasterUserOperation(
-            userOp, bundlerRpc, undefined, PM_V9,
+        const { userOperation: sponsoredOp, sponsorMetadata } = await paymaster.createSponsorPaymasterUserOperation(
+            account, userOp, bundlerRpc, undefined, undefined, PM_V9,
         );
 
         expect(sponsoredOp.paymaster).toBeTruthy();
@@ -400,8 +400,8 @@ describe('Calibur7702Account Token Paymaster (v0.9 / EntryPoint v9)', () => {
                 bundlerRpc,
                 { eip7702Auth: { chainId } },
             );
-            const [sponsoredOp] = await paymaster.createSponsorPaymasterUserOperation(
-                delegateOp, bundlerRpc, undefined, PM_V9,
+            const { userOperation: sponsoredOp } = await paymaster.createSponsorPaymasterUserOperation(
+                account, delegateOp, bundlerRpc, undefined, undefined, PM_V9,
             );
             sponsoredOp.eip7702Auth = ak.createAndSignEip7702DelegationAuthorization(
                 BigInt(sponsoredOp.eip7702Auth.chainId),
@@ -443,9 +443,15 @@ describe('Calibur7702Account Token Paymaster (v0.9 / EntryPoint v9)', () => {
             bundlerRpc,
         );
 
-        const tokenOp = await paymaster.createTokenPaymasterUserOperation(
-            account, userOp, erc20TokenAddress, bundlerRpc, PM_V9,
+        const { userOperation: tokenOp, tokenQuote } = await paymaster.createTokenPaymasterUserOperation(
+            account, userOp, erc20TokenAddress, bundlerRpc, undefined, PM_V9,
         );
+
+        // Verify tokenQuote
+        expect(tokenQuote).toBeDefined();
+        expect(tokenQuote.token.toLowerCase()).toBe(erc20TokenAddress.toLowerCase());
+        expect(tokenQuote.exchangeRate > 0n).toBe(true);
+        expect(tokenQuote.tokenCost > 0n).toBe(true);
 
         // Verify paymaster fields
         expect(tokenOp.paymaster).toBeTruthy();
@@ -480,8 +486,8 @@ describe('Calibur7702Account Token Paymaster (v0.9 / EntryPoint v9)', () => {
             bundlerRpc,
         );
 
-        const tokenOp = await paymaster.createTokenPaymasterUserOperation(
-            account, userOp, erc20TokenAddress, bundlerRpc, PM_V9,
+        const { userOperation: tokenOp, tokenQuote } = await paymaster.createTokenPaymasterUserOperation(
+            account, userOp, erc20TokenAddress, bundlerRpc, undefined, PM_V9,
         );
 
         // Should have 3 calls: approve + 2 original
