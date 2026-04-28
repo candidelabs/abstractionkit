@@ -230,6 +230,38 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
+	 * Check whether a Safe account is already deployed at the given address.
+	 *
+	 * Use this to decide between connecting to an existing account
+	 * (`new SafeAccountV0_3_0(address)`) and initializing a new one
+	 * (`SafeAccountV0_3_0.initializeNewAccount(owners)`). Once an account is
+	 * deployed, the factory data carried by `initializeNewAccount` is no
+	 * longer needed and including it would waste gas.
+	 *
+	 * Note: this only checks whether bytecode exists at `accountAddress`, not
+	 * whether the deployed code is actually a Safe or whether its on-chain
+	 * configuration matches a given set of owners.
+	 *
+	 * @param accountAddress - the Safe account address to check
+	 * @param nodeRpcUrl - Ethereum JSON-RPC node URL
+	 * @returns `true` if bytecode is deployed at `accountAddress`, `false` otherwise
+	 *
+	 * @example
+	 * ```ts
+	 * const account = (await SafeAccountV0_3_0.isDeployed(addr, rpc))
+	 *   ? new SafeAccountV0_3_0(addr)
+	 *   : SafeAccountV0_3_0.initializeNewAccount(owners);
+	 * ```
+	 */
+	public static async isDeployed(
+		accountAddress: string,
+		nodeRpcUrl: string,
+	): Promise<boolean> {
+		const code = await sendEthGetCodeRequest(nodeRpcUrl, accountAddress, "latest");
+		return code.length > 2;
+	}
+
+	/**
 	 * encode calldata for a single MetaTransaction to be executed by Safe account
 	 * @param metaTransaction - metaTransaction to create calldata for
 	 * @param overrides - overrides for the default values

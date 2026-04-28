@@ -242,6 +242,18 @@ const newAccount = SafeAccountV0_3_0.initializeNewAccount(["0xOwnerAddress"]);
 // First UserOp will deploy it automatically
 ```
 
+When you have a stored Safe address and need to pick between the two paths at runtime, use `isDeployed` to avoid emitting redundant factory data (and the `AA10 sender already constructed` error) on subsequent UserOps:
+
+```typescript
+import { SafeAccountV0_3_0 } from "abstractionkit";
+
+const smartAccount = (await SafeAccountV0_3_0.isDeployed(safeAddress, nodeRpc))
+  ? new SafeAccountV0_3_0(safeAddress)
+  : SafeAccountV0_3_0.initializeNewAccount(owners);
+```
+
+`isDeployed` only checks for bytecode at the address. It does not verify that the deployed code is a Safe or that its on-chain owners match a given set. If your owners may have changed, compare `createAccountAddress(owners)` against the stored address yourself before calling `initializeNewAccount`.
+
 ### Calibur 7702: delegate an EOA and send a transfer
 
 `Calibur7702Account` is Uniswap's EIP-7702 smart account. It upgrades a regular EOA in place so the same address becomes a programmable smart account on EntryPoint v0.8.
