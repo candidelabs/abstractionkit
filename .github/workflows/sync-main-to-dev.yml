@@ -16,12 +16,28 @@ jobs:
       group: sync-main-to-dev
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
+      - name: Check SYNC_PAT is configured
+        id: pat
+        env:
+          SYNC_PAT: ${{ secrets.SYNC_PAT }}
+        run: |
+          if [ -z "$SYNC_PAT" ]; then
+            echo "::warning::SYNC_PAT secret is not configured. Auto-sync is skipped. To enable: create a fine-grained PAT (Contents + Pull requests: Read and write) and add it as repo secret SYNC_PAT."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.pat.outputs.configured == 'true'
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: main
+          token: ${{ secrets.SYNC_PAT }}
 
       - name: Skip if dev already contains main
+        if: steps.pat.outputs.configured == 'true'
         id: check
         run: |
           git fetch origin dev
@@ -33,7 +49,7 @@ jobs:
           fi
 
       - name: Create sync branch
-        if: steps.check.outputs.needed == 'true'
+        if: steps.pat.outputs.configured == 'true' && steps.check.outputs.needed == 'true'
         id: branch
         run: |
           BRANCH="sync/main-to-dev-$(date -u +%Y%m%d-%H%M%S)-${GITHUB_RUN_ID}"
@@ -41,9 +57,9 @@ jobs:
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Open sync PR
-        if: steps.check.outputs.needed == 'true'
+        if: steps.pat.outputs.configured == 'true' && steps.check.outputs.needed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
           gh pr create \
             --base dev \
@@ -59,9 +75,5 @@ jobs:
           **Must be merged with "Create a merge commit"** (NOT squash, NOT rebase).
 
           Why: the point of this PR is to make \`main\`'s release merge commits ancestors of \`dev\` by SHA. Squash flattens to a single new commit with a different SHA; rebase rewrites commits with different SHAs. Only "Create a merge commit" preserves the ancestry.
-
-          ## Note on CI
-
-          This PR is opened by \`GITHUB_TOKEN\`. If your branch protection on \`dev\` requires status checks, CI may not trigger automatically on \`GITHUB_TOKEN\`-created PRs. If that happens, close and reopen the PR, or replace the token with a PAT stored in secrets.
           EOF
           )"
