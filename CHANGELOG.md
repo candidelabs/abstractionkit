@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4
+
+### New Features
+
+- **`SafeAccount.isDeployed(accountAddress, nodeRpcUrl)`**: static method that checks whether a Safe account is already deployed on-chain. Returns `true` when `accountAddress` has non-empty bytecode, `false` otherwise. Useful for branching between `new SafeAccountV0_3_0(address)` (existing account) and `SafeAccountV0_3_0.initializeNewAccount([owners])` (counterfactual) without inspecting `eth_getCode` manually.
+
 ## 0.3.3
 
 ### New Features
