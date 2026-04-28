@@ -1,0 +1,67 @@
+name: Sync main to dev
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: sync-main-to-dev
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Skip if dev already contains main
+        id: check
+        run: |
+          git fetch origin dev
+          if git merge-base --is-ancestor HEAD origin/dev; then
+            echo "dev already contains main; nothing to sync"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create sync branch
+        if: steps.check.outputs.needed == 'true'
+        id: branch
+        run: |
+          BRANCH="sync/main-to-dev-$(date -u +%Y%m%d-%H%M%S)-${GITHUB_RUN_ID}"
+          git push origin "HEAD:refs/heads/$BRANCH"
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Open sync PR
+        if: steps.check.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base dev \
+            --head "${{ steps.branch.outputs.name }}" \
+            --title "sync: main into dev" \
+            --body "$(cat <<'EOF'
+          Auto-opened after push to \`main\` (typically a release merge).
+
+          Brings \`main\`'s tip back into \`dev\` so the next release PR does not open with an "out-of-date with base" banner.
+
+          ## How to merge
+
+          **Must be merged with "Create a merge commit"** (NOT squash, NOT rebase).
+
+          Why: the point of this PR is to make \`main\`'s release merge commits ancestors of \`dev\` by SHA. Squash flattens to a single new commit with a different SHA; rebase rewrites commits with different SHAs. Only "Create a merge commit" preserves the ancestry.
+
+          ## Note on CI
+
+          This PR is opened by \`GITHUB_TOKEN\`. If your branch protection on \`dev\` requires status checks, CI may not trigger automatically on \`GITHUB_TOKEN\`-created PRs. If that happens, close and reopen the PR, or replace the token with a PAT stored in secrets.
+          EOF
+          )"
