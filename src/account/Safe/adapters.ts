@@ -1,4 +1,4 @@
-import { getBytes } from "ethers";
+import { getBytes, hexlify } from "ethers";
 import type { Signer } from "src/signer/types";
 import { SafeAccount } from "./SafeAccount";
 import type { WebauthnPublicKey, WebauthnSignatureData } from "./types";
@@ -153,4 +153,305 @@ export function fromSafeWebauthn(params: FromSafeWebauthnParams): Signer<unknown
 			return SafeAccount.createWebAuthnSignature(assertion) as `0x${string}`;
 		},
 	};
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// WebAuthn pubkey JSON round-trip
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Coerce a `{ x, y }` pair where each coord may be `bigint`, hex string
+ * (`"0x..."`), decimal string, or a safe-integer number into a canonical
+ * {@link WebauthnPublicKey} with bigint coords. Used internally by
+ * {@link pubkeyCoordinatesFromJson} — for non-JSON inputs (URL params,
+ * RPC responses), pass the pre-parsed object straight to that helper.
+ *
+ * @throws if either coordinate is missing, the wrong type, or an
+ * unparseable string.
+ */
+function toBigintPubkey(pubkey: {
+	x: bigint | string | number;
+	y: bigint | string | number;
+}): WebauthnPublicKey {
+	if (!pubkey || pubkey.x == null || pubkey.y == null) {
+		throw new Error("toBigintPubkey: pubkey must be `{ x, y }` with both coords set");
+	}
+	return { x: coerceBigint(pubkey.x, "x"), y: coerceBigint(pubkey.y, "y") };
+}
+
+function coerceBigint(v: bigint | string | number, field: string): bigint {
+	let coerced: bigint;
+	if (typeof v === "bigint") {
+		coerced = v;
+	} else if (typeof v === "string") {
+		try {
+			coerced = BigInt(v);
+		} catch {
+			throw new Error(
+				`toBigintPubkey: pubkey.${field} ("${v}") is not a valid bigint string. ` +
+					"Accepted: non-negative bigint, decimal string, or 0x-prefixed hex string.",
+			);
+		}
+	} else if (typeof v === "number") {
+		if (!Number.isSafeInteger(v)) {
+			throw new Error(
+				`toBigintPubkey: pubkey.${field} is a Number but not a safe integer. ` +
+					"Pass as bigint or hex string to avoid precision loss.",
+			);
+		}
+		coerced = BigInt(v);
+	} else {
+		throw new Error(
+			`toBigintPubkey: pubkey.${field} must be bigint, string, or number (got ${typeof v})`,
+		);
+	}
+	// P-256 field elements are non-negative by definition. Reject negatives
+	// at the coercion boundary so they can't reach `pubkeyCoordinatesToJson`,
+	// which would emit an invalid `"0x-..."` string and break round-trip.
+	if (coerced < 0n) {
+		throw new Error(
+			`toBigintPubkey: pubkey.${field} must be non-negative (got ${coerced.toString()}). ` +
+				"P-256 coordinates are non-negative field elements; negative values aren't valid " +
+				"and would break canonical JSON round-trip serialization.",
+		);
+	}
+	return coerced;
+}
+
+/**
+ * Serialize a WebAuthn pubkey to a JSON string with hex-encoded
+ * coordinates. Inverse of {@link pubkeyCoordinatesFromJson}.
+ *
+ * Any JSON-string persistence — localStorage, backend indexes, query
+ * strings, IPC payloads — eventually needs a custom replacer for
+ * `bigint` (which `JSON.stringify` can't serialize on its own). This
+ * helper ships the canonical version so the round-trip is consistent
+ * across call sites.
+ *
+ * @example
+ * ```ts
+ * localStorage.setItem("passkey", pubkeyCoordinatesToJson({ x: 0x7a..., y: 0x2e... }));
+ * // Stored as: {"x":"0x7a...","y":"0x2e..."}
+ * ```
+ */
+export function pubkeyCoordinatesToJson(pubkey: WebauthnPublicKey): string {
+	return JSON.stringify({
+		x: "0x" + pubkey.x.toString(16),
+		y: "0x" + pubkey.y.toString(16),
+	});
+}
+
+/**
+ * Parse a JSON string produced by {@link pubkeyCoordinatesToJson} (or
+ * any JSON object with `x` / `y` fields as bigint-compatible values)
+ * back into a {@link WebauthnPublicKey} with bigint coords.
+ *
+ * Lenient about input shape: accepts a JSON string, a pre-parsed object
+ * (skip `JSON.parse` if you already ran it), and either hex (`"0x..."`)
+ * or decimal-string coords. Same one-line cost regardless of where the
+ * string came from — localStorage, backend response, query parameter.
+ *
+ * @example
+ * ```ts
+ * const raw = localStorage.getItem("passkey");
+ * if (raw) {
+ *   const pubkey = pubkeyCoordinatesFromJson(raw);
+ *   // pubkey: { x: bigint, y: bigint }
+ * }
+ * ```
+ */
+export function pubkeyCoordinatesFromJson(
+	input: string | { x: bigint | string | number; y: bigint | string | number },
+): WebauthnPublicKey {
+	const parsed = typeof input === "string" ? JSON.parse(input) : input;
+	return toBigintPubkey(parsed);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// WebAuthn assertion normalizer
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Structural shape matching the browser `AuthenticatorAssertionResponse`,
+ * `ox/WebAuthnP256` sign output, and `@simplewebauthn/browser`. Consumers
+ * can pass any of these without an adapter-specific wrapper.
+ *
+ * Each field is normalized individually:
+ * - `authenticatorData`: `ArrayBuffer` (raw browser API), `Uint8Array`
+ *   (most libraries), or `0x`-prefixed hex string (`ox`).
+ * - `clientDataJSON`: UTF-8 string (`ox` returns it pre-decoded), or
+ *   buffer (raw browser API).
+ * - `signature`: pre-decoded `{ r, s }` bigints (`ox` returns this), or a
+ *   DER-encoded buffer (raw browser API).
+ */
+interface AuthenticatorAssertionLike {
+	authenticatorData: ArrayBuffer | Uint8Array | string;
+	clientDataJSON: ArrayBuffer | Uint8Array | string;
+	signature: ArrayBuffer | Uint8Array | { r: bigint; s: bigint };
+}
+
+/**
+ * Turn a structural {@link AuthenticatorAssertionLike} into
+ * {@link WebauthnSignatureData}, ready to feed straight into
+ * `SafeAccount.createWebAuthnSignature` or the `getAssertion` callback
+ * of `fromSafeWebauthn`.
+ *
+ * Replaces the ~13-line manual pipeline every Safe-passkeys consumer
+ * has been writing — `JSON.parse` of `clientDataJSON`, destructure +
+ * re-serialize the non-`type` / non-`challenge` fields, hex-encode,
+ * normalize `authenticatorData`, parse DER signature → `(r, s)` —
+ * with a single call.
+ *
+ * @example Browser:
+ * ```ts
+ * const assertion = await navigator.credentials.get({...});
+ * return webauthnSignatureFromAssertion(assertion.response);
+ * ```
+ *
+ * @example `ox/WebAuthnP256`:
+ * ```ts
+ * const { metadata, signature } = await sign({ challenge, credentialId });
+ * return webauthnSignatureFromAssertion({
+ *   authenticatorData: metadata.authenticatorData, // hex string from ox
+ *   clientDataJSON: metadata.clientDataJSON,       // string from ox
+ *   signature,                                      // { r, s } from ox
+ * });
+ * ```
+ */
+export function webauthnSignatureFromAssertion(
+	response: AuthenticatorAssertionLike,
+): WebauthnSignatureData {
+	const authenticatorData = toArrayBuffer(response.authenticatorData);
+	const clientDataJSON = toUtf8String(response.clientDataJSON);
+	const rs = toRSPair(response.signature);
+	return {
+		authenticatorData,
+		clientDataFields: extractClientDataFieldsHex(clientDataJSON),
+		rs: [rs.r, rs.s],
+	};
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Internal: input normalization
+// ────────────────────────────────────────────────────────────────────────────
+
+function toArrayBuffer(input: ArrayBuffer | Uint8Array | string): ArrayBuffer {
+	// ethers' `getBytes` validates hex format and returns a fresh
+	// Uint8Array; it doesn't accept ArrayBuffer though, so we handle
+	// that one case manually. Same byte-for-byte output as the previous
+	// hand-rolled `hexToBytes` plus regex validation.
+	if (input instanceof ArrayBuffer) return input;
+	const bytes = getBytes(input);
+	return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+function toUtf8String(input: ArrayBuffer | Uint8Array | string): string {
+	if (typeof input === "string") return input;
+	const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+	// TextDecoder is available in all modern browsers and Node 11+.
+	return new TextDecoder("utf-8").decode(bytes);
+}
+
+function toRSPair(
+	input: ArrayBuffer | Uint8Array | { r: bigint; s: bigint },
+): { r: bigint; s: bigint } {
+	if (
+		input !== null &&
+		typeof input === "object" &&
+		"r" in input &&
+		"s" in input &&
+		typeof (input as { r: unknown }).r === "bigint" &&
+		typeof (input as { s: unknown }).s === "bigint"
+	) {
+		return { r: (input as { r: bigint }).r, s: (input as { s: bigint }).s };
+	}
+	const bytes = input instanceof Uint8Array ? input : new Uint8Array(input as ArrayBuffer);
+	return parseDerP256Signature(bytes);
+}
+
+/**
+ * Re-serialize every clientDataJSON field except `type` and `challenge`.
+ * Robust to authenticators adding or reordering keys (e.g. Safari's
+ * `crossOrigin`, future WebAuthn L3 fields) — parses JSON instead of
+ * using a regex, validates the shape is a plain object, and emits hex
+ * via `TextEncoder` (browser-safe; `Buffer` isn't defined in Vite /
+ * Rollup / esbuild bundles without a polyfill).
+ */
+function extractClientDataFieldsHex(clientDataJSON: string): string {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(clientDataJSON);
+	} catch (err) {
+		throw new Error(
+			`webauthnSignatureFromAssertion: clientDataJSON is not valid JSON (${(err as Error).message})`,
+		);
+	}
+	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+		throw new Error(
+			"webauthnSignatureFromAssertion: clientDataJSON must parse to a plain object " +
+				`(got ${parsed === null ? "null" : Array.isArray(parsed) ? "array" : typeof parsed})`,
+		);
+	}
+	const { type: _type, challenge: _challenge, ...rest } = parsed as Record<string, unknown>;
+	const fields = Object.entries(rest)
+		.map(([key, value]) => `"${key}":${JSON.stringify(value)}`)
+		.join(",");
+	// `hexlify` mirrors what the prior hand-rolled hex loop produced —
+	// each byte gets exactly 2 lowercase hex chars, no separators, `0x`
+	// prefix. Confirmed identical for all input sizes via the test suite.
+	return hexlify(new TextEncoder().encode(fields));
+}
+
+/**
+ * Parse a DER-encoded ECDSA P-256 signature into `(r, s)` bigints with
+ * low-S normalization. Defends against truncated / malformed DER: every
+ * length and tag is bounds-checked against the buffer before slicing,
+ * because `Uint8Array.subarray` silently clamps OOB indices and would
+ * otherwise produce attacker-controlled-length r/s.
+ *
+ * DER layout:
+ *   0x30 | total-len | 0x02 | r-len | r-bytes | 0x02 | s-len | s-bytes
+ */
+function parseDerP256Signature(der: Uint8Array): { r: bigint; s: bigint } {
+	const malformed = () =>
+		new Error("webauthnSignatureFromAssertion: malformed DER signature");
+	if (der.length < 8 || der[0] !== 0x30) throw malformed();
+
+	// Validate the outer SEQUENCE length up front so trailing garbage and
+	// length under/overstatement can't survive to the bigint conversion.
+	const headerLen = der[1] === 0x81 ? 3 : 2;
+	const outerLen = der[1] === 0x81 ? der[2] : der[1];
+	if (der.length !== headerLen + outerLen) throw malformed();
+	let offset = headerLen;
+
+	// r tag + length + body must fit
+	if (offset + 2 > der.length) throw malformed();
+	if (der[offset] !== 0x02) throw malformed();
+	const rLen = der[offset + 1];
+	if (rLen <= 0 || offset + 2 + rLen > der.length) throw malformed();
+	const rBytes = der.subarray(offset + 2, offset + 2 + rLen);
+	offset += 2 + rLen;
+
+	// s tag + length + body must fit
+	if (offset + 2 > der.length) throw malformed();
+	if (der[offset] !== 0x02) throw malformed();
+	const sLen = der[offset + 1];
+	if (sLen <= 0 || offset + 2 + sLen > der.length) throw malformed();
+	const sBytes = der.subarray(offset + 2, offset + 2 + sLen);
+	// No bytes may follow `s` inside the SEQUENCE.
+	if (offset + 2 + sLen !== der.length) throw malformed();
+
+	// `hexlify(empty)` returns "0x" which BigInt rejects; preserve the
+	// 0n short-circuit. For DER-parsed r/s the bytes are non-empty by
+	// the rLen/sLen > 0 checks above, but keep the guard explicit.
+	const r = rBytes.length === 0 ? 0n : BigInt(hexlify(rBytes));
+	let s = sBytes.length === 0 ? 0n : BigInt(hexlify(sBytes));
+
+	// Low-S normalize: some authenticators return the high-S form; the
+	// Safe WebAuthn verifier and most P-256 checkers accept only low-S.
+	const P256_N = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
+	const P256_N_HALF = P256_N >> 1n;
+	if (s > P256_N_HALF) s = P256_N - s;
+
+	return { r, s };
 }
