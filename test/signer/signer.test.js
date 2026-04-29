@@ -232,6 +232,96 @@ describe('fromSafeWebauthn adapter', () => {
         ]);
         expect(sig).toBe(expectedSig);
     });
+
+    test('isInit=false integrates — verifier-proxy address equals manual reference', async () => {
+        const safe = ak.SafeAccountV0_3_0.initializeNewAccount([PUBLIC_KEY]);
+        const op = { ...buildSafeV3Op(safe), nonce: 1n };
+        const data = dummyAssertion();
+
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: false,
+            getAssertion: async () => data,
+        });
+        const sig = await safe.signUserOperationWithSigners(op, [signer], CHAIN_ID);
+
+        const verifierAddr = ak.SafeAccountV0_3_0.createWebAuthnSignerVerifierAddress(
+            PUBLIC_KEY.x, PUBLIC_KEY.y,
+        );
+        const webauthnSig = ak.SafeAccountV0_3_0.createWebAuthnSignature(data);
+        const expected = ak.SafeAccountV0_3_0.formatSignaturesToUseroperationSignature([
+            { signer: verifierAddr, signature: webauthnSig, isContractSignature: true },
+        ]);
+        expect(sig).toBe(expected);
+    });
+
+    test('mixed multisig (passkey + EOA, 2-of-2) matches manual reference', async () => {
+        const eoaWallet = new Wallet(PK1);
+        const safe = ak.SafeAccountV0_3_0.initializeNewAccount(
+            [PUBLIC_KEY, eoaWallet.address],
+            { threshold: 2 },
+        );
+        const op = buildSafeV3Op(safe);
+        const data = dummyAssertion();
+
+        const passkeySigner = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            getAssertion: async () => data,
+        });
+        const eoaSigner = ak.fromPrivateKey(PK1);
+        const sig = await safe.signUserOperationWithSigners(
+            op, [passkeySigner, eoaSigner], CHAIN_ID,
+        );
+
+        const hash = ak.SafeAccountV0_3_0.getUserOperationEip712Hash(op, CHAIN_ID);
+        const eoaSig = eoaWallet.signingKey.sign(hash).serialized;
+        const passkeySig = ak.SafeAccountV0_3_0.createWebAuthnSignature(data);
+        // formatter sorts by address internally, so input order is irrelevant
+        const expected = ak.SafeAccountV0_3_0.formatSignaturesToUseroperationSignature([
+            {
+                signer: ak.SafeAccountV0_3_0.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+                signature: passkeySig,
+                isContractSignature: true,
+            },
+            { signer: eoaWallet.address, signature: eoaSig },
+        ]);
+        expect(sig).toBe(expected);
+    });
+
+    test('SafeMultiChainSigAccountV1 Merkle path: single-op delegates equal, multi-op embeds WebAuthn bytes', async () => {
+        const safe = ak.SafeMultiChainSigAccountV1.initializeNewAccount([PUBLIC_KEY]);
+        const op1 = buildSafeMultiChainOp(safe);
+        const op2 = { ...op1, nonce: 1n };
+        const data = dummyAssertion();
+
+        const makeSigner = () => ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            getAssertion: async () => data,
+        });
+
+        // Single-op path: signUserOperationsWithSigners delegates to signUserOperationWithSigners
+        const [singleSig] = await safe.signUserOperationsWithSigners(
+            [{ userOperation: op1, chainId: CHAIN_ID, validAfter: 0n, validUntil: 0n }],
+            [makeSigner()],
+        );
+        const refSingle = await safe.signUserOperationWithSigners(op1, [makeSigner()], CHAIN_ID);
+        expect(singleSig).toBe(refSingle);
+
+        // Multi-op path: distinct signatures, each embedding the WebAuthn contract-signature bytes
+        const [s1, s2] = await safe.signUserOperationsWithSigners(
+            [
+                { userOperation: op1, chainId: 1n, validAfter: 0n, validUntil: 0n },
+                { userOperation: op2, chainId: 10n, validAfter: 0n, validUntil: 0n },
+            ],
+            [makeSigner()],
+        );
+        const webauthnSigBytes = ak.SafeAccountV0_3_0.createWebAuthnSignature(data).slice(2);
+        expect(s1).not.toBe(s2);
+        expect(s1.toLowerCase()).toContain(webauthnSigBytes.toLowerCase());
+        expect(s2.toLowerCase()).toContain(webauthnSigBytes.toLowerCase());
+    });
 });
 
 // ─── SignContext delivery ────────────────────────────────────────────────
