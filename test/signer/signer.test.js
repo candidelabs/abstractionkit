@@ -105,6 +105,23 @@ describe('fromSafeWebauthn adapter', () => {
         };
     }
 
+    test('throws on non-bigint coords (e.g. JSON.parse round-trip)', () => {
+        const stringCoords = {
+            x: PUBLIC_KEY.x.toString(),
+            y: PUBLIC_KEY.y.toString(),
+        };
+        expect(() => ak.fromSafeWebauthn({
+            publicKey: stringCoords,
+            isInit: true,
+            getAssertion: async () => dummyAssertion(),
+        })).toThrow(TypeError);
+        expect(() => ak.fromSafeWebauthn({
+            publicKey: { x: PUBLIC_KEY.x, y: undefined },
+            isInit: true,
+            getAssertion: async () => dummyAssertion(),
+        })).toThrow(/must be bigint/);
+    });
+
     test('isInit=true routes to the WebAuthn shared signer (default)', () => {
         const signer = ak.fromSafeWebauthn({
             publicKey: PUBLIC_KEY,

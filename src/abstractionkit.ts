@@ -108,11 +108,11 @@ export {
 export type {
 	FromSafeWebauthnParams,
 	WebauthnAssertionFetcher,
-} from "./signer/adapters";
+} from "./account/Safe/adapters";
+export { fromSafeWebauthn } from "./account/Safe/adapters";
 export {
 	fromEthersWallet,
 	fromPrivateKey,
-	fromSafeWebauthn,
 	fromViem,
 	fromViemWalletClient,
 } from "./signer/adapters";
