@@ -1,0 +1,79 @@
+name: Sync main to dev
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: sync-main-to-dev
+      cancel-in-progress: true
+    steps:
+      - name: Check SYNC_PAT is configured
+        id: pat
+        env:
+          SYNC_PAT: ${{ secrets.SYNC_PAT }}
+        run: |
+          if [ -z "$SYNC_PAT" ]; then
+            echo "::warning::SYNC_PAT secret is not configured. Auto-sync is skipped. To enable: create a fine-grained PAT (Contents + Pull requests: Read and write) and add it as repo secret SYNC_PAT."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.pat.outputs.configured == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ secrets.SYNC_PAT }}
+
+      - name: Skip if dev already contains main
+        if: steps.pat.outputs.configured == 'true'
+        id: check
+        run: |
+          git fetch origin dev
+          if git merge-base --is-ancestor HEAD origin/dev; then
+            echo "dev already contains main; nothing to sync"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create sync branch
+        if: steps.pat.outputs.configured == 'true' && steps.check.outputs.needed == 'true'
+        id: branch
+        run: |
+          BRANCH="sync/main-to-dev-$(date -u +%Y%m%d-%H%M%S)-${GITHUB_RUN_ID}"
+          git push origin "HEAD:refs/heads/$BRANCH"
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Open sync PR
+        if: steps.pat.outputs.configured == 'true' && steps.check.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          gh pr create \
+            --base dev \
+            --head "${{ steps.branch.outputs.name }}" \
+            --title "sync: main into dev" \
+            --body "$(cat <<'EOF'
+          Auto-opened after push to \`main\` (typically a release merge).
+
+          Brings \`main\`'s tip back into \`dev\` so the next release PR does not open with an "out-of-date with base" banner.
+
+          ## How to merge
+
+          **Must be merged with "Create a merge commit"** (NOT squash, NOT rebase).
+
+          Why: the point of this PR is to make \`main\`'s release merge commits ancestors of \`dev\` by SHA. Squash flattens to a single new commit with a different SHA; rebase rewrites commits with different SHAs. Only "Create a merge commit" preserves the ancestry.
+          EOF
+          )"
