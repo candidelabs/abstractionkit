@@ -67,6 +67,15 @@ export interface FromSafeWebauthnParams {
  * @example
  * import { fromSafeWebauthn } from "abstractionkit";
  *
+ * // Pass `expectedSigners: [{ x, y }]` so createUserOperation picks the
+ * // WebAuthn dummy signature for gas estimation. Without it, the
+ * // bundler sizes verification gas against the EOA dummy and the
+ * // real signed UserOp gets rejected (or under-budgeted on-chain) at submit.
+ * let userOperation = await safe.createUserOperation(
+ *   transactions, nodeUrl, bundlerUrl,
+ *   { expectedSigners: [{ x, y }] },
+ * );
+ *
  * const signer = fromSafeWebauthn({
  *   publicKey: { x, y },
  *   isInit: userOperation.nonce === 0n,
