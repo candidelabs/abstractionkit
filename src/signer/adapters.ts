@@ -169,4 +169,3 @@ export function fromEthersWallet(wallet: EthersWalletLike): Signer<unknown> {
 			(await wallet.signTypedData(td.domain, td.types, td.message)) as `0x${string}`,
 	};
 }
-
