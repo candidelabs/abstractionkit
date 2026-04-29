@@ -88,6 +88,135 @@ describe('fromEthersWallet adapter', () => {
     });
 });
 
+describe('fromSafeWebauthn adapter', () => {
+    const PUBLIC_KEY = {
+        x: 0x1234567890123456789012345678901234567890123456789012345678901234n,
+        y: 0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789n,
+    };
+
+    function dummyAssertion() {
+        return {
+            authenticatorData: new Uint8Array(37).buffer,
+            clientDataFields: '0x7b226f726967696e223a2268747470733a2f2f736166652e676c6f62616c227d',
+            rs: [
+                0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1n,
+                0xb2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2n,
+            ],
+        };
+    }
+
+    test('isInit=true routes to the WebAuthn shared signer (default)', () => {
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            getAssertion: async () => dummyAssertion(),
+        });
+        expect(signer.address.toLowerCase())
+            .toBe(ak.SafeAccountV0_3_0.DEFAULT_WEB_AUTHN_SHARED_SIGNER.toLowerCase());
+    });
+
+    test('isInit=true respects webAuthnSharedSigner override', () => {
+        const override = '0x1111111111111111111111111111111111111111';
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            webAuthnSharedSigner: override,
+            getAssertion: async () => dummyAssertion(),
+        });
+        expect(signer.address).toBe(override);
+    });
+
+    test('isInit=false derives the deterministic verifier proxy from publicKey', () => {
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: false,
+            getAssertion: async () => dummyAssertion(),
+        });
+        const expected = ak.SafeAccountV0_3_0.createWebAuthnSignerVerifierAddress(
+            PUBLIC_KEY.x, PUBLIC_KEY.y,
+        );
+        expect(signer.address.toLowerCase()).toBe(expected.toLowerCase());
+    });
+
+    test('declares type="contract" so the per-pair contract-signature path is used', () => {
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            getAssertion: async () => dummyAssertion(),
+        });
+        expect(signer.type).toBe('contract');
+    });
+
+    test('exposes only signHash — no signTypedData (challenge has no typed-data display)', () => {
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            getAssertion: async () => dummyAssertion(),
+        });
+        expect(typeof signer.signHash).toBe('function');
+        expect(signer.signTypedData).toBeUndefined();
+    });
+
+    test('signHash forwards hash bytes to getAssertion as the challenge', async () => {
+        let captured = null;
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            getAssertion: async (challenge) => {
+                captured = challenge;
+                return dummyAssertion();
+            },
+        });
+        const hash = '0x' + 'aa'.repeat(32);
+        await signer.signHash(hash);
+        expect(captured).toBeInstanceOf(Uint8Array);
+        expect(captured).toEqual(getBytes(hash));
+    });
+
+    test('signHash returns the encoded WebAuthn contract signature', async () => {
+        const data = dummyAssertion();
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            getAssertion: async () => data,
+        });
+        const got = await signer.signHash('0x' + 'cc'.repeat(32));
+        const expected = ak.SafeAccountV0_3_0.createWebAuthnSignature(data);
+        expect(got).toBe(expected);
+    });
+
+    test('integrates with signUserOperationWithSigners — challenge is the SafeOp digest, signature matches manual reference', async () => {
+        const safe = ak.SafeAccountV0_3_0.initializeNewAccount([PUBLIC_KEY]);
+        const op = buildSafeV3Op(safe);
+        const data = dummyAssertion();
+
+        let challengeReceived = null;
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            getAssertion: async (challenge) => {
+                challengeReceived = challenge;
+                return data;
+            },
+        });
+
+        const sig = await safe.signUserOperationWithSigners(op, [signer], CHAIN_ID);
+
+        const expectedHash = ak.SafeAccountV0_3_0.getUserOperationEip712Hash(op, CHAIN_ID);
+        expect(challengeReceived).toEqual(getBytes(expectedHash));
+
+        const webauthnSig = ak.SafeAccountV0_3_0.createWebAuthnSignature(data);
+        const expectedSig = ak.SafeAccountV0_3_0.formatSignaturesToUseroperationSignature([
+            {
+                signer: ak.SafeAccountV0_3_0.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+                signature: webauthnSig,
+                isContractSignature: true,
+            },
+        ]);
+        expect(sig).toBe(expectedSig);
+    });
+});
+
 // ─── SignContext delivery ────────────────────────────────────────────────
 
 describe('SignContext is forwarded to signers', () => {
