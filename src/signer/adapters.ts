@@ -1,4 +1,6 @@
-import { getAddress, Wallet } from "ethers";
+import { getAddress, getBytes, Wallet } from "ethers";
+import { SafeAccount } from "../account/Safe/SafeAccount";
+import type { WebauthnPublicKey, WebauthnSignatureData } from "../account/Safe/types";
 import type { Signer, TypedData } from "./types";
 
 // Structural types for well-known signers. NO imports from viem / ethers
@@ -167,5 +169,120 @@ export function fromEthersWallet(wallet: EthersWalletLike): Signer<unknown> {
 		signHash: async (hash) => wallet.signingKey.sign(hash).serialized as `0x${string}`,
 		signTypedData: async (td) =>
 			(await wallet.signTypedData(td.domain, td.types, td.message)) as `0x${string}`,
+	};
+}
+
+/**
+ * Caller-supplied callback that runs the WebAuthn assertion ceremony for a
+ * given challenge and returns the structured fields needed to encode a
+ * Safe contract signature. The SDK passes the SafeOp digest as the
+ * `challenge` so the authenticator signs over the same bytes Safe will
+ * verify on-chain.
+ *
+ * Implementations typically wrap `navigator.credentials.get(...)` in
+ * browsers, or an equivalent HSM/native bridge in other environments. The
+ * SDK doesn't import `navigator` itself, so the adapter stays
+ * environment-agnostic.
+ */
+export type WebauthnAssertionFetcher = (
+	challenge: Uint8Array,
+) => Promise<WebauthnSignatureData>;
+
+/** Parameters for {@link fromSafeWebauthn}. */
+export interface FromSafeWebauthnParams {
+	/** WebAuthn public key (P-256 x/y coordinates) backing this signer. */
+	publicKey: WebauthnPublicKey;
+	/**
+	 * Whether the UserOperation is the account's first one. When `true`, the
+	 * signer's address is the WebAuthn shared signer (because the per-owner
+	 * verifier proxy isn't deployed yet); when `false`, it's the
+	 * deterministic verifier proxy address derived from `publicKey`.
+	 * Typically computed by the caller as `userOperation.nonce === 0n`.
+	 */
+	isInit: boolean;
+	/** Async callback that runs the WebAuthn ceremony for the SafeOp digest. */
+	getAssertion: WebauthnAssertionFetcher;
+	/** Override the WebAuthn shared signer address used when `isInit`. */
+	webAuthnSharedSigner?: string;
+	/** Override the WebAuthn signer factory used to derive the verifier proxy. */
+	webAuthnSignerFactory?: string;
+	/** Override the WebAuthn signer singleton used to derive the verifier proxy. */
+	webAuthnSignerSingleton?: string;
+	/** Override the WebAuthn signer proxy creation code used in the address derivation. */
+	webAuthnSignerProxyCreationCode?: string;
+	/** Override the EIP-7212 precompile verifier used in the address derivation. */
+	eip7212WebAuthnPrecompileVerifier?: string;
+	/** Override the EIP-7212 contract verifier used in the address derivation. */
+	eip7212WebAuthnContractVerifier?: string;
+}
+
+/**
+ * Adapt a WebAuthn credential to a Signer for `signUserOperationWithSigners`
+ * on Safe accounts. Safe-specific (uses Safe's WebAuthn shared signer /
+ * verifier proxy / signature encoding) — for non-Safe accounts, use the
+ * account's own WebAuthn adapter.
+ *
+ * Hides the address routing (shared signer for the init UserOp, per-owner
+ * verifier proxy after that), the `type: "contract"` tag, and the
+ * Safe-specific signature encoding. The caller supplies a
+ * {@link FromSafeWebauthnParams.getAssertion} callback that runs the
+ * actual WebAuthn ceremony — this is where you call
+ * `navigator.credentials.get(...)` (browser) or an equivalent native
+ * bridge, since the SDK doesn't import `navigator` itself.
+ *
+ * Only `signHash` is exposed: WebAuthn signs a flat challenge, so a typed-data
+ * preview would never reach the authenticator anyway.
+ *
+ * @example
+ * import { fromSafeWebauthn } from "abstractionkit";
+ *
+ * const signer = fromSafeWebauthn({
+ *   publicKey: { x, y },
+ *   isInit: userOperation.nonce === 0n,
+ *   getAssertion: async (challenge) => {
+ *     const assertion = await navigator.credentials.get({
+ *       publicKey: { challenge, rpId, allowCredentials, userVerification },
+ *     });
+ *     return {
+ *       authenticatorData: assertion.response.authenticatorData,
+ *       clientDataFields: extractClientDataFields(assertion.response),
+ *       rs: extractSignature(assertion.response),
+ *     };
+ *   },
+ * });
+ * userOperation.signature = await safe.signUserOperationWithSigners(
+ *   userOperation, [signer], chainId,
+ * );
+ */
+export function fromSafeWebauthn(params: FromSafeWebauthnParams): Signer<unknown> {
+	const {
+		publicKey,
+		isInit,
+		getAssertion,
+		webAuthnSharedSigner,
+		webAuthnSignerFactory,
+		webAuthnSignerSingleton,
+		webAuthnSignerProxyCreationCode,
+		eip7212WebAuthnPrecompileVerifier,
+		eip7212WebAuthnContractVerifier,
+	} = params;
+
+	const address = isInit
+		? (webAuthnSharedSigner ?? SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER)
+		: SafeAccount.createWebAuthnSignerVerifierAddress(publicKey.x, publicKey.y, {
+				webAuthnSignerFactory,
+				webAuthnSignerSingleton,
+				webAuthnSignerProxyCreationCode,
+				eip7212WebAuthnPrecompileVerifier,
+				eip7212WebAuthnContractVerifier,
+			});
+
+	return {
+		address: address as `0x${string}`,
+		type: "contract",
+		signHash: async (hash) => {
+			const assertion = await getAssertion(getBytes(hash));
+			return SafeAccount.createWebAuthnSignature(assertion) as `0x${string}`;
+		},
 	};
 }
