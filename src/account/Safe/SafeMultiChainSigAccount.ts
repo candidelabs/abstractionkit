@@ -19,6 +19,7 @@ import type {
 	MultiChainSignatureMerkleTreeRootTypedDataDomain,
 	MultiChainSignatureMerkleTreeRootTypedMessageValue,
 	SafeAccountSingleton,
+	SafeSignatureOptions,
 	SafeUserOperationTypedDataDomain,
 	SafeUserOperationV9TypedMessageValue,
 	Signer,
@@ -436,19 +437,14 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * @param useroperation - useroperation to sign
 	 * @param privateKeys - for the signers
 	 * @param chainId - target chain id
-	 * @param overrides - overrides for the default values
-	 * @param overrides.validAfter - timestamp the signature will be valid after
-	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @param options - {@link SafeSignatureOptions} — timing, multiChainMerkleProof, module address. The multi-chain flag is force-set true and overrides any caller value.
 	 * @returns signature
 	 */
 	public signUserOperation(
 		userOperation: UserOperationV9,
 		privateKeys: string[],
 		chainId: bigint,
-		overrides: {
-			validAfter?: bigint;
-			validUntil?: bigint;
-		} = {},
+		options: SafeSignatureOptions = {},
 	): string {
 		return SafeAccount.baseSignSingleUserOperation(
 			userOperation,
@@ -457,7 +453,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			this.entrypointAddress,
 			this.safe4337ModuleAddress,
 			{
-				...overrides,
+				...options,
 				isMultiChainSignature: true,
 			},
 		);
@@ -468,33 +464,33 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * {@link AkSigner} instances. See
 	 * {@link SafeAccountV0_3_0.signUserOperationWithSigners} for the full
 	 * design rationale. Sets the multi-chain flag automatically.
+	 *
+	 * @param userOperation - UserOperation to sign
+	 * @param signers - one ExternalSigner per owner (any order)
+	 * @param chainId - target chain id
+	 * @param options - {@link SafeSignatureOptions} — timing, multiChainMerkleProof, module address. The multi-chain flag is force-set true and overrides any caller value.
+	 * @returns Promise resolving to the formatted signature string
 	 */
 	public signUserOperationWithSigners(
 		userOperation: UserOperationV9,
 		signers: ReadonlyArray<AkSigner>,
 		chainId: bigint,
-		overrides: {
-			validAfter?: bigint;
-			validUntil?: bigint;
-		} = {},
+		options: SafeSignatureOptions = {},
 	): Promise<string> {
 		const context: SignContext<UserOperationV9> = {
 			userOperation,
 			chainId,
 			entryPoint: this.entrypointAddress,
 		};
-		return SafeAccount.baseSignUserOperationWithSigners(
-			userOperation,
-			signers,
-			chainId,
-			this.entrypointAddress,
-			this.safe4337ModuleAddress,
+		return SafeAccount.baseSignUserOperationWithSigners(userOperation, signers, chainId, {
+			entrypointAddress: this.entrypointAddress,
+			safe4337ModuleAddress: this.safe4337ModuleAddress,
 			context,
-			{
-				...overrides,
+			options: {
+				...options,
 				isMultiChainSignature: true,
 			},
-		);
+		});
 	}
 
 	/**
@@ -687,13 +683,15 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				u.userOperation,
 				signers,
 				u.chainId,
-				this.entrypointAddress,
-				this.safe4337ModuleAddress,
-				context,
 				{
-					validAfter: u.validAfter,
-					validUntil: u.validUntil,
-					isMultiChainSignature: true,
+					entrypointAddress: this.entrypointAddress,
+					safe4337ModuleAddress: this.safe4337ModuleAddress,
+					context,
+					options: {
+						validAfter: u.validAfter,
+						validUntil: u.validUntil,
+						isMultiChainSignature: true,
+					},
 				},
 			);
 			return [sig];
@@ -781,21 +779,25 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		if (userOperationsToSign.length < 1) {
 			throw new RangeError("There should be at least one userOperationsToSign");
 		}
-		const defaultOverrides: WebAuthnSignatureOverrides = {
+		const defaultWebAuthnOverrides: WebAuthnSignatureOverrides = {
 			eip7212WebAuthnPrecompileVerifier: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
 			webAuthnSignerFactory: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
 			webAuthnSignerSingleton: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
 			webAuthnSignerProxyCreationCode:
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
-			safe4337ModuleAddress: SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 			webAuthnSharedSigner: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+		};
+		const defaultOptions: SafeSignatureOptions = {
+			safe4337ModuleAddress: SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 		};
 		if (userOperationsToSign.length === 1) {
 			return [
 				SafeAccount.formatSignaturesToUseroperationSignature(signerSignaturePairs, {
-					...defaultOverrides,
-					...userOperationsToSign[0].overrides,
+					...defaultOptions,
+					...defaultWebAuthnOverrides,
+					...userOperationsToSign[0].options,
+					...userOperationsToSign[0].webAuthnSignatureOverrides,
 					validAfter: userOperationsToSign[0].validAfter,
 					validUntil: userOperationsToSign[0].validUntil,
 					isMultiChainSignature: true,
@@ -811,8 +813,8 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 					validAfter: userOperationToSign.validAfter,
 					validUntil: userOperationToSign.validUntil,
 					safe4337ModuleAddress:
-						userOperationToSign.overrides?.safe4337ModuleAddress ??
-						defaultOverrides.safe4337ModuleAddress,
+						userOperationToSign.options?.safe4337ModuleAddress ??
+						defaultOptions.safe4337ModuleAddress,
 				},
 			);
 			userOperationsHashes.push(userOperationHash);
@@ -822,8 +824,10 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		userOperationsToSign.forEach((userOperationToSign, index) => {
 			userOpSignatures.push(
 				SafeAccount.formatSignaturesToUseroperationSignature(signerSignaturePairs, {
-					...defaultOverrides,
-					...userOperationToSign.overrides,
+					...defaultOptions,
+					...defaultWebAuthnOverrides,
+					...userOperationToSign.options,
+					...userOperationToSign.webAuthnSignatureOverrides,
 					isMultiChainSignature: true,
 					multiChainMerkleProof: proofs[index],
 				}),
