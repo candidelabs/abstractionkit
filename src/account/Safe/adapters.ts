@@ -33,17 +33,17 @@ export interface FromSafeWebauthnParams {
 	isInit: boolean;
 	/** Async callback that runs the WebAuthn ceremony for the SafeOp digest. */
 	getAssertion: WebauthnAssertionFetcher;
-	/** Override the WebAuthn shared signer address used when `isInit`. */
+	/** Override the WebAuthn shared signer address used when `isInit`. Must match the value passed to `initializeNewAccount`. */
 	webAuthnSharedSigner?: string;
-	/** Override the WebAuthn signer factory used to derive the verifier proxy. */
+	/** Override the WebAuthn signer factory used to derive the verifier proxy. Must match the value passed to `initializeNewAccount`. */
 	webAuthnSignerFactory?: string;
-	/** Override the WebAuthn signer singleton used to derive the verifier proxy. */
+	/** Override the WebAuthn signer singleton used to derive the verifier proxy. Must match the value passed to `initializeNewAccount`. */
 	webAuthnSignerSingleton?: string;
-	/** Override the WebAuthn signer proxy creation code used in the address derivation. */
+	/** Override the WebAuthn signer proxy creation code used in the address derivation. Must match the value passed to `initializeNewAccount`. */
 	webAuthnSignerProxyCreationCode?: string;
-	/** Override the EIP-7212 precompile verifier used in the address derivation. */
+	/** Override the EIP-7212 precompile verifier used in the address derivation. Must match the value passed to `initializeNewAccount`. */
 	eip7212WebAuthnPrecompileVerifier?: string;
-	/** Override the EIP-7212 contract verifier used in the address derivation. */
+	/** Override the EIP-7212 contract verifier used in the address derivation. Must match the value passed to `initializeNewAccount`. */
 	eip7212WebAuthnContractVerifier?: string;
 }
 
@@ -63,6 +63,19 @@ export interface FromSafeWebauthnParams {
  *
  * Only `signHash` is exposed: WebAuthn signs a flat challenge, so a typed-data
  * preview would never reach the authenticator anyway.
+ *
+ * **Override consistency.** Every WebAuthn-related override on
+ * {@link FromSafeWebauthnParams} (shared signer, signer factory/singleton,
+ * proxy creation code, EIP-7212 precompile/contract verifier) must match
+ * the value passed to `InitCodeOverrides` at `initializeNewAccount` time.
+ * The on-chain owner set is locked to whatever was used at init —
+ * `webAuthnSharedSigner` for `isInit=true`, the deterministic verifier
+ * proxy derived from the other five for `isInit=false`. A mismatch
+ * produces a signature pointing at an address that isn't an owner;
+ * on-chain `checkSignatures` reverts with `GS026` and the bundler
+ * surfaces it as a generic "Invalid UserOp signature" with no offline
+ * diagnostic. If you stick to defaults at both call sites you're fine —
+ * only set these when you've also overridden them at init.
  *
  * @example
  * import { fromSafeWebauthn } from "abstractionkit";
