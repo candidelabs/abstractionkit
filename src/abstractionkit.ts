@@ -105,9 +105,14 @@ export {
 	createWorldIdSignal,
 	WorldIdPermissionlessPaymaster,
 } from "./paymaster/WorldIdPermissionlessPaymaster";
+export type {
+	FromSafeWebauthnParams,
+	WebauthnAssertionFetcher,
+} from "./signer/adapters";
 export {
 	fromEthersWallet,
 	fromPrivateKey,
+	fromSafeWebauthn,
 	fromViem,
 	fromViemWalletClient,
 } from "./signer/adapters";
