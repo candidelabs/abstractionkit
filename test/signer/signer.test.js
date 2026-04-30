@@ -615,14 +615,23 @@ describe('Simple7702Account signUserOperationWithSigner', () => {
         expect(signerSig).toBe(pkSig);
     });
 
-    test('rejects signTypedData-only signer with actionable error', async () => {
+    test('signTypedData-only signer succeeds (v0.8 userOpHash IS the EIP-712 digest)', async () => {
+        const wallet = new Wallet(PK1);
         const tdOnly = {
             address: owner,
-            signTypedData: async () => '0x',
+            signTypedData: async (td) =>
+                wallet.signTypedData(td.domain, td.types, td.message),
         };
+        const tdSig = await simple.signUserOperationWithSigner(op, tdOnly, CHAIN_ID);
+        const pkSig = simple.signUserOperation(op, PK1, CHAIN_ID);
+        expect(tdSig).toBe(pkSig);
+    });
+
+    test('rejects signer with neither signHash nor signTypedData', async () => {
+        const empty = { address: owner };
         await expect(
-            simple.signUserOperationWithSigner(op, tdOnly, CHAIN_ID),
-        ).rejects.toThrow(/accepts: \[hash\]; signer provides: \[typedData\]/);
+            simple.signUserOperationWithSigner(op, empty, CHAIN_ID),
+        ).rejects.toThrow(/No compatible signing scheme/);
     });
 });
 
@@ -637,6 +646,18 @@ describe('Simple7702AccountV09 signUserOperationWithSigner', () => {
             op, ak.fromPrivateKey(PK1), CHAIN_ID,
         );
         expect(signerSig).toBe(pkSig);
+    });
+
+    test('signTypedData-only signer succeeds (v0.9 userOpHash IS the EIP-712 digest)', async () => {
+        const wallet = new Wallet(PK1);
+        const tdOnly = {
+            address: owner,
+            signTypedData: async (td) =>
+                wallet.signTypedData(td.domain, td.types, td.message),
+        };
+        const tdSig = await simple.signUserOperationWithSigner(op, tdOnly, CHAIN_ID);
+        const pkSig = simple.signUserOperation(op, PK1, CHAIN_ID);
+        expect(tdSig).toBe(pkSig);
     });
 });
 
@@ -724,7 +745,7 @@ describe('Uint8Array-only / secure-dispose signers', () => {
             .rejects.toThrow(/signer disposed/);
     });
 
-    test('works on Simple7702 / Calibur (hash-only accounts)', async () => {
+    test('works on Simple7702 / Calibur via the hash-signing path', async () => {
         const hexPk = '0x' + '55'.repeat(32);
         const bytes = getBytes(hexPk);
         const signer = fromPrivateKeyBytes(bytes);

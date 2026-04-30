@@ -3,7 +3,7 @@ import { Bundler } from "src/Bundler";
 import { BaseUserOperationDummyValues, ENTRYPOINT_V8, ENTRYPOINT_V9 } from "src/constants";
 import { AbstractionKitError } from "src/errors";
 import { invokeSigner, pickScheme } from "src/signer/negotiate";
-import type { Signer as AkSigner, SignContext, SigningScheme } from "src/signer/types";
+import type { Signer as AkSigner, SignContext, SigningScheme, TypedData } from "src/signer/types";
 import type {
 	GasOption,
 	JsonRpcResult,
@@ -19,6 +19,8 @@ import {
 	createRevokeDelegationAuthorization,
 } from "src/utils7702";
 import {
+	buildPackedInitCodeV8V9,
+	buildPaymasterAndData,
 	createCallData,
 	createUserOperationHash,
 	fetchAccountNonce,
@@ -753,16 +755,123 @@ export class BaseSimple7702Account extends SmartAccount {
 	}
 
 	/**
-	 * Schemes Simple7702 accepts from a Signer. Only raw-hash ECDSA, since
-	 * the delegatee verifies a plain signature over the userOp hash.
+	 * Schemes Simple7702 accepts from a Signer. EntryPoint v0.8/v0.9 introduced
+	 * an EIP-712 domain at the EntryPoint contract, and the userOpHash IS the
+	 * EIP-712 digest of the PackedUserOperation under that domain — so signing
+	 * the typed data and signing the raw hash produce signatures that verify
+	 * against the same `userOpHash` (and recover to the same signer address).
+	 * Deterministic-ECDSA signers (ethers, viem, MetaMask) yield byte-identical
+	 * bytes; signers that differ in `s` / `v` normalization still validate the
+	 * same on-chain.
+	 *
+	 * `typedData` is listed first so JSON-RPC wallets that can only sign typed
+	 * data work without a separate code path; `hash` remains a valid fallback
+	 * for local-key signers.
 	 */
-	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = ["hash"];
+	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = ["typedData", "hash"];
 
 	/**
-	 * Sign a UserOperation with an {@link AkSigner}. Signer must implement
-	 * `signHash`, since Simple7702 only verifies raw ECDSA over the userOp
-	 * hash. JSON-RPC wallets and anything that only provides `signTypedData`
-	 * fail offline with a specific error.
+	 * Build the EIP-712 typed data payload for a UserOperation under the
+	 * EntryPoint v0.8 / v0.9 domain. Lower-level escape hatch for integrators
+	 * driving `signTypedData` themselves with their own signing primitive
+	 * (HSM, MPC, custom wallet abstraction). Most callers should pass an
+	 * {@link AkSigner} to {@link signUserOperationWithSigner} instead, which
+	 * builds this internally.
+	 *
+	 * The digest of the returned payload equals the UserOperation hash from
+	 * {@link createUserOperationHash}, so a wallet calling
+	 * `signTypedData(domain, types, message)` produces a signature that
+	 * verifies against the same `userOpHash` as raw ECDSA over that hash.
+	 * Deterministic-ECDSA signers yield byte-identical signatures; signers
+	 * that differ in `s` / `v` normalization still validate the same on-chain.
+	 *
+	 * Common use cases beyond direct signing:
+	 *   - Inspect / log the typed data the wallet will display.
+	 *   - Render a custom confirmation UI before delegating to a wallet's
+	 *     `signTypedData`.
+	 *   - Drive non-`ExternalSigner`-shaped signers (HSM, MPC service,
+	 *     backend signing pipelines).
+	 *
+	 * @param userOperation - Unsigned UserOperation to wrap
+	 * @param chainId - Target chain ID (must match the chain that will validate
+	 *   the signature)
+	 * @returns EIP-712 {@link TypedData} payload ready for `signTypedData`
+	 * @throws {AbstractionKitError} if this account targets an EntryPoint
+	 *   version other than v0.8 / v0.9. Earlier EntryPoints define the
+	 *   userOpHash differently and require raw-hash signing.
+	 */
+	public getUserOperationEip712TypedData(
+		userOperation: UserOperationV8 | UserOperationV9,
+		chainId: bigint,
+	): TypedData {
+		const ep = this.entrypointAddress.toLowerCase();
+		const isV9 = ep === ENTRYPOINT_V9.toLowerCase();
+		if (ep !== ENTRYPOINT_V8.toLowerCase() && !isV9) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`getUserOperationEip712TypedData supports EntryPoint v0.8 / v0.9 only; ` +
+					`this account targets ${this.entrypointAddress}. Use signUserOperation ` +
+					`(raw-hash ECDSA) for earlier EntryPoint versions.`,
+			);
+		}
+
+		const abiCoder = AbiCoder.defaultAbiCoder();
+		const initCode = buildPackedInitCodeV8V9(userOperation);
+		const accountGasLimits =
+			"0x" +
+			abiCoder.encode(["uint128"], [userOperation.verificationGasLimit]).slice(34) +
+			abiCoder.encode(["uint128"], [userOperation.callGasLimit]).slice(34);
+		const gasFees =
+			"0x" +
+			abiCoder.encode(["uint128"], [userOperation.maxPriorityFeePerGas]).slice(34) +
+			abiCoder.encode(["uint128"], [userOperation.maxFeePerGas]).slice(34);
+		const paymasterAndData = buildPaymasterAndData(userOperation, isV9);
+
+		const types = {
+			PackedUserOperation: [
+				{ name: "sender", type: "address" },
+				{ name: "nonce", type: "uint256" },
+				{ name: "initCode", type: "bytes" },
+				{ name: "callData", type: "bytes" },
+				{ name: "accountGasLimits", type: "bytes32" },
+				{ name: "preVerificationGas", type: "uint256" },
+				{ name: "gasFees", type: "bytes32" },
+				{ name: "paymasterAndData", type: "bytes" },
+			],
+		};
+
+		return {
+			domain: {
+				name: "ERC4337",
+				version: "1",
+				chainId,
+				verifyingContract: this.entrypointAddress as `0x${string}`,
+			},
+			types,
+			primaryType: "PackedUserOperation",
+			message: {
+				sender: userOperation.sender,
+				nonce: userOperation.nonce,
+				initCode,
+				callData: userOperation.callData,
+				accountGasLimits,
+				preVerificationGas: userOperation.preVerificationGas,
+				gasFees,
+				paymasterAndData,
+			},
+		};
+	}
+
+	/**
+	 * Sign a UserOperation with an {@link AkSigner}. The signer can implement
+	 * either `signTypedData` (preferred — JSON-RPC wallets, viem `WalletClient`)
+	 * or `signHash` (local keys, hardware wallets). Both schemes produce
+	 * signatures that validate against the same `userOpHash` because the
+	 * v0.8 / v0.9 userOpHash IS the EIP-712 digest of the PackedUserOperation
+	 * (deterministic-ECDSA signers yield byte-identical bytes).
+	 *
+	 * Signers that implement neither method fail offline with an actionable
+	 * error.
 	 */
 	protected async baseSignUserOperationWithSigner<T extends UserOperationV8 | UserOperationV9>(
 		useroperation: T,
@@ -770,7 +879,7 @@ export class BaseSimple7702Account extends SmartAccount {
 		chainId: bigint,
 	): Promise<string> {
 		const scheme = pickScheme(signer, BaseSimple7702Account.ACCEPTED_SIGNING_SCHEMES, {
-			accountName: "Simple7702 (raw ECDSA over userOpHash)",
+			accountName: "Simple7702 (EIP-712 typed data or raw ECDSA over userOpHash)",
 			signerIndex: 0,
 		});
 		const hash = createUserOperationHash(
@@ -783,7 +892,11 @@ export class BaseSimple7702Account extends SmartAccount {
 			chainId,
 			entryPoint: this.entrypointAddress,
 		};
-		return invokeSigner(signer, scheme, { hash, context });
+		const typedData =
+			scheme === "typedData"
+				? this.getUserOperationEip712TypedData(useroperation, chainId)
+				: undefined;
+		return invokeSigner(signer, scheme, { hash, typedData, context });
 	}
 
 	/**
@@ -991,13 +1104,34 @@ export class Simple7702Account extends BaseSimple7702Account {
 	}
 
 	/**
-	 * Sign a {@link UserOperationV8} using an {@link ExternalSigner}.
-	 * Simple7702 only accepts raw-hash ECDSA; signers without `signHash`
-	 * fail offline with an actionable error.
+	 * Sign a {@link UserOperationV8} using an {@link ExternalSigner}. This is
+	 * the recommended entry point for any non-private-key signer.
+	 *
+	 * Accepts signers that implement `signTypedData` (JSON-RPC wallets, viem
+	 * `WalletClient`, browser wallets), `signHash` (local keys, hardware
+	 * wallets), or both. The v0.8 userOpHash IS the EIP-712 digest of the
+	 * PackedUserOperation under the EntryPoint domain, so both schemes
+	 * produce signatures that validate against the same `userOpHash`.
+	 *
+	 * Wrapping a custom signing primitive is just an object literal; no
+	 * adapter function required:
+	 *
+	 * ```ts
+	 * const signer: ExternalSigner = {
+	 *   address: ownerAddress,
+	 *   signTypedData: async (td) => myWallet.signTypedData(td),
+	 * }
+	 * userOp.signature = await account.signUserOperationWithSigner(userOp, signer, chainId)
+	 * ```
 	 *
 	 * For signing with a raw private-key string, use the sync
 	 * {@link signUserOperation} method, or wrap explicitly with
 	 * `fromPrivateKey(pk)`.
+	 *
+	 * @see {@link BaseSimple7702Account.getUserOperationEip712TypedData} for
+	 *   the lower-level escape hatch when you need the typed data outside the
+	 *   dispatcher (e.g., to render a custom confirmation UI or feed an HSM
+	 *   that doesn't fit the {@link ExternalSigner} shape).
 	 */
 	public async signUserOperationWithSigner(
 		useroperation: UserOperationV8,
