@@ -113,11 +113,13 @@ describe('fromSafeWebauthn adapter', () => {
         expect(() => ak.fromSafeWebauthn({
             publicKey: stringCoords,
             isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
             getAssertion: async () => dummyAssertion(),
         })).toThrow(TypeError);
         expect(() => ak.fromSafeWebauthn({
             publicKey: { x: PUBLIC_KEY.x, y: undefined },
             isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
             getAssertion: async () => dummyAssertion(),
         })).toThrow(/must be bigint/);
     });
@@ -126,6 +128,7 @@ describe('fromSafeWebauthn adapter', () => {
         const signer = ak.fromSafeWebauthn({
             publicKey: PUBLIC_KEY,
             isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
             getAssertion: async () => dummyAssertion(),
         });
         expect(signer.address.toLowerCase())
@@ -137,6 +140,7 @@ describe('fromSafeWebauthn adapter', () => {
         const signer = ak.fromSafeWebauthn({
             publicKey: PUBLIC_KEY,
             isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
             webAuthnSharedSigner: override,
             getAssertion: async () => dummyAssertion(),
         });
@@ -147,6 +151,7 @@ describe('fromSafeWebauthn adapter', () => {
         const signer = ak.fromSafeWebauthn({
             publicKey: PUBLIC_KEY,
             isInit: false,
+            accountClass: ak.SafeAccountV0_3_0,
             getAssertion: async () => dummyAssertion(),
         });
         const expected = ak.SafeAccountV0_3_0.createWebAuthnSignerVerifierAddress(
@@ -159,6 +164,7 @@ describe('fromSafeWebauthn adapter', () => {
         const signer = ak.fromSafeWebauthn({
             publicKey: PUBLIC_KEY,
             isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
             getAssertion: async () => dummyAssertion(),
         });
         expect(signer.type).toBe('contract');
@@ -168,6 +174,7 @@ describe('fromSafeWebauthn adapter', () => {
         const signer = ak.fromSafeWebauthn({
             publicKey: PUBLIC_KEY,
             isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
             getAssertion: async () => dummyAssertion(),
         });
         expect(typeof signer.signHash).toBe('function');
@@ -179,6 +186,7 @@ describe('fromSafeWebauthn adapter', () => {
         const signer = ak.fromSafeWebauthn({
             publicKey: PUBLIC_KEY,
             isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
             getAssertion: async (challenge) => {
                 captured = challenge;
                 return dummyAssertion();
@@ -195,6 +203,7 @@ describe('fromSafeWebauthn adapter', () => {
         const signer = ak.fromSafeWebauthn({
             publicKey: PUBLIC_KEY,
             isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
             getAssertion: async () => data,
         });
         const got = await signer.signHash('0x' + 'cc'.repeat(32));
@@ -211,6 +220,7 @@ describe('fromSafeWebauthn adapter', () => {
         const signer = ak.fromSafeWebauthn({
             publicKey: PUBLIC_KEY,
             isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
             getAssertion: async (challenge) => {
                 challengeReceived = challenge;
                 return data;
@@ -241,6 +251,7 @@ describe('fromSafeWebauthn adapter', () => {
         const signer = ak.fromSafeWebauthn({
             publicKey: PUBLIC_KEY,
             isInit: false,
+            accountClass: ak.SafeAccountV0_3_0,
             getAssertion: async () => data,
         });
         const sig = await safe.signUserOperationWithSigners(op, [signer], CHAIN_ID);
@@ -267,6 +278,7 @@ describe('fromSafeWebauthn adapter', () => {
         const passkeySigner = ak.fromSafeWebauthn({
             publicKey: PUBLIC_KEY,
             isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
             getAssertion: async () => data,
         });
         const eoaSigner = ak.fromPrivateKey(PK1);
@@ -298,6 +310,7 @@ describe('fromSafeWebauthn adapter', () => {
         const makeSigner = () => ak.fromSafeWebauthn({
             publicKey: PUBLIC_KEY,
             isInit: true,
+            accountClass: ak.SafeMultiChainSigAccountV1,
             getAssertion: async () => data,
         });
 

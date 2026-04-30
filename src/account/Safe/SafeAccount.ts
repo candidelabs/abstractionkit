@@ -97,7 +97,13 @@ export class SafeAccount extends SmartAccount {
 		"0x270D7E4a57E6322f336261f3EaE2BADe72E68d72";
 	static readonly DEFAULT_WEB_AUTHN_SIGNER_FACTORY: string =
 		"0xF7488fFbe67327ac9f37D5F722d83Fc900852Fbf";
-	static readonly DEFAULT_WEB_AUTHN_FCLP256_VERIFIER: string =
+	// EIP-7212 contract verifier used in the verifier proxy CREATE2 salt and
+	// installed as the shared signer's contract verifier at init time.
+	// Defaults to FCL P256 because that's what Safe Passkey module v0.2.0
+	// shipped — newer modules (v0.2.1+, v1.5.0_M_0.3.0) override with Daimo.
+	// FCL has known non-security-critical bugs and is being phased out
+	// upstream now that EIP-7951 (precompile) supersedes it.
+	static readonly DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER: string =
 		"0x445a0683e494ea0c5AF3E83c5159fBE47Cf9e765";
 	static readonly DEFAULT_WEB_AUTHN_PRECOMPILE: string =
 		"0x0000000000000000000000000000000000000000"; //zero address means no precompile
@@ -1024,7 +1030,7 @@ export class SafeAccount extends SmartAccount {
 			overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner ??
 				SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
-				SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER,
+				SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		);
 
 		let safeAccountFactory: SafeAccountFactory;
@@ -1061,7 +1067,7 @@ export class SafeAccount extends SmartAccount {
 		multisendContractAddress: string = SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS,
 		webAuthnSharedSigner = SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
 		eip7212WebAuthnPrecompileVerifierForSharedSigner: string = SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
-		eip7212WebAuthnContractVerifierForSharedSigner: string = SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER,
+		eip7212WebAuthnContractVerifierForSharedSigner: string = SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 	): string {
 		if (owners.length < 1) {
 			throw new RangeError("There should be at least one owner");
@@ -1209,7 +1215,7 @@ export class SafeAccount extends SmartAccount {
 			overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner ??
 				SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
-				SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER,
+				SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		);
 
 		let safeAccountFactory: SafeAccountFactory;
@@ -1471,7 +1477,7 @@ export class SafeAccount extends SmartAccount {
 		const eip7212WebAuthnPrecompileVerifier =
 			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
 		const eip7212WebAuthnContractVerifier =
-			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 		const webAuthnSignerFactory =
 			overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 		const webAuthnSignerSingleton =
@@ -1775,6 +1781,7 @@ export class SafeAccount extends SmartAccount {
 	): string {
 		const validAfter = options.validAfter ?? 0n;
 		const validUntil = options.validUntil ?? 0n;
+		const moduleAddress = options.safe4337ModuleAddress ?? safe4337ModuleAddress;
 
 		if (privateKeys.length < 1) {
 			throw new RangeError("There should be at least one privateKey");
@@ -1793,7 +1800,7 @@ export class SafeAccount extends SmartAccount {
 			validAfter,
 			validUntil,
 			entrypointAddress,
-			safe4337ModuleAddress,
+			safe4337ModuleAddress: moduleAddress,
 		});
 
 		const signerSignaturePairs: SignerSignaturePair[] = [];
@@ -1862,6 +1869,7 @@ export class SafeAccount extends SmartAccount {
 		} = params;
 		const validAfter = options.validAfter ?? 0n;
 		const validUntil = options.validUntil ?? 0n;
+		const moduleAddress = options.safe4337ModuleAddress ?? safe4337ModuleAddress;
 
 		if (signers.length < 1) {
 			throw new RangeError("There should be at least one signer");
@@ -1871,7 +1879,7 @@ export class SafeAccount extends SmartAccount {
 			validAfter,
 			validUntil,
 			entrypointAddress,
-			safe4337ModuleAddress,
+			safe4337ModuleAddress: moduleAddress,
 		});
 		const userOpHash = TypedDataEncoder.hash(
 			typedDataRaw.domain,
@@ -1954,7 +1962,7 @@ export class SafeAccount extends SmartAccount {
 		const eip7212WebAuthnPrecompileVerifier =
 			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
 		const eip7212WebAuthnContractVerifier =
-			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 		const webAuthnSignerFactory =
 			overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 		const webAuthnSignerSingleton =
@@ -2080,7 +2088,7 @@ export class SafeAccount extends SmartAccount {
 			const eip7212WebAuthnPrecompileVerifier =
 				overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
 			const eip7212WebAuthnContractVerifier =
-				overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+				overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 			const webAuthnSignerFactory =
 				overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 			const webAuthnSignerSingleton =
@@ -2150,7 +2158,7 @@ export class SafeAccount extends SmartAccount {
 								SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
 							const eip7212WebAuthnContractVerifier =
 								webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier ??
-								SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+								SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 							const webAuthnSignerFactory =
 								webAuthnSignatureOverrides.webAuthnSignerFactory ??
 								SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
@@ -2590,7 +2598,7 @@ export class SafeAccount extends SmartAccount {
 		const eip7212WebAuthnPrecompileVerifier =
 			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
 		const eip7212WebAuthnContractVerifier =
-			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 		const webAuthnSignerFactory =
 			overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 
@@ -2766,7 +2774,7 @@ export class SafeAccount extends SmartAccount {
 						SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
 					const eip7212WebAuthnContractVerifier =
 						webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier ??
-						SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+						SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 					const webAuthnSignerFactory =
 						webAuthnSignatureOverrides.webAuthnSignerFactory ??
 						SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
@@ -2827,7 +2835,7 @@ export class SafeAccount extends SmartAccount {
 		const eip7212WebAuthnPrecompileVerifier =
 			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
 		const eip7212WebAuthnContractVerifier =
-			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_FCLP256_VERIFIER;
+			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 		const webAuthnSignerSingleton =
 			overrides.webAuthnSignerSingleton ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
 
