@@ -31,7 +31,12 @@ import type {
 export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 	static readonly DEFAULT_WEB_AUTHN_PRECOMPILE: string =
 		"0x0000000000000000000000000000000000000100"; // EIP-7951
+	// Daimo P256 contract verifier paired with module v0.3.0. Same value
+	// exposed under both names: DAIMO_VERIFIER for self-documentation and
+	// CONTRACT_VERIFIER as the polymorphic slot fromSafeWebauthn reads.
 	static readonly DEFAULT_WEB_AUTHN_DAIMO_VERIFIER: string =
+		"0xc2b78104907F722DABAc4C69f826a522B2754De4";
+	static readonly DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER: string =
 		"0xc2b78104907F722DABAc4C69f826a522B2754De4";
 
 	/**
@@ -107,7 +112,7 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifierForSharedSigner:
 				overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
-				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		};
 		return SafeAccountV0_3_0.initializeNewAccount(owners, modOverrides);
 	}
@@ -129,7 +134,7 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifierForSharedSigner:
 				overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
-				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		};
 		return SafeAccountV0_3_0.createAccountAddress(owners, modOverrides);
 	}
@@ -154,7 +159,7 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifierForSharedSigner:
 				overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
-				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		};
 		return SafeAccountV0_3_0.createFactoryAddressAndData(owners, modOverrides);
 	}
@@ -182,7 +187,7 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier:
 				overrides.eip7212WebAuthnContractVerifier ??
-				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		});
 	}
 
@@ -216,7 +221,7 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier:
 				overrides.eip7212WebAuthnContractVerifier ??
-				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		});
 	}
 
@@ -247,7 +252,7 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier:
 				overrides.eip7212WebAuthnContractVerifier ??
-				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		});
 	}
 
@@ -276,7 +281,7 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier:
 				overrides.eip7212WebAuthnContractVerifier ??
-				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		});
 	}
 
@@ -298,7 +303,7 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier:
 				webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier ??
-				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		});
 	}
 
@@ -336,7 +341,7 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 					SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_PRECOMPILE,
 				eip7212WebAuthnContractVerifier:
 					overrides.eip7212WebAuthnContractVerifier ??
-					SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+					SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 			},
 		);
 	}

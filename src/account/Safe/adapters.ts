@@ -33,6 +33,31 @@ export interface FromSafeWebauthnParams {
 	isInit: boolean;
 	/** Async callback that runs the WebAuthn ceremony for the SafeOp digest. */
 	getAssertion: WebauthnAssertionFetcher;
+	/**
+	 * Account class whose `DEFAULT_WEB_AUTHN_*` statics source the adapter's
+	 * defaults. Required: address derivation depends on Safe Passkey module
+	 * version (v0.2.0 ships FCL P256, v0.2.1 ships Daimo P256 + RIP-7951
+	 * precompile) and the wrong choice produces a signer address that isn't
+	 * an on-chain owner, surfacing as a generic "Invalid UserOp signature"
+	 * (`GS026` on-chain) with no offline diagnostic. Pass the same class you
+	 * passed to `initializeNewAccount` — `SafeAccountV0_2_0` /
+	 * `SafeAccountV0_3_0` for v0.2.0, or `SafeMultiChainSigAccountV1` for
+	 * v0.2.1.
+	 *
+	 * Typed against just the static surface the adapter reads (not
+	 * `typeof SafeAccount`) because Safe subclass constructors take fewer
+	 * positional args than the base class — `typeof SafeAccountV0_3_0` is
+	 * not assignable to `typeof SafeAccount`.
+	 */
+	accountClass: Pick<
+		typeof SafeAccount,
+		| "DEFAULT_WEB_AUTHN_SHARED_SIGNER"
+		| "DEFAULT_WEB_AUTHN_SIGNER_FACTORY"
+		| "DEFAULT_WEB_AUTHN_SIGNER_SINGLETON"
+		| "DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE"
+		| "DEFAULT_WEB_AUTHN_PRECOMPILE"
+		| "DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER"
+	>;
 	/** Override the WebAuthn shared signer address used when `isInit`. Must match the value passed to `initializeNewAccount`. */
 	webAuthnSharedSigner?: string;
 	/** Override the WebAuthn signer factory used to derive the verifier proxy. Must match the value passed to `initializeNewAccount`. */
@@ -64,21 +89,24 @@ export interface FromSafeWebauthnParams {
  * Only `signHash` is exposed: WebAuthn signs a flat challenge, so a typed-data
  * preview would never reach the authenticator anyway.
  *
- * **Override consistency.** Every WebAuthn-related override on
- * {@link FromSafeWebauthnParams} (shared signer, signer factory/singleton,
- * proxy creation code, EIP-7212 precompile/contract verifier) must match
- * the value passed to `InitCodeOverrides` at `initializeNewAccount` time.
- * The on-chain owner set is locked to whatever was used at init —
- * `webAuthnSharedSigner` for `isInit=true`, the deterministic verifier
- * proxy derived from the other five for `isInit=false`. A mismatch
- * produces a signature pointing at an address that isn't an owner;
- * on-chain `checkSignatures` reverts with `GS026` and the bundler
- * surfaces it as a generic "Invalid UserOp signature" with no offline
- * diagnostic. If you stick to defaults at both call sites you're fine —
- * only set these when you've also overridden them at init.
+ * **Override consistency.** Pass the same `accountClass` you passed to
+ * `initializeNewAccount` so the adapter sources the right Safe Passkey
+ * module defaults — v0.2.0 / FCL P256 for `SafeAccount` / `SafeAccountV0_2_0`
+ * / `SafeAccountV0_3_0`, v0.2.1 / Daimo P256 + RIP-7951 for
+ * `SafeMultiChainSigAccountV1`. Every individual WebAuthn override
+ * (`webAuthnSharedSigner`, `webAuthnSignerFactory`, `webAuthnSignerSingleton`,
+ * `webAuthnSignerProxyCreationCode`, `eip7212WebAuthnPrecompileVerifier`,
+ * `eip7212WebAuthnContractVerifier`) must likewise match what was passed to
+ * `InitCodeOverrides` at init time — only set them when you've also
+ * overridden them at init. The on-chain owner set is locked to whatever was
+ * used at init: `webAuthnSharedSigner` for `isInit=true`, the deterministic
+ * verifier proxy derived from the other five for `isInit=false`. A mismatch
+ * produces a signature pointing at an address that isn't an owner; on-chain
+ * `checkSignatures` reverts with `GS026` and the bundler surfaces it as a
+ * generic "Invalid UserOp signature" with no offline diagnostic.
  *
  * @example
- * import { fromSafeWebauthn } from "abstractionkit";
+ * import { fromSafeWebauthn, SafeAccountV0_3_0 } from "abstractionkit";
  *
  * // Pass `expectedSigners: [{ x, y }]` so createUserOperation picks the
  * // WebAuthn dummy signature for gas estimation. Without it, the
@@ -92,6 +120,7 @@ export interface FromSafeWebauthnParams {
  * const signer = fromSafeWebauthn({
  *   publicKey: { x, y },
  *   isInit: userOperation.nonce === 0n,
+ *   accountClass: SafeAccountV0_3_0, // SafeMultiChainSigAccountV1 for multi-chain
  *   getAssertion: async (challenge) => {
  *     const assertion = await navigator.credentials.get({
  *       publicKey: { challenge, rpId, allowCredentials, userVerification },
@@ -112,6 +141,7 @@ export function fromSafeWebauthn(params: FromSafeWebauthnParams): Signer<unknown
 		publicKey,
 		isInit,
 		getAssertion,
+		accountClass,
 		webAuthnSharedSigner,
 		webAuthnSignerFactory,
 		webAuthnSignerSingleton,
@@ -135,14 +165,25 @@ export function fromSafeWebauthn(params: FromSafeWebauthnParams): Signer<unknown
 		);
 	}
 
+	// Source defaults from `accountClass` so subclasses with different Safe
+	// Passkey module versions (e.g. SafeMultiChainSigAccountV1's v0.2.1 set)
+	// are picked up automatically. `createWebAuthnSignerVerifierAddress`
+	// itself falls back to the parent's v0.2.0 defaults for any field left
+	// undefined, so we must resolve them here before forwarding.
 	const address = isInit
-		? (webAuthnSharedSigner ?? SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER)
+		? (webAuthnSharedSigner ?? accountClass.DEFAULT_WEB_AUTHN_SHARED_SIGNER)
 		: SafeAccount.createWebAuthnSignerVerifierAddress(publicKey.x, publicKey.y, {
-				webAuthnSignerFactory,
-				webAuthnSignerSingleton,
-				webAuthnSignerProxyCreationCode,
-				eip7212WebAuthnPrecompileVerifier,
-				eip7212WebAuthnContractVerifier,
+				webAuthnSignerFactory:
+					webAuthnSignerFactory ?? accountClass.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
+				webAuthnSignerSingleton:
+					webAuthnSignerSingleton ?? accountClass.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
+				webAuthnSignerProxyCreationCode:
+					webAuthnSignerProxyCreationCode ??
+					accountClass.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
+				eip7212WebAuthnPrecompileVerifier:
+					eip7212WebAuthnPrecompileVerifier ?? accountClass.DEFAULT_WEB_AUTHN_PRECOMPILE,
+				eip7212WebAuthnContractVerifier:
+					eip7212WebAuthnContractVerifier ?? accountClass.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 			});
 
 	return {
