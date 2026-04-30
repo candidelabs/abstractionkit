@@ -134,6 +134,26 @@ export type {
 	SignTypedDataFn,
 	TypedData,
 } from "./signer/types";
+export {
+	getConsensusBlockHeader,
+	StateVerifier,
+	verifyAccountProof,
+	verifyStorageProof,
+} from "./stateVerifier";
+export type { ConsensusDisagreementNode } from "./stateVerifier/errors";
+export {
+	AccountProofInvalidError,
+	CodeHashMismatchError,
+	ConsensusHeaderDisagreementError,
+	ConsensusQuorumNotMetError,
+	StateProofVerificationError,
+	StorageProofInvalidError,
+} from "./stateVerifier/errors";
+export type {
+	ConsensusBlockHeader,
+	EthGetProofResult,
+	VerifiedAccountState,
+} from "./stateVerifier/types";
 export type {
 	AbiInputValue,
 	GasEstimationResult,
@@ -155,7 +175,6 @@ export type {
 	UserOperationV8,
 	UserOperationV9,
 } from "./types";
-
 export { GasOption, Operation, PolygonChain } from "./types";
 export type { DepositInfo } from "./utils";
 export {
