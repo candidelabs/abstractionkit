@@ -93,10 +93,19 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	}
 
 	/**
-	 * Sign a {@link UserOperationV9} using an {@link ExternalSigner}.
-	 * Simple7702 only accepts raw-hash ECDSA; signers without `signHash`
-	 * fail offline with an actionable error. For a raw pk string, use the
-	 * sync {@link signUserOperation} method or wrap with `fromPrivateKey`.
+	 * Sign a {@link UserOperationV9} using an {@link ExternalSigner}. Accepts
+	 * signers that implement `signTypedData` (preferred — JSON-RPC wallets,
+	 * viem `WalletClient`), `signHash` (local keys, hardware wallets), or
+	 * both. The v0.9 userOpHash IS the EIP-712 digest of the PackedUserOperation
+	 * under the EntryPoint domain, so both schemes produce signatures that
+	 * validate against the same `userOpHash`.
+	 *
+	 * For signing with a raw private-key string, use the sync
+	 * {@link signUserOperation} method, or wrap explicitly with
+	 * `fromPrivateKey(pk)`.
+	 *
+	 * @see {@link BaseSimple7702Account.getUserOperationEip712TypedData} to
+	 *   obtain the typed data payload directly.
 	 */
 	public async signUserOperationWithSigner(
 		useroperation: UserOperationV9,

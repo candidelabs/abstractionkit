@@ -95,6 +95,88 @@ export function createUserOperationHash(
 }
 
 /**
+ * @internal
+ * Reconstruct the packed `initCode` field for an EntryPoint v0.8/v0.9
+ * UserOperation. When `eip7702Auth.address` is set, the EIP-7702 delegatee
+ * address replaces the factory address in initCode (only `factoryData` is
+ * concatenated). Otherwise, behaves like v0.7 (`factory + factoryData`).
+ *
+ * Shared by {@link createPackedUserOperationV8} /
+ * {@link createPackedUserOperationV9} and Simple7702Account's typed-data
+ * builder. Not part of the public API; only `export`ed for cross-module
+ * use within the package and not re-exported from `src/abstractionkit.ts`.
+ *
+ * @param useroperation - V8 or V9 UserOperation to read fields from
+ * @returns Hex-encoded initCode
+ */
+export function buildPackedInitCodeV8V9(useroperation: UserOperationV8 | UserOperationV9): string {
+	if (useroperation.factory == null) return "0x";
+	const eip7702Auth = useroperation.eip7702Auth;
+	const head =
+		eip7702Auth != null && eip7702Auth.address != null
+			? eip7702Auth.address
+			: useroperation.factory;
+	const factoryData = useroperation.factoryData != null ? useroperation.factoryData.slice(2) : "";
+	return head + factoryData;
+}
+
+/**
+ * @internal
+ * Reconstruct the packed `paymasterAndData` field from a UserOperation's
+ * separate paymaster fields. Returns `0x` when no paymaster is set.
+ *
+ * For EntryPoint v0.9, when `paymasterData` ends with the parallel-paymaster
+ * signature magic suffix (`0x22e325a297439656`), the embedded signature is
+ * stripped so the userOpHash does not commit to the paymaster's signature
+ * over itself. Pass `stripV9PaymasterSig=false` to preserve the wire format.
+ *
+ * Shared by v7/v8/v9 packers and Simple7702Account's typed-data builder.
+ * Not part of the public API; only `export`ed for cross-module use within
+ * the package and not re-exported from `src/abstractionkit.ts`.
+ *
+ * @param useroperation - V7/V8/V9 UserOperation to read fields from
+ * @param stripV9PaymasterSig - Whether to strip the v0.9 paymaster signature suffix
+ * @returns Hex-encoded paymasterAndData
+ */
+export function buildPaymasterAndData(
+	useroperation: UserOperationV7 | UserOperationV8 | UserOperationV9,
+	stripV9PaymasterSig: boolean = false,
+): string {
+	if (useroperation.paymaster == null) return "0x";
+	const abiCoder = AbiCoder.defaultAbiCoder();
+	let paymasterAndData = useroperation.paymaster;
+	if (useroperation.paymasterVerificationGasLimit != null) {
+		paymasterAndData += abiCoder
+			.encode(["uint128"], [useroperation.paymasterVerificationGasLimit])
+			.slice(34);
+	}
+	if (useroperation.paymasterPostOpGasLimit != null) {
+		paymasterAndData += abiCoder
+			.encode(["uint128"], [useroperation.paymasterPostOpGasLimit])
+			.slice(34);
+	}
+	if (useroperation.paymasterData != null) {
+		const PAYMASTER_SIG_MAGIC = "22e325a297439656";
+		if (
+			stripV9PaymasterSig &&
+			useroperation.paymasterData.toLowerCase().endsWith(PAYMASTER_SIG_MAGIC)
+		) {
+			const sigLenHex = useroperation.paymasterData.slice(
+				useroperation.paymasterData.length - 16 - 4,
+				useroperation.paymasterData.length - 16,
+			);
+			const sigLen = parseInt(sigLenHex, 16);
+			const prefixEnd = useroperation.paymasterData.length - 16 - 4 - sigLen * 2;
+			paymasterAndData +=
+				useroperation.paymasterData.slice(0, prefixEnd).replaceAll("0x", "") + PAYMASTER_SIG_MAGIC;
+		} else {
+			paymasterAndData += useroperation.paymasterData.slice(2);
+		}
+	}
+	return paymasterAndData;
+}
+
+/**
  * ABI-encode and pack a UserOperation for hashing (EntryPoint v0.6 format).
  * Bytes fields (initCode, callData, paymasterAndData) are keccak256-hashed before packing.
  *
@@ -162,23 +244,7 @@ export function createPackedUserOperationV7(useroperation: UserOperationV7): str
 		abiCoder.encode(["uint128"], [useroperation.maxPriorityFeePerGas]).slice(34) +
 		abiCoder.encode(["uint128"], [useroperation.maxFeePerGas]).slice(34);
 
-	let paymasterAndData = "0x";
-	if (useroperation.paymaster != null) {
-		paymasterAndData = useroperation.paymaster;
-		if (useroperation.paymasterVerificationGasLimit != null) {
-			paymasterAndData += abiCoder
-				.encode(["uint128"], [useroperation.paymasterVerificationGasLimit])
-				.slice(34);
-		}
-		if (useroperation.paymasterPostOpGasLimit != null) {
-			paymasterAndData += abiCoder
-				.encode(["uint128"], [useroperation.paymasterPostOpGasLimit])
-				.slice(34);
-		}
-		if (useroperation.paymasterData != null) {
-			paymasterAndData += useroperation.paymasterData.slice(2);
-		}
-	}
+	const paymasterAndData = buildPaymasterAndData(useroperation);
 
 	const useroperationValuesArrayWithHashedByteValues = [
 		useroperation.sender,
@@ -230,18 +296,7 @@ function baseCreatePackedUserOperationV8V9(
 ): string {
 	const abiCoder = AbiCoder.defaultAbiCoder();
 
-	let initCode = "0x";
-	if (useroperation.factory != null) {
-		const eip7702Auth = useroperation.eip7702Auth;
-		if (eip7702Auth != null && eip7702Auth.address != null) {
-			initCode = eip7702Auth.address;
-		} else {
-			initCode = useroperation.factory;
-		}
-		if (useroperation.factoryData != null) {
-			initCode += useroperation.factoryData.slice(2);
-		}
-	}
+	const initCode = buildPackedInitCodeV8V9(useroperation);
 
 	const accountGasLimits =
 		"0x" +
@@ -253,36 +308,7 @@ function baseCreatePackedUserOperationV8V9(
 		abiCoder.encode(["uint128"], [useroperation.maxPriorityFeePerGas]).slice(34) +
 		abiCoder.encode(["uint128"], [useroperation.maxFeePerGas]).slice(34);
 
-	let paymasterAndData = "0x";
-	if (useroperation.paymaster != null) {
-		paymasterAndData = useroperation.paymaster;
-		if (useroperation.paymasterVerificationGasLimit != null) {
-			paymasterAndData += abiCoder
-				.encode(["uint128"], [useroperation.paymasterVerificationGasLimit])
-				.slice(34);
-		}
-		if (useroperation.paymasterPostOpGasLimit != null) {
-			paymasterAndData += abiCoder
-				.encode(["uint128"], [useroperation.paymasterPostOpGasLimit])
-				.slice(34);
-		}
-		if (useroperation.paymasterData != null) {
-			const PAYMASTER_SIG_MAGIC = "22e325a297439656";
-			if (is_v9 && useroperation.paymasterData.toLowerCase().endsWith(PAYMASTER_SIG_MAGIC)) {
-				const sigLenHex = useroperation.paymasterData.slice(
-					useroperation.paymasterData.length - 16 - 4,
-					useroperation.paymasterData.length - 16,
-				);
-				const sigLen = parseInt(sigLenHex, 16);
-				const prefixEnd = useroperation.paymasterData.length - 16 - 4 - sigLen * 2;
-				paymasterAndData +=
-					useroperation.paymasterData.slice(0, prefixEnd).replaceAll("0x", "") +
-					PAYMASTER_SIG_MAGIC;
-			} else {
-				paymasterAndData += useroperation.paymasterData.slice(2);
-			}
-		}
-	}
+	const paymasterAndData = buildPaymasterAndData(useroperation, is_v9);
 
 	const useroperationValuesArrayWithHashedByteValues = [
 		// PACKED_USEROP_TYPEHASH
