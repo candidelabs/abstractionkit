@@ -65,6 +65,18 @@ export interface MultiOpSignContext<T extends BaseUserOperation = BaseUserOperat
 interface SignerBase {
 	/** Address that will recover from signatures this signer produces. */
 	readonly address: `0x${string}`;
+	/**
+	 * Signature kind this signer produces. `"ecdsa"` (default) is a raw
+	 * 65-byte ECDSA signature appended inline. `"contract"` is an EIP-1271
+	 * signature blob from a smart-contract owner; it gets encoded as a
+	 * dynamic-length contract-signature segment when the aggregate is built.
+	 *
+	 * Account-agnostic: `Signer` is shared with non-Safe accounts that ignore
+	 * this field. For Safe, this drives the per-pair `isContractSignature`
+	 * flag set on the {@link SignerSignaturePair} produced for this signer,
+	 * so different signers in the same batch can mix kinds correctly.
+	 */
+	readonly type?: "ecdsa" | "contract";
 }
 
 /**

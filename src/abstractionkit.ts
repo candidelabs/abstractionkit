@@ -105,6 +105,16 @@ export {
 	createWorldIdSignal,
 	WorldIdPermissionlessPaymaster,
 } from "./paymaster/WorldIdPermissionlessPaymaster";
+export type {
+	FromSafeWebauthnParams,
+	WebauthnAssertionFetcher,
+} from "./account/Safe/adapters";
+export {
+	fromSafeWebauthn,
+	pubkeyCoordinatesFromJson,
+	pubkeyCoordinatesToJson,
+	webauthnSignatureFromAssertion,
+} from "./account/Safe/adapters";
 export {
 	fromEthersWallet,
 	fromPrivateKey,

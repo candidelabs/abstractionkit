@@ -160,7 +160,13 @@ export interface BaseInitOverrides {
 	eip7212WebAuthnContractVerifierForSharedSigner?: string;
 }
 
-/** Overrides for WebAuthn signature creation and verification. */
+/**
+ * WebAuthn-specific overrides for signature encoding: verifier addresses,
+ * shared-signer routing, and the init-flag that switches between them.
+ * Only fields tied to WebAuthn semantics belong here; per-call signing
+ * parameters (timing, multi-chain, target module) live on
+ * {@link SafeSignatureOptions}.
+ */
 export interface WebAuthnSignatureOverrides {
 	isInit?: boolean;
 	webAuthnSharedSigner?: string;
@@ -169,10 +175,23 @@ export interface WebAuthnSignatureOverrides {
 	webAuthnSignerFactory?: string;
 	webAuthnSignerSingleton?: string;
 	webAuthnSignerProxyCreationCode?: string;
+}
+
+/**
+ * Per-call options for Safe UserOperation signing/formatting. Carries
+ * timing, multi-chain encoding, and module-address routing. Future
+ * per-call flags are added here, not on {@link WebAuthnSignatureOverrides}.
+ */
+export interface SafeSignatureOptions {
+	/** Unix timestamp after which the signature becomes valid */
 	validAfter?: bigint;
+	/** Unix timestamp after which the signature expires */
 	validUntil?: bigint;
+	/** Encode as a multi-chain signature (single op, or with Merkle proof) */
 	isMultiChainSignature?: boolean;
+	/** Merkle proof bytes (with 0x prefix) for multi-chain signatures over multiple ops */
 	multiChainMerkleProof?: string;
+	/** Override the Safe 4337 module address used when constructing the signature */
 	safe4337ModuleAddress?: string;
 }
 
@@ -312,18 +331,10 @@ export interface UserOperationToSign {
 	validUntil?: bigint;
 }
 
-/** Extends UserOperationToSign with per-operation WebAuthn/module overrides. */
+/** Extends UserOperationToSign with per-operation options + WebAuthn overrides. */
 export interface UserOperationToSignWithOverrides extends UserOperationToSign {
-	overrides?: {
-		isInit?: boolean;
-		webAuthnSharedSigner?: string;
-		eip7212WebAuthnPrecompileVerifier?: string;
-		eip7212WebAuthnContractVerifier?: string;
-		webAuthnSignerFactory?: string;
-		webAuthnSignerSingleton?: string;
-		webAuthnSignerProxyCreationCode?: string;
-		safe4337ModuleAddress?: string;
-	};
+	options?: SafeSignatureOptions;
+	webAuthnSignatureOverrides?: WebAuthnSignatureOverrides;
 }
 
 /** EIP-712 domain for multi-chain signature Merkle tree root. */

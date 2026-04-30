@@ -62,6 +62,7 @@ import {
 	EOADummySignerSignaturePair,
 	type SafeAccountSingleton,
 	SafeModuleExecutorFunctionSelector,
+	type SafeSignatureOptions,
 	type SafeUserOperationTypedDataDomain,
 	type SafeUserOperationV6TypedMessageValue,
 	type SafeUserOperationV7TypedMessageValue,
@@ -1333,8 +1334,6 @@ export class SafeAccount extends SmartAccount {
 					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
 					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
 					webAuthnSignerProxyCreationCode: overrides.webAuthnSignerProxyCreationCode,
-					validAfter,
-					validUntil,
 				});
 			userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
 				dummySignerSignaturePairs,
@@ -1624,8 +1623,6 @@ export class SafeAccount extends SmartAccount {
 						webAuthnSignerFactory,
 						webAuthnSignerSingleton,
 						webAuthnSignerProxyCreationCode,
-						validAfter,
-						validUntil,
 					},
 				);
 			}
@@ -1635,8 +1632,8 @@ export class SafeAccount extends SmartAccount {
 			{
 				validAfter,
 				validUntil,
-				webAuthnSharedSigner,
 				isMultiChainSignature: overrides.isMultiChainSignature,
+				webAuthnSharedSigner,
 			},
 		);
 
@@ -1754,9 +1751,9 @@ export class SafeAccount extends SmartAccount {
 	 * @param useroperation - useroperation to sign
 	 * @param privateKeys - for the signers
 	 * @param chainId - target chain id
-	 * @param overrides - overrides for the default values
-	 * @param overrides.validAfter - timestamp the signature will be valid after
-	 * @param overrides.validUntil - timestamp the signature will be valid until
+	 * @param entrypointAddress - target EntryPoint
+	 * @param safe4337ModuleAddress - Safe 4337 module
+	 * @param options - per-call signing options (timing, multi-chain encoding, module address) — passed through to {@link formatSignaturesToUseroperationSignature}
 	 * @returns signature
 	 */
 	protected static baseSignSingleUserOperation(
@@ -1765,14 +1762,10 @@ export class SafeAccount extends SmartAccount {
 		chainId: bigint,
 		entrypointAddress: string,
 		safe4337ModuleAddress: string,
-		overrides: {
-			validAfter?: bigint;
-			validUntil?: bigint;
-			isMultiChainSignature?: boolean;
-		} = {},
+		options: SafeSignatureOptions = {},
 	): string {
-		const validAfter = overrides.validAfter ?? 0n;
-		const validUntil = overrides.validUntil ?? 0n;
+		const validAfter = options.validAfter ?? 0n;
+		const validUntil = options.validUntil ?? 0n;
 
 		if (privateKeys.length < 1) {
 			throw new RangeError("There should be at least one privateKey");
@@ -1804,11 +1797,10 @@ export class SafeAccount extends SmartAccount {
 			});
 		}
 
-		return SafeAccount.formatSignaturesToUseroperationSignature(signerSignaturePairs, {
-			validAfter,
-			validUntil,
-			isMultiChainSignature: overrides.isMultiChainSignature,
-		});
+		return SafeAccount.formatSignaturesToUseroperationSignature(
+			signerSignaturePairs,
+			{ ...options, validAfter, validUntil },
+		);
 	}
 
 	/**
@@ -1832,9 +1824,11 @@ export class SafeAccount extends SmartAccount {
 	 * @param useroperation - UserOperation to sign
 	 * @param signers - Signer instances (`fromViem(account)`, `fromEthersWallet(wallet)`, etc.)
 	 * @param chainId - target chain id
-	 * @param entrypointAddress - target EntryPoint
-	 * @param safe4337ModuleAddress - Safe 4337 module
-	 * @param overrides - optional validAfter / validUntil / multi-chain flag
+	 * @param params - bag combining required wiring (`entrypointAddress`,
+	 *   `safe4337ModuleAddress`, `context`) with optional `options`
+	 *   ({@link SafeSignatureOptions}: timing, multi-chain encoding,
+	 *   module address).
+	 *   Both flow through to {@link formatSignaturesToUseroperationSignature}.
 	 * @returns formatted signature
 	 */
 	protected static async baseSignUserOperationWithSigners<
@@ -1844,17 +1838,21 @@ export class SafeAccount extends SmartAccount {
 		useroperation: T,
 		signers: ReadonlyArray<AkSigner<C>>,
 		chainId: bigint,
-		entrypointAddress: string,
-		safe4337ModuleAddress: string,
-		context: C,
-		overrides: {
-			validAfter?: bigint;
-			validUntil?: bigint;
-			isMultiChainSignature?: boolean;
-		} = {},
+		params: {
+			entrypointAddress: string;
+			safe4337ModuleAddress: string;
+			context: C;
+			options?: SafeSignatureOptions;
+		},
 	): Promise<string> {
-		const validAfter = overrides.validAfter ?? 0n;
-		const validUntil = overrides.validUntil ?? 0n;
+		const {
+			entrypointAddress,
+			safe4337ModuleAddress,
+			context,
+			options = {},
+		} = params;
+		const validAfter = options.validAfter ?? 0n;
+		const validUntil = options.validUntil ?? 0n;
 
 		if (signers.length < 1) {
 			throw new RangeError("There should be at least one signer");
@@ -1916,13 +1914,13 @@ export class SafeAccount extends SmartAccount {
 		const signerSignaturePairs = signatures.map((signature, i) => ({
 			signer: normalizedAddresses[i],
 			signature,
+			isContractSignature: signers[i].type === "contract",
 		}));
 
-		return SafeAccount.formatSignaturesToUseroperationSignature(signerSignaturePairs, {
-			validAfter,
-			validUntil,
-			isMultiChainSignature: overrides.isMultiChainSignature,
-		});
+		return SafeAccount.formatSignaturesToUseroperationSignature(
+			signerSignaturePairs,
+			{ ...options, validAfter, validUntil },
+		);
 	}
 
 	/**
@@ -1994,24 +1992,24 @@ export class SafeAccount extends SmartAccount {
 	/**
 	 * format a list of eip712 signatures to a useroperation signature
 	 * @param signerSignaturePairs - a list of a pair of a signer and it's signature
-	 * @param overrides - overrides for the default values
+	 * @param options - merged bag of {@link SafeSignatureOptions} (timing, multi-chain encoding, module address) and {@link WebAuthnSignatureOverrides} (verifier addresses, init flag). Single param for back-compat with the pre-split shape — callers may pass any combination of fields from either type.
 	 * @returns signature
 	 */
 	public static formatSignaturesToUseroperationSignature(
 		signerSignaturePairs: SignerSignaturePair[],
-		overrides: WebAuthnSignatureOverrides = {},
+		options: SafeSignatureOptions & WebAuthnSignatureOverrides = {},
 	): string {
-		const validAfter = overrides.validAfter ?? 0n;
-		const validUntil = overrides.validUntil ?? 0n;
+		const validAfter = options.validAfter ?? 0n;
+		const validUntil = options.validUntil ?? 0n;
 
 		const signature = SafeAccount.buildSignaturesFromSingerSignaturePairs(
 			signerSignaturePairs,
-			overrides,
+			options,
 		);
 
-		if (overrides.isMultiChainSignature) {
-			if (overrides.multiChainMerkleProof != null) {
-				const merkleProofLength = overrides.multiChainMerkleProof.slice(2).length; // wihout 0x prefix
+		if (options.isMultiChainSignature) {
+			if (options.multiChainMerkleProof != null) {
+				const merkleProofLength = options.multiChainMerkleProof.slice(2).length; // wihout 0x prefix
 				if (
 					// 1 byte has a length of 2 hex chars
 					// minimum proof consist of at least two hashes, 2 * 2 * 32 = 128
@@ -2037,7 +2035,7 @@ export class SafeAccount extends SmartAccount {
 						merkleTreeDepthHex,
 						validAfter,
 						validUntil,
-						overrides.multiChainMerkleProof + signature.slice(2),
+						options.multiChainMerkleProof + signature.slice(2),
 					],
 				);
 			} else {
@@ -2113,7 +2111,7 @@ export class SafeAccount extends SmartAccount {
 	/**
 	 * format a list of eip712 signatures to a safe signature (without the time range)
 	 * @param signerSignaturePairs - a list of a pair of a signer and it's signature
-	 * @param overrides - overrides for the default values
+	 * @param webAuthnSignatureOverrides - WebAuthn-only configuration (verifier addresses, init flag)
 	 * @returns signature
 	 */
 	public static buildSignaturesFromSingerSignaturePairs(
@@ -3125,7 +3123,7 @@ function generateOnChainIdentifier(
 	project: string,
 	platform: "Web" | "Mobile" | "Safe App" | "Widget" = "Web",
 	tool: string = "abstractionkit",
-	toolVersion: string = "0.3.4",
+	toolVersion: string = "0.3.5",
 ): string {
 	const identifierPrefix = "5afe"; // Safe identifier prefix
 	const identifierVersion = "00"; // First version
