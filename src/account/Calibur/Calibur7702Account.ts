@@ -499,8 +499,13 @@ export class Calibur7702Account
 				preVerificationGas = BigInt(estimation.preVerificationGas);
 				verificationGasLimit = BigInt(estimation.verificationGasLimit);
 				callGasLimit = BigInt(estimation.callGasLimit);
-				// Safety margin for P-256/WebAuthn signature verification overhead
-				// that the bundler's simulation may underestimate.
+				// Compensate for signature verification cost the bundler skips
+				// during `eth_estimateUserOperationGas`: estimation runs with a
+				// dummy signature whose signature path is short-circuited
+				// (the dummy doesn't recover to a real key, so the bundler
+				// bypasses signature validation). ~55k gas covers the on-chain
+				// signature path that simulation never paid for, whether the
+				// real key is secp256k1 (ECRECOVER), P-256, or WebAuthn-P256.
 				verificationGasLimit += 55_000n;
 
 				userOperation.maxFeePerGas = inputMaxFeePerGas;

@@ -1704,6 +1704,15 @@ export class SafeAccount extends SmartAccount {
 						stateOverrideSet: overrides.state_override_set,
 						isMultiChainSignature: overrides.isMultiChainSignature,
 					});
+				// Compensate for per-signer signature verification cost the
+				// bundler skips during `eth_estimateUserOperationGas`:
+				// estimation runs with dummy signatures whose signature paths
+				// are short-circuited (dummies don't recover to real owners,
+				// so the bundler bypasses signature validation). Safe iterates
+				// owner signatures inside `validateUserOp`, so each real
+				// signature pays ~55k gas at inclusion that simulation never
+				// paid for. The same pattern (without the per-signer
+				// multiplier) appears in Simple7702 and Calibur.
 				verificationGasLimit += BigInt(dummySignerSignaturePairs.length) * 55_000n;
 
 				userOperation.maxFeePerGas = inputMaxFeePerGas;
