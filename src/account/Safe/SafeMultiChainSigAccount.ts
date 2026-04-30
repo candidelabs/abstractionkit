@@ -117,7 +117,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifierForSharedSigner:
 				overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		};
 		const [accountAddress, ,] = SafeAccount.createAccountAddressAndFactoryAddressAndData(
 			owners,
@@ -175,7 +175,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifierForSharedSigner:
 				overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		};
 		const [accountAddress, factoryAddress, factoryData] =
 			SafeAccount.createAccountAddressAndFactoryAddressAndData(
@@ -321,7 +321,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner ??
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		);
 	}
 
@@ -349,7 +349,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifierForSharedSigner:
 				overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		};
 		return SafeAccount.createFactoryAddressAndData(
 			owners,
@@ -403,7 +403,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 						SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 					eip7212WebAuthnContractVerifier:
 						overrides.eip7212WebAuthnContractVerifier ??
-						SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+						SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 					webAuthnSignerFactory:
 						overrides.webAuthnSignerFactory ??
 						SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
@@ -802,7 +802,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		}
 		const defaultWebAuthnOverrides: WebAuthnSignatureOverrides = {
 			eip7212WebAuthnPrecompileVerifier: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifier: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+			eip7212WebAuthnContractVerifier: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 			webAuthnSignerFactory: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
 			webAuthnSignerSingleton: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
 			webAuthnSignerProxyCreationCode:
@@ -886,7 +886,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier:
 				overrides.eip7212WebAuthnContractVerifier ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 			webAuthnSignerFactory:
 				overrides.webAuthnSignerFactory ??
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
@@ -915,7 +915,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier:
 				overrides.eip7212WebAuthnContractVerifier ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 			webAuthnSignerFactory:
 				overrides.webAuthnSignerFactory ??
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
@@ -933,7 +933,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 			eip7212WebAuthnContractVerifier:
 				webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 			webAuthnSignerFactory:
 				webAuthnSignatureOverrides.webAuthnSignerFactory ??
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
@@ -972,7 +972,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 					SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
 				eip7212WebAuthnContractVerifier:
 					overrides.eip7212WebAuthnContractVerifier ??
-					SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_DAIMO_VERIFIER,
+					SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 				webAuthnSignerSingleton:
 					overrides.webAuthnSignerSingleton ??
 					SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
