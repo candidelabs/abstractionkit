@@ -636,6 +636,12 @@ export class BaseSimple7702Account extends SmartAccount {
 					await this.baseEstimateUserOperationGas(userOperationToEstimate, bundlerRpc, {
 						stateOverrideSet: overrides.state_override_set,
 					});
+				// Compensate for ECDSA verification cost the bundler skips during
+				// `eth_estimateUserOperationGas`: estimation runs with a dummy
+				// signature whose signature path is short-circuited (the dummy
+				// doesn't recover to a real owner, so the bundler bypasses
+				// signature validation). ~55k gas is the on-chain ECRECOVER +
+				// signature decode cost that simulation never paid for.
 				verificationGasLimit += 55_000n;
 
 				userOperation.maxFeePerGas = inputMaxFeePerGas;
