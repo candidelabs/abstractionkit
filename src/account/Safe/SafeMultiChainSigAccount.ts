@@ -60,7 +60,12 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	static readonly DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE =
 		DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE_V_0_2_1;
 	static readonly DEFAULT_WEB_AUTHN_PRECOMPILE: string = DEFAULT_WEB_AUTHN_PRECOMPILE_RIP_7951;
+	// Daimo P256 contract verifier (Safe Passkey module v0.2.1). Same value
+	// exposed under both names: DAIMO_VERIFIER for self-documentation and
+	// CONTRACT_VERIFIER as the polymorphic slot fromSafeWebauthn reads.
 	static readonly DEFAULT_WEB_AUTHN_DAIMO_VERIFIER: string =
+		DEFAULT_WEB_AUTHN_DAIMO_VERIFIER_V_0_2_1;
+	static readonly DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER: string =
 		DEFAULT_WEB_AUTHN_DAIMO_VERIFIER_V_0_2_1;
 
 	/**
@@ -446,6 +451,14 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		chainId: bigint,
 		options: SafeSignatureOptions = {},
 	): string {
+		// Single-op path signs the leaf SafeOp hash directly (not a Merkle
+		// root), so a caller-supplied proof would be silently encoded into
+		// a signature that fails on-chain. Reject offline.
+		if (options.multiChainMerkleProof != null && options.multiChainMerkleProof.length > 0) {
+			throw new RangeError(
+				"signUserOperation does not accept multiChainMerkleProof; use signUserOperations for multi-op Merkle signatures",
+			);
+		}
 		return SafeAccount.baseSignSingleUserOperation(
 			userOperation,
 			privateKeys,
@@ -477,6 +490,14 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		chainId: bigint,
 		options: SafeSignatureOptions = {},
 	): Promise<string> {
+		// Single-op path signs the leaf SafeOp hash directly (not a Merkle
+		// root), so a caller-supplied proof would be silently encoded into
+		// a signature that fails on-chain. Reject offline.
+		if (options.multiChainMerkleProof != null && options.multiChainMerkleProof.length > 0) {
+			throw new RangeError(
+				"signUserOperationWithSigners does not accept multiChainMerkleProof; use signUserOperationsWithSigners for multi-op Merkle signatures",
+			);
+		}
 		const context: SignContext<UserOperationV9> = {
 			userOperation,
 			chainId,
@@ -805,13 +826,22 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			];
 		}
 		const userOperationsHashes: string[] = [];
-		userOperationsToSign.forEach((userOperationToSign, _index) => {
+		// Resolve validity windows once per op so leaf hashing and signature
+		// formatting agree. Options take precedence over the top-level fields
+		// when set; falling through to the top-level avoids encoding 0/0 in
+		// the SafeOp digest while the formatter encoded a non-zero window
+		// (or vice versa).
+		const resolvedValidity = userOperationsToSign.map((userOperationToSign) => ({
+			validAfter: userOperationToSign.options?.validAfter ?? userOperationToSign.validAfter,
+			validUntil: userOperationToSign.options?.validUntil ?? userOperationToSign.validUntil,
+		}));
+		userOperationsToSign.forEach((userOperationToSign, index) => {
 			const userOperationHash = SafeAccount.getUserOperationEip712Hash_V9(
 				userOperationToSign.userOperation,
 				userOperationToSign.chainId,
 				{
-					validAfter: userOperationToSign.validAfter,
-					validUntil: userOperationToSign.validUntil,
+					validAfter: resolvedValidity[index].validAfter,
+					validUntil: resolvedValidity[index].validUntil,
 					safe4337ModuleAddress:
 						userOperationToSign.options?.safe4337ModuleAddress ??
 						defaultOptions.safe4337ModuleAddress,
@@ -828,6 +858,8 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 					...defaultWebAuthnOverrides,
 					...userOperationToSign.options,
 					...userOperationToSign.webAuthnSignatureOverrides,
+					validAfter: resolvedValidity[index].validAfter,
+					validUntil: resolvedValidity[index].validUntil,
 					isMultiChainSignature: true,
 					multiChainMerkleProof: proofs[index],
 				}),
