@@ -1766,6 +1766,7 @@ export class SafeAccount extends SmartAccount {
 	): string {
 		const validAfter = options.validAfter ?? 0n;
 		const validUntil = options.validUntil ?? 0n;
+		const moduleAddress = options.safe4337ModuleAddress ?? safe4337ModuleAddress;
 
 		if (privateKeys.length < 1) {
 			throw new RangeError("There should be at least one privateKey");
@@ -1784,7 +1785,7 @@ export class SafeAccount extends SmartAccount {
 			validAfter,
 			validUntil,
 			entrypointAddress,
-			safe4337ModuleAddress,
+			safe4337ModuleAddress: moduleAddress,
 		});
 
 		const signerSignaturePairs: SignerSignaturePair[] = [];
@@ -1853,6 +1854,7 @@ export class SafeAccount extends SmartAccount {
 		} = params;
 		const validAfter = options.validAfter ?? 0n;
 		const validUntil = options.validUntil ?? 0n;
+		const moduleAddress = options.safe4337ModuleAddress ?? safe4337ModuleAddress;
 
 		if (signers.length < 1) {
 			throw new RangeError("There should be at least one signer");
@@ -1862,7 +1864,7 @@ export class SafeAccount extends SmartAccount {
 			validAfter,
 			validUntil,
 			entrypointAddress,
-			safe4337ModuleAddress,
+			safe4337ModuleAddress: moduleAddress,
 		});
 		const userOpHash = TypedDataEncoder.hash(
 			typedDataRaw.domain,
