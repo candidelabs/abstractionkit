@@ -301,7 +301,7 @@ describe('fromSafeWebauthn adapter', () => {
         expect(sig).toBe(expected);
     });
 
-    test('SafeMultiChainSigAccountV1 Merkle path: single-op delegates equal, multi-op embeds WebAuthn bytes', async () => {
+    test('SafeMultiChainSigAccountV1 Merkle path: single-op delegates equal, multi-op preserves contract signer metadata', async () => {
         const safe = ak.SafeMultiChainSigAccountV1.initializeNewAccount([PUBLIC_KEY]);
         const op1 = buildSafeMultiChainOp(safe);
         const op2 = { ...op1, nonce: 1n };
@@ -322,18 +322,26 @@ describe('fromSafeWebauthn adapter', () => {
         const refSingle = await safe.signUserOperationWithSigners(op1, [makeSigner()], CHAIN_ID);
         expect(singleSig).toBe(refSingle);
 
-        // Multi-op path: distinct signatures, each embedding the WebAuthn contract-signature bytes
+        // Multi-op path: distinct signatures, each using the Safe contract-signature layout.
+        const opsToSign = [
+            { userOperation: op1, chainId: 1n, validAfter: 0n, validUntil: 0n },
+            { userOperation: op2, chainId: 10n, validAfter: 0n, validUntil: 0n },
+        ];
         const [s1, s2] = await safe.signUserOperationsWithSigners(
-            [
-                { userOperation: op1, chainId: 1n, validAfter: 0n, validUntil: 0n },
-                { userOperation: op2, chainId: 10n, validAfter: 0n, validUntil: 0n },
-            ],
+            opsToSign,
             [makeSigner()],
         );
-        const webauthnSigBytes = ak.SafeAccountV0_3_0.createWebAuthnSignature(data).slice(2);
+        const webauthnSig = ak.SafeAccountV0_3_0.createWebAuthnSignature(data);
+        const expected = ak.SafeMultiChainSigAccountV1.formatSignaturesToUseroperationsSignatures(
+            opsToSign,
+            [{
+                signer: ak.SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+                signature: webauthnSig,
+                isContractSignature: true,
+            }],
+        );
         expect(s1).not.toBe(s2);
-        expect(s1.toLowerCase()).toContain(webauthnSigBytes.toLowerCase());
-        expect(s2.toLowerCase()).toContain(webauthnSigBytes.toLowerCase());
+        expect([s1, s2]).toEqual(expected);
     });
 });
 
