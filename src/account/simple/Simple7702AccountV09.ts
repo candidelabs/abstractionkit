@@ -93,10 +93,33 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	}
 
 	/**
-	 * Sign a {@link UserOperationV9} using an {@link ExternalSigner}.
-	 * Simple7702 only accepts raw-hash ECDSA; signers without `signHash`
-	 * fail offline with an actionable error. For a raw pk string, use the
-	 * sync {@link signUserOperation} method or wrap with `fromPrivateKey`.
+	 * Sign a {@link UserOperationV9} using an {@link ExternalSigner}. This is
+	 * the recommended entry point for any non-private-key signer.
+	 *
+	 * Accepts signers that implement `signTypedData` (JSON-RPC wallets, viem
+	 * `WalletClient`, browser wallets), `signHash` (local keys, hardware
+	 * wallets), or both. The v0.9 userOpHash IS the EIP-712 digest of the
+	 * PackedUserOperation under the EntryPoint domain, so both schemes
+	 * produce signatures that validate against the same `userOpHash`.
+	 *
+	 * Wrapping a custom signing primitive is just an object literal; no
+	 * adapter function required:
+	 *
+	 * ```ts
+	 * const signer: ExternalSigner = {
+	 *   address: ownerAddress,
+	 *   signTypedData: async (td) => myWallet.signTypedData(td),
+	 * }
+	 * userOp.signature = await account.signUserOperationWithSigner(userOp, signer, chainId)
+	 * ```
+	 *
+	 * For signing with a raw private-key string, use the sync
+	 * {@link signUserOperation} method, or wrap explicitly with
+	 * `fromPrivateKey(pk)`.
+	 *
+	 * @see {@link BaseSimple7702Account.getUserOperationEip712TypedData} for
+	 *   the lower-level escape hatch when you need the typed data outside the
+	 *   dispatcher.
 	 */
 	public async signUserOperationWithSigner(
 		useroperation: UserOperationV9,

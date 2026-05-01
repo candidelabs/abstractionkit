@@ -88,6 +88,255 @@ describe('fromEthersWallet adapter', () => {
     });
 });
 
+describe('fromSafeWebauthn adapter', () => {
+    const PUBLIC_KEY = {
+        x: 0x1234567890123456789012345678901234567890123456789012345678901234n,
+        y: 0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789n,
+    };
+
+    function dummyAssertion() {
+        return {
+            authenticatorData: new Uint8Array(37).buffer,
+            clientDataFields: '0x7b226f726967696e223a2268747470733a2f2f736166652e676c6f62616c227d',
+            rs: [
+                0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1n,
+                0xb2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2n,
+            ],
+        };
+    }
+
+    test('throws on non-bigint coords (e.g. JSON.parse round-trip)', () => {
+        const stringCoords = {
+            x: PUBLIC_KEY.x.toString(),
+            y: PUBLIC_KEY.y.toString(),
+        };
+        expect(() => ak.fromSafeWebauthn({
+            publicKey: stringCoords,
+            isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
+            getAssertion: async () => dummyAssertion(),
+        })).toThrow(TypeError);
+        expect(() => ak.fromSafeWebauthn({
+            publicKey: { x: PUBLIC_KEY.x, y: undefined },
+            isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
+            getAssertion: async () => dummyAssertion(),
+        })).toThrow(/must be bigint/);
+    });
+
+    test('isInit=true routes to the WebAuthn shared signer (default)', () => {
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
+            getAssertion: async () => dummyAssertion(),
+        });
+        expect(signer.address.toLowerCase())
+            .toBe(ak.SafeAccountV0_3_0.DEFAULT_WEB_AUTHN_SHARED_SIGNER.toLowerCase());
+    });
+
+    test('isInit=true respects webAuthnSharedSigner override', () => {
+        const override = '0x1111111111111111111111111111111111111111';
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
+            webAuthnSharedSigner: override,
+            getAssertion: async () => dummyAssertion(),
+        });
+        expect(signer.address).toBe(override);
+    });
+
+    test('isInit=false derives the deterministic verifier proxy from publicKey', () => {
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: false,
+            accountClass: ak.SafeAccountV0_3_0,
+            getAssertion: async () => dummyAssertion(),
+        });
+        const expected = ak.SafeAccountV0_3_0.createWebAuthnSignerVerifierAddress(
+            PUBLIC_KEY.x, PUBLIC_KEY.y,
+        );
+        expect(signer.address.toLowerCase()).toBe(expected.toLowerCase());
+    });
+
+    test('declares type="contract" so the per-pair contract-signature path is used', () => {
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
+            getAssertion: async () => dummyAssertion(),
+        });
+        expect(signer.type).toBe('contract');
+    });
+
+    test('exposes only signHash — no signTypedData (challenge has no typed-data display)', () => {
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
+            getAssertion: async () => dummyAssertion(),
+        });
+        expect(typeof signer.signHash).toBe('function');
+        expect(signer.signTypedData).toBeUndefined();
+    });
+
+    test('signHash forwards hash bytes to getAssertion as the challenge', async () => {
+        let captured = null;
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
+            getAssertion: async (challenge) => {
+                captured = challenge;
+                return dummyAssertion();
+            },
+        });
+        const hash = '0x' + 'aa'.repeat(32);
+        await signer.signHash(hash);
+        expect(captured).toBeInstanceOf(Uint8Array);
+        expect(captured).toEqual(getBytes(hash));
+    });
+
+    test('signHash returns the encoded WebAuthn contract signature', async () => {
+        const data = dummyAssertion();
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
+            getAssertion: async () => data,
+        });
+        const got = await signer.signHash('0x' + 'cc'.repeat(32));
+        const expected = ak.SafeAccountV0_3_0.createWebAuthnSignature(data);
+        expect(got).toBe(expected);
+    });
+
+    test('integrates with signUserOperationWithSigners — challenge is the SafeOp digest, signature matches manual reference', async () => {
+        const safe = ak.SafeAccountV0_3_0.initializeNewAccount([PUBLIC_KEY]);
+        const op = buildSafeV3Op(safe);
+        const data = dummyAssertion();
+
+        let challengeReceived = null;
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
+            getAssertion: async (challenge) => {
+                challengeReceived = challenge;
+                return data;
+            },
+        });
+
+        const sig = await safe.signUserOperationWithSigners(op, [signer], CHAIN_ID);
+
+        const expectedHash = ak.SafeAccountV0_3_0.getUserOperationEip712Hash(op, CHAIN_ID);
+        expect(challengeReceived).toEqual(getBytes(expectedHash));
+
+        const webauthnSig = ak.SafeAccountV0_3_0.createWebAuthnSignature(data);
+        const expectedSig = ak.SafeAccountV0_3_0.formatSignaturesToUseroperationSignature([
+            {
+                signer: ak.SafeAccountV0_3_0.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+                signature: webauthnSig,
+                isContractSignature: true,
+            },
+        ]);
+        expect(sig).toBe(expectedSig);
+    });
+
+    test('isInit=false integrates — verifier-proxy address equals manual reference', async () => {
+        const safe = ak.SafeAccountV0_3_0.initializeNewAccount([PUBLIC_KEY]);
+        const op = { ...buildSafeV3Op(safe), nonce: 1n };
+        const data = dummyAssertion();
+
+        const signer = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: false,
+            accountClass: ak.SafeAccountV0_3_0,
+            getAssertion: async () => data,
+        });
+        const sig = await safe.signUserOperationWithSigners(op, [signer], CHAIN_ID);
+
+        const verifierAddr = ak.SafeAccountV0_3_0.createWebAuthnSignerVerifierAddress(
+            PUBLIC_KEY.x, PUBLIC_KEY.y,
+        );
+        const webauthnSig = ak.SafeAccountV0_3_0.createWebAuthnSignature(data);
+        const expected = ak.SafeAccountV0_3_0.formatSignaturesToUseroperationSignature([
+            { signer: verifierAddr, signature: webauthnSig, isContractSignature: true },
+        ]);
+        expect(sig).toBe(expected);
+    });
+
+    test('mixed multisig (passkey + EOA, 2-of-2) matches manual reference', async () => {
+        const eoaWallet = new Wallet(PK1);
+        const safe = ak.SafeAccountV0_3_0.initializeNewAccount(
+            [PUBLIC_KEY, eoaWallet.address],
+            { threshold: 2 },
+        );
+        const op = buildSafeV3Op(safe);
+        const data = dummyAssertion();
+
+        const passkeySigner = ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            accountClass: ak.SafeAccountV0_3_0,
+            getAssertion: async () => data,
+        });
+        const eoaSigner = ak.fromPrivateKey(PK1);
+        const sig = await safe.signUserOperationWithSigners(
+            op, [passkeySigner, eoaSigner], CHAIN_ID,
+        );
+
+        const hash = ak.SafeAccountV0_3_0.getUserOperationEip712Hash(op, CHAIN_ID);
+        const eoaSig = eoaWallet.signingKey.sign(hash).serialized;
+        const passkeySig = ak.SafeAccountV0_3_0.createWebAuthnSignature(data);
+        // formatter sorts by address internally, so input order is irrelevant
+        const expected = ak.SafeAccountV0_3_0.formatSignaturesToUseroperationSignature([
+            {
+                signer: ak.SafeAccountV0_3_0.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+                signature: passkeySig,
+                isContractSignature: true,
+            },
+            { signer: eoaWallet.address, signature: eoaSig },
+        ]);
+        expect(sig).toBe(expected);
+    });
+
+    test('SafeMultiChainSigAccountV1 Merkle path: single-op delegates equal, multi-op embeds WebAuthn bytes', async () => {
+        const safe = ak.SafeMultiChainSigAccountV1.initializeNewAccount([PUBLIC_KEY]);
+        const op1 = buildSafeMultiChainOp(safe);
+        const op2 = { ...op1, nonce: 1n };
+        const data = dummyAssertion();
+
+        const makeSigner = () => ak.fromSafeWebauthn({
+            publicKey: PUBLIC_KEY,
+            isInit: true,
+            accountClass: ak.SafeMultiChainSigAccountV1,
+            getAssertion: async () => data,
+        });
+
+        // Single-op path: signUserOperationsWithSigners delegates to signUserOperationWithSigners
+        const [singleSig] = await safe.signUserOperationsWithSigners(
+            [{ userOperation: op1, chainId: CHAIN_ID, validAfter: 0n, validUntil: 0n }],
+            [makeSigner()],
+        );
+        const refSingle = await safe.signUserOperationWithSigners(op1, [makeSigner()], CHAIN_ID);
+        expect(singleSig).toBe(refSingle);
+
+        // Multi-op path: distinct signatures, each embedding the WebAuthn contract-signature bytes
+        const [s1, s2] = await safe.signUserOperationsWithSigners(
+            [
+                { userOperation: op1, chainId: 1n, validAfter: 0n, validUntil: 0n },
+                { userOperation: op2, chainId: 10n, validAfter: 0n, validUntil: 0n },
+            ],
+            [makeSigner()],
+        );
+        const webauthnSigBytes = ak.SafeAccountV0_3_0.createWebAuthnSignature(data).slice(2);
+        expect(s1).not.toBe(s2);
+        expect(s1.toLowerCase()).toContain(webauthnSigBytes.toLowerCase());
+        expect(s2.toLowerCase()).toContain(webauthnSigBytes.toLowerCase());
+    });
+});
+
 // ─── SignContext delivery ────────────────────────────────────────────────
 
 describe('SignContext is forwarded to signers', () => {
@@ -379,14 +628,23 @@ describe('Simple7702Account signUserOperationWithSigner', () => {
         expect(signerSig).toBe(pkSig);
     });
 
-    test('rejects signTypedData-only signer with actionable error', async () => {
+    test('signTypedData-only signer succeeds (v0.8 userOpHash IS the EIP-712 digest)', async () => {
+        const wallet = new Wallet(PK1);
         const tdOnly = {
             address: owner,
-            signTypedData: async () => '0x',
+            signTypedData: async (td) =>
+                wallet.signTypedData(td.domain, td.types, td.message),
         };
+        const tdSig = await simple.signUserOperationWithSigner(op, tdOnly, CHAIN_ID);
+        const pkSig = simple.signUserOperation(op, PK1, CHAIN_ID);
+        expect(tdSig).toBe(pkSig);
+    });
+
+    test('rejects signer with neither signHash nor signTypedData', async () => {
+        const empty = { address: owner };
         await expect(
-            simple.signUserOperationWithSigner(op, tdOnly, CHAIN_ID),
-        ).rejects.toThrow(/accepts: \[hash\]; signer provides: \[typedData\]/);
+            simple.signUserOperationWithSigner(op, empty, CHAIN_ID),
+        ).rejects.toThrow(/No compatible signing scheme/);
     });
 });
 
@@ -401,6 +659,18 @@ describe('Simple7702AccountV09 signUserOperationWithSigner', () => {
             op, ak.fromPrivateKey(PK1), CHAIN_ID,
         );
         expect(signerSig).toBe(pkSig);
+    });
+
+    test('signTypedData-only signer succeeds (v0.9 userOpHash IS the EIP-712 digest)', async () => {
+        const wallet = new Wallet(PK1);
+        const tdOnly = {
+            address: owner,
+            signTypedData: async (td) =>
+                wallet.signTypedData(td.domain, td.types, td.message),
+        };
+        const tdSig = await simple.signUserOperationWithSigner(op, tdOnly, CHAIN_ID);
+        const pkSig = simple.signUserOperation(op, PK1, CHAIN_ID);
+        expect(tdSig).toBe(pkSig);
     });
 });
 
@@ -488,7 +758,7 @@ describe('Uint8Array-only / secure-dispose signers', () => {
             .rejects.toThrow(/signer disposed/);
     });
 
-    test('works on Simple7702 / Calibur (hash-only accounts)', async () => {
+    test('works on Simple7702 / Calibur via the hash-signing path', async () => {
         const hexPk = '0x' + '55'.repeat(32);
         const bytes = getBytes(hexPk);
         const signer = fromPrivateKeyBytes(bytes);

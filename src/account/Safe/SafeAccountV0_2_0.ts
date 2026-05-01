@@ -13,6 +13,7 @@ import type {
 	CreateUserOperationV6Overrides,
 	InitCodeOverrides,
 	SafeAccountSingleton,
+	SafeSignatureOptions,
 	SafeUserOperationTypedDataDomain,
 	SafeUserOperationV6TypedMessageValue,
 	Signer,
@@ -448,7 +449,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 * @param useroperation - The UserOperation to sign
 	 * @param privateKeys - Array of private keys for the signers
 	 * @param chainId - The target chain ID
-	 * @param overrides - Override validAfter and validUntil timestamps
+	 * @param options - {@link SafeSignatureOptions} — timing, multi-chain encoding, module address
 	 * @returns The formatted signature string ready to set on the UserOperation
 	 *
 	 * @example
@@ -459,10 +460,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		useroperation: UserOperationV6,
 		privateKeys: string[],
 		chainId: bigint,
-		overrides: {
-			validAfter?: bigint;
-			validUntil?: bigint;
-		} = {},
+		options: SafeSignatureOptions = {},
 	): string {
 		return SafeAccount.baseSignSingleUserOperation(
 			useroperation,
@@ -470,7 +468,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			chainId,
 			this.entrypointAddress,
 			this.safe4337ModuleAddress,
-			overrides,
+			options,
 		);
 	}
 
@@ -478,30 +476,29 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 * Sign a UserOperation using one or more {@link AkSigner} instances.
 	 * See {@link SafeAccountV0_3_0.signUserOperationWithSigners} for full
 	 * design rationale and examples.
+	 *
+	 * @param useroperation - The UserOperation to sign
+	 * @param signers - one ExternalSigner per owner (any order)
+	 * @param chainId - The target chain ID
+	 * @param options - {@link SafeSignatureOptions} — timing, multi-chain encoding, module address
+	 * @returns Promise resolving to the formatted signature string
 	 */
 	public signUserOperationWithSigners(
 		useroperation: UserOperationV6,
 		signers: ReadonlyArray<AkSigner>,
 		chainId: bigint,
-		overrides: {
-			validAfter?: bigint;
-			validUntil?: bigint;
-			isMultiChainSignature?: boolean;
-		} = {},
+		options: SafeSignatureOptions = {},
 	): Promise<string> {
 		const context: SignContext<UserOperationV6> = {
 			userOperation: useroperation,
 			chainId,
 			entryPoint: this.entrypointAddress,
 		};
-		return SafeAccount.baseSignUserOperationWithSigners(
-			useroperation,
-			signers,
-			chainId,
-			this.entrypointAddress,
-			this.safe4337ModuleAddress,
+		return SafeAccount.baseSignUserOperationWithSigners(useroperation, signers, chainId, {
+			entrypointAddress: this.entrypointAddress,
+			safe4337ModuleAddress: this.safe4337ModuleAddress,
 			context,
-			overrides,
-		);
+			options,
+		});
 	}
 }

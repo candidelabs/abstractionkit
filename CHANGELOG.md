@@ -1,5 +1,78 @@
 # Changelog
 
+## 0.3.5
+
+### New Features
+
+- **EIP-712 typed-data signing for `Simple7702Account` / `Simple7702AccountV09`**: `signUserOperationWithSigner` now accepts `signTypedData`-only signers (JSON-RPC wallets, viem `WalletClient`) in addition to existing `signHash` signers. The v0.8/v0.9 `userOpHash` IS the EIP-712 digest of `PackedUserOperation` under the EntryPoint's domain, so both schemes produce signatures that validate against the same hash. Throws on EntryPoint v0.7 (different signing scheme). Adds `getUserOperationEip712TypedData(userOp, chainId)` on `BaseSimple7702Account` as the lower-level escape hatch for integrators driving `signTypedData` with their own primitive (HSM, MPC, custom wallet abstraction).
+  ```ts
+  // Path A: signTypedData-only signer
+  const signer = {
+    address: eoaAddress,
+    signTypedData: async (td) => walletClient.signTypedData(td),
+  };
+  userOp.signature = await account.signUserOperationWithSigner(userOp, signer, chainId);
+
+  // Path B: drive signTypedData yourself
+  const td = account.getUserOperationEip712TypedData(userOp, chainId);
+  userOp.signature = await wallet.signTypedData(td.domain, td.types, td.message);
+  ```
+- **WebAuthn pubkey JSON helpers + assertion normalizer** (3 new exports from package root):
+  - `pubkeyCoordinatesToJson(pubkey)` / `pubkeyCoordinatesFromJson(input)`: bigint-safe JSON round-trip for `{ x, y }` coordinates. Hex on the wire, canonical `{ x: bigint, y: bigint }` after parse. `fromJson` accepts a JSON string or a pre-parsed object, and either hex or decimal string coords.
+  - `webauthnSignatureFromAssertion(response)`: turns a structural assertion shape (browser `AuthenticatorAssertionResponse`, `ox/WebAuthnP256` sign output, or `@simplewebauthn/browser`) into the `WebauthnSignatureData` that `fromSafeWebauthn` and `createWebAuthnSignature` already accept. Replaces the ~13-line parser pipeline every Safe-passkeys consumer was writing in their `getAssertion` callback.
+- **`fromSafeWebauthn` adapter**: package-root factory that produces an `ExternalSigner` from a WebAuthn credential, ready to pass into `safe.signUserOperationWithSigners(op, [signer], chainId)`. Hides three Safe-specific concerns: address routing (the WebAuthn shared signer for the deployment UserOp, the deterministic verifier-proxy address derived from `(x, y)` afterward), the `type: "contract"` tag, and the Safe-specific signature encoding. Required `accountClass` parameter (the same Safe subclass used at `initializeNewAccount`) sources the Passkey module defaults — `SafeAccountV0_2_0` / `SafeAccountV0_3_0` for v0.2.0 (FCL P256), `SafeMultiChainSigAccountV1` for v0.2.1 (Daimo P256 + RIP-7951). Picking the wrong class would derive an address that isn't an on-chain owner and the bundler would reject with a generic "Invalid UserOp signature" (`GS026` on-chain), so the param is required to surface this choice at compile time. Caller supplies a `getAssertion(challenge: Uint8Array) => Promise<WebauthnSignatureData>` callback that runs `navigator.credentials.get(...)` (browser) or an equivalent native bridge — the SDK doesn't import `navigator` itself, so the adapter stays environment-agnostic. Pass `expectedSigners: [{ x, y }]` to `createUserOperation` so the bundler estimates verification gas against the WebAuthn dummy signature (~400 bytes) instead of the EOA dummy (~65 bytes); without it, the real signed UserOp is rejected at submit. The `FromSafeWebauthnParams` and `WebauthnAssertionFetcher` types are also exported from the package root.
+  ```ts
+  import { fromSafeWebauthn, SafeAccountV0_3_0 } from "abstractionkit";
+
+  let userOperation = await safe.createUserOperation(
+    transactions, nodeUrl, bundlerUrl,
+    { expectedSigners: [{ x, y }] },
+  );
+  const signer = fromSafeWebauthn({
+    publicKey: { x, y },
+    isInit: userOperation.nonce === 0n,
+    accountClass: SafeAccountV0_3_0, // SafeMultiChainSigAccountV1 for multi-chain
+    getAssertion: async (challenge) => {
+      const assertion = await navigator.credentials.get({
+        publicKey: { challenge, rpId, allowCredentials, userVerification },
+      });
+      return {
+        authenticatorData: assertion.response.authenticatorData,
+        clientDataFields: extractClientDataFields(assertion.response),
+        rs: extractSignature(assertion.response),
+      };
+    },
+  });
+  userOperation.signature = await safe.signUserOperationWithSigners(
+    userOperation, [signer], chainId,
+  );
+  ```
+- **`ExternalSigner.type` field** (`"ecdsa" | "contract"`, optional, defaults to `"ecdsa"`). When `"contract"`, the signer's signature is encoded as a dynamic-length EIP-1271 contract-signature segment instead of a raw 65-byte ECDSA blob. Lets a single `signUserOperationWithSigners([...])` call mix ECDSA owners and contract-signature owners (WebAuthn, smart-contract owners) in the same Safe multisig batch. Account-agnostic: ignored by non-Safe accounts that don't model contract signatures. `fromSafeWebauthn` sets this internally.
+
+### Breaking Changes
+
+- **`UserOperationToSignWithOverrides.overrides` is split into `options` and `webAuthnSignatureOverrides`.** The previous kitchen-sink `overrides` field carried both per-call signing options (timing, multi-chain, module address) and WebAuthn-specific encoding overrides (verifier addresses, init flag); these now live on dedicated fields. Affects callers of `SafeMultiChainSigAccountV1.signUserOperations` and `signUserOperationsWithSigners`. Migration:
+  ```ts
+  // Before
+  await safe.signUserOperations(
+    [{
+      userOperation, chainId, validAfter, validUntil,
+      overrides: { isInit: true, webAuthnSharedSigner, safe4337ModuleAddress },
+    }],
+    [pk],
+  );
+
+  // After
+  await safe.signUserOperations(
+    [{
+      userOperation, chainId, validAfter, validUntil,
+      options: { safe4337ModuleAddress },
+      webAuthnSignatureOverrides: { isInit: true, webAuthnSharedSigner },
+    }],
+    [pk],
+  );
+  ```
+
 ## 0.3.4
 
 ### New Features
