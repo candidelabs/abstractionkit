@@ -58,6 +58,47 @@ function buildSimpleOp(owner) {
     };
 }
 
+function byteLength(hex) {
+    return (hex.length - 2) / 2;
+}
+
+// ─── Signature formatting fixtures ─────────────────────────────────────
+
+describe('Safe signature formatting fixtures', () => {
+    test('EOA signature stays inline after the validity window', () => {
+        const wallet = new Wallet(PK1);
+        const signature = wallet.signingKey.sign('0x' + '11'.repeat(32)).serialized;
+
+        const formatted = ak.SafeAccountV0_3_0.formatSignaturesToUseroperationSignature([
+            { signer: wallet.address, signature },
+        ]);
+
+        expect(byteLength(formatted)).toBe(12 + 65);
+        expect(formatted.endsWith(signature.slice(2))).toBe(true);
+    });
+
+    test('contract signature uses an offset segment plus dynamic bytes', () => {
+        const contractSigner = '0x1000000000000000000000000000000000000000';
+        const contractSignature = '0x' + 'ab'.repeat(96);
+
+        const formatted = ak.SafeAccountV0_3_0.formatSignaturesToUseroperationSignature([
+            {
+                signer: contractSigner,
+                signature: contractSignature,
+                isContractSignature: true,
+            },
+        ]);
+
+        expect(byteLength(formatted)).toBe(12 + 65 + 32 + 96);
+        const body = formatted.slice(2 + 24).toLowerCase();
+        expect(body.slice(0, 64)).toBe(contractSigner.slice(2).padStart(64, '0'));
+        expect(body.slice(64, 128)).toBe('41'.padStart(64, '0'));
+        expect(body.slice(128, 130)).toBe('00');
+        expect(body.slice(130, 194)).toBe('60'.padStart(64, '0'));
+        expect(body.slice(194)).toBe(contractSignature.slice(2));
+    });
+});
+
 // ─── Adapter tests ───────────────────────────────────────────────────────
 
 describe('fromPrivateKey adapter', () => {
