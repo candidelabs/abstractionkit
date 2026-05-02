@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.6
+
+### Fixes
+
+- **Safe multi-chain single-operation signing now hashes the correct payload.** `SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Hash` now returns the per-operation SafeOp hash when called with exactly one UserOperation, matching the Safe4337MultiChainSignatureModule `merkleTreeDepth == 0` validation path. This fixes single-operation multi-chain signatures being rejected on-chain with `AA24`.
+- **Safe multi-chain WebAuthn / EIP-1271 signatures keep contract-signer formatting.** `signUserOperationsWithSigners` now preserves the `"contract"` signer type when formatting multi-operation signatures, so dynamic Safe contract-signature segments are emitted correctly.
+
+### Maintenance
+
+- Added signer API documentation, type-level signer tests, signer unit-test coverage, and CI checks for linting, type tests, build, and signer tests.
+
 ## 0.3.5
 
 ### New Features
