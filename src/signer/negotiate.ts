@@ -63,9 +63,8 @@ function buildMismatchMessage(params: {
  * account-side code stays linear. `typedData` is optional: accounts that
  * only accept the `"hash"` scheme (Simple7702, Calibur) pass just `hash`.
  *
- * The SDK always forwards `context` here so power-user implementations can
- * inspect the userOp. The public callback type still keeps context optional
- * for direct signer calls outside an account method.
+ * `context` is always forwarded to the signer so power-user implementations
+ * can inspect the userOp.
  */
 export async function invokeSigner<C>(
 	signer: Signer<C>,
