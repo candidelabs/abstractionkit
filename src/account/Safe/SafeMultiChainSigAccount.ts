@@ -681,6 +681,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			const signerSignaturePairs: SignerSignaturePair[] = signers.map((_signer, i) => ({
 				signer: normalizedAddresses[i],
 				signature: signatures[i],
+				isContractSignature: signers[i].type === "contract",
 			}));
 
 			const userOpSignatures: string[] = [];
