@@ -83,28 +83,25 @@ interface SignerBase {
  * Sign a 32-byte hash raw (no EIP-191 prefix). Required for Simple7702 /
  * Calibur; acceptable fallback for Safe.
  *
- * Generic over the context type the SDK will pass when signing through an
- * account. The context argument is optional so direct calls to a signer can
- * use `signer.signHash(hash)` without passing a placeholder. Defaults to
+ * Generic over the context type the SDK will pass. Defaults to
  * {@link SignContext} (single-op) — set explicitly to
  * {@link MultiOpSignContext} for multi-op signers, or to `unknown` for
  * universal/context-agnostic signers like the built-in adapters.
  */
 export type SignHashFn<C = SignContext> = (
 	hash: `0x${string}`,
-	context?: C,
+	context: C,
 ) => Promise<`0x${string}`>;
 
 /**
  * Sign an EIP-712 typed data payload. Preferred for Safe because wallets
  * can display structured fields instead of a hex blob.
  *
- * Generic over context — see {@link SignHashFn}. The SDK passes context when
- * it invokes the signer, but direct callers may omit it.
+ * Generic over context — see {@link SignHashFn}.
  */
 export type SignTypedDataFn<C = SignContext> = (
 	data: TypedData,
-	context?: C,
+	context: C,
 ) => Promise<`0x${string}`>;
 
 /**
