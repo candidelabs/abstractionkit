@@ -27,6 +27,8 @@
 		"prepare": "tsdown",
 		"clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
 		"test": "jest --verbose",
+		"test:signer": "jest --runTestsByPath test/signer/signer.test.js --runInBand",
+		"test:types": "tsc -p test/types/tsconfig.json --noEmit",
 		"lint": "biome lint src",
 		"format": "biome format --write src",
 		"check": "biome check --write src"

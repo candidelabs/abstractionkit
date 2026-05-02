@@ -1,7 +1,7 @@
 # ============================================
-# CI Pipeline — Build Only
+# CI Pipeline
 # ============================================
-# Verifies that the main project builds successfully.
+# Verifies that the main project builds and core offline checks pass.
 
 name: CI
 
@@ -36,5 +36,14 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Lint
+        run: yarn lint
+
+      - name: Type tests
+        run: yarn test:types
+
       - name: Build
         run: yarn build
+
+      - name: Signer unit tests
+        run: yarn test:signer
