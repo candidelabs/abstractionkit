@@ -25,13 +25,13 @@ const typedDataOnlySigner: ExternalSigner = {
 const dualSchemeSigner: ExternalSigner<SignContext<UserOperationV9>> = {
 	address,
 	signHash: async (_hash, context) => {
-		context.userOperation.sender;
-		context.chainId;
-		context.entryPoint;
+		context?.userOperation.sender;
+		context?.chainId;
+		context?.entryPoint;
 		return signature;
 	},
 	signTypedData: async (_typedData, context) => {
-		context.userOperation.sender;
+		context?.userOperation.sender;
 		return signature;
 	},
 };
@@ -39,8 +39,8 @@ const dualSchemeSigner: ExternalSigner<SignContext<UserOperationV9>> = {
 const multiOpSigner: ExternalSigner<MultiOpSignContext<UserOperationV9>> = {
 	address,
 	signHash: async (_hash, context) => {
-		context.userOperations[0]?.chainId;
-		context.entryPoint;
+		context?.userOperations[0]?.chainId;
+		context?.entryPoint;
 		return signature;
 	},
 };
