@@ -478,6 +478,14 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * {@link SafeAccountV0_3_0.signUserOperationWithSigners} for the full
 	 * design rationale. Sets the multi-chain flag automatically.
 	 *
+	 * Note the chainId plumbing asymmetry vs the multi-op variant:
+	 *   - **Singular** (this method): `chainId` is a positional argument.
+	 *   - **Plural** ({@link signUserOperationsWithSigners}): chainIds live
+	 *     inside each `UserOperationToSign` element, since each op may
+	 *     target a different chain.
+	 * Pick the variant that matches your bundle shape; don't pass the same
+	 * chainId twice.
+	 *
 	 * @param userOperation - UserOperation to sign
 	 * @param signers - one ExternalSigner per owner (any order)
 	 * @param chainId - target chain id
@@ -607,6 +615,15 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * rejects it offline. User-defined single-op signers
 	 * (`Signer<SignContext>`) also don't work — they'd receive a context shape
 	 * they didn't declare.
+	 *
+	 * Note the chainId plumbing asymmetry vs the single-op variant:
+	 *   - **Plural** (this method): each `UserOperationToSign` carries its
+	 *     own `chainId`, since a multichain bundle's ops target different
+	 *     chains.
+	 *   - **Singular** ({@link signUserOperationWithSigners}): `chainId` is
+	 *     a positional argument.
+	 * For a length-1 bundle on this method, set `chainId` on the single
+	 * element rather than reaching for the singular variant.
 	 *
 	 * @param userOperationsToSign - UserOperations + chain IDs + validity windows
 	 * @param signers - one Signer per owner (any order; sorted by address on-chain)
