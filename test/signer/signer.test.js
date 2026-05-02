@@ -651,6 +651,50 @@ describe('SafeMultiChainSigAccountV1 signUserOperationWithSigners', () => {
         );
         expect(newSigs).toEqual(legacySigs);
     });
+
+    // The on-chain Safe4337MultiChainSignatureModule's `merkleTreeDepth == 0`
+    // branch verifies against `keccak256(SafeOp)` directly, not the Merkle
+    // wrapper. Returning the wrapper from this helper for length=1 produced
+    // signatures the contract rejected with AA24.
+    test('getMultiChainSingleSignatureUserOperationsEip712Hash length=1 returns the per-op SafeOp hash', () => {
+        const length1Hash = ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Hash(
+            [{ userOperation: op, chainId: CHAIN_ID, validAfter: 0n, validUntil: 0n }],
+        );
+        const perOpHash = ak.SafeAccountV0_3_0.getUserOperationEip712Hash_V9(
+            op,
+            CHAIN_ID,
+            { safe4337ModuleAddress: ak.SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS },
+        );
+        expect(length1Hash).toBe(perOpHash);
+    });
+
+    test('getMultiChainSingleSignatureUserOperationsEip712Hash length=2 returns the Merkle wrapper hash', () => {
+        const op2 = { ...op, nonce: 1n };
+        const ops = [
+            { userOperation: op, chainId: 1n, validAfter: 0n, validUntil: 0n },
+            { userOperation: op2, chainId: 10n, validAfter: 0n, validUntil: 0n },
+        ];
+        const wrapperHash = ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Hash(ops);
+        const perOpHash = ak.SafeAccountV0_3_0.getUserOperationEip712Hash_V9(
+            op, 1n,
+            { safe4337ModuleAddress: ak.SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS },
+        );
+        expect(wrapperHash).not.toBe(perOpHash);
+    });
+
+    test('getMultiChainSingleSignatureUserOperationsEip712Data throws for length=1', () => {
+        expect(() =>
+            ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Data(
+                [{ userOperation: op, chainId: CHAIN_ID, validAfter: 0n, validUntil: 0n }],
+            ),
+        ).toThrow(RangeError);
+    });
+
+    test('getMultiChainSingleSignatureUserOperationsEip712Hash throws for empty input', () => {
+        expect(() =>
+            ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Hash([]),
+        ).toThrow(RangeError);
+    });
 });
 
 // ─── Single-signer accounts (singular method name) ──────────────────────
