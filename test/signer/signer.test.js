@@ -58,6 +58,47 @@ function buildSimpleOp(owner) {
     };
 }
 
+function byteLength(hex) {
+    return (hex.length - 2) / 2;
+}
+
+// ─── Signature formatting fixtures ─────────────────────────────────────
+
+describe('Safe signature formatting fixtures', () => {
+    test('EOA signature stays inline after the validity window', () => {
+        const wallet = new Wallet(PK1);
+        const signature = wallet.signingKey.sign('0x' + '11'.repeat(32)).serialized;
+
+        const formatted = ak.SafeAccountV0_3_0.formatSignaturesToUseroperationSignature([
+            { signer: wallet.address, signature },
+        ]);
+
+        expect(byteLength(formatted)).toBe(12 + 65);
+        expect(formatted.endsWith(signature.slice(2))).toBe(true);
+    });
+
+    test('contract signature uses an offset segment plus dynamic bytes', () => {
+        const contractSigner = '0x1000000000000000000000000000000000000000';
+        const contractSignature = '0x' + 'ab'.repeat(96);
+
+        const formatted = ak.SafeAccountV0_3_0.formatSignaturesToUseroperationSignature([
+            {
+                signer: contractSigner,
+                signature: contractSignature,
+                isContractSignature: true,
+            },
+        ]);
+
+        expect(byteLength(formatted)).toBe(12 + 65 + 32 + 96);
+        const body = formatted.slice(2 + 24).toLowerCase();
+        expect(body.slice(0, 64)).toBe(contractSigner.slice(2).padStart(64, '0'));
+        expect(body.slice(64, 128)).toBe('41'.padStart(64, '0'));
+        expect(body.slice(128, 130)).toBe('00');
+        expect(body.slice(130, 194)).toBe('60'.padStart(64, '0'));
+        expect(body.slice(194)).toBe(contractSignature.slice(2));
+    });
+});
+
 // ─── Adapter tests ───────────────────────────────────────────────────────
 
 describe('fromPrivateKey adapter', () => {
@@ -301,7 +342,7 @@ describe('fromSafeWebauthn adapter', () => {
         expect(sig).toBe(expected);
     });
 
-    test('SafeMultiChainSigAccountV1 Merkle path: single-op delegates equal, multi-op embeds WebAuthn bytes', async () => {
+    test('SafeMultiChainSigAccountV1 Merkle path: single-op delegates equal, multi-op preserves contract signer metadata', async () => {
         const safe = ak.SafeMultiChainSigAccountV1.initializeNewAccount([PUBLIC_KEY]);
         const op1 = buildSafeMultiChainOp(safe);
         const op2 = { ...op1, nonce: 1n };
@@ -322,18 +363,26 @@ describe('fromSafeWebauthn adapter', () => {
         const refSingle = await safe.signUserOperationWithSigners(op1, [makeSigner()], CHAIN_ID);
         expect(singleSig).toBe(refSingle);
 
-        // Multi-op path: distinct signatures, each embedding the WebAuthn contract-signature bytes
+        // Multi-op path: distinct signatures, each using the Safe contract-signature layout.
+        const opsToSign = [
+            { userOperation: op1, chainId: 1n, validAfter: 0n, validUntil: 0n },
+            { userOperation: op2, chainId: 10n, validAfter: 0n, validUntil: 0n },
+        ];
         const [s1, s2] = await safe.signUserOperationsWithSigners(
-            [
-                { userOperation: op1, chainId: 1n, validAfter: 0n, validUntil: 0n },
-                { userOperation: op2, chainId: 10n, validAfter: 0n, validUntil: 0n },
-            ],
+            opsToSign,
             [makeSigner()],
         );
-        const webauthnSigBytes = ak.SafeAccountV0_3_0.createWebAuthnSignature(data).slice(2);
+        const webauthnSig = ak.SafeAccountV0_3_0.createWebAuthnSignature(data);
+        const expected = ak.SafeMultiChainSigAccountV1.formatSignaturesToUseroperationsSignatures(
+            opsToSign,
+            [{
+                signer: ak.SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+                signature: webauthnSig,
+                isContractSignature: true,
+            }],
+        );
         expect(s1).not.toBe(s2);
-        expect(s1.toLowerCase()).toContain(webauthnSigBytes.toLowerCase());
-        expect(s2.toLowerCase()).toContain(webauthnSigBytes.toLowerCase());
+        expect([s1, s2]).toEqual(expected);
     });
 });
 
@@ -601,6 +650,57 @@ describe('SafeMultiChainSigAccountV1 signUserOperationWithSigners', () => {
             opsToSign, [ak.fromPrivateKey(PK1)],
         );
         expect(newSigs).toEqual(legacySigs);
+    });
+
+    // The on-chain Safe4337MultiChainSignatureModule's `merkleTreeDepth == 0`
+    // branch verifies against `keccak256(SafeOp)` directly, not the Merkle
+    // wrapper. The wrapper helpers are wrapper-only (length >= 2); for length=1
+    // callers must use the per-op multichain helpers, otherwise signatures
+    // hash a different digest than what the contract checks (AA24 on-chain).
+    test('getMultiChainSingleSignatureUserOperationsEip712Hash throws for length=1', () => {
+        expect(() =>
+            ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Hash(
+                [{ userOperation: op, chainId: CHAIN_ID, validAfter: 0n, validUntil: 0n }],
+            ),
+        ).toThrow(RangeError);
+    });
+
+    test('getMultiChainSingleSignatureUserOperationsEip712Data throws for length=1', () => {
+        expect(() =>
+            ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Data(
+                [{ userOperation: op, chainId: CHAIN_ID, validAfter: 0n, validUntil: 0n }],
+            ),
+        ).toThrow(RangeError);
+    });
+
+    test('multi-chain wrapper helpers throw for empty input', () => {
+        expect(() =>
+            ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Hash([]),
+        ).toThrow(RangeError);
+        expect(() =>
+            ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Data([]),
+        ).toThrow(RangeError);
+    });
+
+    test('per-op multichain helpers are the length=1 path (default to multichain module address)', () => {
+        const hash = ak.SafeMultiChainSigAccountV1.getUserOperationEip712Hash(op, CHAIN_ID);
+        const refHash = ak.SafeAccountV0_3_0.getUserOperationEip712Hash_V9(op, CHAIN_ID, {
+            safe4337ModuleAddress: ak.SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+        });
+        expect(hash).toBe(refHash);
+    });
+
+    test('getMultiChainSingleSignatureUserOperationsEip712Hash length=2 returns the Merkle wrapper digest (distinct from any per-op hash)', () => {
+        const op2 = { ...op, nonce: 1n };
+        const ops = [
+            { userOperation: op, chainId: 1n, validAfter: 0n, validUntil: 0n },
+            { userOperation: op2, chainId: 10n, validAfter: 0n, validUntil: 0n },
+        ];
+        const wrapperHash = ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Hash(ops);
+        const perOp1 = ak.SafeMultiChainSigAccountV1.getUserOperationEip712Hash(op, 1n);
+        const perOp2 = ak.SafeMultiChainSigAccountV1.getUserOperationEip712Hash(op2, 10n);
+        expect(wrapperHash).not.toBe(perOp1);
+        expect(wrapperHash).not.toBe(perOp2);
     });
 });
 

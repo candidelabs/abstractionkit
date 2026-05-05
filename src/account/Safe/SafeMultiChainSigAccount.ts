@@ -681,6 +681,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			const signerSignaturePairs: SignerSignaturePair[] = signers.map((_signer, i) => ({
 				signer: normalizedAddresses[i],
 				signature: signatures[i],
+				isContractSignature: signers[i].type === "contract",
 			}));
 
 			const userOpSignatures: string[] = [];
@@ -720,9 +721,16 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	}
 
 	/**
-	 * Compute the EIP-712 hash of a multi-chain Merkle tree root for a set of UserOperations.
-	 * This hash is what signers sign to approve multiple cross-chain operations at once.
-	 * @param userOperationsToSignsToSign - list of UserOperations with their target chain IDs
+	 * Compute the EIP-712 Merkle root wrapper digest that owners sign once
+	 * across all UserOperations in a multi-chain bundle.
+	 *
+	 * Requires length≥2. For a single UserOperation use
+	 * {@link SafeMultiChainSigAccountV1.getUserOperationEip712Hash} (the on-chain
+	 * `merkleTreeDepth == 0` branch verifies against the per-op SafeOp digest,
+	 * not a Merkle wrapper, so signing the wrapper for length=1 produces bytes
+	 * the contract rejects with AA24).
+	 *
+	 * @param userOperationsToSignsToSign - list of UserOperations with their target chain IDs (length ≥ 2)
 	 * @param overrides - optional overrides for the Safe 4337 module address
 	 * @returns the EIP-712 hash as a hex string
 	 */
@@ -730,6 +738,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		userOperationsToSignsToSign: UserOperationToSign[],
 		overrides: {
 			safe4337ModuleAddress?: string;
+			entrypointAddress?: string;
 		} = {},
 	): string {
 		const data = SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Data(
@@ -742,7 +751,20 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	/**
 	 * Get the EIP-712 typed data components for a multi-chain Merkle tree root.
 	 * Returns the domain, types, and message value needed for signing or hashing.
-	 * @param userOperationsToSignsToSign - list of UserOperations with their target chain IDs
+	 *
+	 * Requires length≥2. For a single UserOperation use
+	 * {@link SafeMultiChainSigAccountV1.getUserOperationEip712Data} (or
+	 * {@link SafeMultiChainSigAccountV1.getUserOperationEip712Hash}): those
+	 * multichain-class overrides default `safe4337ModuleAddress` to
+	 * `DEFAULT_SAFE_4337_MODULE_ADDRESS`. The on-chain depth=0 path verifies
+	 * against the per-op SafeOp digest, not a Merkle wrapper, so signing the
+	 * wrapper for length=1 produces bytes the contract rejects with AA24. The
+	 * parent `SafeAccount.getUserOperationEip712Data_V9` /
+	 * `getUserOperationEip712Hash_V9` helpers default to a different module and
+	 * would hash against the wrong verifying contract unless
+	 * `overrides.safe4337ModuleAddress` is supplied explicitly.
+	 *
+	 * @param userOperationsToSignsToSign - list of UserOperations with their target chain IDs (length ≥ 2)
 	 * @param overrides - optional overrides for the Safe 4337 module address
 	 * @returns an object with domain, types, and messageValue for EIP-712 signing
 	 */
@@ -757,8 +779,18 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		types: Record<string, { name: string; type: string }[]>;
 		messageValue: MultiChainSignatureMerkleTreeRootTypedMessageValue;
 	} {
-		if (userOperationsToSign.length < 1) {
-			throw new RangeError("There should be at least one userOperationsToSign");
+		if (userOperationsToSign.length < 2) {
+			throw new RangeError(
+				"Multi-chain Merkle wrapper helpers require >= 2 userOperations. " +
+					"For a single UserOperation, use SafeMultiChainSigAccountV1.getUserOperationEip712Data " +
+					"or SafeMultiChainSigAccountV1.getUserOperationEip712Hash (these multichain-class overrides " +
+					"default safe4337ModuleAddress to DEFAULT_SAFE_4337_MODULE_ADDRESS, the multi-chain module). " +
+					"The on-chain depth=0 path verifies against the per-op SafeOp digest, not a Merkle wrapper. " +
+					"If calling the parent SafeAccount.getUserOperationEip712Data_V9 / getUserOperationEip712Hash_V9 " +
+					"helpers directly, you must pass overrides.safe4337ModuleAddress = " +
+					"SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS explicitly so signatures hash " +
+					"the correct verifying contract.",
+			);
 		}
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ??

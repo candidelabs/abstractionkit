@@ -4,7 +4,7 @@
 		"name": "Candidelabs",
 		"url": "https://candide.dev"
 	},
-	"version": "0.3.5",
+	"version": "0.3.6",
 	"description": "Account Abstraction 4337 SDK by Candidelabs",
 	"main": "dist/index.cjs",
 	"module": "dist/index.mjs",
@@ -27,6 +27,8 @@
 		"prepare": "tsdown",
 		"clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
 		"test": "jest --verbose",
+		"test:signer": "jest --runTestsByPath test/signer/signer.test.js --runInBand",
+		"test:types": "tsc -p test/types/tsconfig.json --noEmit",
 		"lint": "biome lint src",
 		"format": "biome format --write src",
 		"check": "biome check --write src"

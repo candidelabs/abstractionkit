@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.6
+
+### Fixes
+
+- **Safe multi-chain single-operation signing now hashes the correct payload.** Single-op `SafeMultiChainSigAccountV1` flows previously hashed through the Merkle wrapper and were rejected on-chain with `AA24`, since `Safe4337MultiChainSignatureModule` verifies against `keccak256(SafeOp)` directly when `merkleTreeDepth == 0`. The per-op SafeOp digest is now reachable via `SafeMultiChainSigAccountV1.getUserOperationEip712Hash` / `getUserOperationEip712Data`, which default `safe4337ModuleAddress` to the multi-chain module so the digest matches the on-chain verifier without manual override.
+- **Safe multi-chain WebAuthn / EIP-1271 signatures keep contract-signer formatting.** `signUserOperationsWithSigners` now preserves the `"contract"` signer type when formatting multi-operation signatures, so dynamic Safe contract-signature segments are emitted correctly.
+
+### API changes
+
+- **`getMultiChainSingleSignatureUserOperationsEip712Hash` / `...Eip712Data` are wrapper-only and throw for `length < 2`.** They now do one thing: hash the Merkle-wrapped multi-op payload. Single-op callers must use `SafeMultiChainSigAccountV1.getUserOperationEip712Hash` / `getUserOperationEip712Data` (which default `safe4337ModuleAddress` to the multi-chain module). If you call the parent `SafeAccount` helpers directly, pass `safe4337ModuleAddress` explicitly. Their default points at the standard 4337 module, not the multi-chain one.
+
+### Maintenance
+
+- Added signer API documentation, type-level signer tests, signer unit-test coverage, and CI checks for linting, type tests, build, and signer tests.
+
 ## 0.3.5
 
 ### New Features

@@ -277,8 +277,8 @@ function coerceBigint(v: bigint | string | number, field: string): bigint {
  */
 export function pubkeyCoordinatesToJson(pubkey: WebauthnPublicKey): string {
 	return JSON.stringify({
-		x: "0x" + pubkey.x.toString(16),
-		y: "0x" + pubkey.y.toString(16),
+		x: `0x${pubkey.x.toString(16)}`,
+		y: `0x${pubkey.y.toString(16)}`,
 	});
 }
 
