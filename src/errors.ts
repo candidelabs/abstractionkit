@@ -69,7 +69,7 @@ export const JsonRpcErrorDict: Dictionary<JsonRpcErrorCode> = {
 	"-32603": "INTERNAL_ERROR",
 };
 
-type Jsonable =
+export type Jsonable =
 	| string
 	| number
 	| boolean
