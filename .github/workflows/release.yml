@@ -1,0 +1,80 @@
+# ============================================
+# Release Pipeline
+# ============================================
+# Publishes to npm with build provenance using npm Trusted Publishers (OIDC).
+# No NPM_TOKEN secret is used — npm authenticates the workflow via the
+# GitHub OIDC token, so there is no long-lived credential to steal.
+#
+# Triggered when a GitHub Release is published. Typical flow:
+#   1. dev → main graduation PR merges.
+#   2. Tag main: `git tag vX.Y.Z <main-sha> && git push origin vX.Y.Z`.
+#   3. Create GitHub release: `gh release create vX.Y.Z --title ... --notes ...`.
+#   4. This workflow fires, builds in a clean runner, and publishes with provenance.
+#
+# One-time setup (after this workflow lands on main):
+#   - npm: configure Trusted Publisher at
+#     https://www.npmjs.com/package/abstractionkit/access
+#     Repo: candidelabs/abstractionkit · Workflow: release.yml · Environment: release
+#   - GitHub: create `release` environment (Settings → Environments → New) and add
+#     required reviewer(s). The environment gate is what makes a malicious workflow
+#     edit visibly stall on a human approval.
+#   - GitHub: branch protection on `main` (require PR + CI + review) and on
+#     `.github/workflows/**` so the workflow itself can't be changed without review.
+
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # required for npm Trusted Publisher OIDC
+
+jobs:
+  publish:
+    name: release/publish
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0 # full history needed for the ancestry check below
+
+      - name: Verify tag commit is on main
+        # Branch protection guards what merges into main, but anyone with write
+        # access can tag an arbitrary commit and create a release for it. Refuse
+        # to publish unless the tag's commit descends from origin/main.
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          TAG_SHA="$(git rev-parse HEAD)"
+          if ! git merge-base --is-ancestor "$TAG_SHA" origin/main; then
+            echo "Tag ${{ github.event.release.tag_name }} ($TAG_SHA) is not an ancestor of origin/main." >&2
+            echo "Refusing to publish from a commit that has not landed on main." >&2
+            exit 1
+          fi
+          echo "Tag ${{ github.event.release.tag_name }} ($TAG_SHA) is on main. Proceeding."
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Verify package version matches release tag
+        run: |
+          PKG_VERSION="v$(node -p "require('./package.json').version")"
+          TAG="${{ github.event.release.tag_name }}"
+          if [ "$PKG_VERSION" != "$TAG" ]; then
+            echo "Mismatch: package.json version is $PKG_VERSION but release tag is $TAG" >&2
+            exit 1
+          fi
+
+      - name: Publish to npm with provenance
+        run: npm publish --provenance --access public
