@@ -15,14 +15,9 @@ module.exports = [
         anvilHostPort: 8546,
         bundlerHostPort: 3001,
     },
-    {
-        name: 'arbitrum-sepolia',
-        chainId: 421614,
-        defaultForkUrl: 'https://arbitrum-sepolia-rpc.publicnode.com',
-        forkUrlEnvVar: 'ARBITRUM_SEPOLIA_RPC',
-        anvilHostPort: 8547,
-        bundlerHostPort: 3002,
-    },
+    // arbitrum-sepolia is intentionally excluded: voltaire's L1 gas estimation
+    // calls Arbitrum's NodeInterface precompile (Nitro runtime), which anvil
+    // cannot emulate, so eth_sendUserOperation reverts during simulation.
     {
         name: 'base-sepolia',
         chainId: 84532,

@@ -1,9 +1,8 @@
-const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { fromPrivateKey } = require('../../dist/index.cjs');
+const { Wallet } = require('ethers');
 const chains = require('./chains.cjs');
 
 const NETWORK = 'abstractionkit-integration';
@@ -98,6 +97,7 @@ function startVoltaire(chain, bundlerSecret) {
         '--rpc_port', VOLTAIRE_INTERNAL_PORT,
         '--disable_p2p', 'y',
         '--unsafe', 'y',
+        '--logs_incremental_range', '4000',
     ]);
 }
 
@@ -110,12 +110,11 @@ async function setupChain(chain) {
         throw new Error(`[${chain.name}] anvil: ${e.message}`);
     }
 
-    const bundlerSecret = `0x${crypto.randomBytes(32).toString('hex')}`;
-    const { address: bundlerAddress } = fromPrivateKey(bundlerSecret);
-    const fund = await rpc(anvilHostUrl(chain), 'anvil_setBalance', [bundlerAddress, TEN_ETH_HEX]);
+    const bundler = Wallet.createRandom();
+    const fund = await rpc(anvilHostUrl(chain), 'anvil_setBalance', [bundler.address, TEN_ETH_HEX]);
     if (fund.error) throw new Error(`[${chain.name}] anvil_setBalance: ${JSON.stringify(fund.error)}`);
 
-    startVoltaire(chain, bundlerSecret);
+    startVoltaire(chain, bundler.privateKey);
     try {
         await waitForChainId(bundlerHostUrl(chain));
     } catch (e) {
