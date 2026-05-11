@@ -98,7 +98,9 @@ function startVoltaire(chain, bundlerSecret) {
         '--rpc_port', VOLTAIRE_INTERNAL_PORT,
         '--disable_p2p', 'y',
         '--unsafe', 'y',
-        '--logs_incremental_range', '4000',
+        '--logs_incremental_range', '100',
+        '--logs_number_of_ranges', '1',
+        '--enforce_gas_price_tolerance', '50',
     ]);
 }
 
