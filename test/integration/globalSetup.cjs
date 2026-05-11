@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
