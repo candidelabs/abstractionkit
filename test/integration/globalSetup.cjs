@@ -1,44 +1,148 @@
-const { spawn } = require('node:child_process');
+const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { fromPrivateKey } = require('../../dist/index.cjs');
+const chains = require('./chains.cjs');
 
-const FORK_URL = 'https://ethereum-sepolia-rpc.publicnode.com';
-const CHAIN_ID = '11155111';
-const HOST = '127.0.0.1';
-const PORT = '8545';
-const READY_TIMEOUT_MS = 30000;
-const PID_FILE = path.join(os.tmpdir(), 'abstractionkit-anvil.pid');
+const NETWORK = 'abstractionkit-integration';
+const ANVIL_IMAGE = 'ghcr.io/foundry-rs/foundry:v1.7.1';
+const VOLTAIRE_IMAGE = 'ghcr.io/candidelabs/voltaire/voltaire-bundler:0.1.0a71';
+const ANVIL_INTERNAL_PORT = '8545';
+const VOLTAIRE_INTERNAL_PORT = '3000';
+const TEN_ETH_HEX = '0x8ac7230489e80000';
+const READY_TIMEOUT_MS = 90000;
 
-async function probe() {
+const STATUS_FILE = path.join(os.tmpdir(), 'abstractionkit-integration-status.json');
+const LOG_DIR = path.join(os.tmpdir(), 'abstractionkit-integration-logs');
+
+const anvilContainer = (name) => `abstractionkit-anvil-${name}`;
+const voltaireContainer = (name) => `abstractionkit-voltaire-${name}`;
+const forkUrlFor = (chain) => process.env[chain.forkUrlEnvVar] || chain.defaultForkUrl;
+const anvilHostUrl = (chain) => `http://127.0.0.1:${chain.anvilHostPort}`;
+const bundlerHostUrl = (chain) => `http://127.0.0.1:${chain.bundlerHostPort}/rpc`;
+
+async function rpc(url, method, params) {
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', method, params, id: 1 }),
+    });
+    return res.json();
+}
+
+async function waitForChainId(url) {
+    const deadline = Date.now() + READY_TIMEOUT_MS;
+    let lastErr;
+    while (Date.now() < deadline) {
+        try {
+            const json = await rpc(url, 'eth_chainId', []);
+            if (json.result) return;
+            lastErr = new Error(JSON.stringify(json));
+        } catch (e) {
+            lastErr = e;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+    }
+    throw new Error(`${url} not ready within ${READY_TIMEOUT_MS}ms: ${lastErr}`);
+}
+
+function dockerRun(args) {
+    const result = spawnSync('docker', args, { encoding: 'utf8' });
+    if (result.status !== 0) {
+        throw new Error(`docker ${args.slice(0, 6).join(' ')}... failed: ${result.stderr || result.stdout}`);
+    }
+    return result.stdout.trim();
+}
+
+function dumpLogs(container, logFile) {
+    const fd = fs.openSync(logFile, 'w');
+    spawnSync('docker', ['logs', container], { stdio: ['ignore', fd, fd] });
+    fs.closeSync(fd);
+}
+
+function ensureNetwork() {
+    const existing = spawnSync('docker', ['network', 'inspect', NETWORK], { stdio: 'ignore' }).status;
+    if (existing !== 0) dockerRun(['network', 'create', NETWORK]);
+}
+
+function startAnvil(chain) {
+    spawnSync('docker', ['rm', '-f', anvilContainer(chain.name)], { stdio: 'ignore' });
+    dockerRun([
+        'run', '-d',
+        '--name', anvilContainer(chain.name),
+        '--network', NETWORK,
+        '-p', `${chain.anvilHostPort}:${ANVIL_INTERNAL_PORT}`,
+        '--entrypoint', 'anvil',
+        ANVIL_IMAGE,
+        '--fork-url', forkUrlFor(chain),
+        '--chain-id', String(chain.chainId),
+        '--host', '0.0.0.0',
+        '--port', ANVIL_INTERNAL_PORT,
+    ]);
+}
+
+function startVoltaire(chain, bundlerSecret) {
+    spawnSync('docker', ['rm', '-f', voltaireContainer(chain.name)], { stdio: 'ignore' });
+    dockerRun([
+        'run', '-d',
+        '--name', voltaireContainer(chain.name),
+        '--network', NETWORK,
+        '-p', `${chain.bundlerHostPort}:${VOLTAIRE_INTERNAL_PORT}`,
+        VOLTAIRE_IMAGE,
+        '--bundler_secret', bundlerSecret,
+        '--chain_id', String(chain.chainId),
+        '--ethereum_node_url', `http://${anvilContainer(chain.name)}:${ANVIL_INTERNAL_PORT}`,
+        '--rpc_url', '0.0.0.0',
+        '--rpc_port', VOLTAIRE_INTERNAL_PORT,
+        '--disable_p2p', 'y',
+        '--unsafe', 'y',
+    ]);
+}
+
+async function setupChain(chain) {
+    startAnvil(chain);
     try {
-        const res = await fetch(`http://${HOST}:${PORT}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_chainId', params: [], id: 1 }),
-        });
-        const json = await res.json();
-        return 'result' in json;
-    } catch {
-        return false;
+        await waitForChainId(anvilHostUrl(chain));
+    } catch (e) {
+        dumpLogs(anvilContainer(chain.name), path.join(LOG_DIR, `${chain.name}-anvil.log`));
+        throw new Error(`[${chain.name}] anvil: ${e.message}`);
+    }
+
+    const bundlerSecret = `0x${crypto.randomBytes(32).toString('hex')}`;
+    const { address: bundlerAddress } = fromPrivateKey(bundlerSecret);
+    const fund = await rpc(anvilHostUrl(chain), 'anvil_setBalance', [bundlerAddress, TEN_ETH_HEX]);
+    if (fund.error) throw new Error(`[${chain.name}] anvil_setBalance: ${JSON.stringify(fund.error)}`);
+
+    startVoltaire(chain, bundlerSecret);
+    try {
+        await waitForChainId(bundlerHostUrl(chain));
+    } catch (e) {
+        dumpLogs(voltaireContainer(chain.name), path.join(LOG_DIR, `${chain.name}-voltaire.log`));
+        throw new Error(`[${chain.name}] voltaire: ${e.message}`);
     }
 }
 
 module.exports = async function globalSetup() {
-    const logPath = path.join(os.tmpdir(), 'abstractionkit-anvil.log');
-    const out = fs.openSync(logPath, 'w');
-    const child = spawn(
-        'anvil',
-        ['--fork-url', FORK_URL, '--chain-id', CHAIN_ID, '--host', HOST, '--port', PORT],
-        { detached: true, stdio: ['ignore', out, out] },
-    );
-    child.unref();
-    fs.writeFileSync(PID_FILE, String(child.pid));
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+    ensureNetwork();
 
-    const deadline = Date.now() + READY_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-        if (await probe()) return;
-        await new Promise((r) => setTimeout(r, 500));
+    const results = await Promise.allSettled(chains.map(setupChain));
+    const status = chains.map((chain, i) => {
+        const r = results[i];
+        if (r.status === 'fulfilled') {
+            return { name: chain.name, ok: true };
+        }
+        const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+        console.error(`[integration] ${chain.name} setup failed: ${msg}`);
+        return { name: chain.name, ok: false, error: msg };
+    });
+    fs.writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2));
+
+    const okCount = status.filter((s) => s.ok).length;
+    console.log(`[integration] ${okCount}/${chains.length} chains ready (logs: ${LOG_DIR})`);
+    if (okCount === 0) {
+        throw new Error('all chains failed to start; aborting integration run');
     }
-    throw new Error(`anvil did not become ready within ${READY_TIMEOUT_MS}ms (see ${logPath})`);
 };

@@ -1,7 +1,8 @@
 # ============================================
 # Integration Tests
 # ============================================
-# Runs integration tests against an anvil fork of Sepolia.
+# Spins up an anvil fork + voltaire bundler per chain (see
+# test/integration/chains.cjs) and runs the integration suite against them.
 
 name: Integration
 
@@ -39,8 +40,27 @@ jobs:
       - name: Build
         run: yarn build
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+      # Cache the foundry + voltaire images as a tarball between runs.
+      # Bump the key when either tag in test/integration/globalSetup.cjs changes.
+      - name: Cache Docker images
+        id: docker-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/integration-images.tar
+          key: integration-images-foundry-v1.7.1-voltaire-0.1.0a71
+
+      - name: Pull and save images (cache miss)
+        if: steps.docker-cache.outputs.cache-hit != 'true'
+        run: |
+          docker pull ghcr.io/foundry-rs/foundry:v1.7.1
+          docker pull ghcr.io/candidelabs/voltaire/voltaire-bundler:0.1.0a71
+          docker save -o /tmp/integration-images.tar \
+            ghcr.io/foundry-rs/foundry:v1.7.1 \
+            ghcr.io/candidelabs/voltaire/voltaire-bundler:0.1.0a71
+
+      - name: Load images (cache hit)
+        if: steps.docker-cache.outputs.cache-hit == 'true'
+        run: docker load -i /tmp/integration-images.tar
 
       - name: Integration tests
         run: yarn test:integration

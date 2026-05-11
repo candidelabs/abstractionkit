@@ -1,14 +1,13 @@
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const chains = require('./chains.cjs');
 
-const PID_FILE = path.join(os.tmpdir(), 'abstractionkit-anvil.pid');
+const NETWORK = 'abstractionkit-integration';
 
 module.exports = async function globalTeardown() {
-    if (!fs.existsSync(PID_FILE)) return;
-    const pid = Number(fs.readFileSync(PID_FILE, 'utf8'));
-    fs.unlinkSync(PID_FILE);
-    try {
-        process.kill(pid, 'SIGTERM');
-    } catch {}
+    const containers = chains.flatMap((c) => [
+        `abstractionkit-anvil-${c.name}`,
+        `abstractionkit-voltaire-${c.name}`,
+    ]);
+    spawnSync('docker', ['rm', '-f', ...containers], { stdio: 'ignore' });
+    spawnSync('docker', ['network', 'rm', NETWORK], { stdio: 'ignore' });
 };
