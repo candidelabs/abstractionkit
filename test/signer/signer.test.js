@@ -654,32 +654,15 @@ describe('SafeMultiChainSigAccountV1 signUserOperationWithSigners', () => {
 
     // The on-chain Safe4337MultiChainSignatureModule's `merkleTreeDepth == 0`
     // branch verifies against `keccak256(SafeOp)` directly, not the Merkle
-    // wrapper. Returning the wrapper from this helper for length=1 produced
-    // signatures the contract rejected with AA24.
-    test('getMultiChainSingleSignatureUserOperationsEip712Hash length=1 returns the per-op SafeOp hash', () => {
-        const length1Hash = ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Hash(
-            [{ userOperation: op, chainId: CHAIN_ID, validAfter: 0n, validUntil: 0n }],
-        );
-        const perOpHash = ak.SafeAccountV0_3_0.getUserOperationEip712Hash_V9(
-            op,
-            CHAIN_ID,
-            { safe4337ModuleAddress: ak.SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS },
-        );
-        expect(length1Hash).toBe(perOpHash);
-    });
-
-    test('getMultiChainSingleSignatureUserOperationsEip712Hash length=2 returns the Merkle wrapper hash', () => {
-        const op2 = { ...op, nonce: 1n };
-        const ops = [
-            { userOperation: op, chainId: 1n, validAfter: 0n, validUntil: 0n },
-            { userOperation: op2, chainId: 10n, validAfter: 0n, validUntil: 0n },
-        ];
-        const wrapperHash = ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Hash(ops);
-        const perOpHash = ak.SafeAccountV0_3_0.getUserOperationEip712Hash_V9(
-            op, 1n,
-            { safe4337ModuleAddress: ak.SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS },
-        );
-        expect(wrapperHash).not.toBe(perOpHash);
+    // wrapper. The wrapper helpers are wrapper-only (length >= 2); for length=1
+    // callers must use the per-op multichain helpers, otherwise signatures
+    // hash a different digest than what the contract checks (AA24 on-chain).
+    test('getMultiChainSingleSignatureUserOperationsEip712Hash throws for length=1', () => {
+        expect(() =>
+            ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Hash(
+                [{ userOperation: op, chainId: CHAIN_ID, validAfter: 0n, validUntil: 0n }],
+            ),
+        ).toThrow(RangeError);
     });
 
     test('getMultiChainSingleSignatureUserOperationsEip712Data throws for length=1', () => {
@@ -690,10 +673,34 @@ describe('SafeMultiChainSigAccountV1 signUserOperationWithSigners', () => {
         ).toThrow(RangeError);
     });
 
-    test('getMultiChainSingleSignatureUserOperationsEip712Hash throws for empty input', () => {
+    test('multi-chain wrapper helpers throw for empty input', () => {
         expect(() =>
             ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Hash([]),
         ).toThrow(RangeError);
+        expect(() =>
+            ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Data([]),
+        ).toThrow(RangeError);
+    });
+
+    test('per-op multichain helpers are the length=1 path (default to multichain module address)', () => {
+        const hash = ak.SafeMultiChainSigAccountV1.getUserOperationEip712Hash(op, CHAIN_ID);
+        const refHash = ak.SafeAccountV0_3_0.getUserOperationEip712Hash_V9(op, CHAIN_ID, {
+            safe4337ModuleAddress: ak.SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+        });
+        expect(hash).toBe(refHash);
+    });
+
+    test('getMultiChainSingleSignatureUserOperationsEip712Hash length=2 returns the Merkle wrapper digest (distinct from any per-op hash)', () => {
+        const op2 = { ...op, nonce: 1n };
+        const ops = [
+            { userOperation: op, chainId: 1n, validAfter: 0n, validUntil: 0n },
+            { userOperation: op2, chainId: 10n, validAfter: 0n, validUntil: 0n },
+        ];
+        const wrapperHash = ak.SafeMultiChainSigAccountV1.getMultiChainSingleSignatureUserOperationsEip712Hash(ops);
+        const perOp1 = ak.SafeMultiChainSigAccountV1.getUserOperationEip712Hash(op, 1n);
+        const perOp2 = ak.SafeMultiChainSigAccountV1.getUserOperationEip712Hash(op2, 10n);
+        expect(wrapperHash).not.toBe(perOp1);
+        expect(wrapperHash).not.toBe(perOp2);
     });
 });
 
