@@ -85,14 +85,20 @@ export class SocialRecoveryModule extends SafeModule {
 	): MetaTransaction {
 		//"multiConfirmRecovery(address,address[],uint256,SignatureData[],bool)"
 		const functionSelector = "0x0728e1e7";
+		// The on-chain module rejects with "SM: duplicate signers/invalid ordering"
+		// unless signature pairs are sorted by signer address ascending. Sort here
+		// so callers don't have to know about this internal constraint.
+		const sortedPairs = [...signaturePairList].sort((a, b) =>
+			BigInt(a.signer) < BigInt(b.signer) ? -1 : 1,
+		);
 		const callData = createCallData(
 			functionSelector,
-			["address", "address[]", "uint256", "(address,bytes)", "bool"],
+			["address", "address[]", "uint256", "(address,bytes)[]", "bool"],
 			[
 				accountAddress,
 				newOwners,
 				newThreshold,
-				signaturePairList.map((signaturePair) => [signaturePair.signer, signaturePair.signature]),
+				sortedPairs.map((signaturePair) => [signaturePair.signer, signaturePair.signature]),
 				execute,
 			],
 		);
