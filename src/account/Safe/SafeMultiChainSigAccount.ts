@@ -480,7 +480,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 *
 	 * Note the chainId plumbing asymmetry vs the multi-op variant:
 	 *   - **Singular** (this method): `chainId` is a positional argument.
-	 *   - **Plural** ({@link signUserOperationsWithSigners}): chainIds live
+	 *   - **Plural** ({@link signUserOperationsWithSigners}): `chainId` lives
 	 *     inside each `UserOperationToSign` element, since each op may
 	 *     target a different chain.
 	 * Pick the variant that matches your bundle shape; don't pass the same
