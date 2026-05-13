@@ -222,9 +222,17 @@ export class JsonRpcNode implements Transport {
 					{ method: "eth_gasPrice" },
 					options,
 				);
-				if (typeof result === "string") gasPrice = BigInt(result);
-			} catch {
-				// fall through; may be unsupported
+				if (typeof result !== "string") {
+					throw new AbstractionKitError(
+						"BAD_DATA",
+						"eth_gasPrice returned ill formed data",
+						{ context: JSON.stringify(result) },
+					);
+				}
+				gasPrice = BigInt(result);
+			} catch (err) {
+				if (!isMethodNotSupportedError(err)) throw err;
+				// method unsupported on this node; fall through to gas-price-less branch
 			}
 
 			try {
@@ -232,9 +240,17 @@ export class JsonRpcNode implements Transport {
 					{ method: "eth_maxPriorityFeePerGas" },
 					options,
 				);
-				if (typeof result === "string") maxPriorityFeePerGas = BigInt(result);
-			} catch {
-				// fall through; older chains don't support this
+				if (typeof result !== "string") {
+					throw new AbstractionKitError(
+						"BAD_DATA",
+						"eth_maxPriorityFeePerGas returned ill formed data",
+						{ context: JSON.stringify(result) },
+					);
+				}
+				maxPriorityFeePerGas = BigInt(result);
+			} catch (err) {
+				if (!isMethodNotSupportedError(err)) throw err;
+				// older chains don't support this; fall through
 			}
 
 			let maxFeePerGas: bigint;
@@ -395,6 +411,25 @@ function scaleBigIntByGasLevel(value: bigint, gasLevel: number): bigint {
 	const scale = 1000n;
 	const scaledLevel = BigInt(Math.round(gasLevel * Number(scale)));
 	return (value * scaledLevel + scale - 1n) / scale;
+}
+
+/**
+ * Detect whether an error indicates the JSON-RPC method itself is not
+ * implemented by the node. Used by {@link JsonRpcNode.getFeeData} to fall
+ * back gracefully on chains that don't expose EIP-1559 fee methods, while
+ * still surfacing transport, auth, and parse errors to the caller.
+ *
+ * @internal
+ */
+function isMethodNotSupportedError(err: unknown): boolean {
+	const code = (err as ProviderRpcError | undefined)?.code;
+	if (code === -32601) return true;
+	const message = (err as Error | undefined)?.message?.toLowerCase() ?? "";
+	return (
+		message.includes("method not found") ||
+		message.includes("not supported") ||
+		message.includes("unsupported")
+	);
 }
 
 /**
