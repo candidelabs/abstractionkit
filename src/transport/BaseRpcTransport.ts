@@ -98,12 +98,12 @@ export abstract class BaseRpcTransport implements Transport {
 			throw new TransportRpcError(-32603, "malformed JSON-RPC response", raw);
 		}
 		const response = raw as JsonRpcResponseEnvelope;
-		if ("result" in response) {
-			return response.result as T;
-		}
 		if ("error" in response) {
 			const { code, message, data } = response.error;
 			throw new TransportRpcError(code, message, data);
+		}
+		if ("result" in response) {
+			return response.result as T;
 		}
 		throw new TransportRpcError(-32603, "malformed JSON-RPC response", raw);
 	}
