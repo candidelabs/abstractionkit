@@ -1,3 +1,4 @@
+import { AbstractionKitError } from "../../../errors";
 import type { MetaTransaction } from "../../../types";
 import { createCallData, sendEthCallRequest } from "../../../utils";
 import { SafeModule } from "./SafeModule";
@@ -88,9 +89,16 @@ export class SocialRecoveryModule extends SafeModule {
 		// The on-chain module rejects with "SM: duplicate signers/invalid ordering"
 		// unless signature pairs are sorted by signer address ascending. Sort here
 		// so callers don't have to know about this internal constraint.
-		const sortedPairs = [...signaturePairList].sort((a, b) =>
-			BigInt(a.signer) < BigInt(b.signer) ? -1 : 1,
-		);
+		const sortedPairs = [...signaturePairList].sort((a, b) => {
+			const aSigner = BigInt(a.signer);
+			const bSigner = BigInt(b.signer);
+			if (aSigner < bSigner) return -1;
+			if (aSigner > bSigner) return 1;
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Duplicate signer in recovery signaturePairList: ${a.signer}`,
+			);
+		});
 		const callData = createCallData(
 			functionSelector,
 			["address", "address[]", "uint256", "(address,bytes)[]", "bool"],
