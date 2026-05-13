@@ -34,6 +34,7 @@ describe('spend permission (allowance module)', () => {
             const bundler = bundlerUrl(chain);
             const chainId = BigInt(chain.chainId);
             const weth = WETH[chain.name];
+            if (!weth) throw new Error(`WETH address missing for chain ${chain.name}`);
 
             const sourceOwner = Wallet.createRandom();
             const delegateOwner = Wallet.createRandom();
