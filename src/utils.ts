@@ -403,25 +403,29 @@ export async function sendJsonRpcRequest(
 	headers: Record<string, string> = { "Content-Type": "application/json" },
 	paramsKeyName: string = "params",
 ): Promise<JsonRpcResult> {
+	// Normalize bigints to 0x-hex so user-supplied transports
+	// and the fetch body both receive
+	// JSON-RPC-safe values.
+	const normalizedParams = JSON.parse(
+		JSON.stringify(params, (_key, value) =>
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
+			typeof value === "bigint" ? `0x${value.toString(16)}` : value,
+		),
+	) as JsonRpcParam;
 	if (typeof rpc !== "string") {
 		return JsonRpcNode.from(rpc).request<JsonRpcResult>({
 			method,
-			params: params as readonly unknown[] | object,
+			params: normalizedParams as readonly unknown[] | object,
 		});
 	}
 	// URL path — preserve the historical fetch-based implementation so callers
 	// passing custom headers or a custom paramsKeyName continue to work.
-	const raw = JSON.stringify(
-		{
-			method,
-			[paramsKeyName]: params,
-			id: Date.now(),
-			jsonrpc: "2.0",
-		},
-		(_key, value) =>
-			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
-			typeof value === "bigint" ? `0x${value.toString(16)}` : value,
-	);
+	const raw = JSON.stringify({
+		method,
+		[paramsKeyName]: normalizedParams,
+		id: Date.now(),
+		jsonrpc: "2.0",
+	});
 	const fetchResult = await fetch(rpc, {
 		method: "POST",
 		headers,
