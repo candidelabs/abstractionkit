@@ -48,16 +48,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/integration-images.tar
-          key: integration-images-foundry-v1.7.1-voltaire-0.1.0a71
+          key: integration-images-foundry-v1.7.1-voltaire-0.1.0a72
 
       - name: Pull and save images (cache miss)
         if: steps.docker-cache.outputs.cache-hit != 'true'
         run: |
           docker pull ghcr.io/foundry-rs/foundry:v1.7.1
-          docker pull ghcr.io/candidelabs/voltaire/voltaire-bundler:0.1.0a71
+          docker pull ghcr.io/candidelabs/voltaire/voltaire-bundler:0.1.0a72
           docker save -o /tmp/integration-images.tar \
             ghcr.io/foundry-rs/foundry:v1.7.1 \
-            ghcr.io/candidelabs/voltaire/voltaire-bundler:0.1.0a71
+            ghcr.io/candidelabs/voltaire/voltaire-bundler:0.1.0a72
 
       - name: Load images (cache hit)
         if: steps.docker-cache.outputs.cache-hit == 'true'
@@ -65,3 +65,6 @@ jobs:
 
       - name: Integration tests
         run: yarn test:integration
+        env:
+          ETHEREUM_RPC: ${{ secrets.ETHEREUM_RPC }}
+          OPTIMISM_RPC: ${{ secrets.OPTIMISM_RPC }}
