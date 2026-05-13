@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Wallet } = require('ethers');
 const chains = require('./chains.cjs');
+const { SUPPORTED_ENTRYPOINTS } = require('./_entrypoints.cjs');
 
 const NETWORK = 'abstractionkit-integration';
 const ANVIL_IMAGE = 'ghcr.io/foundry-rs/foundry:v1.7.1';
@@ -17,11 +18,20 @@ const READY_TIMEOUT_MS = 90000;
 const STATUS_FILE = path.join(os.tmpdir(), 'abstractionkit-integration-status.json');
 const LOG_DIR = path.join(os.tmpdir(), 'abstractionkit-integration-logs');
 
+// Per-repo anvil RPC cache, mounted into the foundry container so storage
+// fetched from upstream (Infura, publicnode, ...) is reused across runs.
+// Combined with a pinned --fork-block-number this brings repeat-run upstream
+// traffic to near zero.
+const ANVIL_CACHE_DIR = path.join(__dirname, '..', '..', '.anvil-cache');
+const FORK_BLOCK_OFFSET = 5; // pin a few blocks behind latest so the same
+// pinned block stays valid across consecutive runs (cache hits).
+
 const anvilContainer = (name) => `abstractionkit-anvil-${name}`;
-const voltaireContainer = (name) => `abstractionkit-voltaire-${name}`;
+const voltaireContainer = (name, ep) => `abstractionkit-voltaire-${name}-${ep}`;
 const forkUrlFor = (chain) => process.env[chain.forkUrlEnvVar] || chain.defaultForkUrl;
 const anvilHostUrl = (chain) => `http://127.0.0.1:${chain.anvilHostPort}`;
-const bundlerHostUrl = (chain) => `http://127.0.0.1:${chain.bundlerHostPort}/rpc`;
+const bundlerHostUrl = (chain, ep) =>
+    `http://127.0.0.1:${chain.bundlerHostPortByEntrypoint[ep]}/rpc`;
 
 async function rpc(url, method, params) {
     const res = await fetch(url, {
@@ -67,29 +77,43 @@ function ensureNetwork() {
     if (existing !== 0) dockerRun(['network', 'create', NETWORK]);
 }
 
-function startAnvil(chain) {
+async function latestBlockNumber(rpcUrl) {
+    const json = await rpc(rpcUrl, 'eth_blockNumber', []);
+    if (!json.result) throw new Error(`eth_blockNumber failed: ${JSON.stringify(json)}`);
+    return Number.parseInt(json.result, 16);
+}
+
+async function startAnvil(chain) {
     spawnSync('docker', ['rm', '-f', anvilContainer(chain.name)], { stdio: 'ignore' });
+    fs.mkdirSync(ANVIL_CACHE_DIR, { recursive: true });
+    const forkUrl = forkUrlFor(chain);
+    const pinnedBlock = (await latestBlockNumber(forkUrl)) - FORK_BLOCK_OFFSET;
     dockerRun([
         'run', '-d',
         '--name', anvilContainer(chain.name),
         '--network', NETWORK,
         '-p', `${chain.anvilHostPort}:${ANVIL_INTERNAL_PORT}`,
+        '-v', `${ANVIL_CACHE_DIR}:/root/.foundry/cache`,
         '--entrypoint', 'anvil',
         ANVIL_IMAGE,
-        '--fork-url', forkUrlFor(chain),
+        '--fork-url', forkUrl,
+        '--fork-block-number', String(pinnedBlock),
+        '--compute-units-per-second', '100',
         '--chain-id', String(chain.chainId),
         '--host', '0.0.0.0',
         '--port', ANVIL_INTERNAL_PORT,
     ]);
 }
 
-function startVoltaire(chain, bundlerSecret) {
-    spawnSync('docker', ['rm', '-f', voltaireContainer(chain.name)], { stdio: 'ignore' });
+function startVoltaire(chain, ep, bundlerSecret) {
+    const containerName = voltaireContainer(chain.name, ep);
+    const hostPort = chain.bundlerHostPortByEntrypoint[ep];
+    spawnSync('docker', ['rm', '-f', containerName], { stdio: 'ignore' });
     dockerRun([
         'run', '-d',
-        '--name', voltaireContainer(chain.name),
+        '--name', containerName,
         '--network', NETWORK,
-        '-p', `${chain.bundlerHostPort}:${VOLTAIRE_INTERNAL_PORT}`,
+        '-p', `${hostPort}:${VOLTAIRE_INTERNAL_PORT}`,
         VOLTAIRE_IMAGE,
         '--bundler_secret', bundlerSecret,
         '--chain_id', String(chain.chainId),
@@ -106,7 +130,7 @@ function startVoltaire(chain, bundlerSecret) {
 }
 
 async function setupChain(chain) {
-    startAnvil(chain);
+    await startAnvil(chain);
     try {
         await waitForChainId(anvilHostUrl(chain));
     } catch (e) {
@@ -114,16 +138,30 @@ async function setupChain(chain) {
         throw new Error(`[${chain.name}] anvil: ${e.message}`);
     }
 
-    const bundler = Wallet.createRandom();
-    const fund = await rpc(anvilHostUrl(chain), 'anvil_setBalance', [bundler.address, TEN_ETH_HEX]);
-    if (fund.error) throw new Error(`[${chain.name}] anvil_setBalance: ${JSON.stringify(fund.error)}`);
-
-    startVoltaire(chain, bundler.privateKey);
-    try {
-        await waitForChainId(bundlerHostUrl(chain));
-    } catch (e) {
-        dumpLogs(voltaireContainer(chain.name), path.join(LOG_DIR, `${chain.name}-voltaire.log`));
-        throw new Error(`[${chain.name}] voltaire: ${e.message}`);
+    // Each entrypoint gets its own voltaire instance with its own fresh
+    // bundler EOA — independent nonce sequences avoid the "nonce too low"
+    // races we saw when one EOA handled bundles for every EP version.
+    for (const ep of SUPPORTED_ENTRYPOINTS) {
+        const bundler = Wallet.createRandom();
+        const fund = await rpc(anvilHostUrl(chain), 'anvil_setBalance', [
+            bundler.address,
+            TEN_ETH_HEX,
+        ]);
+        if (fund.error) {
+            throw new Error(
+                `[${chain.name}/${ep}] anvil_setBalance: ${JSON.stringify(fund.error)}`,
+            );
+        }
+        startVoltaire(chain, ep, bundler.privateKey);
+        try {
+            await waitForChainId(bundlerHostUrl(chain, ep));
+        } catch (e) {
+            dumpLogs(
+                voltaireContainer(chain.name, ep),
+                path.join(LOG_DIR, `${chain.name}-voltaire-${ep}.log`),
+            );
+            throw new Error(`[${chain.name}/${ep}] voltaire: ${e.message}`);
+        }
     }
 }
 

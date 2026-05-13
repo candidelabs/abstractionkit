@@ -15,12 +15,17 @@ const {
     SafeAccountV1_5_0_M_0_3_0,
     SafeMultiChainSigAccountV1,
 } = require('../../dist/index.cjs');
+const { SUPPORTED_ENTRYPOINTS } = require('./_entrypoints.cjs');
 
+// `entrypoint` selects which per-chain voltaire instance to route through —
+// each (chain × entrypoint) pair has its own bundler EOA and so its own nonce
+// sequence. V0_3_0 and V1_5_0_M_0_3_0 share v7, which is fine; they don't race
+// against V0_2_0 (v6) or MultiChainSigV1 (v9).
 const accountVersions = [
-    { name: 'V0_2_0', accountClass: SafeAccountV0_2_0 },
-    { name: 'V0_3_0', accountClass: SafeAccountV0_3_0 },
-    { name: 'V1_5_0_M_0_3_0', accountClass: SafeAccountV1_5_0_M_0_3_0 },
-    { name: 'MultiChainSigV1', accountClass: SafeMultiChainSigAccountV1 },
+    { name: 'V0_2_0', accountClass: SafeAccountV0_2_0, entrypoint: 'v6' },
+    { name: 'V0_3_0', accountClass: SafeAccountV0_3_0, entrypoint: 'v7' },
+    { name: 'V1_5_0_M_0_3_0', accountClass: SafeAccountV1_5_0_M_0_3_0, entrypoint: 'v7' },
+    { name: 'MultiChainSigV1', accountClass: SafeMultiChainSigAccountV1, entrypoint: 'v9' },
 ];
 
 const runnable = chains.filter((c) => okByName[c.name]);
@@ -33,6 +38,7 @@ const runnableMatrix = (versions = accountVersions) =>
             chainName: chain.name,
             accountClass: v.accountClass,
             accountVersion: v.name,
+            entrypoint: v.entrypoint,
         })),
     );
 
@@ -42,6 +48,10 @@ module.exports = {
     unrunnable,
     accountVersions,
     runnableMatrix,
+    SUPPORTED_ENTRYPOINTS,
     nodeUrl: (entry) => `http://127.0.0.1:${entry.anvilHostPort}`,
-    bundlerUrl: (entry) => `http://127.0.0.1:${entry.bundlerHostPort}/rpc`,
+    bundlerUrl: (entry) => {
+        const ep = entry.entrypoint ?? 'v7';
+        return `http://127.0.0.1:${entry.bundlerHostPortByEntrypoint[ep]}/rpc`;
+    },
 };

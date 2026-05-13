@@ -1,7 +1,7 @@
 const { Wallet } = require('ethers');
 const { privateKeyToAccount } = require('viem/accounts');
-const { SafeAccountV0_3_0, fromViem, sendJsonRpcRequest } = require('../../../../dist/index.cjs');
-const { runnable, unrunnable, nodeUrl, bundlerUrl } = require('../../_runnable.cjs');
+const { fromViem, sendJsonRpcRequest } = require('../../../../dist/index.cjs');
+const { runnableMatrix, unrunnable, nodeUrl, bundlerUrl } = require('../../_runnable.cjs');
 
 jest.setTimeout(120000);
 
@@ -9,11 +9,12 @@ const ONE_ETH = 10n ** 18n;
 const toHex = (n) => `0x${n.toString(16)}`;
 
 describe('signer: fromViem', () => {
-    test.concurrent.each(runnable)(
-        'viem LocalAccount adapter signs userop: $name (chainId $chainId)',
-        async (chain) => {
-            const node = nodeUrl(chain);
-            const bundler = bundlerUrl(chain);
+    test.concurrent.each(runnableMatrix())(
+        'viem LocalAccount adapter signs userop: $chainName / $accountVersion (chainId $chainId)',
+        async (entry) => {
+            const node = nodeUrl(entry);
+            const bundler = bundlerUrl(entry);
+            const { accountClass: Account } = entry;
 
             const ethersWallet = Wallet.createRandom();
             const localAccount = privateKeyToAccount(ethersWallet.privateKey);
@@ -22,7 +23,7 @@ describe('signer: fromViem', () => {
             expect(typeof signer.signHash).toBe('function');
             expect(typeof signer.signTypedData).toBe('function');
 
-            const account = SafeAccountV0_3_0.initializeNewAccount([signer.address]);
+            const account = Account.initializeNewAccount([signer.address]);
             await sendJsonRpcRequest(node, 'anvil_setBalance', [account.accountAddress, toHex(ONE_ETH)]);
 
             const recipient = Wallet.createRandom().address;
@@ -36,7 +37,7 @@ describe('signer: fromViem', () => {
             userOp.signature = await account.signUserOperationWithSigners(
                 userOp,
                 [signer],
-                BigInt(chain.chainId),
+                BigInt(entry.chainId),
             );
 
             const sent = await account.sendUserOperation(userOp, bundler);

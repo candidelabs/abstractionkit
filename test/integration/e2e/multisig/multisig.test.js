@@ -1,6 +1,6 @@
 const { Wallet } = require('ethers');
-const { SafeAccountV0_3_0, sendJsonRpcRequest } = require('../../../../dist/index.cjs');
-const { runnable, unrunnable, nodeUrl, bundlerUrl } = require('../../_runnable.cjs');
+const { sendJsonRpcRequest } = require('../../../../dist/index.cjs');
+const { runnableMatrix, unrunnable, nodeUrl, bundlerUrl } = require('../../_runnable.cjs');
 
 jest.setTimeout(120000);
 
@@ -8,15 +8,16 @@ const ONE_ETH = 10n ** 18n;
 const toHex = (n) => `0x${n.toString(16)}`;
 
 describe('multisig safe account', () => {
-    test.concurrent.each(runnable)(
-        '2-of-2 owners must both sign: $name (chainId $chainId)',
-        async (chain) => {
-            const node = nodeUrl(chain);
-            const bundler = bundlerUrl(chain);
+    test.concurrent.each(runnableMatrix())(
+        '2-of-2 owners must both sign: $chainName / $accountVersion (chainId $chainId)',
+        async (entry) => {
+            const node = nodeUrl(entry);
+            const bundler = bundlerUrl(entry);
+            const { accountClass: Account } = entry;
 
             const owner1 = Wallet.createRandom();
             const owner2 = Wallet.createRandom();
-            const account = SafeAccountV0_3_0.initializeNewAccount(
+            const account = Account.initializeNewAccount(
                 [owner1.address, owner2.address],
                 { threshold: 2 },
             );
@@ -35,7 +36,7 @@ describe('multisig safe account', () => {
             userOp.signature = account.signUserOperation(
                 userOp,
                 [owner1.privateKey, owner2.privateKey],
-                BigInt(chain.chainId),
+                BigInt(entry.chainId),
             );
 
             const sent = await account.sendUserOperation(userOp, bundler);

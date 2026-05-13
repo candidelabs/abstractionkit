@@ -1,6 +1,6 @@
 const { Wallet } = require('ethers');
-const { SafeAccountV0_3_0, sendJsonRpcRequest } = require('../../../../dist/index.cjs');
-const { runnable, unrunnable, nodeUrl, bundlerUrl } = require('../../_runnable.cjs');
+const { sendJsonRpcRequest } = require('../../../../dist/index.cjs');
+const { runnableMatrix, unrunnable, nodeUrl, bundlerUrl } = require('../../_runnable.cjs');
 
 jest.setTimeout(120000);
 
@@ -8,14 +8,15 @@ const ONE_ETH = 10n ** 18n;
 const toHex = (n) => `0x${n.toString(16)}`;
 
 describe('onchain identifier', () => {
-    test.concurrent.each(runnable)(
-        'identifier embedded in callData + tx input: $name (chainId $chainId)',
-        async (chain) => {
-            const node = nodeUrl(chain);
-            const bundler = bundlerUrl(chain);
+    test.concurrent.each(runnableMatrix())(
+        'identifier embedded in callData + tx input: $chainName / $accountVersion (chainId $chainId)',
+        async (entry) => {
+            const node = nodeUrl(entry);
+            const bundler = bundlerUrl(entry);
+            const { accountClass: Account } = entry;
 
             const owner = Wallet.createRandom();
-            const account = SafeAccountV0_3_0.initializeNewAccount([owner.address], {
+            const account = Account.initializeNewAccount([owner.address], {
                 onChainIdentifierParams: {
                     project: 'abstractionkit-e2e',
                     platform: 'Web',
@@ -37,7 +38,7 @@ describe('onchain identifier', () => {
 
             expect(userOp.callData.toLowerCase().endsWith(identifier.toLowerCase())).toBe(true);
 
-            userOp.signature = account.signUserOperation(userOp, [owner.privateKey], BigInt(chain.chainId));
+            userOp.signature = account.signUserOperation(userOp, [owner.privateKey], BigInt(entry.chainId));
             const sent = await account.sendUserOperation(userOp, bundler);
             const receipt = await sent.included();
             expect(receipt?.success).toBe(true);
