@@ -1,6 +1,8 @@
-import type { MetaTransaction } from "../../../types";
-import { createCallData, sendEthCallRequest } from "../../../utils";
-import { SafeModule } from "./SafeModule";
+import type {Transport} from "../../../transport";
+import {JsonRpcNode} from "../../../transport";
+import type {MetaTransaction} from "../../../types";
+import {createCallData} from "../../../utils";
+import {SafeModule} from "./SafeModule";
 
 /**
  * Address of the legacy Allowance Module v0.1.0 contract.
@@ -292,7 +294,7 @@ export class AllowanceModule extends SafeModule {
 	 * @returns promise of a list of tokens
 	 */
 	public async getTokens(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		safeAddress: string,
 		delegate: string,
 	): Promise<string[]> {
@@ -309,7 +311,7 @@ export class AllowanceModule extends SafeModule {
 			data: callData,
 		};
 
-		const tokens = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const tokens = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 		this.checkForEmptyResultAndRevert(tokens, "getTokens");
 		const decodedCalldata = this.abiCoder.decode(["address[]"], tokens);
 		return decodedCalldata[0];
@@ -324,7 +326,7 @@ export class AllowanceModule extends SafeModule {
 	 * @returns promise of Allowance
 	 */
 	public async getTokensAllowance(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		safeAddress: string,
 		delegate: string,
 		token: string,
@@ -342,7 +344,7 @@ export class AllowanceModule extends SafeModule {
 			data: callData,
 		};
 
-		const tokenAllowance = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const tokenAllowance = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 		this.checkForEmptyResultAndRevert(tokenAllowance, "getTokenAllowance");
 		const decodedCalldata = this.abiCoder.decode(["uint256[5]"], tokenAllowance);
 		const allowance = decodedCalldata[0];
@@ -366,7 +368,7 @@ export class AllowanceModule extends SafeModule {
 	 * @returns Array of delegate addresses.
 	 */
 	public async getDelegates(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		safeAddress: string,
 		overrides: {
 			start?: bigint;
@@ -407,7 +409,7 @@ export class AllowanceModule extends SafeModule {
 	 * @returns promise of `{ results, next }` — `next` is 0 when there are no more pages
 	 */
 	public async baseGetDelegates(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		safeAddress: string,
 		start: bigint,
 		pageSize: bigint,
@@ -425,7 +427,7 @@ export class AllowanceModule extends SafeModule {
 			data: callData,
 		};
 
-		const delegates = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const delegates = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 		this.checkForEmptyResultAndRevert(delegates, "getDelegates");
 		const decodedCalldata = this.abiCoder.decode(["address[]", "uint48"], delegates);
 

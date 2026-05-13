@@ -1,4 +1,17 @@
-import { AbstractionKitError, ensureError } from "./errors";
+import {
+	AbstractionKitError,
+	type BasicErrorCode,
+	type BundlerErrorCode,
+	BundlerErrorCodeDict,
+	ensureError,
+} from "./errors";
+import {
+	HttpTransport,
+	type ProviderRpcError,
+	type RequestArgs,
+	type RequestOptions,
+	type Transport,
+} from "./transport";
 import type {
 	GasEstimationResult,
 	JsonRpcResult,
@@ -11,25 +24,70 @@ import type {
 	UserOperationV8,
 	UserOperationV9,
 } from "./types";
-import { sendJsonRpcRequest } from "./utils";
 
 /**
  * JSON-RPC client for an ERC-4337 bundler.
+ *
+ * Accepts either a URL string (wrapped automatically in {@link HttpTransport})
+ * or any {@link Transport} — including a viem client, an EIP-1193 wallet
+ * provider, an in-process mock, or a user-composed fallback/retry transport.
+ *
+ * The class itself implements {@link Transport}, so a `Bundler` can be passed
+ * back into any other Transport position.
  *
  * Candide bundler endpoints:
  * - `https://api.candide.dev/api/v3/{chainId}/{apiKey}` (authenticated)
  * - `https://api.candide.dev/public/v3/{chainId}` (public)
  *
- * @example
+ * @example URL string (most common)
+ * ```ts
  * const bundler = new Bundler("https://api.candide.dev/public/v3/11155111");
  * const receipt = await bundler.getUserOperationReceipt(userOpHash);
+ * ```
+ *
+ * @example Custom transport (composed retry behavior)
+ * ```ts
+ * const retryingTransport: Transport = {
+ *   async request(args, options) {
+ *     for (let i = 0; i < 3; i++) {
+ *       try { return await inner.request(args, options); }
+ *       catch (e) { if (i === 2) throw e; await sleep(2 ** i * 100); }
+ *     }
+ *   },
+ * };
+ * const bundler = new Bundler(retryingTransport);
+ * ```
  */
-export class Bundler {
-	readonly rpcUrl: string;
+export class Bundler implements Transport {
+	/** The underlying transport. Strings passed to the constructor are wrapped in {@link HttpTransport}. */
+	readonly transport: Transport;
 
-	/** @param rpcUrl - The bundler JSON-RPC endpoint URL */
-	constructor(rpcUrl: string) {
-		this.rpcUrl = rpcUrl;
+	/**
+	 * @param rpc - Bundler JSON-RPC endpoint URL, or any {@link Transport}.
+	 */
+	constructor(rpc: string | Transport) {
+		this.transport = typeof rpc === "string" ? new HttpTransport(rpc) : rpc;
+	}
+
+	/**
+	 * Normalize any acceptable input into a `Bundler`. When the input is
+	 * already a `Bundler` instance, it is returned by reference (so a user's
+	 * pre-constructed Bundler is never re-wrapped and its transport is
+	 * reused for follow-up calls like {@link SendUseroperationResponse.included}).
+	 *
+	 * @param input - URL string, Transport, or existing Bundler
+	 */
+	static from(input: string | Transport | Bundler): Bundler {
+		return input instanceof Bundler ? input : new Bundler(input);
+	}
+
+	/**
+	 * Transport delegate. Forwards directly to the underlying
+	 * {@link Transport.request}. Lets a `Bundler` itself slot into any other
+	 * transport position.
+	 */
+	request<T = unknown>(args: RequestArgs, options?: RequestOptions): Promise<T> {
+		return this.transport.request<T>(args, options);
 	}
 
 	/**
@@ -38,18 +96,13 @@ export class Bundler {
 	 */
 	async chainId(): Promise<string> {
 		try {
-			const chainId = await sendJsonRpcRequest(this.rpcUrl, "eth_chainId", []);
-			if (typeof chainId === "string") {
-				return chainId;
-			} else {
+			const chainId = await this.transport.request<unknown>({ method: "eth_chainId" });
+			if (typeof chainId !== "string") {
 				throw new AbstractionKitError("BAD_DATA", "bundler eth_chainId rpc call failed");
 			}
+			return chainId;
 		} catch (err) {
-			const error = ensureError(err);
-
-			throw new AbstractionKitError("BUNDLER_ERROR", "bundler eth_chainId rpc call failed", {
-				cause: error,
-			});
+			throw translateBundlerError(err, "eth_chainId");
 		}
 	}
 
@@ -59,22 +112,12 @@ export class Bundler {
 	 */
 	async supportedEntryPoints(): Promise<string[]> {
 		try {
-			const supportedEntryPoints = (await sendJsonRpcRequest(
-				this.rpcUrl,
-				"eth_supportedEntryPoints",
-				[],
-			)) as string[];
-			return supportedEntryPoints;
+			const result = await this.transport.request<string[]>({
+				method: "eth_supportedEntryPoints",
+			});
+			return result;
 		} catch (err) {
-			const error = ensureError(err);
-
-			throw new AbstractionKitError(
-				"BUNDLER_ERROR",
-				"bundler eth_supportedEntryPoints rpc call failed",
-				{
-					cause: error,
-				},
-			);
+			throw translateBundlerError(err, "eth_supportedEntryPoints");
 		}
 	}
 
@@ -91,19 +134,14 @@ export class Bundler {
 		state_override_set?: StateOverrideSet,
 	): Promise<GasEstimationResult> {
 		try {
-			let jsonRpcResult = {} as JsonRpcResult;
-			if (typeof state_override_set === "undefined") {
-				jsonRpcResult = await sendJsonRpcRequest(this.rpcUrl, "eth_estimateUserOperationGas", [
-					useroperation,
-					entrypointAddress,
-				]);
-			} else {
-				jsonRpcResult = await sendJsonRpcRequest(this.rpcUrl, "eth_estimateUserOperationGas", [
-					useroperation,
-					entrypointAddress,
-					state_override_set,
-				]);
-			}
+			const params: unknown[] =
+				state_override_set == null
+					? [useroperation, entrypointAddress]
+					: [useroperation, entrypointAddress, state_override_set];
+			const jsonRpcResult = await this.transport.request<JsonRpcResult>({
+				method: "eth_estimateUserOperationGas",
+				params,
+			});
 			const res = jsonRpcResult as GasEstimationResult;
 			const gasEstimationResult: GasEstimationResult = {
 				callGasLimit: BigInt(res.callGasLimit),
@@ -123,15 +161,7 @@ export class Bundler {
 
 			return gasEstimationResult;
 		} catch (err) {
-			const error = ensureError(err);
-
-			throw new AbstractionKitError(
-				"BUNDLER_ERROR",
-				"bundler eth_estimateUserOperationGas rpc call failed",
-				{
-					cause: error,
-				},
-			);
+			throw translateBundlerError(err, "eth_estimateUserOperationGas");
 		}
 	}
 
@@ -146,21 +176,13 @@ export class Bundler {
 		entrypointAddress: string,
 	): Promise<string> {
 		try {
-			const jsonRpcResult = (await sendJsonRpcRequest(this.rpcUrl, "eth_sendUserOperation", [
-				useroperation,
-				entrypointAddress,
-			])) as string;
+			const jsonRpcResult = await this.transport.request<string>({
+				method: "eth_sendUserOperation",
+				params: [useroperation, entrypointAddress],
+			});
 			return jsonRpcResult;
 		} catch (err) {
-			const error = ensureError(err);
-
-			throw new AbstractionKitError(
-				"BUNDLER_ERROR",
-				"bundler eth_sendUserOperation rpc call failed",
-				{
-					cause: error,
-				},
-			);
+			throw translateBundlerError(err, "eth_sendUserOperation");
 		}
 	}
 
@@ -171,50 +193,36 @@ export class Bundler {
 	 */
 	async getUserOperationReceipt(useroperationhash: string): Promise<UserOperationReceiptResult> {
 		try {
-			const jsonRpcResult = await sendJsonRpcRequest(this.rpcUrl, "eth_getUserOperationReceipt", [
-				useroperationhash,
-			]);
-			const res = jsonRpcResult as UserOperationReceiptResult;
+			const jsonRpcResult = await this.transport.request<UserOperationReceiptResult | null>({
+				method: "eth_getUserOperationReceipt",
+				params: [useroperationhash],
+			});
+			if (jsonRpcResult == null) return null;
+			const res = jsonRpcResult;
 
-			if (res != null) {
-				const userOperationReceipt: UserOperationReceipt = {
-					...res.receipt,
-					blockNumber: BigInt(res.receipt.blockNumber),
-					cumulativeGasUsed: BigInt(res.receipt.cumulativeGasUsed),
-					gasUsed: BigInt(res.receipt.gasUsed),
-					transactionIndex: BigInt(res.receipt.transactionIndex),
-					effectiveGasPrice:
-						res.receipt.effectiveGasPrice == null
-							? undefined
-							: BigInt(res.receipt.effectiveGasPrice),
-					logs: JSON.stringify(res.receipt.logs),
-				};
+			const userOperationReceipt: UserOperationReceipt = {
+				...res.receipt,
+				blockNumber: BigInt(res.receipt.blockNumber),
+				cumulativeGasUsed: BigInt(res.receipt.cumulativeGasUsed),
+				gasUsed: BigInt(res.receipt.gasUsed),
+				transactionIndex: BigInt(res.receipt.transactionIndex),
+				effectiveGasPrice:
+					res.receipt.effectiveGasPrice == null
+						? undefined
+						: BigInt(res.receipt.effectiveGasPrice),
+				logs: JSON.stringify(res.receipt.logs),
+			};
 
-				const bundlerGetUserOperationReceiptResult: UserOperationReceiptResult = {
-					...res,
-					nonce: BigInt(res.nonce),
-					actualGasCost: BigInt(res.actualGasCost),
-					actualGasUsed: BigInt(res.actualGasUsed),
-					logs: JSON.stringify(res.logs),
-					receipt: userOperationReceipt,
-				};
-				return bundlerGetUserOperationReceiptResult;
-			} else {
-				return null;
-			}
+			return {
+				...res,
+				nonce: BigInt(res.nonce),
+				actualGasCost: BigInt(res.actualGasCost),
+				actualGasUsed: BigInt(res.actualGasUsed),
+				logs: JSON.stringify(res.logs),
+				receipt: userOperationReceipt,
+			};
 		} catch (err) {
-			const error = ensureError(err);
-
-			throw new AbstractionKitError(
-				"BUNDLER_ERROR",
-				"bundler eth_getUserOperationReceipt rpc call failed",
-				{
-					cause: error,
-					context: {
-						useroperationhash: useroperationhash,
-					},
-				},
-			);
+			throw translateBundlerError(err, "eth_getUserOperationReceipt", { useroperationhash });
 		}
 	}
 
@@ -225,31 +233,57 @@ export class Bundler {
 	 */
 	async getUserOperationByHash(useroperationhash: string): Promise<UserOperationByHashResult> {
 		try {
-			const jsonRpcResult = await sendJsonRpcRequest(this.rpcUrl, "eth_getUserOperationByHash", [
-				useroperationhash,
-			]);
-			const res = jsonRpcResult as UserOperationByHashResult;
-			if (res != null) {
-				return {
-					...res,
-					blockNumber: res.blockNumber == null ? null : BigInt(res.blockNumber),
-				};
-			} else {
-				return null;
-			}
+			const jsonRpcResult = await this.transport.request<UserOperationByHashResult | null>({
+				method: "eth_getUserOperationByHash",
+				params: [useroperationhash],
+			});
+			if (jsonRpcResult == null) return null;
+			return {
+				...jsonRpcResult,
+				blockNumber: jsonRpcResult.blockNumber == null ? null : BigInt(jsonRpcResult.blockNumber),
+			};
 		} catch (err) {
-			const error = ensureError(err);
-
-			throw new AbstractionKitError(
-				"BUNDLER_ERROR",
-				"bundler eth_getUserOperationByHash rpc call failed",
-				{
-					cause: error,
-					context: {
-						useroperationhash: useroperationhash,
-					},
-				},
-			);
+			throw translateBundlerError(err, "eth_getUserOperationByHash", { useroperationhash });
 		}
 	}
+}
+
+/**
+ * Translate a transport-level error (or already-wrapped
+ * {@link AbstractionKitError}) into the `BUNDLER_ERROR` outer / specific
+ * 4337-code inner shape used by {@link Bundler}.
+ *
+ * - `AbstractionKitError` passes through unchanged (already domain-translated).
+ * - {@link ProviderRpcError} with a known 4337 code → inner code from
+ *   {@link BundlerErrorCodeDict}.
+ * - Anything else → inner `UNKNOWN_ERROR`.
+ *
+ * @internal
+ */
+function translateBundlerError(
+	err: unknown,
+	method: string,
+	context?: { readonly useroperationhash?: string },
+): AbstractionKitError {
+	if (err instanceof AbstractionKitError) {
+		// BC: existing callers see outer BUNDLER_ERROR even when the inner
+		// translation has already happened (e.g. via JsonRpcNode reuse, future
+		// proofing). Re-wrap if not already a BUNDLER_ERROR.
+		if (err.code === "BUNDLER_ERROR") return err;
+		return new AbstractionKitError("BUNDLER_ERROR", `bundler ${method} rpc call failed`, {
+			cause: err,
+			errno: err.errno,
+			context,
+		});
+	}
+	const code = (err as ProviderRpcError | undefined)?.code;
+	const codeString = code != null ? String(code) : "";
+	const innerCode: BundlerErrorCode | BasicErrorCode =
+		codeString in BundlerErrorCodeDict ? BundlerErrorCodeDict[codeString] : "UNKNOWN_ERROR";
+	const error = ensureError(err);
+	return new AbstractionKitError("BUNDLER_ERROR", `bundler ${method} rpc call failed`, {
+		cause: new AbstractionKitError(innerCode, error.message, { errno: code }),
+		errno: code,
+		context,
+	});
 }

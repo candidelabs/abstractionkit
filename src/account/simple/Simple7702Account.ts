@@ -1,9 +1,10 @@
-import { AbiCoder, Wallet } from "ethers";
-import { Bundler } from "src/Bundler";
-import { BaseUserOperationDummyValues, ENTRYPOINT_V8, ENTRYPOINT_V9 } from "src/constants";
-import { AbstractionKitError } from "src/errors";
-import { invokeSigner, pickScheme } from "src/signer/negotiate";
-import type { Signer as AkSigner, SignContext, SigningScheme, TypedData } from "src/signer/types";
+import {AbiCoder, Wallet} from "ethers";
+import {Bundler} from "src/Bundler";
+import {BaseUserOperationDummyValues, ENTRYPOINT_V8, ENTRYPOINT_V9} from "src/constants";
+import {AbstractionKitError} from "src/errors";
+import {invokeSigner, pickScheme} from "src/signer/negotiate";
+import type {SignContext, Signer as AkSigner, SigningScheme, TypedData} from "src/signer/types";
+import {JsonRpcNode, type Transport} from "src/transport";
 import type {
 	GasOption,
 	JsonRpcResult,
@@ -24,13 +25,12 @@ import {
 	createCallData,
 	createUserOperationHash,
 	fetchAccountNonce,
-	getDelegatedAddress,
 	getFunctionSelector,
 	handlefetchGasPrice,
 	sendJsonRpcRequest,
 } from "../../utils";
-import { SendUseroperationResponse } from "../SendUseroperationResponse";
-import { SmartAccount } from "../SmartAccount";
+import {SendUseroperationResponse} from "../SendUseroperationResponse";
+import {SmartAccount} from "../SmartAccount";
 
 /**
  * A minimal transaction object for EIP-7702 simple accounts.
@@ -167,13 +167,15 @@ export class BaseSimple7702Account extends SmartAccount {
 	/**
 	 * Check if this EOA is delegated to the expected delegatee address via EIP-7702.
 	 * Returns `true` only when delegated to `this.delegateeAddress`.
-	 * Use `getDelegatedAddress()` directly to get the raw delegatee address.
+	 * Use `JsonRpcNode.getDelegatedAddress()` directly to get the raw delegatee address.
 	 *
 	 * @param providerRpc - Ethereum JSON-RPC node URL
 	 * @returns `true` if delegated to the expected address, `false` otherwise
 	 */
-	public async isDelegatedToThisAccount(providerRpc: string): Promise<boolean> {
-		const address = await getDelegatedAddress(this.accountAddress, providerRpc);
+	public async isDelegatedToThisAccount(
+		providerRpc: string | Transport | JsonRpcNode,
+	): Promise<boolean> {
+		const address = await JsonRpcNode.from(providerRpc).getDelegatedAddress(this.accountAddress);
 		if (address === null) return false;
 		return address.toLowerCase() === this.delegateeAddress.toLowerCase();
 	}
@@ -196,7 +198,7 @@ export class BaseSimple7702Account extends SmartAccount {
 	 */
 	public async createRevokeDelegationTransaction(
 		eoaPrivateKey: string,
-		providerRpc: string,
+		providerRpc: string | Transport | JsonRpcNode,
 		overrides: {
 			nonce?: bigint;
 			authorizationNonce?: bigint;
@@ -207,7 +209,7 @@ export class BaseSimple7702Account extends SmartAccount {
 		} = {},
 	): Promise<string> {
 		// Verify delegation state before revoking
-		const delegatedTo = await getDelegatedAddress(this.accountAddress, providerRpc);
+		const delegatedTo = await JsonRpcNode.from(providerRpc).getDelegatedAddress(this.accountAddress);
 		if (delegatedTo === null) {
 			throw new AbstractionKitError("BAD_DATA", "Account is not delegated — nothing to revoke");
 		}
@@ -369,8 +371,8 @@ export class BaseSimple7702Account extends SmartAccount {
 	 */
 	protected async baseCreateUserOperation(
 		transactions: SimpleMetaTransaction[],
-		providerRpc?: string,
-		bundlerRpc?: string,
+		providerRpc?: string | Transport | JsonRpcNode,
+		bundlerRpc?: string | Transport | Bundler,
 		overrides: CreateUserOperationOverrides = {},
 	): Promise<UserOperationV8 | UserOperationV9> {
 		if (transactions.length < 1) {
@@ -426,7 +428,9 @@ export class BaseSimple7702Account extends SmartAccount {
 		// Best-effort: if the check fails, proceed as if not delegated.
 		let delegationCheckOp: Promise<string | null> | null = null;
 		if (overrides.eip7702Auth != null && providerRpc != null) {
-			delegationCheckOp = getDelegatedAddress(this.accountAddress, providerRpc).catch(() => null);
+			delegationCheckOp = JsonRpcNode.from(providerRpc)
+				.getDelegatedAddress(this.accountAddress)
+				.catch(() => null);
 		}
 
 		if (overrides.eip7702Auth != null && eip7702AuthNonce == null) {
@@ -706,7 +710,7 @@ export class BaseSimple7702Account extends SmartAccount {
 	 */
 	protected async baseEstimateUserOperationGas(
 		userOperation: UserOperationV8 | UserOperationV9,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
 			dummySignature?: string;
@@ -714,7 +718,7 @@ export class BaseSimple7702Account extends SmartAccount {
 	): Promise<[bigint, bigint, bigint]> {
 		userOperation.signature = overrides.dummySignature ?? BaseSimple7702Account.dummySignature;
 
-		const bundler = new Bundler(bundlerRpc);
+		const bundler = Bundler.from(bundlerRpc);
 
 		const inputMaxFeePerGas = userOperation.maxFeePerGas;
 		const inputMaxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
@@ -913,9 +917,9 @@ export class BaseSimple7702Account extends SmartAccount {
 	 */
 	protected async baseSendUserOperation(
 		userOperation: UserOperationV8 | UserOperationV9,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 	): Promise<SendUseroperationResponse> {
-		const bundler = new Bundler(bundlerRpc);
+		const bundler = Bundler.from(bundlerRpc);
 		const sendUserOperationRes = await bundler.sendUserOperation(
 			userOperation,
 			this.entrypointAddress,
@@ -1066,8 +1070,8 @@ export class Simple7702Account extends BaseSimple7702Account {
 	 */
 	public async createUserOperation(
 		transactions: SimpleMetaTransaction[],
-		providerRpc?: string,
-		bundlerRpc?: string,
+		providerRpc?: string | Transport | JsonRpcNode,
+		bundlerRpc?: string | Transport | Bundler,
 		overrides: CreateUserOperationOverrides = {},
 	): Promise<UserOperationV8> {
 		return this.baseCreateUserOperation(transactions, providerRpc, bundlerRpc, overrides);
@@ -1084,7 +1088,7 @@ export class Simple7702Account extends BaseSimple7702Account {
 	 */
 	public async estimateUserOperationGas(
 		userOperation: UserOperationV8,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
 			dummySignature?: string;
@@ -1155,7 +1159,7 @@ export class Simple7702Account extends BaseSimple7702Account {
 	 */
 	public async sendUserOperation(
 		userOperation: UserOperationV8,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 	): Promise<SendUseroperationResponse> {
 		return this.baseSendUserOperation(userOperation, bundlerRpc);
 	}

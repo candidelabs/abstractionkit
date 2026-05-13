@@ -101,7 +101,7 @@ describe('Calibur7702Account ExperimentalAllowAllParallelPaymaster', () => {
         expect(paymasterInitFields.paymaster).toBe("0x36A337b8b4cE5CF6ca1dDaeef73Da4928d714DF2");
         expect(paymasterInitFields.paymasterVerificationGasLimit).toBe(45_000n);
         expect(paymasterInitFields.paymasterPostOpGasLimit).toBe(45_000n);
-        expect(paymasterInitFields.paymasterData).toBe("0x22e325a297439656");
+        expect(paymasterInitFields.paymasterData).toBe("0x010101010101010101010101010101010101010101010101010101010101011c002022e325a297439656");
     });
 
     // ─── 6.2: ExperimentalAllowAllParallelPaymaster approved data ────────────────────────────
@@ -268,7 +268,7 @@ describe('Calibur7702Account ExperimentalAllowAllParallelPaymaster', () => {
 
         const fields = await custom.getPaymasterFieldsInitValues(chainId);
         expect(fields.paymaster).toBe(customAddress);
-        expect(fields.paymasterData).toBe("0x22e325a297439656");
+        expect(fields.paymasterData).toBe("0x010101010101010101010101010101010101010101010101010101010101011c002022e325a297439656");
         expect(fields.paymasterVerificationGasLimit).toBe(45_000n);
     });
 });

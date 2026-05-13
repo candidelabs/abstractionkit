@@ -13,11 +13,10 @@ const entrypoints = [
 describe('deposit info and balance of address', () => {
     entrypoints.forEach((entrypoint) => {
         test('check deposit info and balance are equal and types for entrypoint: ' + entrypoint, async () => {
-            const depositInfo = await accountAbstractionkit.getDepositInfo(
-                jsonRpcNodeProvider, address, entrypoint);
-            const balance = await accountAbstractionkit.getBalanceOf(
-                jsonRpcNodeProvider, address, entrypoint);
-            
+            const node = new accountAbstractionkit.JsonRpcNode(jsonRpcNodeProvider);
+            const depositInfo = await node.getEntryPointDepositInfo(address, entrypoint);
+            const balance = await node.getEntryPointDeposit(address, entrypoint);
+
             expect(depositInfo["deposit"]).toStrictEqual(balance);
             expect(typeof depositInfo["deposit"]).toBe("bigint");
             expect(typeof depositInfo["staked"]).toBe("boolean");

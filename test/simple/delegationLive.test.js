@@ -38,8 +38,8 @@ describe('EIP-7702 delegation lifecycle (live)', () => {
     test('getDelegatedAddress and isDelegatedToThisAccount before delegation', async () => {
         // If account was previously delegated from a prior test run,
         // undelegate it first
-        const existingDelegation = await ak.getDelegatedAddress(
-            eoaDelegatorAddress, jsonRpcNodeProvider
+        const existingDelegation = await new ak.JsonRpcNode(jsonRpcNodeProvider).getDelegatedAddress(
+            eoaDelegatorAddress
         );
 
         if (existingDelegation !== null) {
@@ -61,8 +61,8 @@ describe('EIP-7702 delegation lifecycle (live)', () => {
             await waitForReceipt(txHash);
         }
 
-        const address = await ak.getDelegatedAddress(
-            eoaDelegatorAddress, jsonRpcNodeProvider
+        const address = await new ak.JsonRpcNode(jsonRpcNodeProvider).getDelegatedAddress(
+            eoaDelegatorAddress
         );
         expect(address).toBeNull();
 
@@ -123,8 +123,8 @@ describe('EIP-7702 delegation lifecycle (live)', () => {
         expect(receipt.success).toBe(true);
 
         // Verify delegation
-        const delegatedAddress = await ak.getDelegatedAddress(
-            eoaDelegatorAddress, jsonRpcNodeProvider
+        const delegatedAddress = await new ak.JsonRpcNode(jsonRpcNodeProvider).getDelegatedAddress(
+            eoaDelegatorAddress
         );
         expect(delegatedAddress).not.toBeNull();
 
@@ -196,8 +196,8 @@ describe('EIP-7702 delegation lifecycle (live)', () => {
         await waitForReceipt(txHash);
 
         // Verify undelegation
-        const address = await ak.getDelegatedAddress(
-            eoaDelegatorAddress, jsonRpcNodeProvider
+        const address = await new ak.JsonRpcNode(jsonRpcNodeProvider).getDelegatedAddress(
+            eoaDelegatorAddress
         );
         expect(address).toBeNull();
 
@@ -220,8 +220,8 @@ describe('EIP-7702 delegation lifecycle (live)', () => {
 describe('EIP-7702 delegation lifecycle V09 (live)', () => {
 
     test('fresh state — not delegated', async () => {
-        const address = await ak.getDelegatedAddress(
-            eoaDelegatorAddress, jsonRpcNodeProvider
+        const address = await new ak.JsonRpcNode(jsonRpcNodeProvider).getDelegatedAddress(
+            eoaDelegatorAddress
         );
         expect(address).toBeNull();
 
@@ -268,8 +268,8 @@ describe('EIP-7702 delegation lifecycle V09 (live)', () => {
         const receipt = await response.included();
         expect(receipt.success).toBe(true);
 
-        const delegatedAddress = await ak.getDelegatedAddress(
-            eoaDelegatorAddress, jsonRpcNodeProvider
+        const delegatedAddress = await new ak.JsonRpcNode(jsonRpcNodeProvider).getDelegatedAddress(
+            eoaDelegatorAddress
         );
         expect(delegatedAddress).not.toBeNull();
 
@@ -326,8 +326,8 @@ describe('EIP-7702 delegation lifecycle V09 (live)', () => {
 
         await waitForReceipt(txHash);
 
-        const address = await ak.getDelegatedAddress(
-            eoaDelegatorAddress, jsonRpcNodeProvider
+        const address = await new ak.JsonRpcNode(jsonRpcNodeProvider).getDelegatedAddress(
+            eoaDelegatorAddress
         );
         expect(address).toBeNull();
 

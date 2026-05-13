@@ -1,6 +1,7 @@
-import { AbiCoder, getAddress, id, JsonRpcProvider, keccak256 } from "ethers";
-import { ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8, ENTRYPOINT_V9 } from "./constants";
-import { AbstractionKitError, BundlerErrorCodeDict, ensureError } from "./errors";
+import {AbiCoder, id, keccak256} from "ethers";
+import {ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8, ENTRYPOINT_V9} from "./constants";
+import {AbstractionKitError, ensureError} from "./errors";
+import {JsonRpcNode, type Transport, TransportRpcError} from "./transport";
 import {
 	type AbiInputValue,
 	GasOption,
@@ -368,71 +369,71 @@ export function createCallData(
 }
 
 /**
- * Send a JSON-RPC request to the specified endpoint.
- * Automatically converts bigint values to hex strings in the request body.
+ * Send a JSON-RPC 2.0 request to the specified endpoint.
  *
- * @param rpcUrl - The JSON-RPC endpoint URL (bundler, node, or paymaster)
- * @param method - The JSON-RPC method name (e.g., "eth_call", "eth_sendUserOperation")
+ * **External escape hatch.** Most SDK consumers should use one of the
+ * high-level service classes ({@link Bundler}, {@link CandidePaymaster},
+ * {@link Erc7677Paymaster}, {@link JsonRpcNode}) which translate errors into
+ * the SDK's domain vocabulary. This function is intentionally low-level: it
+ * speaks plain JSON-RPC and throws {@link TransportRpcError}
+ * (an EIP-1193-shaped `ProviderRpcError`) on RPC errors.
+ *
+ * Two execution modes:
+ * - **URL string:** issues a `fetch` POST directly. Supports custom `headers`
+ *   and a custom `paramsKeyName` for non-standard servers (e.g. APIs that
+ *   expect `"simulations"` instead of `"params"`).
+ * - **Transport / JsonRpcNode:** delegates to `.request({ method, params })`.
+ *   `headers` and `paramsKeyName` are ignored (those concerns belong to the
+ *   transport implementation).
+ *
+ * Automatically serializes `bigint` values in `params` as `0x`-prefixed hex.
+ *
+ * @param rpc - JSON-RPC endpoint URL, {@link Transport}, or {@link JsonRpcNode}
+ * @param method - The JSON-RPC method name (e.g., `"eth_call"`)
  * @param params - The JSON-RPC parameters
- * @param headers - Custom HTTP headers (defaults to Content-Type: application/json)
- * @param paramsKeyName - Key name for the params field (defaults to "params")
- * @returns The result field from the JSON-RPC response
- * @throws AbstractionKitError if the RPC returns an error
+ * @param headers - Custom HTTP headers (URL inputs only; default Content-Type: application/json)
+ * @param paramsKeyName - Override the params key in the envelope (URL inputs only; default `"params"`)
+ * @returns The `result` (or non-standard equivalent) field from the JSON-RPC response
+ * @throws {@link TransportRpcError} when the response contains an `error` field
  */
 export async function sendJsonRpcRequest(
-	rpcUrl: string,
+	rpc: string | Transport | JsonRpcNode,
 	method: string,
 	params: JsonRpcParam,
 	headers: Record<string, string> = { "Content-Type": "application/json" },
 	paramsKeyName: string = "params",
 ): Promise<JsonRpcResult> {
+	if (typeof rpc !== "string") {
+		return JsonRpcNode.from(rpc).request<JsonRpcResult>({
+			method,
+			params: params as readonly unknown[] | object,
+		});
+	}
+	// URL path — preserve the historical fetch-based implementation so callers
+	// passing custom headers or a custom paramsKeyName continue to work.
 	const raw = JSON.stringify(
 		{
-			method: method,
+			method,
 			[paramsKeyName]: params,
-			id: Date.now(), //semi unique id
+			id: Date.now(),
 			jsonrpc: "2.0",
 		},
 		(_key, value) =>
-			// change all bigint values to "0x" prefixed hex strings
 			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
 			typeof value === "bigint" ? `0x${value.toString(16)}` : value,
 	);
-	const requestOptions: RequestInit = {
+	const fetchResult = await fetch(rpc, {
 		method: "POST",
 		headers,
 		body: raw,
 		redirect: "follow",
-	};
-	const fetchResult = await fetch(rpcUrl, requestOptions);
+	});
 	const response = (await fetchResult.json()) as JsonRpcResponse;
-
 	if ("result" in response) {
 		return response.result as JsonRpcResult;
-	} else if ("simulation_results" in response) {
-		return response.simulation_results as JsonRpcResult;
-	} else {
-		const err = response.error as JsonRpcError;
-		const codeString = String(err.code);
-
-		if (codeString in BundlerErrorCodeDict) {
-			throw new AbstractionKitError(BundlerErrorCodeDict[codeString], err.message, {
-				errno: err.code,
-				context: {
-					url: rpcUrl,
-					requestOptions: JSON.stringify(requestOptions),
-				},
-			});
-		} else {
-			throw new AbstractionKitError("UNKNOWN_ERROR", err.message, {
-				errno: err.code,
-				context: {
-					url: rpcUrl,
-					requestOptions: JSON.stringify(requestOptions),
-				},
-			});
-		}
 	}
+	const err = response.error as JsonRpcError;
+	throw new TransportRpcError(err.code, err.message);
 }
 
 /**
@@ -451,107 +452,25 @@ export function getFunctionSelector(functionSignature: string): string {
 /**
  * Fetch the account's nonce from the EntryPoint contract.
  *
- * @param rpcUrl - Ethereum JSON-RPC node URL
+ * Equivalent to `JsonRpcNode.from(rpc).getEntryPointNonce(entryPoint, account, key)`.
+ * Kept as a top-level export for backward compatibility with existing call
+ * sites; the first parameter widens from `string` to
+ * `string | Transport | JsonRpcNode` so users can pass a configured transport
+ * (with custom headers, retries, etc.) without restructuring their code.
+ *
+ * @param rpc - Ethereum JSON-RPC node URL, {@link Transport}, or {@link JsonRpcNode}
  * @param entryPoint - EntryPoint contract address
  * @param account - Smart account address to query
  * @param key - Nonce key (default 0). Different keys allow parallel nonce channels.
  * @returns The current nonce as a bigint
- * @throws AbstractionKitError with code "BAD_DATA" if the nonce call fails
  */
 export async function fetchAccountNonce(
-	rpcUrl: string,
+	rpc: string | Transport | JsonRpcNode,
 	entryPoint: string,
 	account: string,
 	key: number = 0,
 ): Promise<bigint> {
-	const getNonceFunctionSignature = "getNonce(address,uint192)";
-	const getNonceFunctionSelector = getFunctionSelector(getNonceFunctionSignature);
-	const getNonceTransactionCallData = createCallData(
-		getNonceFunctionSelector,
-		["address", "uint192"],
-		[account, key],
-	);
-
-	const params = [
-		{
-			from: "0x0000000000000000000000000000000000000000",
-			to: entryPoint,
-			data: getNonceTransactionCallData,
-		},
-		"latest",
-	];
-
-	try {
-		const nonce = await sendJsonRpcRequest(rpcUrl, "eth_call", params);
-
-		if (typeof nonce === "string") {
-			try {
-				return BigInt(nonce);
-			} catch (err) {
-				const error = ensureError(err);
-
-				throw new AbstractionKitError("BAD_DATA", "getNonce returned ill formed data", {
-					cause: error,
-				});
-			}
-		} else {
-			throw new AbstractionKitError("BAD_DATA", "getNonce returned ill formed data", {
-				context: JSON.stringify(nonce),
-			});
-		}
-	} catch (err) {
-		const error = ensureError(err);
-
-		throw new AbstractionKitError("BAD_DATA", "getNonce failed", {
-			cause: error,
-		});
-	}
-}
-
-/**
- * Fetch current gas prices from a JSON-RPC node.
- * Applies a gas level multiplier to adjust for faster or cheaper inclusion.
- *
- * @param provideRpc - Ethereum JSON-RPC node URL
- * @param gasLevel - Gas price multiplier (default: GasOption.Medium = 1.2x)
- * @returns A tuple of [maxFeePerGas, maxPriorityFeePerGas] as bigints
- */
-export async function fetchGasPrice(
-	provideRpc: string,
-	gasLevel: GasOption = GasOption.Medium,
-): Promise<[bigint, bigint]> {
-	try {
-		const jsonRpcProvider = new JsonRpcProvider(provideRpc);
-		const feeData = await jsonRpcProvider.getFeeData();
-		let maxFeePerGas: bigint;
-		let maxPriorityFeePerGas: bigint;
-
-		if (feeData.maxFeePerGas != null && feeData.maxPriorityFeePerGas != null) {
-			maxFeePerGas = BigInt(Math.ceil(Number(feeData.maxFeePerGas) * gasLevel));
-			maxPriorityFeePerGas = BigInt(Math.ceil(Number(feeData.maxPriorityFeePerGas) * gasLevel));
-		} else if (feeData.gasPrice != null) {
-			maxFeePerGas = BigInt(Math.ceil(Number(feeData.gasPrice) * gasLevel));
-			maxPriorityFeePerGas = maxFeePerGas;
-		} else {
-			maxFeePerGas = BigInt(Math.ceil(1000000000 * gasLevel));
-			maxPriorityFeePerGas = maxFeePerGas;
-		}
-
-		if (maxFeePerGas === 0n) {
-			maxFeePerGas = 1n;
-		}
-		if (maxPriorityFeePerGas === 0n) {
-			maxPriorityFeePerGas = 1n;
-		}
-
-		return [maxFeePerGas, maxPriorityFeePerGas];
-	} catch (err) {
-		const error = ensureError(err);
-
-		throw new AbstractionKitError("BAD_DATA", "fetching gas prices from node failed.", {
-			cause: error,
-		});
-	}
+	return JsonRpcNode.from(rpc).getEntryPointNonce(entryPoint, account, key);
 }
 
 /**
@@ -640,227 +559,24 @@ export type DepositInfo = {
 };
 
 /**
- * Get the deposit balance of an address in the EntryPoint contract.
- *
- * @param nodeRpcUrl - Ethereum JSON-RPC node URL
- * @param address - Address to query the deposit for
- * @param entrypointAddress - EntryPoint contract address
- * @returns The deposit balance as a bigint
- */
-export async function getBalanceOf(
-	nodeRpcUrl: string,
-	address: string,
-	entrypointAddress: string,
-): Promise<bigint> {
-	const depositInfo = await getDepositInfo(nodeRpcUrl, address, entrypointAddress);
-	return depositInfo.deposit;
-}
-
-/**
- * Get the full deposit info of an address from the EntryPoint contract.
- *
- * @param nodeRpcUrl - Ethereum JSON-RPC node URL
- * @param address - Address to query
- * @param entrypointAddress - EntryPoint contract address
- * @returns DepositInfo with deposit, staked, stake, unstakeDelaySec, withdrawTime
- */
-export async function getDepositInfo(
-	nodeRpcUrl: string,
-	address: string,
-	entrypointAddress: string,
-): Promise<DepositInfo> {
-	const getDepositInfoSelector = "0x5287ce12"; //"getDepositInfo(address)"
-	const getDepositInfoCallData = createCallData(getDepositInfoSelector, ["address"], [address]);
-
-	const params = {
-		from: "0x0000000000000000000000000000000000000000",
-		to: entrypointAddress,
-		data: getDepositInfoCallData,
-	};
-
-	try {
-		const depositInfoRequestResult = await sendEthCallRequest(nodeRpcUrl, params, "latest");
-
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const decodedCalldata = abiCoder.decode(
-			["uint256", "bool", "uint112", "uint32", "uint48"],
-			depositInfoRequestResult,
-		);
-
-		if (decodedCalldata.length === 5) {
-			try {
-				return {
-					deposit: BigInt(decodedCalldata[0]),
-					staked: Boolean(decodedCalldata[1]),
-					stake: BigInt(decodedCalldata[2]),
-					unstakeDelaySec: BigInt(decodedCalldata[3]),
-					withdrawTime: BigInt(decodedCalldata[4]),
-				};
-			} catch (err) {
-				const error = ensureError(err);
-
-				throw new AbstractionKitError("BAD_DATA", "getDepositInfo returned ill formed data", {
-					cause: error,
-				});
-			}
-		} else {
-			throw new AbstractionKitError("BAD_DATA", "getDepositInfo returned ill formed data", {
-				context: JSON.stringify(decodedCalldata),
-			});
-		}
-	} catch (err) {
-		const error = ensureError(err);
-
-		throw new AbstractionKitError("BAD_DATA", "getDepositInfo failed", {
-			cause: error,
-		});
-	}
-}
-
-type EthCallTransaction = {
-	from?: string;
-	to: string;
-	gas?: bigint;
-	gasPrice?: bigint;
-	value?: bigint;
-	data?: string;
-};
-
-/**
- * Send an eth_call JSON-RPC request with optional state overrides.
- *
- * @param nodeRpcUrl - Ethereum JSON-RPC node URL
- * @param ethCallTransaction - The call transaction parameters
- * @param blockNumber - Block number or "latest"
- * @param stateOverrides - Optional state overrides for the call
- * @returns The call result as a hex string
- */
-export async function sendEthCallRequest(
-	nodeRpcUrl: string,
-	ethCallTransaction: EthCallTransaction,
-	blockNumber: string | bigint,
-	stateOverrides?: object,
-): Promise<string> {
-	let params = [];
-	if (stateOverrides == null) {
-		params = [ethCallTransaction, blockNumber];
-	} else {
-		params = [ethCallTransaction, blockNumber, stateOverrides];
-	}
-
-	try {
-		const data = await sendJsonRpcRequest(nodeRpcUrl, "eth_call", params);
-
-		if (typeof data === "string") {
-			try {
-				return data;
-			} catch (err) {
-				const error = ensureError(err);
-
-				throw new AbstractionKitError("BAD_DATA", "eth_call returned ill formed data", {
-					cause: error,
-				});
-			}
-		} else {
-			throw new AbstractionKitError("BAD_DATA", "eth_call returned ill formed data", {
-				context: JSON.stringify(data),
-			});
-		}
-	} catch (err) {
-		const error = ensureError(err);
-
-		throw new AbstractionKitError("BAD_DATA", "eth_call failed", {
-			cause: error,
-		});
-	}
-}
-
-/**
- * Send an eth_getCode JSON-RPC request to check deployed bytecode.
- *
- * @param nodeRpcUrl - Ethereum JSON-RPC node URL
- * @param contractAddress - Contract address to query
- * @param blockNumber - Block number or "latest"
- * @returns The deployed bytecode as a hex string
- */
-export async function sendEthGetCodeRequest(
-	nodeRpcUrl: string,
-	contractAddress: string,
-	blockNumber: string | bigint,
-): Promise<string> {
-	const params = [contractAddress, blockNumber];
-
-	try {
-		const data = await sendJsonRpcRequest(nodeRpcUrl, "eth_getCode", params);
-
-		if (typeof data === "string") {
-			try {
-				return data;
-			} catch (err) {
-				const error = ensureError(err);
-
-				throw new AbstractionKitError("BAD_DATA", "eth_getCode returned ill formed data", {
-					cause: error,
-				});
-			}
-		} else {
-			throw new AbstractionKitError("BAD_DATA", "eth_getCode returned ill formed data", {
-				context: JSON.stringify(data),
-			});
-		}
-	} catch (err) {
-		const error = ensureError(err);
-
-		throw new AbstractionKitError("BAD_DATA", "eth_getCode failed", {
-			cause: error,
-		});
-	}
-}
-
-/**
- * Check if an address is delegated via EIP-7702 and return the delegatee address.
- * EIP-7702 delegated accounts have bytecode in the format `0xef0100` + 20-byte address.
- *
- * @param accountAddress - The address to check
- * @param providerRpc - Ethereum JSON-RPC node URL
- * @returns The checksummed delegatee address, or `null` if not delegated
- */
-export async function getDelegatedAddress(
-	accountAddress: string,
-	providerRpc: string,
-): Promise<string | null> {
-	const code = (await sendEthGetCodeRequest(providerRpc, accountAddress, "latest")).toLowerCase();
-	if (code.length === 48 && code.startsWith("0xef0100")) {
-		return getAddress(`0x${code.slice(8)}`);
-	}
-	return null;
-}
-
-/**
- * Fetch gas prices using either the Polygon Gas Station or a standard JSON-RPC node.
- *
- * @param providerRpc - Ethereum JSON-RPC node URL (used if polygonGasStation is null)
- * @param polygonGasStation - Polygon chain to use for gas station (takes priority)
- * @param gasLevel - Gas price multiplier (default: GasOption.Medium)
- * @returns A tuple of [maxFeePerGas, maxPriorityFeePerGas] as bigints
+ * @internal
+ * Internal dispatcher: routes to the Polygon Gas Station when a chain is
+ * provided, otherwise delegates to {@link JsonRpcNode.getFeeData}. Used by
+ * the account classes when assembling base UserOperation gas fields.
  */
 export async function handlefetchGasPrice(
-	providerRpc: string | undefined,
+	providerRpc: string | Transport | JsonRpcNode | undefined,
 	polygonGasStation: PolygonChain | undefined,
 	gasLevel: GasOption = GasOption.Medium,
 ): Promise<[bigint, bigint]> {
-	let maxFeePerGas: bigint;
-	let maxPriorityFeePerGas: bigint;
-
 	if (polygonGasStation != null) {
-		[maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPricePolygon(polygonGasStation, gasLevel);
-	} else if (providerRpc != null) {
-		[maxFeePerGas, maxPriorityFeePerGas] = await fetchGasPrice(providerRpc, gasLevel);
-	} else {
-		throw new AbstractionKitError(
-			"BAD_DATA",
-			"providerRpc can't be null if maxFeePerGas and " + "maxPriorityFeePerGas are not overridden",
-		);
+		return fetchGasPricePolygon(polygonGasStation, gasLevel);
 	}
-	return [maxFeePerGas, maxPriorityFeePerGas];
+	if (providerRpc != null) {
+		return JsonRpcNode.from(providerRpc).getFeeData(gasLevel);
+	}
+	throw new AbstractionKitError(
+		"BAD_DATA",
+		"providerRpc can't be null if maxFeePerGas and maxPriorityFeePerGas are not overridden",
+	);
 }

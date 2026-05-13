@@ -826,11 +826,12 @@ describe('Calibur7702Account', () => {
         ).rejects.toThrow("providerRpc");
     });
 
-    test('getDelegatedAddress is exported', () => {
-        expect(typeof ak.getDelegatedAddress).toBe('function');
+    test('JsonRpcNode.getDelegatedAddress is exported on the node class', () => {
+        const node = new ak.JsonRpcNode('http://localhost');
+        expect(typeof node.getDelegatedAddress).toBe('function');
     });
 
-    // ─── getDelegatedAddress parsing ─────────────────────────────────────
+    // ─── JsonRpcNode.getDelegatedAddress parsing ─────────────────────────
 
     const originalFetch = global.fetch;
 
@@ -846,23 +847,29 @@ describe('Calibur7702Account', () => {
         global.fetch = originalFetch;
     });
 
-    test('getDelegatedAddress returns address for valid EIP-7702 delegation code', async () => {
+    test('JsonRpcNode.getDelegatedAddress returns address for valid EIP-7702 delegation code', async () => {
         const delegatee = '0x000000009B1D0aF20D8C6d0A44e162d11F9b8f00';
         const code = '0xef0100' + delegatee.slice(2).toLowerCase();
         mockFetchWithCode(code);
-        const result = await ak.getDelegatedAddress('0x1111111111111111111111111111111111111111', 'http://localhost');
+        const result = await new ak.JsonRpcNode('http://localhost').getDelegatedAddress(
+            '0x1111111111111111111111111111111111111111',
+        );
         expect(result.toLowerCase()).toBe(delegatee.toLowerCase());
     });
 
-    test('getDelegatedAddress returns null for non-delegated EOA (0x)', async () => {
+    test('JsonRpcNode.getDelegatedAddress returns null for non-delegated EOA (0x)', async () => {
         mockFetchWithCode('0x');
-        const result = await ak.getDelegatedAddress('0x1111111111111111111111111111111111111111', 'http://localhost');
+        const result = await new ak.JsonRpcNode('http://localhost').getDelegatedAddress(
+            '0x1111111111111111111111111111111111111111',
+        );
         expect(result).toBeNull();
     });
 
-    test('getDelegatedAddress returns null for regular contract code', async () => {
+    test('JsonRpcNode.getDelegatedAddress returns null for regular contract code', async () => {
         mockFetchWithCode('0x6080604052');
-        const result = await ak.getDelegatedAddress('0x1111111111111111111111111111111111111111', 'http://localhost');
+        const result = await new ak.JsonRpcNode('http://localhost').getDelegatedAddress(
+            '0x1111111111111111111111111111111111111111',
+        );
         expect(result).toBeNull();
     });
 

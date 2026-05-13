@@ -1,8 +1,10 @@
-import { getAddress, TypedDataEncoder, Wallet } from "ethers";
-import { EIP712_MULTI_CHAIN_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants";
-import { invokeSigner, pickScheme } from "src/signer/negotiate";
-import type { Signer as AkSigner, MultiOpSignContext, SignContext } from "src/signer/types";
-import type { MetaTransaction, OnChainIdentifierParamsType, UserOperationV9 } from "../../types";
+import {getAddress, TypedDataEncoder, Wallet} from "ethers";
+import type {Bundler} from "src/Bundler";
+import {EIP712_MULTI_CHAIN_OPERATIONS_TYPE, ENTRYPOINT_V9} from "src/constants";
+import {invokeSigner, pickScheme} from "src/signer/negotiate";
+import type {MultiOpSignContext, SignContext, Signer as AkSigner} from "src/signer/types";
+import type {JsonRpcNode, Transport} from "src/transport";
+import type {MetaTransaction, OnChainIdentifierParamsType, UserOperationV9} from "../../types";
 import {
 	DEFAULT_WEB_AUTHN_DAIMO_VERIFIER_V_0_2_1,
 	DEFAULT_WEB_AUTHN_PRECOMPILE_RIP_7951,
@@ -11,8 +13,8 @@ import {
 	DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE_V_0_2_1,
 	DEFAULT_WEB_AUTHN_SIGNER_SINGLETON_V_0_2_1,
 } from "./constants";
-import { generateMerkleProofs } from "./MerkleTree";
-import { SafeAccount } from "./SafeAccount";
+import {generateMerkleProofs} from "./MerkleTree";
+import {SafeAccount} from "./SafeAccount";
 import type {
 	CreateUserOperationV9Overrides,
 	InitCodeOverrides,
@@ -26,8 +28,8 @@ import type {
 	SignerSignaturePair,
 	UserOperationToSign,
 	UserOperationToSignWithOverrides,
-	WebAuthnSignatureOverrides,
 	WebauthnPublicKey,
+	WebAuthnSignatureOverrides,
 } from "./types";
 
 /**
@@ -373,8 +375,8 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 */
 	public async createUserOperation(
 		transactions: MetaTransaction[],
-		providerRpc?: string,
-		bundlerRpc?: string,
+		providerRpc?: string | Transport | JsonRpcNode,
+		bundlerRpc?: string | Transport | Bundler,
 		overrides: CreateUserOperationV9Overrides = {},
 	): Promise<UserOperationV9> {
 		const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
@@ -982,7 +984,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	}
 
 	public static async verifyWebAuthnSignatureForMessageHash(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		signer: WebauthnPublicKey,
 		messageHash: string,
 		signature: string,

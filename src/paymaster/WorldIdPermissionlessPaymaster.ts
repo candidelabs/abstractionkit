@@ -1,8 +1,9 @@
-import { AbiCoder, keccak256, solidityPacked } from "ethers";
-import { Bundler } from "src/Bundler";
-import { ENTRYPOINT_V7, ENTRYPOINT_V8 } from "src/constants";
-import type { StateOverrideSet, UserOperationV7, UserOperationV8 } from "../types";
-import { Paymaster } from "./Paymaster";
+import {AbiCoder, keccak256, solidityPacked} from "ethers";
+import {Bundler} from "src/Bundler";
+import {ENTRYPOINT_V7, ENTRYPOINT_V8} from "src/constants";
+import type {Transport} from "src/transport";
+import type {StateOverrideSet, UserOperationV7, UserOperationV8} from "../types";
+import {Paymaster} from "./Paymaster";
 
 /**
  * A paymaster that sponsors UserOperations for accounts verified through
@@ -34,7 +35,7 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 	 */
 	async createPaymasterUserOperation(
 		userOperation: UserOperationV8,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		nullifierHash: bigint,
 		root: bigint,
 		proof: string,
@@ -48,7 +49,7 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 	): Promise<UserOperationV8>;
 	async createPaymasterUserOperation(
 		userOperation: UserOperationV7,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		nullifierHash: bigint,
 		root: bigint,
 		proof: string,
@@ -62,7 +63,7 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 	): Promise<UserOperationV7>;
 	async createPaymasterUserOperation(
 		userOperation: UserOperationV8 | UserOperationV7,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		nullifierHash: bigint,
 		root: bigint,
 		proof: string,
@@ -121,7 +122,7 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 		// set preVerificationGas to zero to force re-estimation
 		userOperation.preVerificationGas = 0n;
 
-		const bundler = new Bundler(bundlerRpc);
+		const bundler = Bundler.from(bundlerRpc);
 		const estimation = await bundler.estimateUserOperationGas(
 			userOperation,
 			entrypointAddress as string,

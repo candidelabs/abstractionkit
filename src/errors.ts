@@ -1,16 +1,24 @@
 //credits:https://medium.com/with-orus/the-5-commandments-of-clean-error-handling-in-typescript-93a9cbdf1af5
 
-import type { Dictionary } from "./types";
+import type {Dictionary} from "./types";
 
 /**
  * General SDK error codes for non-bundler, non-RPC failures.
+ *
+ * - `NODE_ERROR` — outer code thrown by {@link JsonRpcNode} when an underlying
+ *   RPC call fails. The specific JSON-RPC code (when known) appears in
+ *   `.cause` as a nested {@link AbstractionKitError} carrying a
+ *   {@link JsonRpcErrorCode}.
+ * - `BAD_DATA` — reserved for malformed responses (the RPC call returned, but
+ *   the data shape was wrong). Not used for RPC failures themselves.
  */
 export type BasicErrorCode =
 	| "UNKNOWN_ERROR"
 	| "TIMEOUT"
 	| "BAD_DATA"
 	| "BUNDLER_ERROR"
-	| "PAYMASTER_ERROR";
+	| "PAYMASTER_ERROR"
+	| "NODE_ERROR";
 
 /**
  * ERC-4337 bundler-specific error codes, mapped from JSON-RPC error numbers

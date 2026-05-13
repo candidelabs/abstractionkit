@@ -1,5 +1,63 @@
 # Changelog
 
+## [UNRELEASED]
+
+### New Features
+
+- **Pluggable `Transport` abstraction.** All SDK ↔ bundler / paymaster / node traffic now flows through a single swappable seam, so users can compose fallback, retry, hedging, logging, custom auth, non-HTTP backends (WebSocket / IPC / in-process mocks), or pass an EIP-1193 wallet provider (`window.ethereum`, WalletConnect, viem `WalletClient`, ethers `Eip1193Provider`-shaped objects) without forking the SDK or writing wrapper code. The interface is shaped exactly like EIP-1193:
+  ```ts
+  interface Transport {
+    request<T = unknown>(
+      args: { method: string; params?: readonly unknown[] | object },
+      options?: { signal?: AbortSignal },
+    ): Promise<T>;
+  }
+  ```
+  Five new public types are exported from the package root: `Transport`, `EventfulTransport` (narrowable subtype for pub/sub-capable backends, with `isEventfulTransport` guard), `BaseRpcTransport` (abstract base that handles JSON-RPC framing, id assignment, and standard error parsing so subclasses implement only the byte-level `send` hook), `HttpTransport` (the default; wraps any URL string, supports a custom `fetch`, static `headers`, and `AbortSignal`), and `JsonRpcNode` (small high-level service class for the ~10 node RPC methods abstractionkit reads). Plus `RequestArgs`, `RequestOptions`, `ProviderRpcError`, `TransportRpcError`, `HttpTransportOptions`, `JsonRpcEnvelope`, `EthCallTransaction`, and `isHttpTransport`.
+- **`JsonRpcNode` service class.** Intentionally not a general Ethereum client — only the methods abstractionkit actually reads, named to match viem/ethers conventions where applicable: `chainId()`, `blockNumber()`, `getCode()`, `call()`, `getTransactionCount()`, `getFeeData()`, `getDelegatedAddress()`, `getEntryPointNonce()`, `getEntryPointDeposit()`, `getEntryPointDepositInfo()`, plus a `request()` pass-through so a `JsonRpcNode` is itself a `Transport`. `getFeeData()` is fully re-implemented on the new transport — no more `ethers.JsonRpcProvider` dependency under the hood.
+- **`Bundler`, `CandidePaymaster`, `Erc7677Paymaster` constructors widen to `string | Transport`.** Existing `new Bundler(url)` / `new CandidePaymaster(url)` / `new Erc7677Paymaster(url)` calls compile and behave identically. Each class now implements `Transport` itself (delegates `.request()` to the underlying transport) so it can be slotted into any transport position. URL-derived inference is preserved for string inputs (`CandidePaymaster` infers `chainId` from the Candide path; `Erc7677Paymaster` auto-detects `provider === "pimlico" | "candide"` from the hostname); pass `options.provider` explicitly to override when constructing from a `Transport`.
+- **Static `.from(input)` helpers on every service class.** `Bundler.from(...)`, `CandidePaymaster.from(...)`, `Erc7677Paymaster.from(...)`, `JsonRpcNode.from(...)` accept `string | Transport | <Self>` and return the input by reference when it's already an instance of that class (no re-wrapping). Used at every public-API widening site so a user's pre-configured `Bundler` (with retry, logging, etc.) is reused for both `sendUserOperation` and the response's `included()` polling.
+- **All `providerRpc?` / `bundlerRpc?` / `nodeRpcUrl` parameters widen.** Every public method that accepted a URL string for a node or bundler now accepts `string | Transport | JsonRpcNode` / `string | Transport | Bundler`. Affects `SafeAccount` + subclasses (`SafeAccountV0_2_0`, `SafeAccountV0_3_0`, `SafeAccountV1_5_0_M_0_3_0`, `SafeMultiChainSigAccountV1`), `Simple7702Account`, `Simple7702AccountV09`, `Calibur7702Account`, `AllowanceModule`, `SocialRecoveryModule`, and the paymaster classes' `createSponsorPaymasterUserOperation` / `createTokenPaymasterUserOperation` / `createPaymasterUserOperation` methods. EIP-7702 paths in `Simple7702Account` and `Calibur7702Account` route through `JsonRpcNode` like every other node call.
+- **`AbortSignal` support via per-request options bag.** `Transport.request` accepts `options?: { signal?: AbortSignal }`. `HttpTransport` forwards the signal to `fetch`. The options-bag shape leaves room to add `timeoutMs`, `headers`, `retryHint`, etc. in future minor releases without further widening.
+- **`NODE_ERROR` added to `BasicErrorCode`** for failures originating in `JsonRpcNode`. Matches the existing double-wrap shape on `Bundler` (`BUNDLER_ERROR`) and the paymaster classes (`PAYMASTER_ERROR`): outer code is the service-level vocabulary; the specific JSON-RPC code (from the now-active `JsonRpcErrorDict`) is nested in `.cause`. `BAD_DATA` is reserved for malformed-response cases (the RPC succeeded but the data shape was wrong) — a distinction users couldn't make before.
+- **`sendJsonRpcRequest` becomes service-neutral.** The previous implementation applied `BundlerErrorCodeDict` translation to every call regardless of which service was being addressed — a layering inversion. It now throws an EIP-1193-shaped `TransportRpcError` on RPC errors, and each high-level service (`Bundler`, `CandidePaymaster`, `Erc7677Paymaster`, `JsonRpcNode`) owns its own domain translation. External callers see no API change; the function stays a public top-level export with its full 5-arg signature (URL string inputs preserve the historical `headers` and `paramsKeyName` arguments; `Transport` / `JsonRpcNode` inputs delegate to `.request()`).
+- **`Tenderly` helpers untied from `sendJsonRpcRequest`.** `callTenderlySimulateBundle` was the only caller using `sendJsonRpcRequest`'s `paramsKeyName` override, which had forced the helper to special-case `"simulation_results"` response shapes. Tenderly now uses an inline `fetch` call; no public API change.
+
+### Breaking Changes
+
+- **`bundler.rpcUrl` / `paymaster.rpcUrl` field removed.** The `readonly rpcUrl: string` field on `Bundler`, `CandidePaymaster`, and `Erc7677Paymaster` is replaced by `readonly transport: Transport`. Migration:
+  ```ts
+  // Before
+  const url = bundler.rpcUrl;
+
+  // After
+  import { isHttpTransport } from "abstractionkit";
+  const url = isHttpTransport(bundler.transport) ? bundler.transport.url : null;
+  ```
+  Keeping `rpcUrl` made no sense once the input could be a non-HTTP `Transport` — the field would have been `undefined` for `Transport` inputs and silently misleading.
+- **Top-level helpers removed from the public API**: `fetchGasPrice`, `getBalanceOf`, `getDepositInfo`, `getDelegatedAddress`. Each was a thin URL-string wrapper around what is now a `JsonRpcNode` method (in some cases renamed for clarity). Migration:
+  ```ts
+  // Before
+  import { fetchGasPrice, getBalanceOf, getDepositInfo, getDelegatedAddress } from "abstractionkit";
+  const [maxFee, priority] = await fetchGasPrice(nodeUrl, GasOption.Medium);
+  const deposit = await getBalanceOf(nodeUrl, address, entryPoint);
+  const info = await getDepositInfo(nodeUrl, address, entryPoint);
+  const delegatee = await getDelegatedAddress(eoaAddress, nodeUrl);
+
+  // After
+  import { JsonRpcNode, GasOption } from "abstractionkit";
+  const node = new JsonRpcNode(nodeUrl);
+  const [maxFee, priority] = await node.getFeeData(GasOption.Medium);
+  const deposit = await node.getEntryPointDeposit(address, entryPoint);
+  const info = await node.getEntryPointDepositInfo(address, entryPoint);
+  const delegatee = await node.getDelegatedAddress(eoaAddress);
+  ```
+  The `DepositInfo` type continues to be exported from the package root. `fetchAccountNonce` and `sendJsonRpcRequest` are explicitly **kept** as top-level exports (both have their first parameter widened to `string | Transport | JsonRpcNode`); they're the only loose helpers preserved.
+
+### Bug Fixes
+
+- **`JsonRpcNode.getFeeData` preserves `bigint` precision above `Number.MAX_SAFE_INTEGER`.** The `gasLevel` multiplier was previously applied via `BigInt(Math.ceil(Number(gasPrice) * gasLevel))`, which silently truncated values above 2^53 wei (the largest integer JS doubles can represent exactly). For gas-price values in that range — possible on test networks, fork environments, or anomalous mainnet spikes — the bottom bits of the returned `maxFeePerGas` / `maxPriorityFeePerGas` were lost. The multiplier is now applied entirely in `BigInt` space (the `gasLevel` is scaled to three-decimal integer precision, multiplied, then ceiling-divided down), preserving the original `Math.ceil(...)` rounding semantics on small values while staying exact for arbitrarily large ones. The previous behavior of `fetchGasPrice` (via ethers' `JsonRpcProvider`) had the same bug; it's gone with the helper's removal.
+
 ## 0.3.7
 
 ### Fixes

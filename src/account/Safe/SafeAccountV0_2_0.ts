@@ -1,14 +1,11 @@
-import { ENTRYPOINT_V6 } from "src/constants";
-import type { Signer as AkSigner, SignContext } from "src/signer/types";
-import { createCallData } from "src/utils";
-import type {
-	MetaTransaction,
-	OnChainIdentifierParamsType,
-	StateOverrideSet,
-	UserOperationV6,
-} from "../../types";
-import { SafeAccount } from "./SafeAccount";
-import { SafeAccountV0_3_0 } from "./SafeAccountV0_3_0";
+import type {Bundler} from "src/Bundler";
+import {ENTRYPOINT_V6} from "src/constants";
+import type {SignContext, Signer as AkSigner} from "src/signer/types";
+import type {JsonRpcNode, Transport} from "src/transport";
+import {createCallData} from "src/utils";
+import type {MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet, UserOperationV6,} from "../../types";
+import {SafeAccount} from "./SafeAccount";
+import {SafeAccountV0_3_0} from "./SafeAccountV0_3_0";
 import type {
 	CreateUserOperationV6Overrides,
 	InitCodeOverrides,
@@ -324,8 +321,8 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 */
 	public async createUserOperation(
 		transactions: MetaTransaction[],
-		providerRpc?: string,
-		bundlerRpc?: string,
+		providerRpc?: string | Transport | JsonRpcNode,
+		bundlerRpc?: string | Transport | Bundler,
 		overrides: CreateUserOperationV6Overrides = {},
 	): Promise<UserOperationV6> {
 		const [userOperation, factoryAddress, factoryData] =
@@ -369,7 +366,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 * @returns Array of MetaTransactions for the migration
 	 */
 	public async createMigrateToSafeAccountV0_3_0MetaTransactions(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		overrides: {
 			safeV06ModuleAddress?: string;
 			safeV07ModuleAddress?: string;
@@ -427,7 +424,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 */
 	public async estimateUserOperationGas(
 		userOperation: UserOperationV6,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
 			dummySignerSignaturePairs?: SignerSignaturePair[];

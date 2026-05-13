@@ -1,5 +1,5 @@
-import { AbiCoder } from "ethers";
-import { AbstractionKitError } from "./errors";
+import {AbiCoder} from "ethers";
+import {AbstractionKitError} from "./errors";
 import type {
 	SingleTransactionTenderlySimulationResult,
 	TenderlySimulationResult,
@@ -8,8 +8,8 @@ import type {
 	UserOperationV8,
 	UserOperationV9,
 } from "./types";
-import { createUserOperationHash, sendJsonRpcRequest } from "./utils";
-import type { Authorization7702Hex } from "./utils7702";
+import {createUserOperationHash} from "./utils";
+import type {Authorization7702Hex} from "./utils7702";
 
 /**
  * State override mapping for Tenderly simulations.
@@ -847,11 +847,32 @@ export async function callTenderlySimulateBundle(
 		"Content-Type": "application/json",
 		"X-Access-Key": tenderlyAccessKey,
 	};
-	return (await sendJsonRpcRequest(
-		tenderlyUrl,
-		"tenderly_simulateBundle",
-		simulations,
+	const body = JSON.stringify(
+		{
+			method: "tenderly_simulateBundle",
+			simulations,
+			id: Date.now(),
+			jsonrpc: "2.0",
+		},
+		(_key, value) =>
+			// biome-ignore lint/suspicious/noExplicitAny: JSON.stringify replacer
+			typeof value === "bigint" ? `0x${(value as bigint).toString(16)}` : (value as any),
+	);
+	const response = await fetch(tenderlyUrl, {
+		method: "POST",
 		headers,
-		"simulations",
-	)) as TenderlySimulationResult;
+		body,
+		redirect: "follow",
+	});
+	const json = (await response.json()) as {
+		simulation_results?: TenderlySimulationResult;
+		error?: { code: number; message: string };
+	};
+	if (json.simulation_results != null) {
+		return json.simulation_results;
+	}
+	throw new AbstractionKitError("TENDERLY_SIMULATION_ERROR", "tenderly_simulateBundle failed", {
+		errno: json.error?.code,
+		context: JSON.stringify(json),
+	});
 }
