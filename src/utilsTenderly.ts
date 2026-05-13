@@ -1,5 +1,5 @@
 import {AbiCoder} from "ethers";
-import {AbstractionKitError} from "./errors";
+import {AbstractionKitError, ensureError} from "./errors";
 import type {
 	SingleTransactionTenderlySimulationResult,
 	TenderlySimulationResult,
@@ -858,16 +858,50 @@ export async function callTenderlySimulateBundle(
 			// biome-ignore lint/suspicious/noExplicitAny: JSON.stringify replacer
 			typeof value === "bigint" ? `0x${(value as bigint).toString(16)}` : (value as any),
 	);
-	const response = await fetch(tenderlyUrl, {
-		method: "POST",
-		headers,
-		body,
-		redirect: "follow",
-	});
-	const json = (await response.json()) as {
+	let response: Response;
+	try {
+		response = await fetch(tenderlyUrl, {
+			method: "POST",
+			headers,
+			body,
+			redirect: "follow",
+		});
+	} catch (err) {
+		const e = ensureError(err);
+		throw new AbstractionKitError(
+			"TENDERLY_NETWORK_ERROR",
+			`tenderly_simulateBundle network error: ${e.message}`,
+			{ cause: e },
+		);
+	}
+
+	if (!response.ok) {
+		throw new AbstractionKitError(
+			"TENDERLY_HTTP_ERROR",
+			`tenderly_simulateBundle HTTP ${response.status}: ${response.statusText}`,
+			{
+				errno: response.status,
+				context: { status: response.status, statusText: response.statusText },
+			},
+		);
+	}
+
+	const responseText = await response.text();
+	let json: {
 		simulation_results?: TenderlySimulationResult;
 		error?: { code: number; message: string };
 	};
+	try {
+		json = JSON.parse(responseText);
+	} catch (err) {
+		const e = ensureError(err);
+		throw new AbstractionKitError(
+			"TENDERLY_INVALID_JSON",
+			`tenderly_simulateBundle returned invalid JSON: ${e.message}`,
+			{ cause: e, context: { responseText } },
+		);
+	}
+
 	if (json.simulation_results != null) {
 		return json.simulation_results;
 	}

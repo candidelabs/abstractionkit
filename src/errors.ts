@@ -47,7 +47,10 @@ export type JsonRpcErrorCode =
 	| "INVALID_PARAMS"
 	| "INTERNAL_ERROR"
 	| "SERVER_ERROR"
-	| "TENDERLY_SIMULATION_ERROR";
+	| "TENDERLY_SIMULATION_ERROR"
+	| "TENDERLY_HTTP_ERROR"
+	| "TENDERLY_INVALID_JSON"
+	| "TENDERLY_NETWORK_ERROR";
 
 /**
  * Maps JSON-RPC numeric error codes to human-readable {@link BundlerErrorCode} values.
