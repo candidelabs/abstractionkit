@@ -300,12 +300,14 @@ export class JsonRpcNode implements Transport {
 	 *
 	 * @param entryPoint - EntryPoint contract address
 	 * @param account - Smart account address
-	 * @param key - Nonce key (default 0). Different keys allow parallel nonce channels.
+	 * @param key - Nonce key as a `bigint` (default `0n`). Different keys allow
+	 *   parallel nonce channels. `bigint` so the full `uint192` range is
+	 *   representable (a JS `number` would cap at 2^53−1).
 	 */
 	async getEntryPointNonce(
 		entryPoint: string,
 		account: string,
-		key: number = 0,
+		key: bigint = 0n,
 		options?: RequestOptions,
 	): Promise<bigint> {
 		// getNonce(address,uint192) selector

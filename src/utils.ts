@@ -470,7 +470,7 @@ export async function fetchAccountNonce(
 	account: string,
 	key: number = 0,
 ): Promise<bigint> {
-	return JsonRpcNode.from(rpc).getEntryPointNonce(entryPoint, account, key);
+	return JsonRpcNode.from(rpc).getEntryPointNonce(entryPoint, account, BigInt(key));
 }
 
 /**
