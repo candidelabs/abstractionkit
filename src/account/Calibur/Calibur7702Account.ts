@@ -9,8 +9,8 @@ import {
 import { AbstractionKitError } from "src/errors";
 import type { PrependTokenPaymasterApproveAccount } from "src/paymaster/types";
 import { invokeSigner, pickScheme } from "src/signer/negotiate";
-import type { Signer as AkSigner, SignContext, SigningScheme } from "src/signer/types";
-import type { JsonRpcResult, UserOperationV8 } from "src/types";
+import type { Signer as AkSigner, SignContext, SigningScheme, TypedData } from "src/signer/types";
+import type { JsonRpcResult, UserOperationV8, UserOperationV9 } from "src/types";
 import {
 	type Authorization7702Hex,
 	bigintToHex,
@@ -23,6 +23,8 @@ import {
 	fetchAccountNonce,
 	getDelegatedAddress,
 	getFunctionSelector,
+	getUserOperationEip712DataV8V9,
+	getUserOperationEip712HashV8V9,
 	handlefetchGasPrice,
 	sendJsonRpcRequest,
 } from "../../utils";
@@ -201,6 +203,55 @@ export class Calibur7702Account
 	 */
 	public getUserOperationHash(userOperation: UserOperationV8, chainId: bigint): string {
 		return createUserOperationHash(userOperation, this.entrypointAddress, chainId);
+	}
+
+	/**
+	 * Build the EIP-712 typed data payload for a UserOperation under the
+	 * EntryPoint v0.8 / v0.9 domain. Useful for wallets that can only sign
+	 * typed data (`eth_signTypedData_v4`) — the digest of the returned payload
+	 * equals the `userOpHash` ({@link getUserOperationHash}), so a typed-data
+	 * signature over it produces a wrapped Calibur signature that validates
+	 * against the same hash on-chain.
+	 *
+	 * Intended for the secp256k1 key path (root key or any registered
+	 * secondary secp256k1 key), since `eth_signTypedData_v4` only produces
+	 * secp256k1 signatures. P-256 and WebAuthn-P256 keys sign with their
+	 * own primitives — for those, use {@link getUserOperationEip712Hash}
+	 * (the digest), which is the value-to-be-signed regardless of key type.
+	 *
+	 * @param userOperation - Unsigned UserOperation to wrap
+	 * @param chainId - Target chain ID
+	 * @returns EIP-712 {@link TypedData} payload ready for `signTypedData`
+	 * @throws {AbstractionKitError} if this account targets an EntryPoint
+	 *   version other than v0.8 / v0.9.
+	 */
+	public getUserOperationEip712Data(
+		userOperation: UserOperationV8 | UserOperationV9,
+		chainId: bigint,
+	): TypedData {
+		return getUserOperationEip712DataV8V9(userOperation, this.entrypointAddress, chainId);
+	}
+
+	/**
+	 * Compute the EIP-712 digest of a UserOperation under the EntryPoint
+	 * v0.8 / v0.9 domain. For these EntryPoints this digest IS the
+	 * `userOpHash` ({@link getUserOperationHash}); the wrapped Calibur
+	 * signature is verified against this hash on-chain.
+	 *
+	 * Universal across Calibur key types: secp256k1 and P-256 keys sign
+	 * this digest directly, each with their own signing primitive.
+	 *
+	 * @param userOperation - Unsigned UserOperation to hash
+	 * @param chainId - Target chain ID
+	 * @returns The EIP-712 digest as a hex string
+	 * @throws {AbstractionKitError} if this account targets an EntryPoint
+	 *   version other than v0.8 / v0.9.
+	 */
+	public getUserOperationEip712Hash(
+		userOperation: UserOperationV8 | UserOperationV9,
+		chainId: bigint,
+	): string {
+		return getUserOperationEip712HashV8V9(userOperation, this.entrypointAddress, chainId);
 	}
 
 	// ─── CallData Encoding ───────────────────────────────────────────────

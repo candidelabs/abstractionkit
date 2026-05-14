@@ -1,6 +1,14 @@
-import { AbiCoder, getAddress, id, JsonRpcProvider, keccak256 } from "ethers";
+import {
+	AbiCoder,
+	getAddress,
+	id,
+	JsonRpcProvider,
+	keccak256,
+	TypedDataEncoder,
+} from "ethers";
 import { ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8, ENTRYPOINT_V9 } from "./constants";
 import { AbstractionKitError, BundlerErrorCodeDict, ensureError } from "./errors";
+import type { TypedData } from "./signer/types";
 import {
 	type AbiInputValue,
 	GasOption,
@@ -122,6 +130,36 @@ export function buildPackedInitCodeV8V9(useroperation: UserOperationV8 | UserOpe
 
 /**
  * @internal
+ * Pack `(verificationGasLimit, callGasLimit)` into a single `bytes32`
+ * (two uint128 values, big-endian). Matches the on-chain
+ * `PackedUserOperation.accountGasLimits` layout used by EntryPoint v0.7+.
+ */
+function packAccountGasLimits(verificationGasLimit: bigint, callGasLimit: bigint): string {
+	const abiCoder = AbiCoder.defaultAbiCoder();
+	return (
+		"0x" +
+		abiCoder.encode(["uint128"], [verificationGasLimit]).slice(34) +
+		abiCoder.encode(["uint128"], [callGasLimit]).slice(34)
+	);
+}
+
+/**
+ * @internal
+ * Pack `(maxPriorityFeePerGas, maxFeePerGas)` into a single `bytes32`
+ * (two uint128 values, big-endian). Matches the on-chain
+ * `PackedUserOperation.gasFees` layout used by EntryPoint v0.7+.
+ */
+function packGasFees(maxPriorityFeePerGas: bigint, maxFeePerGas: bigint): string {
+	const abiCoder = AbiCoder.defaultAbiCoder();
+	return (
+		"0x" +
+		abiCoder.encode(["uint128"], [maxPriorityFeePerGas]).slice(34) +
+		abiCoder.encode(["uint128"], [maxFeePerGas]).slice(34)
+	);
+}
+
+/**
+ * @internal
  * Reconstruct the packed `paymasterAndData` field from a UserOperation's
  * separate paymaster fields. Returns `0x` when no paymaster is set.
  *
@@ -174,6 +212,101 @@ export function buildPaymasterAndData(
 		}
 	}
 	return paymasterAndData;
+}
+
+/**
+ * Build the EIP-712 typed data payload for a UserOperation under the
+ * EntryPoint v0.8 / v0.9 domain. The digest of the returned payload equals
+ * the `userOpHash` from {@link createUserOperationHash}, so signing it via
+ * `signTypedData` produces a signature that validates against the same hash
+ * as raw ECDSA over the `userOpHash`.
+ *
+ * Shared by EIP-7702 accounts (Simple7702, Calibur). Earlier EntryPoints
+ * define the userOpHash differently and don't fit this typed-data shape.
+ *
+ * @param userOperation - Unsigned UserOperation to wrap
+ * @param entrypointAddress - The EntryPoint contract address (must be v0.8 or v0.9)
+ * @param chainId - Target chain ID (must match the chain that will validate the signature)
+ * @returns EIP-712 {@link TypedData} payload ready for `signTypedData`
+ * @throws {AbstractionKitError} if `entrypointAddress` is not v0.8 / v0.9
+ */
+export function getUserOperationEip712DataV8V9(
+	userOperation: UserOperationV8 | UserOperationV9,
+	entrypointAddress: string,
+	chainId: bigint,
+): TypedData {
+	const ep = entrypointAddress.toLowerCase();
+	const isV9 = ep === ENTRYPOINT_V9.toLowerCase();
+	if (ep !== ENTRYPOINT_V8.toLowerCase() && !isV9) {
+		throw new AbstractionKitError(
+			"BAD_DATA",
+			`getUserOperationEip712Data supports EntryPoint v0.8 / v0.9 only; ` +
+				`got ${entrypointAddress}. Earlier EntryPoints define the userOpHash ` +
+				`differently and require raw-hash signing.`,
+		);
+	}
+
+	const initCode = buildPackedInitCodeV8V9(userOperation);
+	const accountGasLimits = packAccountGasLimits(
+		userOperation.verificationGasLimit,
+		userOperation.callGasLimit,
+	);
+	const gasFees = packGasFees(userOperation.maxPriorityFeePerGas, userOperation.maxFeePerGas);
+	const paymasterAndData = buildPaymasterAndData(userOperation, isV9);
+
+	const types = {
+		PackedUserOperation: [
+			{ name: "sender", type: "address" },
+			{ name: "nonce", type: "uint256" },
+			{ name: "initCode", type: "bytes" },
+			{ name: "callData", type: "bytes" },
+			{ name: "accountGasLimits", type: "bytes32" },
+			{ name: "preVerificationGas", type: "uint256" },
+			{ name: "gasFees", type: "bytes32" },
+			{ name: "paymasterAndData", type: "bytes" },
+		],
+	};
+
+	return {
+		domain: {
+			name: "ERC4337",
+			version: "1",
+			chainId,
+			verifyingContract: entrypointAddress as `0x${string}`,
+		},
+		types,
+		primaryType: "PackedUserOperation",
+		message: {
+			sender: userOperation.sender,
+			nonce: userOperation.nonce,
+			initCode,
+			callData: userOperation.callData,
+			accountGasLimits,
+			preVerificationGas: userOperation.preVerificationGas,
+			gasFees,
+			paymasterAndData,
+		},
+	};
+}
+
+/**
+ * Compute the EIP-712 digest of a UserOperation under the EntryPoint
+ * v0.8 / v0.9 domain. For these EntryPoints this digest IS the
+ * `userOpHash` ({@link createUserOperationHash}).
+ *
+ * @param userOperation - Unsigned UserOperation to hash
+ * @param entrypointAddress - The EntryPoint contract address (must be v0.8 or v0.9)
+ * @param chainId - Target chain ID
+ * @returns The EIP-712 digest as a hex string
+ * @throws {AbstractionKitError} if `entrypointAddress` is not v0.8 / v0.9
+ */
+export function getUserOperationEip712HashV8V9(
+	userOperation: UserOperationV8 | UserOperationV9,
+	entrypointAddress: string,
+	chainId: bigint,
+): string {
+	const data = getUserOperationEip712DataV8V9(userOperation, entrypointAddress, chainId);
+	return TypedDataEncoder.hash(data.domain, data.types, data.message);
 }
 
 /**
@@ -234,16 +367,11 @@ export function createPackedUserOperationV7(useroperation: UserOperationV7): str
 		}
 	}
 
-	const accountGasLimits =
-		"0x" +
-		abiCoder.encode(["uint128"], [useroperation.verificationGasLimit]).slice(34) +
-		abiCoder.encode(["uint128"], [useroperation.callGasLimit]).slice(34);
-
-	const gasFees =
-		"0x" +
-		abiCoder.encode(["uint128"], [useroperation.maxPriorityFeePerGas]).slice(34) +
-		abiCoder.encode(["uint128"], [useroperation.maxFeePerGas]).slice(34);
-
+	const accountGasLimits = packAccountGasLimits(
+		useroperation.verificationGasLimit,
+		useroperation.callGasLimit,
+	);
+	const gasFees = packGasFees(useroperation.maxPriorityFeePerGas, useroperation.maxFeePerGas);
 	const paymasterAndData = buildPaymasterAndData(useroperation);
 
 	const useroperationValuesArrayWithHashedByteValues = [
@@ -297,17 +425,11 @@ function baseCreatePackedUserOperationV8V9(
 	const abiCoder = AbiCoder.defaultAbiCoder();
 
 	const initCode = buildPackedInitCodeV8V9(useroperation);
-
-	const accountGasLimits =
-		"0x" +
-		abiCoder.encode(["uint128"], [useroperation.verificationGasLimit]).slice(34) +
-		abiCoder.encode(["uint128"], [useroperation.callGasLimit]).slice(34);
-
-	const gasFees =
-		"0x" +
-		abiCoder.encode(["uint128"], [useroperation.maxPriorityFeePerGas]).slice(34) +
-		abiCoder.encode(["uint128"], [useroperation.maxFeePerGas]).slice(34);
-
+	const accountGasLimits = packAccountGasLimits(
+		useroperation.verificationGasLimit,
+		useroperation.callGasLimit,
+	);
+	const gasFees = packGasFees(useroperation.maxPriorityFeePerGas, useroperation.maxFeePerGas);
 	const paymasterAndData = buildPaymasterAndData(useroperation, is_v9);
 
 	const useroperationValuesArrayWithHashedByteValues = [

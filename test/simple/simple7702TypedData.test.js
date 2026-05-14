@@ -1,4 +1,4 @@
-const { Wallet, computeAddress, recoverAddress, AbiCoder } = require('ethers');
+const { Wallet, computeAddress, recoverAddress, AbiCoder, TypedDataEncoder } = require('ethers');
 const ak = require('../../dist/index.cjs');
 require('dotenv').config();
 
@@ -103,7 +103,7 @@ describe('signTypedData / signHash byte-equivalence (v0.8)', () => {
             const sigA = wallet.signingKey.sign(userOpHash).serialized;
 
             // Path B: typed-data signing
-            const td = account.getUserOperationEip712TypedData(userOp, chainId);
+            const td = account.getUserOperationEip712Data(userOp, chainId);
             const sigB = await wallet.signTypedData(td.domain, td.types, td.message);
 
             expect(sigB).toBe(sigA);
@@ -122,7 +122,7 @@ describe('signTypedData / signHash byte-equivalence (v0.9)', () => {
             const userOpHash = ak.createUserOperationHash(userOp, ENTRYPOINT_V9, chainId);
             const sigA = wallet.signingKey.sign(userOpHash).serialized;
 
-            const td = account.getUserOperationEip712TypedData(userOp, chainId);
+            const td = account.getUserOperationEip712Data(userOp, chainId);
             const sigB = await wallet.signTypedData(td.domain, td.types, td.message);
 
             expect(sigB).toBe(sigA);
@@ -150,17 +150,45 @@ describe('signTypedData / signHash byte-equivalence (v0.9)', () => {
         const userOpHash = ak.createUserOperationHash(userOp, ENTRYPOINT_V9, chainId);
         const sigA = wallet.signingKey.sign(userOpHash).serialized;
 
-        const td = account.getUserOperationEip712TypedData(userOp, chainId);
+        const td = account.getUserOperationEip712Data(userOp, chainId);
         const sigB = await wallet.signTypedData(td.domain, td.types, td.message);
 
         expect(sigB).toBe(sigA);
     });
 });
 
-describe('getUserOperationEip712TypedData domain', () => {
+describe('getUserOperationEip712Hash equivalence', () => {
+    PERMUTATIONS.forEach(({ name, build }) => {
+        test(`v0.8: hash equals userOpHash — ${name}`, () => {
+            const account = new ak.Simple7702Account(ownerAddress);
+            const userOp = build();
+            const eip712Hash = account.getUserOperationEip712Hash(userOp, chainId);
+            const userOpHash = ak.createUserOperationHash(userOp, ENTRYPOINT_V8, chainId);
+            expect(eip712Hash).toBe(userOpHash);
+        });
+
+        test(`v0.9: hash equals userOpHash — ${name}`, () => {
+            const account = new ak.Simple7702AccountV09(ownerAddress);
+            const userOp = build();
+            const eip712Hash = account.getUserOperationEip712Hash(userOp, chainId);
+            const userOpHash = ak.createUserOperationHash(userOp, ENTRYPOINT_V9, chainId);
+            expect(eip712Hash).toBe(userOpHash);
+        });
+    });
+
+    test('throws on v0.7 EntryPoint override', () => {
+        const account = new ak.Simple7702Account(ownerAddress, {
+            entrypointAddress: ENTRYPOINT_V7,
+        });
+        expect(() => account.getUserOperationEip712Hash(makeUserOpV8(), chainId))
+            .toThrow(/EntryPoint v0\.8|v0\.9/i);
+    });
+});
+
+describe('getUserOperationEip712Data domain', () => {
     test('v0.8 domain uses entrypoint v0.8 verifyingContract', () => {
         const account = new ak.Simple7702Account(ownerAddress);
-        const td = account.getUserOperationEip712TypedData(makeUserOpV8(), chainId);
+        const td = account.getUserOperationEip712Data(makeUserOpV8(), chainId);
         expect(td.domain.name).toBe("ERC4337");
         expect(td.domain.version).toBe("1");
         expect(td.domain.chainId).toBe(chainId);
@@ -170,7 +198,7 @@ describe('getUserOperationEip712TypedData domain', () => {
 
     test('v0.9 domain uses entrypoint v0.9 verifyingContract', () => {
         const account = new ak.Simple7702AccountV09(ownerAddress);
-        const td = account.getUserOperationEip712TypedData(makeUserOpV8(), chainId);
+        const td = account.getUserOperationEip712Data(makeUserOpV8(), chainId);
         expect(td.domain.verifyingContract).toBe(ENTRYPOINT_V9);
     });
 
@@ -178,8 +206,8 @@ describe('getUserOperationEip712TypedData domain', () => {
         const account = new ak.Simple7702Account(ownerAddress, {
             entrypointAddress: ENTRYPOINT_V7,
         });
-        expect(() => account.getUserOperationEip712TypedData(makeUserOpV8(), chainId))
-            .toThrow(/typed data|EntryPoint v0\.8|v0\.9/i);
+        expect(() => account.getUserOperationEip712Data(makeUserOpV8(), chainId))
+            .toThrow(/EntryPoint v0\.8|v0\.9/i);
     });
 });
 

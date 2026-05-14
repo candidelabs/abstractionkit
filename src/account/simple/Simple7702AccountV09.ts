@@ -117,8 +117,8 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	 * {@link signUserOperation} method, or wrap explicitly with
 	 * `fromPrivateKey(pk)`.
 	 *
-	 * @see {@link BaseSimple7702Account.getUserOperationEip712TypedData} for
-	 *   the lower-level escape hatch when you need the typed data outside the
+	 * @see {@link BaseSimple7702Account.getUserOperationEip712Data} for the
+	 *   lower-level escape hatch when you need the typed data outside the
 	 *   dispatcher.
 	 */
 	public async signUserOperationWithSigner(
