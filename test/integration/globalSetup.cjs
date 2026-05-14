@@ -6,8 +6,8 @@ const path = require('node:path');
 const { Wallet } = require('ethers');
 const chains = require('./chains.cjs');
 const { SUPPORTED_ENTRYPOINTS } = require('./_entrypoints.cjs');
+const { teardown, NETWORK } = require('./_teardown.cjs');
 
-const NETWORK = 'abstractionkit-integration';
 const ANVIL_IMAGE = 'ghcr.io/foundry-rs/foundry:v1.7.1';
 const VOLTAIRE_IMAGE = 'ghcr.io/candidelabs/voltaire/voltaire-bundler:0.1.0a72';
 const ANVIL_INTERNAL_PORT = '8545';
@@ -165,9 +165,22 @@ async function setupChain(chain) {
     }
 }
 
+function installSignalHandlers() {
+    // Jest's globalTeardown only runs on a clean exit. Without these handlers,
+    // SIGINT/SIGTERM (Ctrl+C, `kill`, CI cancellation) leaks the containers
+    // and the docker network until the next successful run.
+    for (const sig of ['SIGINT', 'SIGTERM']) {
+        process.once(sig, () => {
+            teardown();
+            process.kill(process.pid, sig);
+        });
+    }
+}
+
 module.exports = async function globalSetup() {
     fs.mkdirSync(LOG_DIR, { recursive: true });
     ensureNetwork();
+    installSignalHandlers();
 
     const results = await Promise.allSettled(chains.map(setupChain));
     const status = chains.map((chain, i) => {
