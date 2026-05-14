@@ -183,7 +183,10 @@ module.exports = async function globalSetup() {
 
     const okCount = status.filter((s) => s.ok).length;
     console.log(`[integration] ${okCount}/${chains.length} chains ready (logs: ${LOG_DIR})`);
-    if (okCount === 0) {
-        throw new Error('all chains failed to start; aborting integration run');
+    const failed = status.filter((s) => !s.ok);
+    if (failed.length > 0) {
+        throw new Error(
+            `chain setup failed: ${failed.map((s) => s.name).join(', ')}; aborting integration run`,
+        );
     }
 };
