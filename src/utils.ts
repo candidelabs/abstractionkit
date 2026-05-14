@@ -130,6 +130,36 @@ export function buildPackedInitCodeV8V9(useroperation: UserOperationV8 | UserOpe
 
 /**
  * @internal
+ * Pack `(verificationGasLimit, callGasLimit)` into a single `bytes32`
+ * (two uint128 values, big-endian). Matches the on-chain
+ * `PackedUserOperation.accountGasLimits` layout used by EntryPoint v0.7+.
+ */
+function packAccountGasLimits(verificationGasLimit: bigint, callGasLimit: bigint): string {
+	const abiCoder = AbiCoder.defaultAbiCoder();
+	return (
+		"0x" +
+		abiCoder.encode(["uint128"], [verificationGasLimit]).slice(34) +
+		abiCoder.encode(["uint128"], [callGasLimit]).slice(34)
+	);
+}
+
+/**
+ * @internal
+ * Pack `(maxPriorityFeePerGas, maxFeePerGas)` into a single `bytes32`
+ * (two uint128 values, big-endian). Matches the on-chain
+ * `PackedUserOperation.gasFees` layout used by EntryPoint v0.7+.
+ */
+function packGasFees(maxPriorityFeePerGas: bigint, maxFeePerGas: bigint): string {
+	const abiCoder = AbiCoder.defaultAbiCoder();
+	return (
+		"0x" +
+		abiCoder.encode(["uint128"], [maxPriorityFeePerGas]).slice(34) +
+		abiCoder.encode(["uint128"], [maxFeePerGas]).slice(34)
+	);
+}
+
+/**
+ * @internal
  * Reconstruct the packed `paymasterAndData` field from a UserOperation's
  * separate paymaster fields. Returns `0x` when no paymaster is set.
  *
@@ -216,16 +246,12 @@ export function getUserOperationEip712DataV8V9(
 		);
 	}
 
-	const abiCoder = AbiCoder.defaultAbiCoder();
 	const initCode = buildPackedInitCodeV8V9(userOperation);
-	const accountGasLimits =
-		"0x" +
-		abiCoder.encode(["uint128"], [userOperation.verificationGasLimit]).slice(34) +
-		abiCoder.encode(["uint128"], [userOperation.callGasLimit]).slice(34);
-	const gasFees =
-		"0x" +
-		abiCoder.encode(["uint128"], [userOperation.maxPriorityFeePerGas]).slice(34) +
-		abiCoder.encode(["uint128"], [userOperation.maxFeePerGas]).slice(34);
+	const accountGasLimits = packAccountGasLimits(
+		userOperation.verificationGasLimit,
+		userOperation.callGasLimit,
+	);
+	const gasFees = packGasFees(userOperation.maxPriorityFeePerGas, userOperation.maxFeePerGas);
 	const paymasterAndData = buildPaymasterAndData(userOperation, isV9);
 
 	const types = {
@@ -341,16 +367,11 @@ export function createPackedUserOperationV7(useroperation: UserOperationV7): str
 		}
 	}
 
-	const accountGasLimits =
-		"0x" +
-		abiCoder.encode(["uint128"], [useroperation.verificationGasLimit]).slice(34) +
-		abiCoder.encode(["uint128"], [useroperation.callGasLimit]).slice(34);
-
-	const gasFees =
-		"0x" +
-		abiCoder.encode(["uint128"], [useroperation.maxPriorityFeePerGas]).slice(34) +
-		abiCoder.encode(["uint128"], [useroperation.maxFeePerGas]).slice(34);
-
+	const accountGasLimits = packAccountGasLimits(
+		useroperation.verificationGasLimit,
+		useroperation.callGasLimit,
+	);
+	const gasFees = packGasFees(useroperation.maxPriorityFeePerGas, useroperation.maxFeePerGas);
 	const paymasterAndData = buildPaymasterAndData(useroperation);
 
 	const useroperationValuesArrayWithHashedByteValues = [
@@ -404,17 +425,11 @@ function baseCreatePackedUserOperationV8V9(
 	const abiCoder = AbiCoder.defaultAbiCoder();
 
 	const initCode = buildPackedInitCodeV8V9(useroperation);
-
-	const accountGasLimits =
-		"0x" +
-		abiCoder.encode(["uint128"], [useroperation.verificationGasLimit]).slice(34) +
-		abiCoder.encode(["uint128"], [useroperation.callGasLimit]).slice(34);
-
-	const gasFees =
-		"0x" +
-		abiCoder.encode(["uint128"], [useroperation.maxPriorityFeePerGas]).slice(34) +
-		abiCoder.encode(["uint128"], [useroperation.maxFeePerGas]).slice(34);
-
+	const accountGasLimits = packAccountGasLimits(
+		useroperation.verificationGasLimit,
+		useroperation.callGasLimit,
+	);
+	const gasFees = packGasFees(useroperation.maxPriorityFeePerGas, useroperation.maxFeePerGas);
 	const paymasterAndData = buildPaymasterAndData(useroperation, is_v9);
 
 	const useroperationValuesArrayWithHashedByteValues = [
