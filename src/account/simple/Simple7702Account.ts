@@ -19,13 +19,13 @@ import {
 	createRevokeDelegationAuthorization,
 } from "src/utils7702";
 import {
-	buildPackedInitCodeV8V9,
-	buildPaymasterAndData,
 	createCallData,
 	createUserOperationHash,
 	fetchAccountNonce,
 	getDelegatedAddress,
 	getFunctionSelector,
+	getUserOperationEip712DataV8V9,
+	getUserOperationEip712HashV8V9,
 	handlefetchGasPrice,
 	sendJsonRpcRequest,
 } from "../../utils";
@@ -806,66 +806,32 @@ export class BaseSimple7702Account extends SmartAccount {
 	 *   version other than v0.8 / v0.9. Earlier EntryPoints define the
 	 *   userOpHash differently and require raw-hash signing.
 	 */
-	public getUserOperationEip712TypedData(
+	public getUserOperationEip712Data(
 		userOperation: UserOperationV8 | UserOperationV9,
 		chainId: bigint,
 	): TypedData {
-		const ep = this.entrypointAddress.toLowerCase();
-		const isV9 = ep === ENTRYPOINT_V9.toLowerCase();
-		if (ep !== ENTRYPOINT_V8.toLowerCase() && !isV9) {
-			throw new AbstractionKitError(
-				"BAD_DATA",
-				`getUserOperationEip712TypedData supports EntryPoint v0.8 / v0.9 only; ` +
-					`this account targets ${this.entrypointAddress}. Use signUserOperation ` +
-					`(raw-hash ECDSA) for earlier EntryPoint versions.`,
-			);
-		}
+		return getUserOperationEip712DataV8V9(userOperation, this.entrypointAddress, chainId);
+	}
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const initCode = buildPackedInitCodeV8V9(userOperation);
-		const accountGasLimits =
-			"0x" +
-			abiCoder.encode(["uint128"], [userOperation.verificationGasLimit]).slice(34) +
-			abiCoder.encode(["uint128"], [userOperation.callGasLimit]).slice(34);
-		const gasFees =
-			"0x" +
-			abiCoder.encode(["uint128"], [userOperation.maxPriorityFeePerGas]).slice(34) +
-			abiCoder.encode(["uint128"], [userOperation.maxFeePerGas]).slice(34);
-		const paymasterAndData = buildPaymasterAndData(userOperation, isV9);
-
-		const types = {
-			PackedUserOperation: [
-				{ name: "sender", type: "address" },
-				{ name: "nonce", type: "uint256" },
-				{ name: "initCode", type: "bytes" },
-				{ name: "callData", type: "bytes" },
-				{ name: "accountGasLimits", type: "bytes32" },
-				{ name: "preVerificationGas", type: "uint256" },
-				{ name: "gasFees", type: "bytes32" },
-				{ name: "paymasterAndData", type: "bytes" },
-			],
-		};
-
-		return {
-			domain: {
-				name: "ERC4337",
-				version: "1",
-				chainId,
-				verifyingContract: this.entrypointAddress as `0x${string}`,
-			},
-			types,
-			primaryType: "PackedUserOperation",
-			message: {
-				sender: userOperation.sender,
-				nonce: userOperation.nonce,
-				initCode,
-				callData: userOperation.callData,
-				accountGasLimits,
-				preVerificationGas: userOperation.preVerificationGas,
-				gasFees,
-				paymasterAndData,
-			},
-		};
+	/**
+	 * Compute the EIP-712 digest of a UserOperation under the EntryPoint
+	 * v0.8 / v0.9 domain. For these EntryPoints this digest IS the
+	 * `userOpHash` ({@link createUserOperationHash}); signing it with raw
+	 * ECDSA or via `signTypedData` over the data from
+	 * {@link getUserOperationEip712Data} produces a signature that validates
+	 * against the same hash on-chain.
+	 *
+	 * @param userOperation - Unsigned UserOperation to hash
+	 * @param chainId - Target chain ID
+	 * @returns The EIP-712 digest as a hex string
+	 * @throws {AbstractionKitError} if this account targets an EntryPoint
+	 *   version other than v0.8 / v0.9.
+	 */
+	public getUserOperationEip712Hash(
+		userOperation: UserOperationV8 | UserOperationV9,
+		chainId: bigint,
+	): string {
+		return getUserOperationEip712HashV8V9(userOperation, this.entrypointAddress, chainId);
 	}
 
 	/**
@@ -900,7 +866,7 @@ export class BaseSimple7702Account extends SmartAccount {
 		};
 		const typedData =
 			scheme === "typedData"
-				? this.getUserOperationEip712TypedData(useroperation, chainId)
+				? this.getUserOperationEip712Data(useroperation, chainId)
 				: undefined;
 		return invokeSigner(signer, scheme, { hash, typedData, context });
 	}
@@ -1134,8 +1100,8 @@ export class Simple7702Account extends BaseSimple7702Account {
 	 * {@link signUserOperation} method, or wrap explicitly with
 	 * `fromPrivateKey(pk)`.
 	 *
-	 * @see {@link BaseSimple7702Account.getUserOperationEip712TypedData} for
-	 *   the lower-level escape hatch when you need the typed data outside the
+	 * @see {@link BaseSimple7702Account.getUserOperationEip712Data} for the
+	 *   lower-level escape hatch when you need the typed data outside the
 	 *   dispatcher (e.g., to render a custom confirmation UI or feed an HSM
 	 *   that doesn't fit the {@link ExternalSigner} shape).
 	 */
