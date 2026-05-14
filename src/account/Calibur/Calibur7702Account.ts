@@ -213,9 +213,11 @@ export class Calibur7702Account
 	 * signature over it produces a wrapped Calibur signature that validates
 	 * against the same hash on-chain.
 	 *
-	 * Only meaningful for Calibur's root key path (secp256k1 raw ECDSA); P-256
-	 * and WebAuthn-P256 keys use their own signature schemes that don't fit
-	 * EIP-712 typed-data signing.
+	 * Intended for the secp256k1 key path (root key or any registered
+	 * secondary secp256k1 key), since `eth_signTypedData_v4` only produces
+	 * secp256k1 signatures. P-256 and WebAuthn-P256 keys sign with their
+	 * own primitives — for those, use {@link getUserOperationEip712Hash}
+	 * (the digest), which is the value-to-be-signed regardless of key type.
 	 *
 	 * @param userOperation - Unsigned UserOperation to wrap
 	 * @param chainId - Target chain ID
@@ -235,6 +237,9 @@ export class Calibur7702Account
 	 * v0.8 / v0.9 domain. For these EntryPoints this digest IS the
 	 * `userOpHash` ({@link getUserOperationHash}); the wrapped Calibur
 	 * signature is verified against this hash on-chain.
+	 *
+	 * Universal across Calibur key types: secp256k1 and P-256 keys sign
+	 * this digest directly, each with their own signing primitive.
 	 *
 	 * @param userOperation - Unsigned UserOperation to hash
 	 * @param chainId - Target chain ID
