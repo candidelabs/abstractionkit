@@ -70,12 +70,32 @@ export class JsonRpcNode implements Transport {
 	}
 
 	/**
-	 * Transport delegate. Forwards directly to the underlying
-	 * {@link Transport.request}. Lets a `JsonRpcNode` itself slot into any
-	 * other transport position.
+	 * Transport delegate. Normalizes `bigint` values in `params` to `0x`-hex
+	 * (so user-supplied transports that don't go through
+	 * {@link BaseRpcTransport.serializeEnvelope} still receive JSON-safe values)
+	 * then forwards to the underlying {@link Transport.request}. Lets a
+	 * `JsonRpcNode` itself slot into any other transport position.
 	 */
 	request<T = unknown>(args: RequestArgs, options?: RequestOptions): Promise<T> {
-		return this.transport.request<T>(args, options);
+		return this.callTransport<T>(args.method, args.params, options);
+	}
+
+	/**
+	 * Single function for outbound JSON-RPC calls — normalizes `bigint`s in
+	 * `params` and forwards to {@link Transport.request}. Both {@link request}
+	 * (the public delegate) and the typed methods below route through this so
+	 * normalization is impossible to forget.
+	 *
+	 * @internal
+	 */
+	private callTransport<T>(
+		method: string,
+		params: RequestArgs["params"] | undefined,
+		options?: RequestOptions,
+	): Promise<T> {
+		const normalizedParams =
+			params == null ? params : (normalizeRpcValue(params) as readonly unknown[] | object);
+		return this.transport.request<T>({ method, params: normalizedParams }, options);
 	}
 
 	// ─── Standard JSON-RPC methods ───────────────────────────────────────
@@ -86,7 +106,7 @@ export class JsonRpcNode implements Transport {
 	 */
 	async chainId(options?: RequestOptions): Promise<string> {
 		try {
-			const result = await this.transport.request<unknown>({ method: "eth_chainId" }, options);
+			const result = await this.callTransport<unknown>("eth_chainId", undefined, options);
 			if (typeof result !== "string") {
 				throw new AbstractionKitError("BAD_DATA", "eth_chainId returned ill formed data", {
 					context: JSON.stringify(result),
@@ -103,7 +123,7 @@ export class JsonRpcNode implements Transport {
 	 */
 	async blockNumber(options?: RequestOptions): Promise<bigint> {
 		try {
-			const result = await this.transport.request<unknown>({ method: "eth_blockNumber" }, options);
+			const result = await this.callTransport<unknown>("eth_blockNumber", undefined, options);
 			if (typeof result !== "string") {
 				throw new AbstractionKitError("BAD_DATA", "eth_blockNumber returned ill formed data", {
 					context: JSON.stringify(result),
@@ -125,8 +145,9 @@ export class JsonRpcNode implements Transport {
 		options?: RequestOptions,
 	): Promise<string> {
 		try {
-			const result = await this.transport.request<unknown>(
-				{ method: "eth_getCode", params: [address, blockTag] },
+			const result = await this.callTransport<unknown>(
+				"eth_getCode",
+				[address, blockTag],
 				options,
 			);
 			if (typeof result !== "string") {
@@ -154,10 +175,7 @@ export class JsonRpcNode implements Transport {
 		const params: unknown[] =
 			stateOverrides == null ? [tx, blockTag] : [tx, blockTag, stateOverrides];
 		try {
-			const result = await this.transport.request<unknown>(
-				{ method: "eth_call", params },
-				options,
-			);
+			const result = await this.callTransport<unknown>("eth_call", params, options);
 			if (typeof result !== "string") {
 				throw new AbstractionKitError("BAD_DATA", "eth_call returned ill formed data", {
 					context: JSON.stringify(result),
@@ -180,8 +198,9 @@ export class JsonRpcNode implements Transport {
 		options?: RequestOptions,
 	): Promise<bigint> {
 		try {
-			const result = await this.transport.request<unknown>(
-				{ method: "eth_getTransactionCount", params: [address, blockTag] },
+			const result = await this.callTransport<unknown>(
+				"eth_getTransactionCount",
+				[address, blockTag],
 				options,
 			);
 			if (typeof result !== "string") {
@@ -218,10 +237,7 @@ export class JsonRpcNode implements Transport {
 			let maxPriorityFeePerGas: bigint | null = null;
 
 			try {
-				const result = await this.transport.request<unknown>(
-					{ method: "eth_gasPrice" },
-					options,
-				);
+				const result = await this.callTransport<unknown>("eth_gasPrice", undefined, options);
 				if (typeof result !== "string") {
 					throw new AbstractionKitError(
 						"BAD_DATA",
@@ -236,8 +252,9 @@ export class JsonRpcNode implements Transport {
 			}
 
 			try {
-				const result = await this.transport.request<unknown>(
-					{ method: "eth_maxPriorityFeePerGas" },
+				const result = await this.callTransport<unknown>(
+					"eth_maxPriorityFeePerGas",
+					undefined,
 					options,
 				);
 				if (typeof result !== "string") {
@@ -413,6 +430,29 @@ function scaleBigIntByGasLevel(value: bigint, gasLevel: number): bigint {
 	const scale = 1000n;
 	const scaledLevel = BigInt(Math.round(gasLevel * Number(scale)));
 	return (value * scaledLevel + scale - 1n) / scale;
+}
+
+/**
+ * Recursively convert any `bigint` values inside an RPC param to `0x`-prefixed
+ * hex strings, descending into arrays and plain objects. Other values pass
+ * through unchanged.
+ *
+ * Required for user-supplied {@link Transport} implementations that don't go
+ * through {@link BaseRpcTransport.serializeEnvelope} (EIP-1193 providers, viem
+ * clients, etc.) and would otherwise see raw `bigint`s in `params`. Mirrors the
+ * normalization done in {@link sendJsonRpcRequest}.
+ *
+ * @internal
+ */
+function normalizeRpcValue(value: unknown): unknown {
+	if (typeof value === "bigint") return `0x${value.toString(16)}`;
+	if (Array.isArray(value)) return value.map(normalizeRpcValue);
+	if (value !== null && typeof value === "object") {
+		const out: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(value)) out[k] = normalizeRpcValue(v);
+		return out;
+	}
+	return value;
 }
 
 /**
