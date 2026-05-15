@@ -14,18 +14,33 @@ const {
     SafeAccountV0_3_0,
     SafeAccountV1_5_0_M_0_3_0,
     SafeMultiChainSigAccountV1,
+    Calibur7702Account,
+    Simple7702Account,
+    Simple7702AccountV09,
 } = require('../../dist/index.cjs');
 const { SUPPORTED_ENTRYPOINTS } = require('./_entrypoints.cjs');
 
 // `entrypoint` selects which per-chain voltaire instance to route through —
 // each (chain × entrypoint) pair has its own bundler EOA and so its own nonce
-// sequence. V0_3_0 and V1_5_0_M_0_3_0 share v7, which is fine; they don't race
-// against V0_2_0 (v6) or MultiChainSigV1 (v9).
+// sequence. V0_3_0 and V1_5_0_M_0_3_0 share v7, and MultiChainSigV1 and
+// SimpleAccountV09 share v9; voltaire serialises bundles per instance so the
+// shared EOA's nonce sequence is fine. v8 is used only by the 7702 accounts.
+//
+// `isSafeMultiSig` flags accounts that use Safe's multi-owner calling
+// convention — `Account.initializeNewAccount([owner])` and
+// `signUserOperation(userOp, [pk], chainId)`. Accounts without the flag (the
+// 7702 ones) construct from a single EOA address, take a single private key,
+// and need an eip7702Auth in the first userOp to delegate the EOA. Tests that
+// share a flow across both branch on the flag inline; tests that exercise
+// Safe-only surfaces filter the matrix down to `isSafeMultiSig` entries.
 const accountVersions = [
-    { name: 'V0_2_0', accountClass: SafeAccountV0_2_0, entrypoint: 'v6' },
-    { name: 'V0_3_0', accountClass: SafeAccountV0_3_0, entrypoint: 'v7' },
-    { name: 'V1_5_0_M_0_3_0', accountClass: SafeAccountV1_5_0_M_0_3_0, entrypoint: 'v7' },
-    { name: 'MultiChainSigV1', accountClass: SafeMultiChainSigAccountV1, entrypoint: 'v9' },
+    { name: 'V0_2_0', accountClass: SafeAccountV0_2_0, entrypoint: 'v6', isSafeMultiSig: true },
+    { name: 'V0_3_0', accountClass: SafeAccountV0_3_0, entrypoint: 'v7', isSafeMultiSig: true },
+    { name: 'V1_5_0_M_0_3_0', accountClass: SafeAccountV1_5_0_M_0_3_0, entrypoint: 'v7', isSafeMultiSig: true },
+    { name: 'MultiChainSigV1', accountClass: SafeMultiChainSigAccountV1, entrypoint: 'v9', isSafeMultiSig: true },
+    { name: 'Calibur', accountClass: Calibur7702Account, entrypoint: 'v8' },
+    { name: 'SimpleAccount', accountClass: Simple7702Account, entrypoint: 'v8' },
+    { name: 'SimpleAccountV09', accountClass: Simple7702AccountV09, entrypoint: 'v9' },
 ];
 
 const runnable = chains.filter((c) => okByName[c.name]);
@@ -39,8 +54,14 @@ const runnableMatrix = (versions = accountVersions) =>
             accountClass: v.accountClass,
             accountVersion: v.name,
             entrypoint: v.entrypoint,
+            isSafeMultiSig: v.isSafeMultiSig === true,
         })),
     );
+
+// Tests that exercise Safe-only surfaces (multi-owner factory options, multi-
+// key signing, Safe-specific signature wrappers) skip the 7702 entries.
+const safeMultiSigMatrix = () =>
+    runnableMatrix(accountVersions.filter((v) => v.isSafeMultiSig));
 
 module.exports = {
     chains,
@@ -48,6 +69,7 @@ module.exports = {
     unrunnable,
     accountVersions,
     runnableMatrix,
+    safeMultiSigMatrix,
     SUPPORTED_ENTRYPOINTS,
     nodeUrl: (entry) => `http://127.0.0.1:${entry.anvilHostPort}`,
     bundlerUrl: (entry) => {

@@ -126,6 +126,7 @@ function startVoltaire(chain, ep, bundlerSecret) {
         '--logs_number_of_ranges', '1',
         '--enforce_gas_price_tolerance', '50',
         '--bundle_gas_estimation_multiplier', '3',
+        '--eip7702', 'y',
     ]);
 }
 
