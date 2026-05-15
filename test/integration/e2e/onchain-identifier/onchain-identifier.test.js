@@ -1,6 +1,6 @@
 const { Wallet } = require('ethers');
 const { sendJsonRpcRequest } = require('../../../../dist/index.cjs');
-const { runnableMatrix, unrunnable, nodeUrl, bundlerUrl } = require('../../_runnable.cjs');
+const { safeMultiSigMatrix, unrunnable, nodeUrl, bundlerUrl } = require('../../_runnable.cjs');
 
 jest.setTimeout(120000);
 
@@ -8,7 +8,7 @@ const ONE_ETH = 10n ** 18n;
 const toHex = (n) => `0x${n.toString(16)}`;
 
 describe('onchain identifier', () => {
-    test.concurrent.each(runnableMatrix())(
+    test.concurrent.each(safeMultiSigMatrix())(
         'identifier embedded in callData + tx input: $chainName / $accountVersion (chainId $chainId)',
         async (entry) => {
             const node = nodeUrl(entry);
