@@ -652,6 +652,25 @@ describe('SafeMultiChainSigAccountV1 signUserOperationWithSigners', () => {
         expect(newSigs).toEqual(legacySigs);
     });
 
+    test('multi-op typedData-only signer matches hash signer (Merkle root EIP-712 wrapper)', async () => {
+        const op2 = { ...op, nonce: 1n };
+        const opsToSign = [
+            { userOperation: op, chainId: 1n, validAfter: 0n, validUntil: 0n },
+            { userOperation: op2, chainId: 10n, validAfter: 0n, validUntil: 0n },
+        ];
+        const wallet = new Wallet(PK1);
+        const tdOnly = {
+            address: wallet.address,
+            signTypedData: async (td) =>
+                wallet.signTypedData(td.domain, td.types, td.message),
+        };
+        const tdSigs = await safe.signUserOperationsWithSigners(opsToSign, [tdOnly]);
+        const hashSigs = await safe.signUserOperationsWithSigners(
+            opsToSign, [ak.fromPrivateKey(PK1)],
+        );
+        expect(tdSigs).toEqual(hashSigs);
+    });
+
     // The on-chain Safe4337MultiChainSignatureModule's `merkleTreeDepth == 0`
     // branch verifies against `keccak256(SafeOp)` directly, not the Merkle
     // wrapper. The wrapper helpers are wrapper-only (length >= 2); for length=1

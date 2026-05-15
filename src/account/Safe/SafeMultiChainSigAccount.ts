@@ -1,7 +1,16 @@
 import { getAddress, TypedDataEncoder, Wallet } from "ethers";
-import { EIP712_MULTI_CHAIN_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants";
+import {
+	EIP712_MULTI_CHAIN_OPERATIONS_PRIMARY_TYPE,
+	EIP712_MULTI_CHAIN_OPERATIONS_TYPE,
+	ENTRYPOINT_V9,
+} from "src/constants";
 import { invokeSigner, pickScheme } from "src/signer/negotiate";
-import type { Signer as AkSigner, MultiOpSignContext, SignContext } from "src/signer/types";
+import type {
+	Signer as AkSigner,
+	MultiOpSignContext,
+	SignContext,
+	TypedData,
+} from "src/signer/types";
 import type { MetaTransaction, OnChainIdentifierParamsType, UserOperationV9 } from "../../types";
 import {
 	DEFAULT_WEB_AUTHN_DAIMO_VERIFIER_V_0_2_1,
@@ -605,15 +614,15 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	/**
 	 * Sign a list of UserOperations with a single multi-chain signature. Each
 	 * signer signs the Merkle root of the UserOperation EIP-712 hashes via
-	 * raw-hash signing; `signTypedData` isn't exposed because the Merkle root
-	 * is opaque and has no meaningful typed-data display.
+	 * either `signTypedData` (the root is wrapped in an EIP-712 `MerkleTreeRoot`
+	 * message) or raw-hash signing; both schemes produce signatures that
+	 * validate against the same on-chain digest.
 	 *
 	 * Signers always receive {@link MultiOpSignContext}. The built-in adapters
-	 * `fromPrivateKey`, `fromViem`, and `fromEthersWallet` return
-	 * `Signer<unknown>` and work here without retyping; `fromViemWalletClient`
-	 * does **not** — it only exposes `signTypedData`, so {@link pickScheme}
-	 * rejects it offline. User-defined single-op signers
-	 * (`Signer<SignContext>`) also don't work — they'd receive a context shape
+	 * `fromPrivateKey`, `fromViem`, `fromEthersWallet`, and `fromViemWalletClient`
+	 * all work here without retyping (`fromViemWalletClient` will sign the
+	 * typed-data Merkle wrapper). User-defined single-op signers
+	 * (`Signer<SignContext>`) still don't work — they'd receive a context shape
 	 * they didn't declare.
 	 *
 	 * Note the chainId plumbing asymmetry vs the single-op variant:
@@ -678,19 +687,31 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			// instead of after an external signer has been prompted.
 			const normalizedAddresses = signers.map((signer) => getAddress(signer.address));
 
-			// Merkle root is opaque; signTypedData has nothing meaningful to
-			// display, so we require raw-hash signing.
-			signers.forEach((signer, i) => {
-				pickScheme(signer, ["hash"], {
+			// The Merkle root is wrapped in an EIP-712 `MerkleTreeRoot` message
+			// whose digest equals `merkleTreeRootHash`, so a typed-data signature
+			// over it is byte-identical (for deterministic-ECDSA signers) to a
+			// raw-hash signature. Accept both schemes so JSON-RPC wallets that
+			// only sign typed data can sign multi-op bundles.
+			const typedDataForBundle: TypedData = {
+				domain: {
+					verifyingContract: this.safe4337ModuleAddress as `0x${string}`,
+				},
+				types: EIP712_MULTI_CHAIN_OPERATIONS_TYPE,
+				primaryType: EIP712_MULTI_CHAIN_OPERATIONS_PRIMARY_TYPE,
+				message: { merkleTreeRoot: root },
+			};
+			const schemes = signers.map((signer, i) =>
+				pickScheme(signer, ["typedData", "hash"], {
 					accountName: "SafeMultiChainSigAccountV1 (multi-op Merkle root)",
 					signerIndex: i,
-				});
-			});
+				}),
+			);
 
 			const signatures = await Promise.all(
-				signers.map((signer) =>
-					invokeSigner(signer, "hash", {
+				signers.map((signer, i) =>
+					invokeSigner(signer, schemes[i], {
 						hash: merkleTreeRootHash,
+						typedData: typedDataForBundle,
 						context,
 					}),
 				),
