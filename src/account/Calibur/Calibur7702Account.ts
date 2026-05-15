@@ -168,6 +168,33 @@ export class Calibur7702Account
 		return abiCoder.encode(["bytes32", "bytes", "bytes"], [keyHash, rawSignature, hookData]);
 	}
 
+	/**
+	 * Format a raw EIP-712 signature (from `signTypedData` over the payload
+	 * returned by {@link getUserOperationEip712Data}) into Calibur's
+	 * `userOp.signature` layout. Provided for API parity with Safe's
+	 * `formatEip712SingleSignatureToUseroperationSignature`.
+	 *
+	 * Under EntryPoint v0.8 / v0.9 the userOpHash IS the EIP-712 digest of
+	 * the PackedUserOperation, so a raw-hash signature and a typed-data
+	 * signature are byte-identical for deterministic-ECDSA signers; this
+	 * method is therefore equivalent to {@link wrapSignature} with the same
+	 * `keyHash` / `hookData`. The default `keyHash` is the root-key hash
+	 * (`bytes32(0)`), which selects the EOA's own secp256k1 key.
+	 *
+	 * @param signature - Raw ECDSA signature (65 bytes, hex-encoded) from
+	 *   `signTypedData` over the payload from {@link getUserOperationEip712Data}
+	 * @param overrides - Optional `keyHash` / `hookData` overrides
+	 * @returns Hex-encoded wrapped signature ready for `userOp.signature`
+	 */
+	public static formatEip712SingleSignatureToUseroperationSignature(
+		signature: string,
+		overrides: CaliburSignatureOverrides = {},
+	): string {
+		const keyHash = overrides.keyHash ?? ROOT_KEY_HASH;
+		const hookData = overrides.hookData ?? "0x";
+		return Calibur7702Account.wrapSignature(keyHash, signature, hookData);
+	}
+
 	/** The EntryPoint contract address this account targets */
 	readonly entrypointAddress: string;
 	/** The Calibur singleton (delegatee) contract address */
@@ -658,27 +685,31 @@ export class Calibur7702Account
 	}
 
 	/**
-	 * Schemes Calibur accepts from a Signer. Only raw-hash ECDSA, since
-	 * the account verifies a plain signature over the userOp hash, then
-	 * wraps with `(keyHash, signature, hookData)`.
+	 * Schemes Calibur accepts from a Signer. EntryPoint v0.8/v0.9 introduced
+	 * an EIP-712 domain at the EntryPoint contract, and the userOpHash IS the
+	 * EIP-712 digest of the PackedUserOperation under that domain — so signing
+	 * the typed data and signing the raw hash produce signatures that verify
+	 * against the same `userOpHash` (and recover to the same signer address).
+	 * Deterministic-ECDSA signers (ethers, viem, MetaMask) yield byte-identical
+	 * bytes; signers that differ in `s` / `v` normalization still validate the
+	 * same on-chain.
+	 *
+	 * `typedData` is listed first so JSON-RPC wallets that can only sign typed
+	 * data work without a separate code path; `hash` remains a valid fallback
+	 * for local-key signers.
 	 */
-	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = ["hash"];
+	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = ["typedData", "hash"];
 
 	/**
-	 * Sign a UserOperation using an {@link ExternalSigner}. Calibur only
-	 * accepts raw-hash ECDSA; signers without `signHash` fail offline with
-	 * an actionable error.
+	 * Sign a UserOperation with an {@link AkSigner}. The signer can implement
+	 * either `signTypedData` (preferred — JSON-RPC wallets, viem `WalletClient`)
+	 * or `signHash` (local keys, hardware wallets). Both schemes produce
+	 * signatures that validate against the same `userOpHash` because the
+	 * v0.8 / v0.9 userOpHash IS the EIP-712 digest of the PackedUserOperation
+	 * (deterministic-ECDSA signers yield byte-identical bytes).
 	 *
-	 * For signing with a raw private-key string, use the sync
-	 * {@link signUserOperation} method, or wrap explicitly with
-	 * `fromPrivateKey(pk)`. For secondary (non-root) keys, pass the key
-	 * hash via `overrides.keyHash`.
-	 *
-	 * @example
-	 * import { fromViem, fromEthersWallet } from "abstractionkit";
-	 * userOp.signature = await account.signUserOperationWithSigner(
-	 *   userOp, fromViem(privateKeyToAccount(pk)), chainId,
-	 * );
+	 * Signers that implement neither method fail offline with an actionable
+	 * error.
 	 */
 	public async signUserOperationWithSigner(
 		userOperation: UserOperationV8,
@@ -700,7 +731,13 @@ export class Calibur7702Account
 			chainId,
 			entryPoint: this.entrypointAddress,
 		};
-		const signature = await invokeSigner(signer, scheme, { hash, context });
+		const typedData =
+			scheme === "typedData"
+				? Calibur7702Account.getUserOperationEip712Data(userOperation, chainId, {
+						entrypointAddress: this.entrypointAddress,
+					})
+				: undefined;
+		const signature = await invokeSigner(signer, scheme, { hash, typedData, context });
 		const keyHash = overrides.keyHash ?? ROOT_KEY_HASH;
 		const hookData = overrides.hookData ?? "0x";
 		return Calibur7702Account.wrapSignature(keyHash, signature, hookData);

@@ -796,14 +796,16 @@ describe('Calibur7702Account signUserOperationWithSigner', () => {
         expect(signerSig).toBe(pkSig);
     });
 
-    test('rejects signTypedData-only signer', async () => {
+    test('signTypedData-only signer succeeds (v0.8 userOpHash IS the EIP-712 digest)', async () => {
+        const wallet = new Wallet(PK1);
         const tdOnly = {
             address: owner,
-            signTypedData: async () => '0x',
+            signTypedData: async (td) =>
+                wallet.signTypedData(td.domain, td.types, td.message),
         };
-        await expect(
-            calibur.signUserOperationWithSigner(op, tdOnly, CHAIN_ID),
-        ).rejects.toThrow(/accepts: \[hash\]/);
+        const tdSig = await calibur.signUserOperationWithSigner(op, tdOnly, CHAIN_ID);
+        const pkSig = calibur.signUserOperation(op, PK1, CHAIN_ID);
+        expect(tdSig).toBe(pkSig);
     });
 });
 
