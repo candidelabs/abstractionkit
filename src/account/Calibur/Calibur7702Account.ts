@@ -209,9 +209,8 @@ export class Calibur7702Account
 	 * Build the EIP-712 typed data payload for a UserOperation under the
 	 * EntryPoint v0.8 / v0.9 domain. Useful for wallets that can only sign
 	 * typed data (`eth_signTypedData_v4`) — the digest of the returned payload
-	 * equals the `userOpHash` ({@link getUserOperationHash}), so a typed-data
-	 * signature over it produces a wrapped Calibur signature that validates
-	 * against the same hash on-chain.
+	 * equals the `userOpHash`, so a typed-data signature over it produces a
+	 * wrapped Calibur signature that validates against the same hash on-chain.
 	 *
 	 * Intended for the secp256k1 key path (root key or any registered
 	 * secondary secp256k1 key), since `eth_signTypedData_v4` only produces
@@ -221,37 +220,41 @@ export class Calibur7702Account
 	 *
 	 * @param userOperation - Unsigned UserOperation to wrap
 	 * @param chainId - Target chain ID
+	 * @param overrides - Override the entrypoint address (defaults to EntryPoint v0.8)
 	 * @returns EIP-712 {@link TypedData} payload ready for `signTypedData`
-	 * @throws {AbstractionKitError} if this account targets an EntryPoint
-	 *   version other than v0.8 / v0.9.
+	 * @throws {AbstractionKitError} if the target EntryPoint is not v0.8 / v0.9.
 	 */
-	public getUserOperationEip712Data(
+	public static getUserOperationEip712Data(
 		userOperation: UserOperationV8 | UserOperationV9,
 		chainId: bigint,
+		overrides: { entrypointAddress?: string } = {},
 	): TypedData {
-		return getUserOperationEip712DataV8V9(userOperation, this.entrypointAddress, chainId);
+		const entrypointAddress = overrides.entrypointAddress ?? ENTRYPOINT_V8;
+		return getUserOperationEip712DataV8V9(userOperation, entrypointAddress, chainId);
 	}
 
 	/**
 	 * Compute the EIP-712 digest of a UserOperation under the EntryPoint
 	 * v0.8 / v0.9 domain. For these EntryPoints this digest IS the
-	 * `userOpHash` ({@link getUserOperationHash}); the wrapped Calibur
-	 * signature is verified against this hash on-chain.
+	 * `userOpHash`; the wrapped Calibur signature is verified against this
+	 * hash on-chain.
 	 *
 	 * Universal across Calibur key types: secp256k1 and P-256 keys sign
 	 * this digest directly, each with their own signing primitive.
 	 *
 	 * @param userOperation - Unsigned UserOperation to hash
 	 * @param chainId - Target chain ID
+	 * @param overrides - Override the entrypoint address (defaults to EntryPoint v0.8)
 	 * @returns The EIP-712 digest as a hex string
-	 * @throws {AbstractionKitError} if this account targets an EntryPoint
-	 *   version other than v0.8 / v0.9.
+	 * @throws {AbstractionKitError} if the target EntryPoint is not v0.8 / v0.9.
 	 */
-	public getUserOperationEip712Hash(
+	public static getUserOperationEip712Hash(
 		userOperation: UserOperationV8 | UserOperationV9,
 		chainId: bigint,
+		overrides: { entrypointAddress?: string } = {},
 	): string {
-		return getUserOperationEip712HashV8V9(userOperation, this.entrypointAddress, chainId);
+		const entrypointAddress = overrides.entrypointAddress ?? ENTRYPOINT_V8;
+		return getUserOperationEip712HashV8V9(userOperation, entrypointAddress, chainId);
 	}
 
 	// ─── CallData Encoding ───────────────────────────────────────────────

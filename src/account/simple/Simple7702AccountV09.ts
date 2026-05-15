@@ -1,5 +1,5 @@
 import { ENTRYPOINT_V9 } from "src/constants";
-import type { Signer as AkSigner } from "src/signer/types";
+import type { Signer as AkSigner, TypedData } from "src/signer/types";
 import type { StateOverrideSet, UserOperationV9 } from "src/types";
 import type { SendUseroperationResponse } from "../SendUseroperationResponse";
 import {
@@ -16,6 +16,36 @@ import {
  */
 export class Simple7702AccountV09 extends BaseSimple7702Account {
 	static readonly DEFAULT_DELEGATEE_ADDRESS = "0xa46cc63eBF4Bd77888AA327837d20b23A63a56B5";
+
+	/**
+	 * Build the EIP-712 typed data payload for a {@link UserOperationV9}
+	 * under the EntryPoint v0.9 domain. See
+	 * {@link BaseSimple7702Account.getUserOperationEip712Data} for the
+	 * full semantics; this override just defaults `entrypointAddress` to v0.9.
+	 */
+	public static getUserOperationEip712Data(
+		userOperation: UserOperationV9,
+		chainId: bigint,
+		overrides: { entrypointAddress?: string } = {},
+	): TypedData {
+		return BaseSimple7702Account.getUserOperationEip712Data(userOperation, chainId, {
+			entrypointAddress: overrides.entrypointAddress ?? ENTRYPOINT_V9,
+		});
+	}
+
+	/**
+	 * Compute the EIP-712 digest of a {@link UserOperationV9} under the
+	 * EntryPoint v0.9 domain. Defaults `entrypointAddress` to v0.9.
+	 */
+	public static getUserOperationEip712Hash(
+		userOperation: UserOperationV9,
+		chainId: bigint,
+		overrides: { entrypointAddress?: string } = {},
+	): string {
+		return BaseSimple7702Account.getUserOperationEip712Hash(userOperation, chainId, {
+			entrypointAddress: overrides.entrypointAddress ?? ENTRYPOINT_V9,
+		});
+	}
 
 	/**
 	 * @param accountAddress - The EOA address that will be delegated via EIP-7702
