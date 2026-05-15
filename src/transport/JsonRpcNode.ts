@@ -285,6 +285,7 @@ export class JsonRpcNode implements Transport {
 
 			if (maxFeePerGas === 0n) maxFeePerGas = 1n;
 			if (priorityFee === 0n) priorityFee = 1n;
+			if (priorityFee > maxFeePerGas) maxFeePerGas = priorityFee;
 
 			return [maxFeePerGas, priorityFee];
 		} catch (err) {
