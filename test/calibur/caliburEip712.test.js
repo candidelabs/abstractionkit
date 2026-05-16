@@ -73,7 +73,7 @@ describe('Calibur7702Account.getUserOperationEip712Hash (v0.8)', () => {
         test(`hash equals userOpHash — ${name}`, () => {
             const account = new ak.Calibur7702Account(ownerAddress);
             const userOp = build();
-            const eip712Hash = account.getUserOperationEip712Hash(userOp, chainId);
+            const eip712Hash = ak.Calibur7702Account.getUserOperationEip712Hash(userOp, chainId);
             const userOpHash = ak.createUserOperationHash(userOp, ENTRYPOINT_V8, chainId);
             expect(eip712Hash).toBe(userOpHash);
             expect(eip712Hash).toBe(account.getUserOperationHash(userOp, chainId));
@@ -84,22 +84,18 @@ describe('Calibur7702Account.getUserOperationEip712Hash (v0.8)', () => {
 describe('Calibur7702Account.getUserOperationEip712Hash (v0.9)', () => {
     PERMUTATIONS.forEach(({ name, build }) => {
         test(`hash equals userOpHash — ${name}`, () => {
-            const account = new ak.Calibur7702Account(ownerAddress, {
+            const eip712Hash = ak.Calibur7702Account.getUserOperationEip712Hash(build(), chainId, {
                 entrypointAddress: ENTRYPOINT_V9,
-                delegateeAddress: ak.CALIBUR_CANDIDE_V0_1_0_SINGLETON_ADDRESS,
             });
-            const userOp = build();
-            const eip712Hash = account.getUserOperationEip712Hash(userOp, chainId);
-            const userOpHash = ak.createUserOperationHash(userOp, ENTRYPOINT_V9, chainId);
+            const userOpHash = ak.createUserOperationHash(build(), ENTRYPOINT_V9, chainId);
             expect(eip712Hash).toBe(userOpHash);
         });
     });
 });
 
 describe('Calibur7702Account.getUserOperationEip712Data', () => {
-    test('v0.8 domain matches EntryPoint v0.8', () => {
-        const account = new ak.Calibur7702Account(ownerAddress);
-        const td = account.getUserOperationEip712Data(makeUserOp(), chainId);
+    test('v0.8 domain matches EntryPoint v0.8 (default)', () => {
+        const td = ak.Calibur7702Account.getUserOperationEip712Data(makeUserOp(), chainId);
         expect(td.domain.name).toBe("ERC4337");
         expect(td.domain.version).toBe("1");
         expect(td.domain.chainId).toBe(chainId);
@@ -107,28 +103,25 @@ describe('Calibur7702Account.getUserOperationEip712Data', () => {
         expect(td.primaryType).toBe("PackedUserOperation");
     });
 
-    test('v0.9 domain matches EntryPoint v0.9', () => {
-        const account = new ak.Calibur7702Account(ownerAddress, {
+    test('v0.9 domain matches EntryPoint v0.9 (override)', () => {
+        const td = ak.Calibur7702Account.getUserOperationEip712Data(makeUserOp(), chainId, {
             entrypointAddress: ENTRYPOINT_V9,
-            delegateeAddress: ak.CALIBUR_CANDIDE_V0_1_0_SINGLETON_ADDRESS,
         });
-        const td = account.getUserOperationEip712Data(makeUserOp(), chainId);
         expect(td.domain.verifyingContract).toBe(ENTRYPOINT_V9);
     });
 
     test('throws on v0.7 EntryPoint override', () => {
-        const account = new ak.Calibur7702Account(ownerAddress, {
-            entrypointAddress: ENTRYPOINT_V7,
-        });
-        expect(() => account.getUserOperationEip712Data(makeUserOp(), chainId))
-            .toThrow(/EntryPoint v0\.8|v0\.9/i);
+        expect(() =>
+            ak.Calibur7702Account.getUserOperationEip712Data(makeUserOp(), chainId, {
+                entrypointAddress: ENTRYPOINT_V7,
+            }),
+        ).toThrow(/EntryPoint v0\.8|v0\.9/i);
     });
 });
 
 describe('Calibur signTypedData / signHash byte-equivalence (root key)', () => {
     PERMUTATIONS.forEach(({ name, build }) => {
         test(`v0.8 — ${name}`, async () => {
-            const account = new ak.Calibur7702Account(ownerAddress);
             const userOp = build();
 
             // Path A: raw-hash signing (the existing Calibur path)
@@ -136,7 +129,7 @@ describe('Calibur signTypedData / signHash byte-equivalence (root key)', () => {
             const sigA = wallet.signingKey.sign(userOpHash).serialized;
 
             // Path B: typed-data signing
-            const td = account.getUserOperationEip712Data(userOp, chainId);
+            const td = ak.Calibur7702Account.getUserOperationEip712Data(userOp, chainId);
             const sigB = await wallet.signTypedData(td.domain, td.types, td.message);
 
             // For deterministic ECDSA (ethers), both signatures are byte-identical.

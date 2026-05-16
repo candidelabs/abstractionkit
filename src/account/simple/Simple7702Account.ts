@@ -791,26 +791,23 @@ export class BaseSimple7702Account extends SmartAccount {
 	 * Deterministic-ECDSA signers yield byte-identical signatures; signers
 	 * that differ in `s` / `v` normalization still validate the same on-chain.
 	 *
-	 * Common use cases beyond direct signing:
-	 *   - Inspect / log the typed data the wallet will display.
-	 *   - Render a custom confirmation UI before delegating to a wallet's
-	 *     `signTypedData`.
-	 *   - Drive non-`ExternalSigner`-shaped signers (HSM, MPC service,
-	 *     backend signing pipelines).
+	 * The base class defaults to EntryPoint v0.8; subclasses
+	 * ({@link Simple7702AccountV09}) override with their own default.
 	 *
 	 * @param userOperation - Unsigned UserOperation to wrap
 	 * @param chainId - Target chain ID (must match the chain that will validate
 	 *   the signature)
+	 * @param overrides - Override the entrypoint address
 	 * @returns EIP-712 {@link TypedData} payload ready for `signTypedData`
-	 * @throws {AbstractionKitError} if this account targets an EntryPoint
-	 *   version other than v0.8 / v0.9. Earlier EntryPoints define the
-	 *   userOpHash differently and require raw-hash signing.
+	 * @throws {AbstractionKitError} if the target EntryPoint is not v0.8 / v0.9.
 	 */
-	public getUserOperationEip712Data(
+	public static getUserOperationEip712Data(
 		userOperation: UserOperationV8 | UserOperationV9,
 		chainId: bigint,
+		overrides: { entrypointAddress?: string } = {},
 	): TypedData {
-		return getUserOperationEip712DataV8V9(userOperation, this.entrypointAddress, chainId);
+		const entrypointAddress = overrides.entrypointAddress ?? ENTRYPOINT_V8;
+		return getUserOperationEip712DataV8V9(userOperation, entrypointAddress, chainId);
 	}
 
 	/**
@@ -823,15 +820,17 @@ export class BaseSimple7702Account extends SmartAccount {
 	 *
 	 * @param userOperation - Unsigned UserOperation to hash
 	 * @param chainId - Target chain ID
+	 * @param overrides - Override the entrypoint address (defaults to EntryPoint v0.8)
 	 * @returns The EIP-712 digest as a hex string
-	 * @throws {AbstractionKitError} if this account targets an EntryPoint
-	 *   version other than v0.8 / v0.9.
+	 * @throws {AbstractionKitError} if the target EntryPoint is not v0.8 / v0.9.
 	 */
-	public getUserOperationEip712Hash(
+	public static getUserOperationEip712Hash(
 		userOperation: UserOperationV8 | UserOperationV9,
 		chainId: bigint,
+		overrides: { entrypointAddress?: string } = {},
 	): string {
-		return getUserOperationEip712HashV8V9(userOperation, this.entrypointAddress, chainId);
+		const entrypointAddress = overrides.entrypointAddress ?? ENTRYPOINT_V8;
+		return getUserOperationEip712HashV8V9(userOperation, entrypointAddress, chainId);
 	}
 
 	/**
@@ -866,7 +865,9 @@ export class BaseSimple7702Account extends SmartAccount {
 		};
 		const typedData =
 			scheme === "typedData"
-				? this.getUserOperationEip712Data(useroperation, chainId)
+				? BaseSimple7702Account.getUserOperationEip712Data(useroperation, chainId, {
+						entrypointAddress: this.entrypointAddress,
+					})
 				: undefined;
 		return invokeSigner(signer, scheme, { hash, typedData, context });
 	}

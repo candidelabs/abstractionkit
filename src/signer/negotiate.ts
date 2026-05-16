@@ -61,7 +61,7 @@ function buildMismatchMessage(params: {
 /**
  * Invoke a signer for one scheme. Keeps the dispatch in one place so the
  * account-side code stays linear. `typedData` is optional: accounts that
- * only accept the `"hash"` scheme (Simple7702, Calibur) pass just `hash`.
+ * only accept the `"hash"` scheme can pass just `hash`.
  *
  * `context` is always forwarded to the signer so power-user implementations
  * can inspect the userOp.
