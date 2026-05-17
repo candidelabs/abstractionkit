@@ -1,8 +1,14 @@
-import { getAddress, TypedDataEncoder, Wallet } from "ethers";
-import { EIP712_MULTI_CHAIN_OPERATIONS_TYPE, ENTRYPOINT_V9 } from "src/constants";
-import { invokeSigner, pickScheme } from "src/signer/negotiate";
-import type { Signer as AkSigner, MultiOpSignContext, SignContext } from "src/signer/types";
-import type { MetaTransaction, OnChainIdentifierParamsType, UserOperationV9 } from "../../types";
+import {getAddress, TypedDataEncoder, Wallet} from "ethers";
+import type {Bundler} from "src/Bundler";
+import {
+	EIP712_MULTI_CHAIN_OPERATIONS_PRIMARY_TYPE,
+	EIP712_MULTI_CHAIN_OPERATIONS_TYPE,
+	ENTRYPOINT_V9,
+} from "src/constants";
+import {invokeSigner, pickScheme} from "src/signer/negotiate";
+import type {MultiOpSignContext, SignContext, Signer as AkSigner, TypedData} from "src/signer/types";
+import type {JsonRpcNode, Transport} from "src/transport";
+import type {MetaTransaction, OnChainIdentifierParamsType, UserOperationV9} from "../../types";
 import {
 	DEFAULT_WEB_AUTHN_DAIMO_VERIFIER_V_0_2_1,
 	DEFAULT_WEB_AUTHN_PRECOMPILE_RIP_7951,
@@ -11,8 +17,8 @@ import {
 	DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE_V_0_2_1,
 	DEFAULT_WEB_AUTHN_SIGNER_SINGLETON_V_0_2_1,
 } from "./constants";
-import { generateMerkleProofs } from "./MerkleTree";
-import { SafeAccount } from "./SafeAccount";
+import {generateMerkleProofs} from "./MerkleTree";
+import {SafeAccount} from "./SafeAccount";
 import type {
 	CreateUserOperationV9Overrides,
 	InitCodeOverrides,
@@ -26,8 +32,8 @@ import type {
 	SignerSignaturePair,
 	UserOperationToSign,
 	UserOperationToSignWithOverrides,
-	WebAuthnSignatureOverrides,
 	WebauthnPublicKey,
+	WebAuthnSignatureOverrides,
 } from "./types";
 
 /**
@@ -373,8 +379,8 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 */
 	public async createUserOperation(
 		transactions: MetaTransaction[],
-		providerRpc?: string,
-		bundlerRpc?: string,
+		providerRpc?: string | Transport | JsonRpcNode,
+		bundlerRpc?: string | Transport | Bundler,
 		overrides: CreateUserOperationV9Overrides = {},
 	): Promise<UserOperationV9> {
 		const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
@@ -477,6 +483,14 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * {@link AkSigner} instances. See
 	 * {@link SafeAccountV0_3_0.signUserOperationWithSigners} for the full
 	 * design rationale. Sets the multi-chain flag automatically.
+	 *
+	 * Note the chainId plumbing asymmetry vs the multi-op variant:
+	 *   - **Singular** (this method): `chainId` is a positional argument.
+	 *   - **Plural** ({@link signUserOperationsWithSigners}): `chainId` lives
+	 *     inside each `UserOperationToSign` element, since each op may
+	 *     target a different chain.
+	 * Pick the variant that matches your bundle shape; don't pass the same
+	 * chainId twice.
 	 *
 	 * @param userOperation - UserOperation to sign
 	 * @param signers - one ExternalSigner per owner (any order)
@@ -597,16 +611,25 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	/**
 	 * Sign a list of UserOperations with a single multi-chain signature. Each
 	 * signer signs the Merkle root of the UserOperation EIP-712 hashes via
-	 * raw-hash signing; `signTypedData` isn't exposed because the Merkle root
-	 * is opaque and has no meaningful typed-data display.
+	 * either `signTypedData` (the root is wrapped in an EIP-712 `MerkleTreeRoot`
+	 * message) or raw-hash signing; both schemes produce signatures that
+	 * validate against the same on-chain digest.
 	 *
 	 * Signers always receive {@link MultiOpSignContext}. The built-in adapters
-	 * `fromPrivateKey`, `fromViem`, and `fromEthersWallet` return
-	 * `Signer<unknown>` and work here without retyping; `fromViemWalletClient`
-	 * does **not** — it only exposes `signTypedData`, so {@link pickScheme}
-	 * rejects it offline. User-defined single-op signers
-	 * (`Signer<SignContext>`) also don't work — they'd receive a context shape
+	 * `fromPrivateKey`, `fromViem`, `fromEthersWallet`, and `fromViemWalletClient`
+	 * all work here without retyping (`fromViemWalletClient` will sign the
+	 * typed-data Merkle wrapper). User-defined single-op signers
+	 * (`Signer<SignContext>`) still don't work — they'd receive a context shape
 	 * they didn't declare.
+	 *
+	 * Note the chainId plumbing asymmetry vs the single-op variant:
+	 *   - **Plural** (this method): each `UserOperationToSign` carries its
+	 *     own `chainId`, since a multichain bundle's ops target different
+	 *     chains.
+	 *   - **Singular** ({@link signUserOperationWithSigners}): `chainId` is
+	 *     a positional argument.
+	 * For a length-1 bundle on this method, set `chainId` on the single
+	 * element rather than reaching for the singular variant.
 	 *
 	 * @param userOperationsToSign - UserOperations + chain IDs + validity windows
 	 * @param signers - one Signer per owner (any order; sorted by address on-chain)
@@ -661,19 +684,31 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			// instead of after an external signer has been prompted.
 			const normalizedAddresses = signers.map((signer) => getAddress(signer.address));
 
-			// Merkle root is opaque; signTypedData has nothing meaningful to
-			// display, so we require raw-hash signing.
-			signers.forEach((signer, i) => {
-				pickScheme(signer, ["hash"], {
+			// The Merkle root is wrapped in an EIP-712 `MerkleTreeRoot` message
+			// whose digest equals `merkleTreeRootHash`, so a typed-data signature
+			// over it is byte-identical (for deterministic-ECDSA signers) to a
+			// raw-hash signature. Accept both schemes so JSON-RPC wallets that
+			// only sign typed data can sign multi-op bundles.
+			const typedDataForBundle: TypedData = {
+				domain: {
+					verifyingContract: this.safe4337ModuleAddress as `0x${string}`,
+				},
+				types: EIP712_MULTI_CHAIN_OPERATIONS_TYPE,
+				primaryType: EIP712_MULTI_CHAIN_OPERATIONS_PRIMARY_TYPE,
+				message: { merkleTreeRoot: root },
+			};
+			const schemes = signers.map((signer, i) =>
+				pickScheme(signer, ["typedData", "hash"], {
 					accountName: "SafeMultiChainSigAccountV1 (multi-op Merkle root)",
 					signerIndex: i,
-				});
-			});
+				}),
+			);
 
 			const signatures = await Promise.all(
-				signers.map((signer) =>
-					invokeSigner(signer, "hash", {
+				signers.map((signer, i) =>
+					invokeSigner(signer, schemes[i], {
 						hash: merkleTreeRootHash,
+						typedData: typedDataForBundle,
 						context,
 					}),
 				),
@@ -982,7 +1017,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	}
 
 	public static async verifyWebAuthnSignatureForMessageHash(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		signer: WebauthnPublicKey,
 		messageHash: string,
 		signature: string,

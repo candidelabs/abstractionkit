@@ -1,5 +1,86 @@
 # Changelog
 
+## [UNRELEASED]
+
+## 0.3.8
+
+### New Features
+
+- **EIP-712 UserOperation helpers aligned across account families.** `Simple7702Account`, `Simple7702AccountV09`, and `Calibur7702Account` now expose public static `getUserOperationEip712Data(userOp, chainId, overrides?)` and `getUserOperationEip712Hash(userOp, chainId, overrides?)` helpers. This matches the Safe helper naming and supports EntryPoint override via `overrides.entrypointAddress`.
+- **EIP-712 typed-data signing support expanded.** `Calibur7702Account.signUserOperationWithSigner` now accepts `signTypedData` signers, and `Calibur7702Account.formatEip712SingleSignatureToUseroperationSignature(signature, overrides?)` wraps raw typed-data signatures into Calibur's `(keyHash, sig, hookData)` layout. `SafeMultiChainSigAccountV1.signUserOperationsWithSigners` now accepts typed-data-only signers for multi-operation Merkle bundles.
+- **Pluggable `Transport` abstraction.** Node, bundler, and paymaster traffic now accepts EIP-1193-shaped transports:
+  ```ts
+  interface Transport {
+    request<T = unknown>(
+      args: { method: string; params?: readonly unknown[] | object },
+      options?: { signal?: AbortSignal },
+    ): Promise<T>;
+  }
+  ```
+  New exports: `Transport`, `EventfulTransport`, `isEventfulTransport`, `BaseRpcTransport`, `HttpTransport`, `isHttpTransport`, `JsonRpcNode`, `TransportRpcError`, `RequestArgs`, `RequestOptions`, `ProviderRpcError`, `HttpTransportOptions`, `JsonRpcEnvelope`, and `EthCallTransaction`.
+- **`JsonRpcNode` service class added.** Methods: `chainId()`, `blockNumber()`, `getCode()`, `call()`, `getTransactionCount()`, `getFeeData()`, `getDelegatedAddress()`, `getEntryPointNonce()`, `getEntryPointDeposit()`, `getEntryPointDepositInfo()`, and `request()`. `getFeeData()` no longer depends on `ethers.JsonRpcProvider`.
+- **RPC inputs widened.** `Bundler`, `CandidePaymaster`, and `Erc7677Paymaster` constructors now accept `string | Transport`; each class implements `Transport` and exposes `.from(input)`. Public `providerRpc?`, `bundlerRpc?`, and `nodeRpcUrl` parameters now accept `string | Transport | JsonRpcNode` for node calls and `string | Transport | Bundler` for bundler calls across Safe, Simple7702, Calibur, `AllowanceModule`, `SocialRecoveryModule`, and paymaster methods.
+- **Request cancellation and service error mapping added.** `Transport.request` accepts `options?: { signal?: AbortSignal }`; `HttpTransport` forwards it to `fetch`. `NODE_ERROR` was added to `BasicErrorCode` for `JsonRpcNode`, and `sendJsonRpcRequest` now throws `TransportRpcError` while service classes translate into their own domain errors.
+- **Tenderly helpers no longer depend on `sendJsonRpcRequest`.** `callTenderlySimulateBundle` now uses an inline `fetch` call; public Tenderly helper signatures are unchanged.
+
+### Breaking Changes
+
+- **`BaseSimple7702Account#getUserOperationEip712TypedData` moved from an instance method to a static helper and was renamed to `getUserOperationEip712Data`.** The returned typed-data payload shape is unchanged, but callers must switch from `account.getUserOperationEip712TypedData(...)` to the account class' static helper. This aligns Simple7702 with the Safe and Calibur EIP-712 helper API and lets callers override the EntryPoint explicitly when needed. Migration:
+  ```ts
+  // Before
+  const typedData = account.getUserOperationEip712TypedData(userOp, chainId);
+
+  // After
+  const typedData = Simple7702Account.getUserOperationEip712Data(userOp, chainId);
+
+  // For EntryPoint v0.9
+  const typedDataV9 = Simple7702AccountV09.getUserOperationEip712Data(userOp, chainId);
+  ```
+- **`bundler.rpcUrl` / `paymaster.rpcUrl` field removed.** The `readonly rpcUrl: string` field on `Bundler`, `CandidePaymaster`, and `Erc7677Paymaster` is replaced by `readonly transport: Transport`. Migration:
+  ```ts
+  // Before
+  const url = bundler.rpcUrl;
+
+  // After
+  import { isHttpTransport } from "abstractionkit";
+  const url = isHttpTransport(bundler.transport) ? bundler.transport.url : null;
+  ```
+  Keeping `rpcUrl` made no sense once the input could be a non-HTTP `Transport` — the field would have been `undefined` for `Transport` inputs and silently misleading.
+- **Top-level helpers removed from the public API**: `fetchGasPrice`, `getBalanceOf`, `getDepositInfo`, `getDelegatedAddress`. Each was a thin URL-string wrapper around what is now a `JsonRpcNode` method (in some cases renamed for clarity). Migration:
+  ```ts
+  // Before
+  import { fetchGasPrice, getBalanceOf, getDepositInfo, getDelegatedAddress } from "abstractionkit";
+  const [maxFee, priority] = await fetchGasPrice(nodeUrl, GasOption.Medium);
+  const deposit = await getBalanceOf(nodeUrl, address, entryPoint);
+  const info = await getDepositInfo(nodeUrl, address, entryPoint);
+  const delegatee = await getDelegatedAddress(eoaAddress, nodeUrl);
+
+  // After
+  import { JsonRpcNode, GasOption } from "abstractionkit";
+  const node = new JsonRpcNode(nodeUrl);
+  const [maxFee, priority] = await node.getFeeData(GasOption.Medium);
+  const deposit = await node.getEntryPointDeposit(address, entryPoint);
+  const info = await node.getEntryPointDepositInfo(address, entryPoint);
+  const delegatee = await node.getDelegatedAddress(eoaAddress);
+  ```
+  The `DepositInfo` type continues to be exported from the package root. `fetchAccountNonce` and `sendJsonRpcRequest` are explicitly **kept** as top-level exports (both have their first parameter widened to `string | Transport | JsonRpcNode`); they're the only loose helpers preserved.
+
+### Bug Fixes
+
+- **Social recovery multi-confirm transactions now encode and validate signer data correctly.** `createMultiConfirmRecoveryMetaTransaction` now uses the correct ABI tuple shape, sorts signer addresses with a spec-compliant comparator, and rejects duplicate signers before producing calldata. This prevents malformed recovery confirmations and catches invalid guardian input earlier.
+- **`JsonRpcNode.getFeeData` preserves `bigint` precision above `Number.MAX_SAFE_INTEGER`.** Gas-level multipliers are now applied in `bigint` space instead of via `Number(gasPrice)`, avoiding precision loss for large gas prices.
+
+### Documentation
+
+- **EIP-7702 delegation authorization signer docs are clearer.** `createAndSignEip7702DelegationAuthorization` now documents that callback signers sign the authorization hash directly, without an EIP-191 / EIP-712 prefix, and that both 65-byte standard signatures and 64-byte EIP-2098 compact signatures are accepted.
+- **Safe multi-chain signing docs clarify `chainId` placement.** The single-operation signing JSDoc points out that `chainId` is passed positionally, while multi-operation signing carries `chainId` inside each `UserOperationToSign` item.
+
+### Testing and CI
+
+- **Docker-backed integration test suite added.** The repo now includes an integration Jest config, global setup / teardown, chain matrix helpers, and e2e coverage for passkeys, social recovery, batch transactions, multisig, spend permissions, signer adapters, on-chain identifiers, bundler behavior, and EIP-712 signing.
+- **EIP-7702 accounts added to the e2e matrix.** Calibur, `Simple7702Account` on EntryPoint v0.8, and `Simple7702AccountV09` on EntryPoint v0.9 now run through the account-agnostic integration suites. The local bundler matrix was expanded to run v0.8 with `--eip7702`.
+- **Integration CI expanded.** The integration workflow now supports manual dispatch, fork RPC overrides, per-entrypoint bundlers, cached anvil images, fail-fast chain startup, and cleanup on `SIGINT` / `SIGTERM`.
+
 ## 0.3.7
 
 ### Fixes

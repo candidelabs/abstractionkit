@@ -1,5 +1,5 @@
 module.exports = {
 	testEnvironment: "node",
 	modulePathIgnorePatterns: ["/.worktrees/"],
-	testPathIgnorePatterns: ["/node_modules/", "/dist/", "/.worktrees/"],
+	testPathIgnorePatterns: ["/node_modules/", "/dist/", "/.worktrees/", "/test/integration/"],
 };

@@ -1,7 +1,9 @@
-import { ENTRYPOINT_V9 } from "src/constants";
-import type { Signer as AkSigner } from "src/signer/types";
-import type { StateOverrideSet, UserOperationV9 } from "src/types";
-import type { SendUseroperationResponse } from "../SendUseroperationResponse";
+import type {Bundler} from "src/Bundler";
+import {ENTRYPOINT_V9} from "src/constants";
+import type {Signer as AkSigner, TypedData} from "src/signer/types";
+import type {JsonRpcNode, Transport} from "src/transport";
+import type {StateOverrideSet, UserOperationV9} from "src/types";
+import type {SendUseroperationResponse} from "../SendUseroperationResponse";
 import {
 	BaseSimple7702Account,
 	type CreateUserOperationOverrides,
@@ -16,6 +18,36 @@ import {
  */
 export class Simple7702AccountV09 extends BaseSimple7702Account {
 	static readonly DEFAULT_DELEGATEE_ADDRESS = "0xa46cc63eBF4Bd77888AA327837d20b23A63a56B5";
+
+	/**
+	 * Build the EIP-712 typed data payload for a {@link UserOperationV9}
+	 * under the EntryPoint v0.9 domain. See
+	 * {@link BaseSimple7702Account.getUserOperationEip712Data} for the
+	 * full semantics; this override just defaults `entrypointAddress` to v0.9.
+	 */
+	public static getUserOperationEip712Data(
+		userOperation: UserOperationV9,
+		chainId: bigint,
+		overrides: { entrypointAddress?: string } = {},
+	): TypedData {
+		return BaseSimple7702Account.getUserOperationEip712Data(userOperation, chainId, {
+			entrypointAddress: overrides.entrypointAddress ?? ENTRYPOINT_V9,
+		});
+	}
+
+	/**
+	 * Compute the EIP-712 digest of a {@link UserOperationV9} under the
+	 * EntryPoint v0.9 domain. Defaults `entrypointAddress` to v0.9.
+	 */
+	public static getUserOperationEip712Hash(
+		userOperation: UserOperationV9,
+		chainId: bigint,
+		overrides: { entrypointAddress?: string } = {},
+	): string {
+		return BaseSimple7702Account.getUserOperationEip712Hash(userOperation, chainId, {
+			entrypointAddress: overrides.entrypointAddress ?? ENTRYPOINT_V9,
+		});
+	}
 
 	/**
 	 * @param accountAddress - The EOA address that will be delegated via EIP-7702
@@ -49,8 +81,8 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	 */
 	public async createUserOperation(
 		transactions: SimpleMetaTransaction[],
-		providerRpc?: string,
-		bundlerRpc?: string,
+		providerRpc?: string | Transport | JsonRpcNode,
+		bundlerRpc?: string | Transport | Bundler,
 		overrides: CreateUserOperationOverrides = {},
 	): Promise<UserOperationV9> {
 		return this.baseCreateUserOperation(transactions, providerRpc, bundlerRpc, overrides);
@@ -67,7 +99,7 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	 */
 	public async estimateUserOperationGas(
 		userOperation: UserOperationV9,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
 			dummySignature?: string;
@@ -117,8 +149,8 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	 * {@link signUserOperation} method, or wrap explicitly with
 	 * `fromPrivateKey(pk)`.
 	 *
-	 * @see {@link BaseSimple7702Account.getUserOperationEip712TypedData} for
-	 *   the lower-level escape hatch when you need the typed data outside the
+	 * @see {@link BaseSimple7702Account.getUserOperationEip712Data} for the
+	 *   lower-level escape hatch when you need the typed data outside the
 	 *   dispatcher.
 	 */
 	public async signUserOperationWithSigner(
@@ -137,7 +169,7 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	 */
 	public async sendUserOperation(
 		userOperation: UserOperationV9,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 	): Promise<SendUseroperationResponse> {
 		return this.baseSendUserOperation(userOperation, bundlerRpc);
 	}

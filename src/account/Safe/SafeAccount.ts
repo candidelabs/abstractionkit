@@ -8,11 +8,12 @@ import {
 	TypedDataEncoder,
 	Wallet,
 } from "ethers";
-import { Bundler } from "src/Bundler";
-import { AbstractionKitError, ensureError } from "src/errors";
-import { SafeAccountFactory } from "src/factory/SafeAccountFactory";
-import { invokeSigner, pickScheme } from "src/signer/negotiate";
-import type { Signer as AkSigner, SigningScheme, TypedData } from "src/signer/types";
+import {Bundler} from "src/Bundler";
+import {AbstractionKitError, ensureError} from "src/errors";
+import {SafeAccountFactory} from "src/factory/SafeAccountFactory";
+import {invokeSigner, pickScheme} from "src/signer/negotiate";
+import type {Signer as AkSigner, SigningScheme, TypedData} from "src/signer/types";
+import {JsonRpcNode, type Transport} from "src/transport";
 import {
 	BaseUserOperationDummyValues,
 	EIP712_SAFE_OPERATION_PRIMARY_TYPE,
@@ -36,21 +37,14 @@ import {
 	type UserOperationV7,
 	type UserOperationV9,
 } from "../../types";
-import {
-	createCallData,
-	fetchAccountNonce,
-	getFunctionSelector,
-	handlefetchGasPrice,
-	sendEthCallRequest,
-	sendEthGetCodeRequest,
-} from "../../utils";
+import {createCallData, fetchAccountNonce, getFunctionSelector, handlefetchGasPrice,} from "../../utils";
 import {
 	simulateSenderCallDataWithTenderly,
 	simulateSenderCallDataWithTenderlyAndCreateShareLink,
 } from "../../utilsTenderly";
-import { SendUseroperationResponse } from "../SendUseroperationResponse";
-import { SmartAccount } from "../SmartAccount";
-import { decodeMultiSendCallData, encodeMultiSendCallData } from "./multisend";
+import {SendUseroperationResponse} from "../SendUseroperationResponse";
+import {SmartAccount} from "../SmartAccount";
+import {decodeMultiSendCallData, encodeMultiSendCallData} from "./multisend";
 import {
 	getSafeMessageEip712Data,
 	type SafeMessageTypedDataDomain,
@@ -69,10 +63,10 @@ import {
 	type SafeUserOperationV9TypedMessageValue,
 	type Signer,
 	type SignerSignaturePair,
-	type WebAuthnSignatureOverrides,
 	WebauthnDummySignerSignaturePair,
 	type WebauthnPublicKey,
 	type WebauthnSignatureData,
+	type WebAuthnSignatureOverrides,
 } from "./types";
 
 /**
@@ -262,9 +256,9 @@ export class SafeAccount extends SmartAccount {
 	 */
 	public static async isDeployed(
 		accountAddress: string,
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 	): Promise<boolean> {
-		const code = await sendEthGetCodeRequest(nodeRpcUrl, accountAddress, "latest");
+		const code = await JsonRpcNode.from(nodeRpcUrl).getCode(accountAddress, "latest");
 		return code.length > 2;
 	}
 
@@ -989,14 +983,14 @@ export class SafeAccount extends SmartAccount {
 	/**
 	 * sends a useroperation to a bundler rpc
 	 * @param userOperation - useroperation to send
-	 * @param bundlerRpc - bundler rpc to send useroperation
+	 * @param bundlerRpc - bundler rpc URL, {@link Transport}, or pre-constructed {@link Bundler}
 	 * @returns promise with SendUseroperationResponse
 	 */
 	public async sendUserOperation(
 		userOperation: UserOperationV6 | UserOperationV7 | UserOperationV9,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 	): Promise<SendUseroperationResponse> {
-		const bundler = new Bundler(bundlerRpc);
+		const bundler = Bundler.from(bundlerRpc);
 		const sendUserOperationRes = await bundler.sendUserOperation(
 			userOperation,
 			this.entrypointAddress,
@@ -1287,7 +1281,7 @@ export class SafeAccount extends SmartAccount {
 	 */
 	public async baseEstimateUserOperationGas(
 		userOperation: UserOperationV6 | UserOperationV7,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
 			dummySignerSignaturePairs?: SignerSignaturePair[];
@@ -1360,7 +1354,7 @@ export class SafeAccount extends SmartAccount {
 			);
 		}
 
-		const bundler = new Bundler(bundlerRpc);
+		const bundler = Bundler.from(bundlerRpc);
 
 		const inputMaxFeePerGas = userOperation.maxFeePerGas;
 		const inputMaxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
@@ -1404,8 +1398,8 @@ export class SafeAccount extends SmartAccount {
 	protected async createBaseUserOperationAndFactoryAddressAndFactoryData(
 		transactions: MetaTransaction[],
 		isV06: boolean,
-		providerRpc?: string,
-		bundlerRpc?: string,
+		providerRpc?: string | Transport | JsonRpcNode,
+		bundlerRpc?: string | Transport | Bundler,
 		overrides: CreateBaseUserOperationOverrides = {},
 	): Promise<[BaseUserOperation, string | null, string | null]> {
 		if (transactions.length < 1) {
@@ -2242,7 +2236,7 @@ export class SafeAccount extends SmartAccount {
 	 * @returns a promise of a list of metaTransactions
 	 */
 	public async createSwapOwnerMetaTransactions(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		newOwner: Signer,
 		oldOwner: Signer,
 		overrides: {
@@ -2269,7 +2263,7 @@ export class SafeAccount extends SmartAccount {
 				webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
 				webAuthnSignerProxyCreationCode,
 			});
-			const newOwnerCode = await sendEthGetCodeRequest(nodeRpcUrl, newOwnerT, "latest");
+			const newOwnerCode = await JsonRpcNode.from(nodeRpcUrl).getCode(newOwnerT, "latest");
 			const newOwnerNotDeployed = newOwnerCode.length < 3;
 			if (newOwnerNotDeployed) {
 				deployNewOwnerSignerMetaTransaction =
@@ -2331,7 +2325,7 @@ export class SafeAccount extends SmartAccount {
 	 * @returns a promise of a metaTransaction
 	 */
 	public async createRemoveOwnerMetaTransaction(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		ownerToDelete: Signer,
 		threshold: number,
 		overrides: {
@@ -2394,7 +2388,7 @@ export class SafeAccount extends SmartAccount {
 		newOwner: Signer,
 		threshold: number,
 		overrides: {
-			nodeRpcUrl?: string;
+			nodeRpcUrl?: string | Transport | JsonRpcNode;
 			eip7212WebAuthnPrecompileVerifier?: string;
 			eip7212WebAuthnContractVerifier?: string;
 			webAuthnSignerFactory?: string;
@@ -2420,7 +2414,7 @@ export class SafeAccount extends SmartAccount {
 			if (overrides.nodeRpcUrl == null) {
 				throw new RangeError("overrides.nodeRpcUrl can't be null if adding a webauthn owner");
 			}
-			const newOwnerCode = await sendEthGetCodeRequest(overrides.nodeRpcUrl, newOwnerT, "latest");
+			const newOwnerCode = await JsonRpcNode.from(overrides.nodeRpcUrl).getCode(newOwnerT, "latest");
 			const newOwnerNotDeployed = newOwnerCode.length < 3;
 			if (newOwnerNotDeployed) {
 				deployNewOwnerSignerMetaTransaction =
@@ -2626,7 +2620,7 @@ export class SafeAccount extends SmartAccount {
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
 	 * @returns a promise of a list of owners public addresses
 	 */
-	public async getOwners(nodeRpcUrl: string): Promise<string[]> {
+	public async getOwners(nodeRpcUrl: string | Transport | JsonRpcNode): Promise<string[]> {
 		const functionSignature = "getOwners()";
 		const functionSelector = getFunctionSelector(functionSignature);
 		const callData = createCallData(functionSelector, [], []);
@@ -2635,7 +2629,7 @@ export class SafeAccount extends SmartAccount {
 			to: this.accountAddress,
 			data: callData,
 		};
-		const getOwnersResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const getOwnersResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		const abiCoder = AbiCoder.defaultAbiCoder();
 		const decodedCalldata = abiCoder.decode(["address[]"], getOwnersResult);
@@ -2648,7 +2642,7 @@ export class SafeAccount extends SmartAccount {
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
 	 * @returns a promise with the current threshold
 	 */
-	public async getThreshold(nodeRpcUrl: string): Promise<number> {
+	public async getThreshold(nodeRpcUrl: string | Transport | JsonRpcNode): Promise<number> {
 		const functionSelector = "0xe75235b8"; //getThreshold
 		const callData = createCallData(functionSelector, [], []);
 
@@ -2656,7 +2650,7 @@ export class SafeAccount extends SmartAccount {
 			to: this.accountAddress,
 			data: callData,
 		};
-		const getThresholdResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const getThresholdResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		const abiCoder = AbiCoder.defaultAbiCoder();
 		const decodedCalldata = abiCoder.decode(["uint256"], getThresholdResult);
@@ -2673,7 +2667,7 @@ export class SafeAccount extends SmartAccount {
 	 * @returns a promise of [moduleAddresses, nextPageStart]; pass nextPageStart back in overrides.start to continue
 	 */
 	public async getModules(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		overrides: {
 			start?: string;
 			pageSize?: bigint;
@@ -2699,7 +2693,7 @@ export class SafeAccount extends SmartAccount {
 				to: this.accountAddress,
 				data: callData,
 			};
-			const getModulesResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+			const getModulesResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 			if (getModulesResult === "0x") {
 				throw new AbstractionKitError(
 					"BAD_DATA",
@@ -2725,7 +2719,10 @@ export class SafeAccount extends SmartAccount {
 	 * @param moduleAddress - the module address to check if enabled
 	 * @returns a promise of boolean
 	 */
-	public async isModuleEnabled(nodeRpcUrl: string, moduleAddress: string): Promise<boolean> {
+	public async isModuleEnabled(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		moduleAddress: string,
+	): Promise<boolean> {
 		const functionSignature = "isModuleEnabled(address)";
 		const functionSelector = getFunctionSelector(functionSignature);
 		const callData = createCallData(functionSelector, ["address"], [moduleAddress]);
@@ -2734,7 +2731,7 @@ export class SafeAccount extends SmartAccount {
 			to: this.accountAddress,
 			data: callData,
 		};
-		const isModuleEnabledResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const isModuleEnabledResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		const abiCoder = AbiCoder.defaultAbiCoder();
 		const decodedCalldata = abiCoder.decode(["bool"], isModuleEnabledResult);
@@ -2818,7 +2815,7 @@ export class SafeAccount extends SmartAccount {
 	 * @returns a promise of boolean - True if a valid signature
 	 */
 	public static async verifyWebAuthnSignatureForMessageHash(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		signer: WebauthnPublicKey,
 		messageHash: string,
 		signature: string,
@@ -2867,9 +2864,13 @@ export class SafeAccount extends SmartAccount {
 			webAuthnSignerSingleton,
 		);
 
-		const isModuleEnabledResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest", {
-			[arbitraryAddress]: { code: deployedByteCode },
-		});
+		const isModuleEnabledResult = await JsonRpcNode.from(nodeRpcUrl).call(
+			ethCallParams,
+			"latest",
+			{
+				[arbitraryAddress]: { code: deployedByteCode },
+			},
+		);
 
 		const decodedCalldata = AbiCoder.defaultAbiCoder().decode(["bool"], isModuleEnabledResult);
 
@@ -2941,7 +2942,7 @@ export class SafeAccount extends SmartAccount {
 	 * @returns a promise of a MetaTransaction
 	 */
 	public async createDisableModuleMetaTransaction(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		moduleToDisableAddress: string,
 		accountAddress: string,
 		overrides: {
@@ -3032,7 +3033,7 @@ export class SafeAccount extends SmartAccount {
 		tenderlyAccountSlug: string,
 		tenderlyProjectSlug: string,
 		tenderlyAccessKey: string,
-		nodeRpcUrl: string | null = null,
+		nodeRpcUrl: string | Transport | JsonRpcNode | null = null,
 		chainId: bigint,
 		metaTransactions: MetaTransaction[],
 		blockNumber: number | null = null,
@@ -3140,7 +3141,7 @@ function generateOnChainIdentifier(
 	project: string,
 	platform: "Web" | "Mobile" | "Safe App" | "Widget" = "Web",
 	tool: string = "abstractionkit",
-	toolVersion: string = "0.3.7",
+	toolVersion: string = "0.3.8",
 ): string {
 	const identifierPrefix = "5afe"; // Safe identifier prefix
 	const identifierVersion = "00"; // First version

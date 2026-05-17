@@ -1,9 +1,10 @@
-import { AbiCoder, Wallet } from "ethers";
-import { Bundler } from "src/Bundler";
-import { BaseUserOperationDummyValues, ENTRYPOINT_V8, ENTRYPOINT_V9 } from "src/constants";
-import { AbstractionKitError } from "src/errors";
-import { invokeSigner, pickScheme } from "src/signer/negotiate";
-import type { Signer as AkSigner, SignContext, SigningScheme, TypedData } from "src/signer/types";
+import {AbiCoder, Wallet} from "ethers";
+import {Bundler} from "src/Bundler";
+import {BaseUserOperationDummyValues, ENTRYPOINT_V8, ENTRYPOINT_V9} from "src/constants";
+import {AbstractionKitError} from "src/errors";
+import {invokeSigner, pickScheme} from "src/signer/negotiate";
+import type {SignContext, Signer as AkSigner, SigningScheme, TypedData} from "src/signer/types";
+import {JsonRpcNode, type Transport} from "src/transport";
 import type {
 	GasOption,
 	JsonRpcResult,
@@ -19,18 +20,17 @@ import {
 	createRevokeDelegationAuthorization,
 } from "src/utils7702";
 import {
-	buildPackedInitCodeV8V9,
-	buildPaymasterAndData,
 	createCallData,
 	createUserOperationHash,
 	fetchAccountNonce,
-	getDelegatedAddress,
 	getFunctionSelector,
+	getUserOperationEip712DataV8V9,
+	getUserOperationEip712HashV8V9,
 	handlefetchGasPrice,
 	sendJsonRpcRequest,
 } from "../../utils";
-import { SendUseroperationResponse } from "../SendUseroperationResponse";
-import { SmartAccount } from "../SmartAccount";
+import {SendUseroperationResponse} from "../SendUseroperationResponse";
+import {SmartAccount} from "../SmartAccount";
 
 /**
  * A minimal transaction object for EIP-7702 simple accounts.
@@ -167,13 +167,15 @@ export class BaseSimple7702Account extends SmartAccount {
 	/**
 	 * Check if this EOA is delegated to the expected delegatee address via EIP-7702.
 	 * Returns `true` only when delegated to `this.delegateeAddress`.
-	 * Use `getDelegatedAddress()` directly to get the raw delegatee address.
+	 * Use `JsonRpcNode.getDelegatedAddress()` directly to get the raw delegatee address.
 	 *
 	 * @param providerRpc - Ethereum JSON-RPC node URL
 	 * @returns `true` if delegated to the expected address, `false` otherwise
 	 */
-	public async isDelegatedToThisAccount(providerRpc: string): Promise<boolean> {
-		const address = await getDelegatedAddress(this.accountAddress, providerRpc);
+	public async isDelegatedToThisAccount(
+		providerRpc: string | Transport | JsonRpcNode,
+	): Promise<boolean> {
+		const address = await JsonRpcNode.from(providerRpc).getDelegatedAddress(this.accountAddress);
 		if (address === null) return false;
 		return address.toLowerCase() === this.delegateeAddress.toLowerCase();
 	}
@@ -196,7 +198,7 @@ export class BaseSimple7702Account extends SmartAccount {
 	 */
 	public async createRevokeDelegationTransaction(
 		eoaPrivateKey: string,
-		providerRpc: string,
+		providerRpc: string | Transport | JsonRpcNode,
 		overrides: {
 			nonce?: bigint;
 			authorizationNonce?: bigint;
@@ -207,7 +209,7 @@ export class BaseSimple7702Account extends SmartAccount {
 		} = {},
 	): Promise<string> {
 		// Verify delegation state before revoking
-		const delegatedTo = await getDelegatedAddress(this.accountAddress, providerRpc);
+		const delegatedTo = await JsonRpcNode.from(providerRpc).getDelegatedAddress(this.accountAddress);
 		if (delegatedTo === null) {
 			throw new AbstractionKitError("BAD_DATA", "Account is not delegated — nothing to revoke");
 		}
@@ -369,8 +371,8 @@ export class BaseSimple7702Account extends SmartAccount {
 	 */
 	protected async baseCreateUserOperation(
 		transactions: SimpleMetaTransaction[],
-		providerRpc?: string,
-		bundlerRpc?: string,
+		providerRpc?: string | Transport | JsonRpcNode,
+		bundlerRpc?: string | Transport | Bundler,
 		overrides: CreateUserOperationOverrides = {},
 	): Promise<UserOperationV8 | UserOperationV9> {
 		if (transactions.length < 1) {
@@ -426,7 +428,9 @@ export class BaseSimple7702Account extends SmartAccount {
 		// Best-effort: if the check fails, proceed as if not delegated.
 		let delegationCheckOp: Promise<string | null> | null = null;
 		if (overrides.eip7702Auth != null && providerRpc != null) {
-			delegationCheckOp = getDelegatedAddress(this.accountAddress, providerRpc).catch(() => null);
+			delegationCheckOp = JsonRpcNode.from(providerRpc)
+				.getDelegatedAddress(this.accountAddress)
+				.catch(() => null);
 		}
 
 		if (overrides.eip7702Auth != null && eip7702AuthNonce == null) {
@@ -706,7 +710,7 @@ export class BaseSimple7702Account extends SmartAccount {
 	 */
 	protected async baseEstimateUserOperationGas(
 		userOperation: UserOperationV8 | UserOperationV9,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
 			dummySignature?: string;
@@ -714,7 +718,7 @@ export class BaseSimple7702Account extends SmartAccount {
 	): Promise<[bigint, bigint, bigint]> {
 		userOperation.signature = overrides.dummySignature ?? BaseSimple7702Account.dummySignature;
 
-		const bundler = new Bundler(bundlerRpc);
+		const bundler = Bundler.from(bundlerRpc);
 
 		const inputMaxFeePerGas = userOperation.maxFeePerGas;
 		const inputMaxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
@@ -791,81 +795,46 @@ export class BaseSimple7702Account extends SmartAccount {
 	 * Deterministic-ECDSA signers yield byte-identical signatures; signers
 	 * that differ in `s` / `v` normalization still validate the same on-chain.
 	 *
-	 * Common use cases beyond direct signing:
-	 *   - Inspect / log the typed data the wallet will display.
-	 *   - Render a custom confirmation UI before delegating to a wallet's
-	 *     `signTypedData`.
-	 *   - Drive non-`ExternalSigner`-shaped signers (HSM, MPC service,
-	 *     backend signing pipelines).
+	 * The base class defaults to EntryPoint v0.8; subclasses
+	 * ({@link Simple7702AccountV09}) override with their own default.
 	 *
 	 * @param userOperation - Unsigned UserOperation to wrap
 	 * @param chainId - Target chain ID (must match the chain that will validate
 	 *   the signature)
+	 * @param overrides - Override the entrypoint address
 	 * @returns EIP-712 {@link TypedData} payload ready for `signTypedData`
-	 * @throws {AbstractionKitError} if this account targets an EntryPoint
-	 *   version other than v0.8 / v0.9. Earlier EntryPoints define the
-	 *   userOpHash differently and require raw-hash signing.
+	 * @throws {AbstractionKitError} if the target EntryPoint is not v0.8 / v0.9.
 	 */
-	public getUserOperationEip712TypedData(
+	public static getUserOperationEip712Data(
 		userOperation: UserOperationV8 | UserOperationV9,
 		chainId: bigint,
+		overrides: { entrypointAddress?: string } = {},
 	): TypedData {
-		const ep = this.entrypointAddress.toLowerCase();
-		const isV9 = ep === ENTRYPOINT_V9.toLowerCase();
-		if (ep !== ENTRYPOINT_V8.toLowerCase() && !isV9) {
-			throw new AbstractionKitError(
-				"BAD_DATA",
-				`getUserOperationEip712TypedData supports EntryPoint v0.8 / v0.9 only; ` +
-					`this account targets ${this.entrypointAddress}. Use signUserOperation ` +
-					`(raw-hash ECDSA) for earlier EntryPoint versions.`,
-			);
-		}
+		const entrypointAddress = overrides.entrypointAddress ?? ENTRYPOINT_V8;
+		return getUserOperationEip712DataV8V9(userOperation, entrypointAddress, chainId);
+	}
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const initCode = buildPackedInitCodeV8V9(userOperation);
-		const accountGasLimits =
-			"0x" +
-			abiCoder.encode(["uint128"], [userOperation.verificationGasLimit]).slice(34) +
-			abiCoder.encode(["uint128"], [userOperation.callGasLimit]).slice(34);
-		const gasFees =
-			"0x" +
-			abiCoder.encode(["uint128"], [userOperation.maxPriorityFeePerGas]).slice(34) +
-			abiCoder.encode(["uint128"], [userOperation.maxFeePerGas]).slice(34);
-		const paymasterAndData = buildPaymasterAndData(userOperation, isV9);
-
-		const types = {
-			PackedUserOperation: [
-				{ name: "sender", type: "address" },
-				{ name: "nonce", type: "uint256" },
-				{ name: "initCode", type: "bytes" },
-				{ name: "callData", type: "bytes" },
-				{ name: "accountGasLimits", type: "bytes32" },
-				{ name: "preVerificationGas", type: "uint256" },
-				{ name: "gasFees", type: "bytes32" },
-				{ name: "paymasterAndData", type: "bytes" },
-			],
-		};
-
-		return {
-			domain: {
-				name: "ERC4337",
-				version: "1",
-				chainId,
-				verifyingContract: this.entrypointAddress as `0x${string}`,
-			},
-			types,
-			primaryType: "PackedUserOperation",
-			message: {
-				sender: userOperation.sender,
-				nonce: userOperation.nonce,
-				initCode,
-				callData: userOperation.callData,
-				accountGasLimits,
-				preVerificationGas: userOperation.preVerificationGas,
-				gasFees,
-				paymasterAndData,
-			},
-		};
+	/**
+	 * Compute the EIP-712 digest of a UserOperation under the EntryPoint
+	 * v0.8 / v0.9 domain. For these EntryPoints this digest IS the
+	 * `userOpHash` ({@link createUserOperationHash}); signing it with raw
+	 * ECDSA or via `signTypedData` over the data from
+	 * {@link getUserOperationEip712Data} produces a signature that validates
+	 * against the same hash on-chain.
+	 *
+	 * @param userOperation - Unsigned UserOperation to hash
+	 * @param chainId - Target chain ID
+	 * @param overrides - Override the entrypoint address (defaults to EntryPoint v0.8)
+	 * @returns The EIP-712 digest as a hex string
+	 * @throws {AbstractionKitError} if the target EntryPoint is not v0.8 / v0.9.
+	 */
+	public static getUserOperationEip712Hash(
+		userOperation: UserOperationV8 | UserOperationV9,
+		chainId: bigint,
+		overrides: { entrypointAddress?: string } = {},
+	): string {
+		const entrypointAddress = overrides.entrypointAddress ?? ENTRYPOINT_V8;
+		return getUserOperationEip712HashV8V9(userOperation, entrypointAddress, chainId);
 	}
 
 	/**
@@ -900,7 +869,9 @@ export class BaseSimple7702Account extends SmartAccount {
 		};
 		const typedData =
 			scheme === "typedData"
-				? this.getUserOperationEip712TypedData(useroperation, chainId)
+				? BaseSimple7702Account.getUserOperationEip712Data(useroperation, chainId, {
+						entrypointAddress: this.entrypointAddress,
+					})
 				: undefined;
 		return invokeSigner(signer, scheme, { hash, typedData, context });
 	}
@@ -913,9 +884,9 @@ export class BaseSimple7702Account extends SmartAccount {
 	 */
 	protected async baseSendUserOperation(
 		userOperation: UserOperationV8 | UserOperationV9,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 	): Promise<SendUseroperationResponse> {
-		const bundler = new Bundler(bundlerRpc);
+		const bundler = Bundler.from(bundlerRpc);
 		const sendUserOperationRes = await bundler.sendUserOperation(
 			userOperation,
 			this.entrypointAddress,
@@ -1066,8 +1037,8 @@ export class Simple7702Account extends BaseSimple7702Account {
 	 */
 	public async createUserOperation(
 		transactions: SimpleMetaTransaction[],
-		providerRpc?: string,
-		bundlerRpc?: string,
+		providerRpc?: string | Transport | JsonRpcNode,
+		bundlerRpc?: string | Transport | Bundler,
 		overrides: CreateUserOperationOverrides = {},
 	): Promise<UserOperationV8> {
 		return this.baseCreateUserOperation(transactions, providerRpc, bundlerRpc, overrides);
@@ -1084,7 +1055,7 @@ export class Simple7702Account extends BaseSimple7702Account {
 	 */
 	public async estimateUserOperationGas(
 		userOperation: UserOperationV8,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
 			dummySignature?: string;
@@ -1134,8 +1105,8 @@ export class Simple7702Account extends BaseSimple7702Account {
 	 * {@link signUserOperation} method, or wrap explicitly with
 	 * `fromPrivateKey(pk)`.
 	 *
-	 * @see {@link BaseSimple7702Account.getUserOperationEip712TypedData} for
-	 *   the lower-level escape hatch when you need the typed data outside the
+	 * @see {@link BaseSimple7702Account.getUserOperationEip712Data} for the
+	 *   lower-level escape hatch when you need the typed data outside the
 	 *   dispatcher (e.g., to render a custom confirmation UI or feed an HSM
 	 *   that doesn't fit the {@link ExternalSigner} shape).
 	 */
@@ -1155,7 +1126,7 @@ export class Simple7702Account extends BaseSimple7702Account {
 	 */
 	public async sendUserOperation(
 		userOperation: UserOperationV8,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 	): Promise<SendUseroperationResponse> {
 		return this.baseSendUserOperation(userOperation, bundlerRpc);
 	}

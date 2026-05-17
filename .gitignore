@@ -3,6 +3,7 @@
 **/.env
 *.log
 .worktrees/
+.anvil-cache/
 
 # IDEs / editors
 .idea/

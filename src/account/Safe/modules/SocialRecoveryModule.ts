@@ -1,6 +1,9 @@
-import type { MetaTransaction } from "../../../types";
-import { createCallData, sendEthCallRequest } from "../../../utils";
-import { SafeModule } from "./SafeModule";
+import {AbstractionKitError} from "../../../errors";
+import type {Transport} from "../../../transport";
+import {JsonRpcNode} from "../../../transport";
+import type {MetaTransaction} from "../../../types";
+import {createCallData} from "../../../utils";
+import {SafeModule} from "./SafeModule";
 
 /**
  * Pre-deployed Social Recovery Module addresses, each with a different
@@ -85,14 +88,27 @@ export class SocialRecoveryModule extends SafeModule {
 	): MetaTransaction {
 		//"multiConfirmRecovery(address,address[],uint256,SignatureData[],bool)"
 		const functionSelector = "0x0728e1e7";
+		// The on-chain module rejects with "SM: duplicate signers/invalid ordering"
+		// unless signature pairs are sorted by signer address ascending. Sort here
+		// so callers don't have to know about this internal constraint.
+		const sortedPairs = [...signaturePairList].sort((a, b) => {
+			const aSigner = BigInt(a.signer);
+			const bSigner = BigInt(b.signer);
+			if (aSigner < bSigner) return -1;
+			if (aSigner > bSigner) return 1;
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Duplicate signer in recovery signaturePairList: ${a.signer}`,
+			);
+		});
 		const callData = createCallData(
 			functionSelector,
-			["address", "address[]", "uint256", "(address,bytes)", "bool"],
+			["address", "address[]", "uint256", "(address,bytes)[]", "bool"],
 			[
 				accountAddress,
 				newOwners,
 				newThreshold,
-				signaturePairList.map((signaturePair) => [signaturePair.signer, signaturePair.signature]),
+				sortedPairs.map((signaturePair) => [signaturePair.signer, signaturePair.signature]),
 				execute,
 			],
 		);
@@ -199,7 +215,7 @@ export class SocialRecoveryModule extends SafeModule {
 	 * @returns promise of a MetaTransaction
 	 */
 	public async createRevokeGuardianWithThresholdMetaTransaction(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		accountAddress: string,
 		guardianAddress: string,
 		threshold: bigint,
@@ -283,7 +299,7 @@ export class SocialRecoveryModule extends SafeModule {
 	 * @returns promise of a recovery hash
 	 */
 	public async getRecoveryHash(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		accountAddress: string,
 		newOwners: string[],
 		newThreshold: number,
@@ -302,7 +318,7 @@ export class SocialRecoveryModule extends SafeModule {
 			data: callData,
 		};
 
-		const recoveryHashResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const recoveryHashResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(recoveryHashResult, "getRecoveryHash");
 		const decodedCalldata = this.abiCoder.decode(["bytes32"], recoveryHashResult);
@@ -316,7 +332,7 @@ export class SocialRecoveryModule extends SafeModule {
 	 * @return promise of the account's current recovery request
 	 */
 	public async getRecoveryRequest(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		accountAddress: string,
 	): Promise<RecoveryRequest> {
 		//"getRecoveryRequest(address)"
@@ -328,7 +344,7 @@ export class SocialRecoveryModule extends SafeModule {
 			data: callData,
 		};
 
-		const recoveryRequestResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const recoveryRequestResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(recoveryRequestResult, "getRecoveryRequest");
 		const decodedCalldata = this.abiCoder.decode(
@@ -353,7 +369,7 @@ export class SocialRecoveryModule extends SafeModule {
 	 * @return promise of the account's current recovery approvals count
 	 */
 	public async getRecoveryApprovals(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		accountAddress: string,
 		newOwners: string[],
 		newThreshold: number,
@@ -370,7 +386,7 @@ export class SocialRecoveryModule extends SafeModule {
 			to: this.moduleAddress,
 			data: callData,
 		};
-		const recoveryApprovalResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const recoveryApprovalResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(recoveryApprovalResult, "getRecoveryApprovals");
 		const decodedCalldata = this.abiCoder.decode(["uint256"], recoveryApprovalResult);
@@ -388,7 +404,7 @@ export class SocialRecoveryModule extends SafeModule {
 	 * @return promise of guardian approval status
 	 */
 	public async hasGuardianApproved(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		accountAddress: string,
 		guardian: string,
 		newOwners: string[],
@@ -406,7 +422,7 @@ export class SocialRecoveryModule extends SafeModule {
 			to: this.moduleAddress,
 			data: callData,
 		};
-		const hasGuardianApprovedResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const hasGuardianApprovedResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(hasGuardianApprovedResult, "hasGuardianApproved");
 		const decodedCalldata = this.abiCoder.decode(["bool"], hasGuardianApprovedResult);
@@ -423,7 +439,7 @@ export class SocialRecoveryModule extends SafeModule {
 	 * the account otherwise `false`.
 	 */
 	public async isGuardian(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		accountAddress: string,
 		guardian: string,
 	): Promise<boolean> {
@@ -439,7 +455,7 @@ export class SocialRecoveryModule extends SafeModule {
 			to: this.moduleAddress,
 			data: callData,
 		};
-		const isGuardianResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const isGuardianResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(isGuardianResult, "isGuardian");
 		const decodedCalldata = this.abiCoder.decode(["bool"], isGuardianResult);
@@ -453,7 +469,10 @@ export class SocialRecoveryModule extends SafeModule {
 	 * @param accountAddress - The target account.
 	 * @return promise of The number of active guardians for an account.
 	 */
-	public async guardiansCount(nodeRpcUrl: string, accountAddress: string): Promise<bigint> {
+	public async guardiansCount(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		accountAddress: string,
+	): Promise<bigint> {
 		//"guardiansCount(address)"
 		const functionSelector = "0xc026e7ee";
 		const callData = createCallData(functionSelector, ["address"], [accountAddress]);
@@ -462,7 +481,7 @@ export class SocialRecoveryModule extends SafeModule {
 			to: this.moduleAddress,
 			data: callData,
 		};
-		const guardiansCountResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const guardiansCountResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(guardiansCountResult, "guardiansCount");
 		const decodedCalldata = this.abiCoder.decode(["uint256"], guardiansCountResult);
@@ -476,7 +495,10 @@ export class SocialRecoveryModule extends SafeModule {
 	 * @param accountAddress - The target account.
 	 * @return promise of Threshold.
 	 */
-	public async threshold(nodeRpcUrl: string, accountAddress: string): Promise<bigint> {
+	public async threshold(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		accountAddress: string,
+	): Promise<bigint> {
 		//"threshold(address)"
 		const functionSelector = "0xc86ec2bf";
 		const callData = createCallData(functionSelector, ["address"], [accountAddress]);
@@ -485,7 +507,7 @@ export class SocialRecoveryModule extends SafeModule {
 			to: this.moduleAddress,
 			data: callData,
 		};
-		const thresholdResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const thresholdResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(thresholdResult, "threshold");
 		const decodedCalldata = this.abiCoder.decode(["uint256"], thresholdResult);
@@ -499,7 +521,10 @@ export class SocialRecoveryModule extends SafeModule {
 	 * @param accountAddress - The target account.
 	 * @return promise of a list of the active guardians for an account.
 	 */
-	public async getGuardians(nodeRpcUrl: string, accountAddress: string): Promise<string[]> {
+	public async getGuardians(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		accountAddress: string,
+	): Promise<string[]> {
 		//"getGuardians(address)"
 		const functionSelector = "0xf18858ab";
 		const callData = createCallData(functionSelector, ["address"], [accountAddress]);
@@ -508,7 +533,7 @@ export class SocialRecoveryModule extends SafeModule {
 			to: this.moduleAddress,
 			data: callData,
 		};
-		const getGuardiansResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const getGuardiansResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(getGuardiansResult, "threshold");
 		const decodedCalldata = this.abiCoder.decode(["address[]"], getGuardiansResult);
@@ -522,7 +547,10 @@ export class SocialRecoveryModule extends SafeModule {
 	 * @param accountAddress - The target account.
 	 * @return promise of the nonce for this account.
 	 */
-	public async nonce(nodeRpcUrl: string, accountAddress: string): Promise<bigint> {
+	public async nonce(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		accountAddress: string,
+	): Promise<bigint> {
 		//"nonce(address)"
 		const functionSelector = "0x70ae92d2";
 		const callData = createCallData(functionSelector, ["address"], [accountAddress]);
@@ -531,7 +559,7 @@ export class SocialRecoveryModule extends SafeModule {
 			to: this.moduleAddress,
 			data: callData,
 		};
-		const nonceResult = await sendEthCallRequest(nodeRpcUrl, ethCallParams, "latest");
+		const nonceResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(nonceResult, "threshold");
 		const decodedCalldata = this.abiCoder.decode(["uint256"], nonceResult);
