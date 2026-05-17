@@ -3,6 +3,7 @@ import {ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8, ENTRYPOINT_V9} from "../con
 import {AbstractionKitError, ensureError} from "../errors";
 import {
 	HttpTransport,
+	normalizingTransport,
 	type RequestArgs,
 	type RequestOptions,
 	type Transport,
@@ -183,8 +184,19 @@ interface CandideSupportedResponse {
 }
 
 export class Erc7677Paymaster extends Paymaster implements Transport {
-	/** The underlying transport. Strings passed to the constructor are wrapped in {@link HttpTransport}. */
+	/**
+	 * The raw transport the user passed in (or {@link HttpTransport} when a URL
+	 * string was passed). Exposed for introspection — reading `.url`,
+	 * `isHttpTransport(...)` checks, passing it back into another service.
+	 *
+	 * Calls made directly on this field (`paymaster.transport.request(...)`)
+	 * go to the raw transport and skip SDK-level behavior like bigint param
+	 * normalization. For SDK-pipeline behavior, use
+	 * {@link Erc7677Paymaster.request} or the typed methods.
+	 */
 	readonly transport: Transport;
+	/** Normalizing wrapper around {@link transport}, used for every SDK-outbound call. */
+	private readonly outbound: Transport;
 	/** Cached chain ID (hex string). Passed via constructor or resolved from the bundler at first use. */
 	private chainId: string | null;
 	/** Detected or explicitly set paymaster provider. `null` means no provider-specific features. */
@@ -236,6 +248,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	constructor(rpc: string | Transport, options: Erc7677PaymasterConstructorOptions = {}) {
 		super();
 		this.transport = typeof rpc === "string" ? new HttpTransport(rpc) : rpc;
+		this.outbound = normalizingTransport(this.transport);
 		this.chainId = options.chainId != null ? `0x${options.chainId.toString(16)}` : null;
 		if (options.provider === undefined || options.provider === "auto") {
 			// Provider auto-detection only fires when input is a string (we have a URL to inspect).
@@ -263,7 +276,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 * an `Erc7677Paymaster` can be slotted into any other transport position.
 	 */
 	request<T = unknown>(args: RequestArgs, options?: RequestOptions): Promise<T> {
-		return this.transport.request<T>(args, options);
+		return this.outbound.request<T>(args, options);
 	}
 
 	/**
@@ -307,7 +320,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		context: Erc7677Context = {},
 	): Promise<Erc7677StubDataResult> {
 		try {
-			const result = await this.transport.request<unknown>({
+			const result = await this.outbound.request<unknown>({
 				method: "pm_getPaymasterStubData",
 				params: [userOperation, entrypoint, chainIdHex, context],
 			});
@@ -330,7 +343,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		context: Erc7677Context = {},
 	): Promise<Erc7677PaymasterFields> {
 		try {
-			const result = await this.transport.request<unknown>({
+			const result = await this.outbound.request<unknown>({
 				method: "pm_getPaymasterData",
 				params: [userOperation, entrypoint, chainIdHex, context],
 			});
@@ -352,7 +365,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 */
 	async sendRPCRequest(method: string, params: unknown[] = []): Promise<unknown> {
 		try {
-			return await this.transport.request<unknown>({ method, params });
+			return await this.outbound.request<unknown>({ method, params });
 		} catch (err) {
 			throw new AbstractionKitError("PAYMASTER_ERROR", `sendRPCRequest(${method}) failed`, {
 				cause: ensureError(err),
@@ -562,7 +575,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		entrypoint: string,
 		chainIdHex: string,
 	): Promise<{ exchangeRate: bigint; paymasterAddress: string }> {
-		const result = (await this.transport.request<unknown>({
+		const result = (await this.outbound.request<unknown>({
 			method: "pimlico_getTokenQuotes",
 			params: [{ tokens: [tokenAddress] }, entrypoint, chainIdHex],
 		})) as { quotes?: Array<{ paymaster: string; token: string; exchangeRate: string }> };
@@ -610,7 +623,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			options.enforceTTL === true &&
 			Date.now() - cached.fetchedAt > CANDIDE_TOKEN_QUOTE_TTL_MS;
 		if (cached != null && !isStale) return cached.data;
-		const result = (await this.transport.request<unknown>({
+		const result = (await this.outbound.request<unknown>({
 			method: "pm_supportedERC20Tokens",
 			params: [entrypoint],
 		})) as CandideSupportedResponse;

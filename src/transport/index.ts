@@ -4,6 +4,7 @@ export { HttpTransport, isHttpTransport } from "./HttpTransport";
 export type { HttpTransportOptions } from "./HttpTransport";
 export type { EthCallTransaction } from "./JsonRpcNode";
 export { JsonRpcNode } from "./JsonRpcNode";
+export { normalizeRpcValue, normalizingTransport } from "./normalize";
 export {
 	isEventfulTransport,
 	type EventfulTransport,

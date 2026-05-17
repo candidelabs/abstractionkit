@@ -7,6 +7,7 @@ import {
 } from "./errors";
 import {
 	HttpTransport,
+	normalizingTransport,
 	type ProviderRpcError,
 	type RequestArgs,
 	type RequestOptions,
@@ -59,14 +60,26 @@ import type {
  * ```
  */
 export class Bundler implements Transport {
-	/** The underlying transport. Strings passed to the constructor are wrapped in {@link HttpTransport}. */
+	/**
+	 * The raw transport the user passed in (or {@link HttpTransport} when a URL
+	 * string was passed). Exposed for introspection — reading `.url`,
+	 * `isHttpTransport(...)` checks, passing it back into another service.
+	 *
+	 * Calls made directly on this field (`bundler.transport.request(...)`) go
+	 * to the raw transport and skip SDK-level behavior like bigint param
+	 * normalization. For SDK-pipeline behavior, use {@link Bundler.request} or
+	 * the typed methods.
+	 */
 	readonly transport: Transport;
+	/** Normalizing wrapper around {@link transport}, used for every SDK-outbound call. */
+	private readonly outbound: Transport;
 
 	/**
 	 * @param rpc - Bundler JSON-RPC endpoint URL, or any {@link Transport}.
 	 */
 	constructor(rpc: string | Transport) {
 		this.transport = typeof rpc === "string" ? new HttpTransport(rpc) : rpc;
+		this.outbound = normalizingTransport(this.transport);
 	}
 
 	/**
@@ -87,7 +100,7 @@ export class Bundler implements Transport {
 	 * transport position.
 	 */
 	request<T = unknown>(args: RequestArgs, options?: RequestOptions): Promise<T> {
-		return this.transport.request<T>(args, options);
+		return this.outbound.request<T>(args, options);
 	}
 
 	/**
@@ -96,7 +109,7 @@ export class Bundler implements Transport {
 	 */
 	async chainId(): Promise<string> {
 		try {
-			const chainId = await this.transport.request<unknown>({ method: "eth_chainId" });
+			const chainId = await this.outbound.request<unknown>({ method: "eth_chainId" });
 			if (typeof chainId !== "string") {
 				throw new AbstractionKitError("BAD_DATA", "bundler eth_chainId rpc call failed");
 			}
@@ -112,7 +125,7 @@ export class Bundler implements Transport {
 	 */
 	async supportedEntryPoints(): Promise<string[]> {
 		try {
-			const result = await this.transport.request<string[]>({
+			const result = await this.outbound.request<string[]>({
 				method: "eth_supportedEntryPoints",
 			});
 			return result;
@@ -138,7 +151,7 @@ export class Bundler implements Transport {
 				state_override_set == null
 					? [useroperation, entrypointAddress]
 					: [useroperation, entrypointAddress, state_override_set];
-			const jsonRpcResult = await this.transport.request<JsonRpcResult>({
+			const jsonRpcResult = await this.outbound.request<JsonRpcResult>({
 				method: "eth_estimateUserOperationGas",
 				params,
 			});
@@ -176,7 +189,7 @@ export class Bundler implements Transport {
 		entrypointAddress: string,
 	): Promise<string> {
 		try {
-			const jsonRpcResult = await this.transport.request<string>({
+			const jsonRpcResult = await this.outbound.request<string>({
 				method: "eth_sendUserOperation",
 				params: [useroperation, entrypointAddress],
 			});
@@ -193,7 +206,7 @@ export class Bundler implements Transport {
 	 */
 	async getUserOperationReceipt(useroperationhash: string): Promise<UserOperationReceiptResult> {
 		try {
-			const jsonRpcResult = await this.transport.request<UserOperationReceiptResult | null>({
+			const jsonRpcResult = await this.outbound.request<UserOperationReceiptResult | null>({
 				method: "eth_getUserOperationReceipt",
 				params: [useroperationhash],
 			});
@@ -233,7 +246,7 @@ export class Bundler implements Transport {
 	 */
 	async getUserOperationByHash(useroperationhash: string): Promise<UserOperationByHashResult> {
 		try {
-			const jsonRpcResult = await this.transport.request<UserOperationByHashResult | null>({
+			const jsonRpcResult = await this.outbound.request<UserOperationByHashResult | null>({
 				method: "eth_getUserOperationByHash",
 				params: [useroperationhash],
 			});

@@ -4,6 +4,7 @@ import {ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8} from "src/constants";
 import {AbstractionKitError, ensureError} from "src/errors";
 import {
 	HttpTransport,
+	normalizingTransport,
 	type RequestArgs,
 	type RequestOptions,
 	type Transport,
@@ -65,8 +66,19 @@ const TOKENS_REQUIRING_ALLOWANCE_RESET: string[] = [
  * const { userOperation: sponsoredOp } = await paymaster.createSponsorPaymasterUserOperation(userOp, bundlerRpcUrl);
  */
 export class CandidePaymaster extends Paymaster implements Transport {
-	/** The underlying transport. Strings passed to the constructor are wrapped in {@link HttpTransport}. */
+	/**
+	 * The raw transport the user passed in (or {@link HttpTransport} when a URL
+	 * string was passed). Exposed for introspection — reading `.url`,
+	 * `isHttpTransport(...)` checks, passing it back into another service.
+	 *
+	 * Calls made directly on this field (`paymaster.transport.request(...)`)
+	 * go to the raw transport and skip SDK-level behavior like bigint param
+	 * normalization. For SDK-pipeline behavior, use
+	 * {@link CandidePaymaster.request} or the typed methods.
+	 */
 	readonly transport: Transport;
+	/** Normalizing wrapper around {@link transport}, used for every SDK-outbound call. */
+	private readonly outbound: Transport;
 	/** Cached token/metadata per EntryPoint address (lowercase keys) */
 	private entrypointData = new Map<string, SupportedERC20TokensAndMetadata>();
 	/** Per-entrypoint initialization promises (lowercase keys) */
@@ -83,6 +95,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	constructor(rpc: string | Transport) {
 		super();
 		this.transport = typeof rpc === "string" ? new HttpTransport(rpc) : rpc;
+		this.outbound = normalizingTransport(this.transport);
 		this.chainId = typeof rpc === "string" ? CandidePaymaster.extractChainIdFromUrl(rpc) : null;
 	}
 
@@ -99,7 +112,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 * `CandidePaymaster` can be slotted into any other transport position.
 	 */
 	request<T = unknown>(args: RequestArgs, options?: RequestOptions): Promise<T> {
-		return this.transport.request<T>(args, options);
+		return this.outbound.request<T>(args, options);
 	}
 
 	/**
@@ -138,7 +151,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 
 	private async fetchChainId(): Promise<string> {
 		try {
-			const result = await this.transport.request<string>({ method: "pm_chainId" });
+			const result = await this.outbound.request<string>({ method: "pm_chainId" });
 			return result;
 		} catch (err) {
 			const error = ensureError(err);
@@ -284,7 +297,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	}
 
 	private async fetchSupportedTokensRpc(entrypoint: string): Promise<unknown> {
-		return await this.transport.request({
+		return await this.outbound.request({
 			method: "pm_supportedERC20Tokens",
 			params: [entrypoint],
 		});
@@ -297,7 +310,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 */
 	async getSupportedEntrypoints(): Promise<string[]> {
 		try {
-			const result = await this.transport.request<string[]>({
+			const result = await this.outbound.request<string[]>({
 				method: "pm_supportedEntryPoints",
 			});
 			return result;
@@ -524,7 +537,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			const entrypoint =
 				overrides.entrypoint ?? this.resolveEntrypoint(smartAccount, userOperation);
 			const chainId = await this.getChainId();
-			const jsonRpcResult = await this.transport.request<unknown>({
+			const jsonRpcResult = await this.outbound.request<unknown>({
 				method: "pm_getPaymasterData",
 				params: [userOperation, entrypoint, chainId, context],
 			});
