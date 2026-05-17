@@ -117,10 +117,21 @@ export function createAndSignLegacyRawTransaction(
  * `(hash: string) => Promise<string>` for use with viem, ethers Signers,
  * hardware wallets, or MPC signers.
  *
+ * The callback signs the auth hash directly — no EIP-191 / EIP-712 / message
+ * prefix. The returned hex string must be one of:
+ *   - **Standard 65-byte signature** (130 hex chars after `0x`): `r (32) || s (32) || v (1)`,
+ *     where `v` is `0`, `1`, `27`, or `28`. This is the shape every common
+ *     library produces (e.g., ethers v6: `Signature.from(wallet.signingKey.sign(hash)).serialized`;
+ *     viem `LocalAccount.sign({ hash })`).
+ *   - **EIP-2098 compact 64-byte signature** (128 hex chars after `0x`): `r (32) || yParityAndS (32)`,
+ *     where the high bit of the second 32-byte word encodes `yParity`.
+ *
+ * The `0x` prefix is optional. Other lengths or out-of-range `v` values throw.
+ *
  * @param chainId - The chain ID the authorization is valid for.
  * @param address - The contract address to delegate code from.
  * @param nonce - The EOA's nonce at the time of signing.
- * @param signer - The EOA's private key or a signing function that returns a 65-byte signature.
+ * @param signer - The EOA's private key or a signing function returning a 65-byte standard or 64-byte EIP-2098 hex signature.
  * @returns The signed authorization with all numeric values as hex strings.
  */
 export function createAndSignEip7702DelegationAuthorization(

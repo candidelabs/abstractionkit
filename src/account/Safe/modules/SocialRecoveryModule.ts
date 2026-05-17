@@ -1,3 +1,4 @@
+import {AbstractionKitError} from "../../../errors";
 import type {Transport} from "../../../transport";
 import {JsonRpcNode} from "../../../transport";
 import type {MetaTransaction} from "../../../types";
@@ -87,14 +88,27 @@ export class SocialRecoveryModule extends SafeModule {
 	): MetaTransaction {
 		//"multiConfirmRecovery(address,address[],uint256,SignatureData[],bool)"
 		const functionSelector = "0x0728e1e7";
+		// The on-chain module rejects with "SM: duplicate signers/invalid ordering"
+		// unless signature pairs are sorted by signer address ascending. Sort here
+		// so callers don't have to know about this internal constraint.
+		const sortedPairs = [...signaturePairList].sort((a, b) => {
+			const aSigner = BigInt(a.signer);
+			const bSigner = BigInt(b.signer);
+			if (aSigner < bSigner) return -1;
+			if (aSigner > bSigner) return 1;
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Duplicate signer in recovery signaturePairList: ${a.signer}`,
+			);
+		});
 		const callData = createCallData(
 			functionSelector,
-			["address", "address[]", "uint256", "(address,bytes)", "bool"],
+			["address", "address[]", "uint256", "(address,bytes)[]", "bool"],
 			[
 				accountAddress,
 				newOwners,
 				newThreshold,
-				signaturePairList.map((signaturePair) => [signaturePair.signer, signaturePair.signature]),
+				sortedPairs.map((signaturePair) => [signaturePair.signer, signaturePair.signature]),
 				execute,
 			],
 		);
