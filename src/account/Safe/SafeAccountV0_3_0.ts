@@ -1,13 +1,10 @@
-import { ENTRYPOINT_V7 } from "src/constants";
-import type { Signer as AkSigner, SignContext } from "src/signer/types";
+import type {Bundler} from "src/Bundler";
+import {ENTRYPOINT_V7} from "src/constants";
+import type {SignContext, Signer as AkSigner} from "src/signer/types";
+import type {JsonRpcNode, Transport} from "src/transport";
 
-import type {
-	MetaTransaction,
-	OnChainIdentifierParamsType,
-	StateOverrideSet,
-	UserOperationV7,
-} from "../../types";
-import { SafeAccount } from "./SafeAccount";
+import type {MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet, UserOperationV7,} from "../../types";
+import {SafeAccount} from "./SafeAccount";
 import type {
 	CreateUserOperationV7Overrides,
 	InitCodeOverrides,
@@ -290,8 +287,8 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 	 */
 	public async createUserOperation(
 		transactions: MetaTransaction[],
-		providerRpc?: string,
-		bundlerRpc?: string,
+		providerRpc?: string | Transport | JsonRpcNode,
+		bundlerRpc?: string | Transport | Bundler,
 		overrides: CreateUserOperationV7Overrides = {},
 	): Promise<UserOperationV7> {
 		const [userOperation, factoryAddress, factoryData] =
@@ -326,7 +323,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 	 */
 	public async estimateUserOperationGas(
 		userOperation: UserOperationV7,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
 			dummySignerSignaturePairs?: SignerSignaturePair[];

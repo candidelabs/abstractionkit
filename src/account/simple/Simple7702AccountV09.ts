@@ -1,7 +1,9 @@
-import { ENTRYPOINT_V9 } from "src/constants";
-import type { Signer as AkSigner, TypedData } from "src/signer/types";
-import type { StateOverrideSet, UserOperationV9 } from "src/types";
-import type { SendUseroperationResponse } from "../SendUseroperationResponse";
+import type {Bundler} from "src/Bundler";
+import {ENTRYPOINT_V9} from "src/constants";
+import type {Signer as AkSigner, TypedData} from "src/signer/types";
+import type {JsonRpcNode, Transport} from "src/transport";
+import type {StateOverrideSet, UserOperationV9} from "src/types";
+import type {SendUseroperationResponse} from "../SendUseroperationResponse";
 import {
 	BaseSimple7702Account,
 	type CreateUserOperationOverrides,
@@ -79,8 +81,8 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	 */
 	public async createUserOperation(
 		transactions: SimpleMetaTransaction[],
-		providerRpc?: string,
-		bundlerRpc?: string,
+		providerRpc?: string | Transport | JsonRpcNode,
+		bundlerRpc?: string | Transport | Bundler,
 		overrides: CreateUserOperationOverrides = {},
 	): Promise<UserOperationV9> {
 		return this.baseCreateUserOperation(transactions, providerRpc, bundlerRpc, overrides);
@@ -97,7 +99,7 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	 */
 	public async estimateUserOperationGas(
 		userOperation: UserOperationV9,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
 			dummySignature?: string;
@@ -167,7 +169,7 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	 */
 	public async sendUserOperation(
 		userOperation: UserOperationV9,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 	): Promise<SendUseroperationResponse> {
 		return this.baseSendUserOperation(userOperation, bundlerRpc);
 	}

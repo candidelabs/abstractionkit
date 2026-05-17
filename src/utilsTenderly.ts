@@ -1,5 +1,5 @@
-import { AbiCoder } from "ethers";
-import { AbstractionKitError } from "./errors";
+import {AbiCoder} from "ethers";
+import {AbstractionKitError, ensureError} from "./errors";
 import type {
 	SingleTransactionTenderlySimulationResult,
 	TenderlySimulationResult,
@@ -8,8 +8,8 @@ import type {
 	UserOperationV8,
 	UserOperationV9,
 } from "./types";
-import { createUserOperationHash, sendJsonRpcRequest } from "./utils";
-import type { Authorization7702Hex } from "./utils7702";
+import {createUserOperationHash} from "./utils";
+import type {Authorization7702Hex} from "./utils7702";
 
 /**
  * State override mapping for Tenderly simulations.
@@ -847,11 +847,66 @@ export async function callTenderlySimulateBundle(
 		"Content-Type": "application/json",
 		"X-Access-Key": tenderlyAccessKey,
 	};
-	return (await sendJsonRpcRequest(
-		tenderlyUrl,
-		"tenderly_simulateBundle",
-		simulations,
-		headers,
-		"simulations",
-	)) as TenderlySimulationResult;
+	const body = JSON.stringify(
+		{
+			method: "tenderly_simulateBundle",
+			simulations,
+			id: Date.now(),
+			jsonrpc: "2.0",
+		},
+		(_key, value) =>
+			// biome-ignore lint/suspicious/noExplicitAny: JSON.stringify replacer
+			typeof value === "bigint" ? `0x${(value as bigint).toString(16)}` : (value as any),
+	);
+	let response: Response;
+	try {
+		response = await fetch(tenderlyUrl, {
+			method: "POST",
+			headers,
+			body,
+			redirect: "follow",
+		});
+	} catch (err) {
+		const e = ensureError(err);
+		throw new AbstractionKitError(
+			"TENDERLY_NETWORK_ERROR",
+			`tenderly_simulateBundle network error: ${e.message}`,
+			{ cause: e },
+		);
+	}
+
+	if (!response.ok) {
+		throw new AbstractionKitError(
+			"TENDERLY_HTTP_ERROR",
+			`tenderly_simulateBundle HTTP ${response.status}: ${response.statusText}`,
+			{
+				errno: response.status,
+				context: { status: response.status, statusText: response.statusText },
+			},
+		);
+	}
+
+	const responseText = await response.text();
+	let json: {
+		simulation_results?: TenderlySimulationResult;
+		error?: { code: number; message: string };
+	};
+	try {
+		json = JSON.parse(responseText);
+	} catch (err) {
+		const e = ensureError(err);
+		throw new AbstractionKitError(
+			"TENDERLY_INVALID_JSON",
+			`tenderly_simulateBundle returned invalid JSON: ${e.message}`,
+			{ cause: e, context: { responseText } },
+		);
+	}
+
+	if (json.simulation_results != null) {
+		return json.simulation_results;
+	}
+	throw new AbstractionKitError("TENDERLY_SIMULATION_ERROR", "tenderly_simulateBundle failed", {
+		errno: json.error?.code,
+		context: JSON.stringify(json),
+	});
 }

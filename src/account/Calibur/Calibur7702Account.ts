@@ -1,16 +1,17 @@
-import { AbiCoder, keccak256, Wallet } from "ethers";
-import { Bundler } from "src/Bundler";
+import {AbiCoder, keccak256, Wallet} from "ethers";
+import {Bundler} from "src/Bundler";
 import {
 	BaseUserOperationDummyValues,
 	CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS,
 	ENTRYPOINT_V8,
 	ZeroAddress,
 } from "src/constants";
-import { AbstractionKitError } from "src/errors";
-import type { PrependTokenPaymasterApproveAccount } from "src/paymaster/types";
-import { invokeSigner, pickScheme } from "src/signer/negotiate";
-import type { Signer as AkSigner, SignContext, SigningScheme, TypedData } from "src/signer/types";
-import type { JsonRpcResult, UserOperationV8, UserOperationV9 } from "src/types";
+import {AbstractionKitError} from "src/errors";
+import type {PrependTokenPaymasterApproveAccount} from "src/paymaster/types";
+import {invokeSigner, pickScheme} from "src/signer/negotiate";
+import type {SignContext, Signer as AkSigner, SigningScheme, TypedData} from "src/signer/types";
+import {JsonRpcNode, type Transport} from "src/transport";
+import type {JsonRpcResult, UserOperationV8, UserOperationV9} from "src/types";
 import {
 	type Authorization7702Hex,
 	bigintToHex,
@@ -21,16 +22,15 @@ import {
 	createCallData,
 	createUserOperationHash,
 	fetchAccountNonce,
-	getDelegatedAddress,
 	getFunctionSelector,
 	getUserOperationEip712DataV8V9,
 	getUserOperationEip712HashV8V9,
 	handlefetchGasPrice,
 	sendJsonRpcRequest,
 } from "../../utils";
-import { SendUseroperationResponse } from "../SendUseroperationResponse";
-import { SmartAccount } from "../SmartAccount";
-import type { SimpleMetaTransaction } from "../simple/Simple7702Account";
+import {SendUseroperationResponse} from "../SendUseroperationResponse";
+import {SmartAccount} from "../SmartAccount";
+import type {SimpleMetaTransaction} from "../simple/Simple7702Account";
 import {
 	type CaliburCreateUserOperationOverrides,
 	type CaliburKey,
@@ -326,8 +326,8 @@ export class Calibur7702Account
 	 */
 	public async createUserOperation(
 		transactions: SimpleMetaTransaction[],
-		providerRpc?: string,
-		bundlerRpc?: string,
+		providerRpc?: string | Transport | JsonRpcNode,
+		bundlerRpc?: string | Transport | Bundler,
 		overrides: CaliburCreateUserOperationOverrides = {},
 	): Promise<UserOperationV8> {
 		if (transactions.length < 1) {
@@ -385,7 +385,9 @@ export class Calibur7702Account
 		let skipEip7702Auth = false;
 		let delegationCheckOp: Promise<string | null> | null = null;
 		if (overrides.eip7702Auth != null && providerRpc != null) {
-			delegationCheckOp = getDelegatedAddress(this.accountAddress, providerRpc).catch(() => null);
+			delegationCheckOp = JsonRpcNode.from(providerRpc)
+				.getDelegatedAddress(this.accountAddress)
+				.catch(() => null);
 		}
 
 		if (overrides.eip7702Auth != null && eip7702AuthNonce == null) {
@@ -570,7 +572,7 @@ export class Calibur7702Account
 				userOperationToEstimate.signature =
 					overrides.dummySignature ?? Calibur7702Account.dummySignature;
 
-				const bundler = new Bundler(bundlerRpc);
+				const bundler = Bundler.from(bundlerRpc);
 				const estimation = await bundler.estimateUserOperationGas(
 					userOperationToEstimate,
 					this.entrypointAddress,
@@ -789,9 +791,9 @@ export class Calibur7702Account
 	 */
 	public async sendUserOperation(
 		userOperation: UserOperationV8,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 	): Promise<SendUseroperationResponse> {
-		const bundler = new Bundler(bundlerRpc);
+		const bundler = Bundler.from(bundlerRpc);
 		const sendUserOperationRes = await bundler.sendUserOperation(
 			userOperation,
 			this.entrypointAddress,
@@ -974,7 +976,7 @@ export class Calibur7702Account
 	 * ```
 	 */
 	public async createRevokeAllKeysMetaTransactions(
-		providerRpc: string,
+		providerRpc: string | Transport | JsonRpcNode,
 	): Promise<SimpleMetaTransaction[]> {
 		const keys = await this.getKeys(providerRpc);
 		return keys.map((key) => {
@@ -1014,7 +1016,7 @@ export class Calibur7702Account
 	public async createRevokeDelegationRawTransaction(
 		chainId: bigint,
 		eoaPrivateKey: string,
-		providerRpc: string,
+		providerRpc: string | Transport | JsonRpcNode,
 		overrides: {
 			nonce?: bigint;
 			authorizationNonce?: bigint;
@@ -1033,7 +1035,7 @@ export class Calibur7702Account
 		}
 
 		// Verify delegation state before revoking
-		const delegatedTo = await getDelegatedAddress(this.accountAddress, providerRpc);
+		const delegatedTo = await JsonRpcNode.from(providerRpc).getDelegatedAddress(this.accountAddress);
 		if (delegatedTo === null) {
 			throw new AbstractionKitError("BAD_DATA", "Account is not delegated — nothing to revoke");
 		}
@@ -1167,14 +1169,14 @@ export class Calibur7702Account
 	/**
 	 * Check if this EOA is delegated to this account's singleton (delegatee).
 	 * Returns `false` if not delegated at all or delegated to a different
-	 * singleton. Use the standalone {@link getDelegatedAddress} utility to
-	 * get the raw delegatee address regardless of which singleton it is.
+	 * singleton. Use {@link JsonRpcNode.getDelegatedAddress} to get the raw
+	 * delegatee address regardless of which singleton it is.
 	 *
 	 * @param providerRpc - JSON-RPC endpoint
 	 * @returns True if the account is delegated to `this.delegateeAddress`
 	 */
-	public async isDelegatedToThisAccount(providerRpc: string): Promise<boolean> {
-		const address = await getDelegatedAddress(this.accountAddress, providerRpc);
+	public async isDelegatedToThisAccount(providerRpc: string | Transport | JsonRpcNode): Promise<boolean> {
+		const address = await JsonRpcNode.from(providerRpc).getDelegatedAddress(this.accountAddress);
 		if (address === null) return false;
 		return address.toLowerCase() === this.delegateeAddress.toLowerCase();
 	}
@@ -1186,7 +1188,7 @@ export class Calibur7702Account
 	 * @param sequenceKey - Optional sequence key for parallel nonce channels (default: 0)
 	 * @returns The fully constructed nonce `(sequenceKey << 64) | seq`
 	 */
-	public async getNonce(providerRpc: string, sequenceKey = 0): Promise<bigint> {
+	public async getNonce(providerRpc: string | Transport | JsonRpcNode, sequenceKey = 0): Promise<bigint> {
 		return fetchAccountNonce(providerRpc, this.entrypointAddress, this.accountAddress, sequenceKey);
 	}
 
@@ -1197,7 +1199,7 @@ export class Calibur7702Account
 	 * @param keyHash - The key hash to check
 	 * @returns True if the key is registered
 	 */
-	public async isKeyRegistered(providerRpc: string, keyHash: string): Promise<boolean> {
+	public async isKeyRegistered(providerRpc: string | Transport | JsonRpcNode, keyHash: string): Promise<boolean> {
 		const abiCoder = AbiCoder.defaultAbiCoder();
 		const callData = IS_REGISTERED_SELECTOR + abiCoder.encode(["bytes32"], [keyHash]).slice(2);
 
@@ -1225,7 +1227,7 @@ export class Calibur7702Account
 	 * @returns Parsed {@link CaliburKeySettingsResult} with all fields populated
 	 */
 	public async getKeySettings(
-		providerRpc: string,
+		providerRpc: string | Transport | JsonRpcNode,
 		keyHash: string,
 	): Promise<CaliburKeySettingsResult> {
 		const abiCoder = AbiCoder.defaultAbiCoder();
@@ -1254,7 +1256,7 @@ export class Calibur7702Account
 	 * @param keyHash - The key hash to query
 	 * @returns Parsed {@link CaliburKey}
 	 */
-	public async getKey(providerRpc: string, keyHash: string): Promise<CaliburKey> {
+	public async getKey(providerRpc: string | Transport | JsonRpcNode, keyHash: string): Promise<CaliburKey> {
 		const abiCoder = AbiCoder.defaultAbiCoder();
 		const callData = GET_KEY_SELECTOR + abiCoder.encode(["bytes32"], [keyHash]).slice(2);
 
@@ -1289,7 +1291,7 @@ export class Calibur7702Account
 	 * @returns Array of registered {@link CaliburKey}s
 	 */
 	public async getKeys(
-		providerRpc: string,
+		providerRpc: string | Transport | JsonRpcNode,
 		overrides: { blockNumber?: bigint } = {},
 	): Promise<CaliburKey[]> {
 		const abiCoder = AbiCoder.defaultAbiCoder();

@@ -156,6 +156,24 @@ export type {
 	UserOperationV9,
 } from "./types";
 
+export {
+	BaseRpcTransport,
+	HttpTransport,
+	isEventfulTransport,
+	isHttpTransport,
+	JsonRpcNode,
+	TransportRpcError,
+} from "./transport";
+export type {
+	EthCallTransaction,
+	EventfulTransport,
+	HttpTransportOptions,
+	JsonRpcEnvelope,
+	ProviderRpcError,
+	RequestArgs,
+	RequestOptions,
+	Transport,
+} from "./transport";
 export { GasOption, Operation, PolygonChain } from "./types";
 export type { DepositInfo } from "./utils";
 export {
@@ -163,10 +181,6 @@ export {
 	createCallData,
 	createUserOperationHash,
 	fetchAccountNonce,
-	fetchGasPrice,
-	getBalanceOf,
-	getDelegatedAddress,
-	getDepositInfo,
 	getFunctionSelector,
 	sendJsonRpcRequest,
 } from "./utils";

@@ -1,20 +1,17 @@
-import { Safe_L2_V1_5_0 } from "src/constants";
-import type {
-	MetaTransaction,
-	OnChainIdentifierParamsType,
-	StateOverrideSet,
-	UserOperationV7,
-} from "src/types";
-import { SafeAccount } from "./SafeAccount";
-import { SafeAccountV0_3_0 } from "./SafeAccountV0_3_0";
+import type {Bundler} from "src/Bundler";
+import {Safe_L2_V1_5_0} from "src/constants";
+import type {JsonRpcNode, Transport} from "src/transport";
+import type {MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet, UserOperationV7,} from "src/types";
+import {SafeAccount} from "./SafeAccount";
+import {SafeAccountV0_3_0} from "./SafeAccountV0_3_0";
 import type {
 	CreateUserOperationV7Overrides,
 	InitCodeOverrides,
 	SafeAccountSingleton,
 	Signer,
 	SignerSignaturePair,
-	WebAuthnSignatureOverrides,
 	WebauthnPublicKey,
+	WebAuthnSignatureOverrides,
 } from "./types";
 
 /**
@@ -176,8 +173,8 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 	 */
 	public async createUserOperation(
 		transactions: MetaTransaction[],
-		providerRpc?: string,
-		bundlerRpc?: string,
+		providerRpc?: string | Transport | JsonRpcNode,
+		bundlerRpc?: string | Transport | Bundler,
 		overrides: CreateUserOperationV7Overrides = {},
 	): Promise<UserOperationV7> {
 		return super.createUserOperation(transactions, providerRpc, bundlerRpc, {
@@ -201,7 +198,7 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 	 */
 	public async estimateUserOperationGas(
 		userOperation: UserOperationV7,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		overrides: {
 			stateOverrideSet?: StateOverrideSet;
 			dummySignerSignaturePairs?: SignerSignaturePair[];
@@ -319,7 +316,7 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 	 * @returns Promise of `true` if the signature verifies, otherwise `false`
 	 */
 	public static async verifyWebAuthnSignatureForMessageHash(
-		nodeRpcUrl: string,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		signer: WebauthnPublicKey,
 		messageHash: string,
 		signature: string,

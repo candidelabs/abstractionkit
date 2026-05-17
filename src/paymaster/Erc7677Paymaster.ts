@@ -1,9 +1,16 @@
-import { Bundler } from "../Bundler";
-import { ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8, ENTRYPOINT_V9 } from "../constants";
-import { AbstractionKitError, ensureError } from "../errors";
-import type { StateOverrideSet, TokenQuote } from "../types";
-import { calculateUserOperationMaxGasCost, sendJsonRpcRequest } from "../utils";
-import { Paymaster } from "./Paymaster";
+import {Bundler} from "../Bundler";
+import {ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8, ENTRYPOINT_V9} from "../constants";
+import {AbstractionKitError, ensureError} from "../errors";
+import {
+	HttpTransport,
+	normalizingTransport,
+	type RequestArgs,
+	type RequestOptions,
+	type Transport,
+} from "../transport";
+import type {StateOverrideSet, TokenQuote} from "../types";
+import {calculateUserOperationMaxGasCost} from "../utils";
+import {Paymaster} from "./Paymaster";
 import type {
 	AnyUserOperation,
 	Erc7677PaymasterConstructorOptions,
@@ -176,9 +183,20 @@ interface CandideSupportedResponse {
 	};
 }
 
-export class Erc7677Paymaster extends Paymaster {
-	/** The paymaster JSON-RPC endpoint URL */
-	readonly rpcUrl: string;
+export class Erc7677Paymaster extends Paymaster implements Transport {
+	/**
+	 * The raw transport the user passed in (or {@link HttpTransport} when a URL
+	 * string was passed). Exposed for introspection — reading `.url`,
+	 * `isHttpTransport(...)` checks, passing it back into another service.
+	 *
+	 * Calls made directly on this field (`paymaster.transport.request(...)`)
+	 * go to the raw transport and skip SDK-level behavior like bigint param
+	 * normalization. For SDK-pipeline behavior, use
+	 * {@link Erc7677Paymaster.request} or the typed methods.
+	 */
+	readonly transport: Transport;
+	/** Normalizing wrapper around {@link transport}, used for every SDK-outbound call. */
+	private readonly outbound: Transport;
 	/** Cached chain ID (hex string). Passed via constructor or resolved from the bundler at first use. */
 	private chainId: string | null;
 	/** Detected or explicitly set paymaster provider. `null` means no provider-specific features. */
@@ -214,33 +232,59 @@ export class Erc7677Paymaster extends Paymaster {
 	}
 
 	/**
-	 * @param rpcUrl - Paymaster JSON-RPC endpoint. Can be the same URL as the
-	 *   bundler when the provider bundles both (Candide, Pimlico, Alchemy);
-	 *   can also be a separate paymaster-only endpoint.
+	 * @param rpc - Paymaster JSON-RPC endpoint URL, or any {@link Transport}.
+	 *   Can be the same URL as the bundler when the provider bundles both
+	 *   (Candide, Pimlico, Alchemy); can also be a separate paymaster-only
+	 *   endpoint, or a fully custom transport.
 	 * @param options
 	 * @param options.chainId - Optional chain id as a bigint (e.g. `1n` for
 	 *   mainnet). When provided, avoids a lookup at first use. Otherwise,
 	 *   resolved from the bundler via `eth_chainId` on the first call.
 	 * @param options.provider - Paymaster provider. `"auto"` (default) detects
-	 *   from the RPC URL. Set explicitly to override, or `null` to disable.
+	 *   from the RPC URL (only when a URL string is passed; non-string inputs
+	 *   default to `null` unless overridden here). Set explicitly to override,
+	 *   or `null` to disable provider-specific features.
 	 */
-	constructor(rpcUrl: string, options: Erc7677PaymasterConstructorOptions = {}) {
+	constructor(rpc: string | Transport, options: Erc7677PaymasterConstructorOptions = {}) {
 		super();
-		this.rpcUrl = rpcUrl;
+		this.transport = typeof rpc === "string" ? new HttpTransport(rpc) : rpc;
+		this.outbound = normalizingTransport(this.transport);
 		this.chainId = options.chainId != null ? `0x${options.chainId.toString(16)}` : null;
 		if (options.provider === undefined || options.provider === "auto") {
-			this.provider = Erc7677Paymaster.detectProvider(rpcUrl);
+			// Provider auto-detection only fires when input is a string (we have a URL to inspect).
+			this.provider = typeof rpc === "string" ? Erc7677Paymaster.detectProvider(rpc) : null;
 		} else {
 			this.provider = options.provider;
 		}
 	}
 
 	/**
+	 * Normalize any acceptable input into an `Erc7677Paymaster`. Returns the
+	 * input by reference when it's already an `Erc7677Paymaster` (in which
+	 * case the second `options` argument is ignored — the existing instance's
+	 * configuration is preserved).
+	 */
+	static from(
+		input: string | Transport | Erc7677Paymaster,
+		options?: Erc7677PaymasterConstructorOptions,
+	): Erc7677Paymaster {
+		return input instanceof Erc7677Paymaster ? input : new Erc7677Paymaster(input, options);
+	}
+
+	/**
+	 * Transport delegate. Forwards directly to {@link Transport.request}, so
+	 * an `Erc7677Paymaster` can be slotted into any other transport position.
+	 */
+	request<T = unknown>(args: RequestArgs, options?: RequestOptions): Promise<T> {
+		return this.outbound.request<T>(args, options);
+	}
+
+	/**
 	 * Resolve the chain id, querying the bundler if not provided at construction.
 	 */
-	private async getChainId(bundlerRpc: string): Promise<string> {
+	private async getChainId(bundlerRpc: string | Transport | Bundler): Promise<string> {
 		if (this.chainId != null) return this.chainId;
-		const id = await new Bundler(bundlerRpc).chainId();
+		const id = await Bundler.from(bundlerRpc).chainId();
 		this.chainId = id;
 		return id;
 	}
@@ -276,12 +320,10 @@ export class Erc7677Paymaster extends Paymaster {
 		context: Erc7677Context = {},
 	): Promise<Erc7677StubDataResult> {
 		try {
-			const result = await sendJsonRpcRequest(this.rpcUrl, "pm_getPaymasterStubData", [
-				userOperation,
-				entrypoint,
-				chainIdHex,
-				context,
-			]);
+			const result = await this.outbound.request<unknown>({
+				method: "pm_getPaymasterStubData",
+				params: [userOperation, entrypoint, chainIdHex, context],
+			});
 			return result as Erc7677StubDataResult;
 		} catch (err) {
 			throw new AbstractionKitError("PAYMASTER_ERROR", "pm_getPaymasterStubData failed", {
@@ -301,12 +343,10 @@ export class Erc7677Paymaster extends Paymaster {
 		context: Erc7677Context = {},
 	): Promise<Erc7677PaymasterFields> {
 		try {
-			const result = await sendJsonRpcRequest(this.rpcUrl, "pm_getPaymasterData", [
-				userOperation,
-				entrypoint,
-				chainIdHex,
-				context,
-			]);
+			const result = await this.outbound.request<unknown>({
+				method: "pm_getPaymasterData",
+				params: [userOperation, entrypoint, chainIdHex, context],
+			});
 			return result as Erc7677PaymasterFields;
 		} catch (err) {
 			throw new AbstractionKitError("PAYMASTER_ERROR", "pm_getPaymasterData failed", {
@@ -325,7 +365,7 @@ export class Erc7677Paymaster extends Paymaster {
 	 */
 	async sendRPCRequest(method: string, params: unknown[] = []): Promise<unknown> {
 		try {
-			return await sendJsonRpcRequest(this.rpcUrl, method, params);
+			return await this.outbound.request<unknown>({ method, params });
 		} catch (err) {
 			throw new AbstractionKitError("PAYMASTER_ERROR", `sendRPCRequest(${method}) failed`, {
 				cause: ensureError(err),
@@ -351,7 +391,7 @@ export class Erc7677Paymaster extends Paymaster {
 	async createPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: T,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		context: Erc7677Context = {},
 		overrides: GasPaymasterUserOperationOverrides = {},
 	): Promise<{ userOperation: SameUserOp<T>; tokenQuote?: TokenQuote }> {
@@ -417,7 +457,7 @@ export class Erc7677Paymaster extends Paymaster {
 	 */
 	private async estimateAndApplyGasLimits(
 		userOp: AnyUserOperation,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		entrypoint: string,
 		overrides: GasPaymasterUserOperationOverrides,
 	): Promise<void> {
@@ -436,7 +476,7 @@ export class Erc7677Paymaster extends Paymaster {
 					"bundlerRpc can't be null if preVerificationGas, verificationGasLimit and callGasLimit are not overridden",
 				);
 			}
-			const bundler = new Bundler(bundlerRpc);
+			const bundler = Bundler.from(bundlerRpc);
 			userOp.callGasLimit = 0n;
 			userOp.verificationGasLimit = 0n;
 			userOp.preVerificationGas = 0n;
@@ -535,11 +575,10 @@ export class Erc7677Paymaster extends Paymaster {
 		entrypoint: string,
 		chainIdHex: string,
 	): Promise<{ exchangeRate: bigint; paymasterAddress: string }> {
-		const result = (await sendJsonRpcRequest(this.rpcUrl, "pimlico_getTokenQuotes", [
-			{ tokens: [tokenAddress] },
-			entrypoint,
-			chainIdHex,
-		])) as { quotes?: Array<{ paymaster: string; token: string; exchangeRate: string }> };
+		const result = (await this.outbound.request<unknown>({
+			method: "pimlico_getTokenQuotes",
+			params: [{ tokens: [tokenAddress] }, entrypoint, chainIdHex],
+		})) as { quotes?: Array<{ paymaster: string; token: string; exchangeRate: string }> };
 
 		const quotes = result?.quotes;
 		if (!Array.isArray(quotes) || quotes.length === 0) {
@@ -584,9 +623,10 @@ export class Erc7677Paymaster extends Paymaster {
 			options.enforceTTL === true &&
 			Date.now() - cached.fetchedAt > CANDIDE_TOKEN_QUOTE_TTL_MS;
 		if (cached != null && !isStale) return cached.data;
-		const result = (await sendJsonRpcRequest(this.rpcUrl, "pm_supportedERC20Tokens", [
-			entrypoint,
-		])) as unknown as CandideSupportedResponse;
+		const result = (await this.outbound.request<unknown>({
+			method: "pm_supportedERC20Tokens",
+			params: [entrypoint],
+		})) as CandideSupportedResponse;
 		this.candideCache.set(key, { data: result, fetchedAt: Date.now() });
 		return result;
 	}
@@ -694,7 +734,7 @@ export class Erc7677Paymaster extends Paymaster {
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOp: T,
 		tokenAddress: string,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		entrypoint: string,
 		chainIdHex: string,
 		context: Erc7677Context,
@@ -821,7 +861,7 @@ export class Erc7677Paymaster extends Paymaster {
 	 */
 	private async sponsoredFlow<T extends AnyUserOperation>(
 		userOp: T,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		entrypoint: string,
 		chainIdHex: string,
 		context: Erc7677Context,

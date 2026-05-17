@@ -1,7 +1,14 @@
-import { isAddress } from "ethers";
-import { Bundler } from "src/Bundler";
-import { ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8 } from "src/constants";
-import { AbstractionKitError, ensureError } from "src/errors";
+import {isAddress} from "ethers";
+import {Bundler} from "src/Bundler";
+import {ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8} from "src/constants";
+import {AbstractionKitError, ensureError} from "src/errors";
+import {
+	HttpTransport,
+	normalizingTransport,
+	type RequestArgs,
+	type RequestOptions,
+	type Transport,
+} from "src/transport";
 import type {
 	ERC20Token,
 	ERC20TokenWithExchangeRate,
@@ -14,8 +21,8 @@ import type {
 	SupportedERC20TokensAndMetadataWithExchangeRate,
 	TokenQuote,
 } from "../types";
-import { calculateUserOperationMaxGasCost, sendJsonRpcRequest } from "../utils";
-import { Paymaster } from "./Paymaster";
+import {calculateUserOperationMaxGasCost} from "../utils";
+import {Paymaster} from "./Paymaster";
 import type {
 	AnyUserOperation,
 	CandidePaymasterContext,
@@ -58,9 +65,20 @@ const TOKENS_REQUIRING_ALLOWANCE_RESET: string[] = [
  * const paymaster = new CandidePaymaster("https://api.candide.dev/public/v3/11155111");
  * const { userOperation: sponsoredOp } = await paymaster.createSponsorPaymasterUserOperation(userOp, bundlerRpcUrl);
  */
-export class CandidePaymaster extends Paymaster {
-	/** The paymaster JSON-RPC endpoint URL */
-	readonly rpcUrl: string;
+export class CandidePaymaster extends Paymaster implements Transport {
+	/**
+	 * The raw transport the user passed in (or {@link HttpTransport} when a URL
+	 * string was passed). Exposed for introspection — reading `.url`,
+	 * `isHttpTransport(...)` checks, passing it back into another service.
+	 *
+	 * Calls made directly on this field (`paymaster.transport.request(...)`)
+	 * go to the raw transport and skip SDK-level behavior like bigint param
+	 * normalization. For SDK-pipeline behavior, use
+	 * {@link CandidePaymaster.request} or the typed methods.
+	 */
+	readonly transport: Transport;
+	/** Normalizing wrapper around {@link transport}, used for every SDK-outbound call. */
+	private readonly outbound: Transport;
 	/** Cached token/metadata per EntryPoint address (lowercase keys) */
 	private entrypointData = new Map<string, SupportedERC20TokensAndMetadata>();
 	/** Per-entrypoint initialization promises (lowercase keys) */
@@ -69,11 +87,32 @@ export class CandidePaymaster extends Paymaster {
 	private chainId: string | null = null;
 	private chainIdPromise: Promise<string> | null = null;
 
-	/** @param rpcUrl - The Candide paymaster JSON-RPC endpoint URL */
-	constructor(rpcUrl: string) {
+	/**
+	 * @param rpc - The Candide paymaster JSON-RPC endpoint URL, or any {@link Transport}.
+	 *   When a URL string is passed, the chain id is inferred from the URL path
+	 *   when possible; otherwise it's resolved lazily via `pm_chainId`.
+	 */
+	constructor(rpc: string | Transport) {
 		super();
-		this.rpcUrl = rpcUrl;
-		this.chainId = CandidePaymaster.extractChainIdFromUrl(rpcUrl);
+		this.transport = typeof rpc === "string" ? new HttpTransport(rpc) : rpc;
+		this.outbound = normalizingTransport(this.transport);
+		this.chainId = typeof rpc === "string" ? CandidePaymaster.extractChainIdFromUrl(rpc) : null;
+	}
+
+	/**
+	 * Normalize any acceptable input into a `CandidePaymaster`. Returns the
+	 * input by reference when it's already a `CandidePaymaster`.
+	 */
+	static from(input: string | Transport | CandidePaymaster): CandidePaymaster {
+		return input instanceof CandidePaymaster ? input : new CandidePaymaster(input);
+	}
+
+	/**
+	 * Transport delegate. Forwards directly to {@link Transport.request}, so a
+	 * `CandidePaymaster` can be slotted into any other transport position.
+	 */
+	request<T = unknown>(args: RequestArgs, options?: RequestOptions): Promise<T> {
+		return this.outbound.request<T>(args, options);
 	}
 
 	/**
@@ -112,8 +151,8 @@ export class CandidePaymaster extends Paymaster {
 
 	private async fetchChainId(): Promise<string> {
 		try {
-			const result = await sendJsonRpcRequest(this.rpcUrl, "pm_chainId", []);
-			return result as string;
+			const result = await this.outbound.request<string>({ method: "pm_chainId" });
+			return result;
 		} catch (err) {
 			const error = ensureError(err);
 			throw new AbstractionKitError("PAYMASTER_ERROR", "pm_chainId failed", { cause: error });
@@ -258,7 +297,10 @@ export class CandidePaymaster extends Paymaster {
 	}
 
 	private async fetchSupportedTokensRpc(entrypoint: string): Promise<unknown> {
-		return await sendJsonRpcRequest(this.rpcUrl, "pm_supportedERC20Tokens", [entrypoint]);
+		return await this.outbound.request({
+			method: "pm_supportedERC20Tokens",
+			params: [entrypoint],
+		});
 	}
 
 	/**
@@ -268,8 +310,10 @@ export class CandidePaymaster extends Paymaster {
 	 */
 	async getSupportedEntrypoints(): Promise<string[]> {
 		try {
-			const result = await sendJsonRpcRequest(this.rpcUrl, "pm_supportedEntryPoints", []);
-			return result as string[];
+			const result = await this.outbound.request<string[]>({
+				method: "pm_supportedEntryPoints",
+			});
+			return result;
 		} catch (err) {
 			const error = ensureError(err);
 
@@ -366,7 +410,7 @@ export class CandidePaymaster extends Paymaster {
 
 	private async estimateAndApplyGasLimits(
 		userOp: AnyUserOperation,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		entrypoint: string,
 		overrides: GasPaymasterUserOperationOverrides,
 	): Promise<void> {
@@ -385,7 +429,7 @@ export class CandidePaymaster extends Paymaster {
 					"bundlerRpc can't be null if preVerificationGas,verificationGasLimit and callGasLimit are not overridden",
 				);
 			}
-			const bundler = new Bundler(bundlerRpc);
+			const bundler = Bundler.from(bundlerRpc);
 
 			userOp.callGasLimit = 0n;
 			userOp.verificationGasLimit = 0n;
@@ -493,12 +537,10 @@ export class CandidePaymaster extends Paymaster {
 			const entrypoint =
 				overrides.entrypoint ?? this.resolveEntrypoint(smartAccount, userOperation);
 			const chainId = await this.getChainId();
-			const jsonRpcResult = await sendJsonRpcRequest(this.rpcUrl, "pm_getPaymasterData", [
-				userOperation,
-				entrypoint,
-				chainId,
-				context,
-			]);
+			const jsonRpcResult = await this.outbound.request<unknown>({
+				method: "pm_getPaymasterData",
+				params: [userOperation, entrypoint, chainId, context],
+			});
 			const sponsorMetadata = this.applyPaymasterResult(userOperation, jsonRpcResult);
 			return {
 				userOperation: userOperation as unknown as SameUserOp<T>,
@@ -529,7 +571,7 @@ export class CandidePaymaster extends Paymaster {
 	async createSponsorPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: SmartAccountWithEntrypoint,
 		userOperation: T,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		sponsorshipPolicyId?: string,
 		context?: CandidePaymasterContext,
 		overrides?: GasPaymasterUserOperationOverrides,
@@ -571,7 +613,7 @@ export class CandidePaymaster extends Paymaster {
 		smartAccount: PrependTokenPaymasterApproveAccount,
 		userOperation: T,
 		tokenAddress: string,
-		bundlerRpc: string,
+		bundlerRpc: string | Transport | Bundler,
 		context?: CandidePaymasterContext,
 		overrides?: GasPaymasterUserOperationOverrides,
 	): Promise<{ userOperation: SameUserOp<T>; tokenQuote?: TokenQuote }> {
