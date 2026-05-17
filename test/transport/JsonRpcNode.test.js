@@ -118,17 +118,21 @@ describe("JsonRpcNode", () => {
 	});
 
 	test("getFeeData() applies the gasLevel multiplier and returns bigints", async () => {
-		// eth_gasPrice and eth_maxPriorityFeePerGas both available
+		// eth_gasPrice and eth_maxPriorityFeePerGas both available.
+		// Values chosen so gasPrice >= maxPriorityFeePerGas (the realistic
+		// ordering); otherwise the `priorityFee > maxFeePerGas` guard inside
+		// getFeeData would bump maxFee up to match priority and the multiplier
+		// check would be obscured.
 		const mock = tx(({ method }) => {
-			if (method === "eth_gasPrice") return "0x3b9aca00"; // 1 gwei
-			if (method === "eth_maxPriorityFeePerGas") return "0x77359400"; // 2 gwei
+			if (method === "eth_gasPrice") return "0x77359400"; // 2 gwei
+			if (method === "eth_maxPriorityFeePerGas") return "0x3b9aca00"; // 1 gwei
 			return null;
 		});
 		const node = new ak.JsonRpcNode(mock);
 		const [maxFee, priority] = await node.getFeeData(ak.GasOption.Medium); // 1.2x
-		// 1e9 * 1.2 = 1.2e9, 2e9 * 1.2 = 2.4e9
-		expect(maxFee).toBe(1_200_000_000n);
-		expect(priority).toBe(2_400_000_000n);
+		// 2e9 * 1.2 = 2.4e9, 1e9 * 1.2 = 1.2e9
+		expect(maxFee).toBe(2_400_000_000n);
+		expect(priority).toBe(1_200_000_000n);
 	});
 
 	test("getFeeData() falls back to a default when neither call is supported", async () => {
