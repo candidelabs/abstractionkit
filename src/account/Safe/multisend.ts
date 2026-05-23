@@ -1,4 +1,4 @@
-import { AbiCoder, getBytes, solidityPacked } from "ethers";
+import { decodeAbiParameters, getBytes, solidityPacked } from "../../ethereUtils";
 import { type MetaTransaction, Operation } from "src/types";
 
 /**
@@ -34,7 +34,6 @@ export function encodeMultiSendCallData(metaTransactions: MetaTransaction[]): st
  * @returns The decoded packed transaction bytes as a hex string.
  */
 export function decodeMultiSendCallData(callData: string): string {
-	const abiCoder = AbiCoder.defaultAbiCoder();
-	const decodedCalldata = abiCoder.decode(["bytes"], `0x${callData.slice(10)}`);
+	const decodedCalldata = decodeAbiParameters(["bytes"], `0x${callData.slice(10)}`);
 	return decodedCalldata[0] as string;
 }

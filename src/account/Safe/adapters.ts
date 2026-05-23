@@ -1,4 +1,4 @@
-import { getBytes, hexlify } from "ethers";
+import { getBytes, hexlify } from "../../ethereUtils";
 import type { Signer } from "src/signer/types";
 import { SafeAccount } from "./SafeAccount";
 import type { WebauthnPublicKey, WebauthnSignatureData } from "./types";

@@ -1,4 +1,4 @@
-import {AbiCoder, Wallet} from "ethers";
+import {decodeAbiParameters, signHash} from "src/ethereUtils";
 import {Bundler} from "src/Bundler";
 import {BaseUserOperationDummyValues, ENTRYPOINT_V8, ENTRYPOINT_V9} from "src/constants";
 import {AbstractionKitError} from "src/errors";
@@ -760,8 +760,7 @@ export class BaseSimple7702Account extends SmartAccount {
 			chainId,
 		);
 
-		const wallet = new Wallet(privateKey);
-		return wallet.signingKey.sign(userOperationHash).serialized;
+		return signHash(privateKey, userOperationHash).serialized;
 	}
 
 	/**
@@ -947,10 +946,9 @@ export class BaseSimple7702Account extends SmartAccount {
 			data: approveCallData,
 		};
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
 		let decodedMetaTransactions: SimpleMetaTransaction[];
 		if (callData.startsWith(BaseSimple7702Account.batchExecutorFunctionSelector)) {
-			const decodedParamsArray = abiCoder.decode(
+			const decodedParamsArray = decodeAbiParameters(
 				BaseSimple7702Account.batchExecutorFunctionInputAbi,
 				`0x${callData.slice(10)}`,
 			)[0] as [];
@@ -963,7 +961,7 @@ export class BaseSimple7702Account extends SmartAccount {
 						: decodedParams[2],
 			}));
 		} else if (callData.startsWith(BaseSimple7702Account.executorFunctionSelector)) {
-			const decodedParams = abiCoder.decode(
+			const decodedParams = decodeAbiParameters(
 				BaseSimple7702Account.executorFunctionInputAbi,
 				`0x${callData.slice(10)}`,
 			);
