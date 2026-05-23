@@ -261,6 +261,7 @@ const smartAccount = (await SafeAccountV0_3_0.isDeployed(safeAddress, nodeRpc))
 ```typescript
 import {
   Calibur7702Account,
+  JsonRpcNode,
   createAndSignEip7702DelegationAuthorization,
 } from "abstractionkit";
 
@@ -295,7 +296,7 @@ const response = await account.sendUserOperation(userOp, bundlerRpc);
 const receipt = await response.included();
 ```
 
-After the first UserOp deploys the delegation, subsequent UserOps no longer need `eip7702Auth`. Use `getDelegatedAddress(eoaAddress, nodeRpc)` to check delegation status.
+After the first UserOp deploys the delegation, subsequent UserOps no longer need `eip7702Auth`. Use `JsonRpcNode.from(nodeRpc).getDelegatedAddress(eoaAddress)` to check delegation status.
 
 ### Calibur 7702: register a WebAuthn passkey
 
