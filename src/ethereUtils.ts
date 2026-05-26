@@ -439,7 +439,9 @@ function _pack(type: string, value: unknown, isArray?: boolean): Uint8Array {
 export function solidityPacked(types: ReadonlyArray<string>, values: ReadonlyArray<unknown>): Hex {
     assertArgument(types.length === values.length, "wrong number of values", "values", values);
     const tight: Uint8Array[] = [];
-    types.forEach((type, index) => tight.push(_pack(type, values[index])));
+    for (let i = 0; i < types.length; i++) {
+        tight.push(_pack(types[i], values[i]));
+    }
     return hexlify(concat(tight));
 }
 
@@ -676,26 +678,47 @@ function encodeTuple(types: AbiType[], values: unknown[]): Uint8Array {
     return concatBytes([...heads, ...tails]);
 }
 
+function ensureRange(data: Uint8Array, offset: number, len: number, what: string): void {
+    if (offset < 0 || len < 0 || offset + len > data.length) {
+        throw new Error(
+            `ABI decode: out-of-bounds read for ${what} ` +
+            `(offset=${offset}, length=${len}, data.length=${data.length})`,
+        );
+    }
+}
+
 function decodeValue(t: AbiType, data: Uint8Array, base: number): unknown {
     switch (t.kind) {
         case "uint": {
+            ensureRange(data, base, WordSize, `${t.signed ? "int" : "uint"}${t.bits}`);
             const raw = toBigInt(data.slice(base, base + WordSize));
             const masked = mask(raw, t.bits);
             return t.signed ? fromTwos(masked, t.bits) : masked;
         }
-        case "address": return getAddress(hexlify(data.slice(base + 12, base + WordSize)));
-        case "bool": return data[base + 31] !== 0;
-        case "bytesN": return hexlify(data.slice(base, base + t.size));
+        case "address":
+            ensureRange(data, base, WordSize, "address");
+            return getAddress(hexlify(data.slice(base + 12, base + WordSize)));
+        case "bool":
+            ensureRange(data, base, WordSize, "bool");
+            return data[base + 31] !== 0;
+        case "bytesN":
+            ensureRange(data, base, WordSize, `bytes${t.size}`);
+            return hexlify(data.slice(base, base + t.size));
         case "bytes": {
+            ensureRange(data, base, WordSize, "bytes length");
             const len = toNumber(data.slice(base, base + WordSize));
+            ensureRange(data, base + WordSize, len, "bytes payload");
             return hexlify(data.slice(base + WordSize, base + WordSize + len));
         }
         case "string": {
+            ensureRange(data, base, WordSize, "string length");
             const len = toNumber(data.slice(base, base + WordSize));
+            ensureRange(data, base + WordSize, len, "string payload");
             return new TextDecoder().decode(data.slice(base + WordSize, base + WordSize + len));
         }
         case "array": {
             if (t.size === -1) {
+                ensureRange(data, base, WordSize, "array length");
                 const len = toNumber(data.slice(base, base + WordSize));
                 return decodeTupleAt(Array<AbiType>(len).fill(t.child), data, base + WordSize);
             }
@@ -711,12 +734,21 @@ function decodeTupleAt(types: AbiType[], data: Uint8Array, base: number): unknow
     let head = 0;
     for (const t of types) {
         if (isDynamic(t)) {
+            ensureRange(data, base + head, WordSize, "tuple offset slot");
             const off = toNumber(data.slice(base + head, base + head + WordSize));
+            if (off < 0 || base + off > data.length) {
+                throw new Error(
+                    `ABI decode: tuple dynamic offset out-of-bounds ` +
+                    `(offset=${off}, base=${base}, data.length=${data.length})`,
+                );
+            }
             out.push(decodeValue(t, data, base + off));
             head += WordSize;
         } else {
+            const size = staticSize(t);
+            ensureRange(data, base + head, size, `tuple static slot (${t.kind})`);
             out.push(decodeValue(t, data, base + head));
-            head += staticSize(t);
+            head += size;
         }
     }
     return out;
@@ -730,8 +762,7 @@ export function encodeAbiParameters(
     return hexlify(encodeTuple(types.map(parseType), values as unknown[]));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function decodeAbiParameters(types: ReadonlyArray<string>, data: BytesLike): any[] {
+export function decodeAbiParameters(types: ReadonlyArray<string>, data: BytesLike): unknown[] {
     return decodeTupleAt(types.map(parseType), getBytes(data), 0);
 }
 
