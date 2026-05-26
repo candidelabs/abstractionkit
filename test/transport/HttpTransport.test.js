@@ -65,6 +65,24 @@ describe("HttpTransport", () => {
 		expect(new Set(ids).size).toBe(3); // all distinct
 	});
 
+	test("sendJsonRpcRequest returns non-standard simulation_results responses", async () => {
+		const originalFetch = global.fetch;
+		global.fetch = jest.fn(async () =>
+			jsonResponse({
+				jsonrpc: "2.0",
+				id: 1,
+				simulation_results: [{ transaction: { hash: "0x1" }, simulation: { id: "sim-1" } }],
+			}),
+		);
+
+		try {
+			const result = await ak.sendJsonRpcRequest("https://example.test/rpc", "tenderly_simulateBundle", []);
+			expect(result).toEqual([{ transaction: { hash: "0x1" }, simulation: { id: "sim-1" } }]);
+		} finally {
+			global.fetch = originalFetch;
+		}
+	});
+
 	test("throws TransportRpcError on JSON-RPC error response", async () => {
 		const fetch = makeMockFetch(() =>
 			jsonResponse({

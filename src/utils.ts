@@ -551,6 +551,9 @@ export async function sendJsonRpcRequest(
 	if ("result" in response) {
 		return response.result as JsonRpcResult;
 	}
+	if ("simulation_results" in response) {
+		return response.simulation_results as JsonRpcResult;
+	}
 	const err = response.error as JsonRpcError;
 	throw new TransportRpcError(err.code, err.message);
 }
