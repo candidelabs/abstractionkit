@@ -98,10 +98,6 @@ export function isHexString(value: unknown, length?: number | boolean): value is
     return true;
 }
 
-function isBytesLike(value: unknown): value is BytesLike {
-    return isHexString(value, true) || value instanceof Uint8Array;
-}
-
 export function hexlify(data: BytesLike): Hex {
     const bytes = getBytes(data);
     let result = "0x";
