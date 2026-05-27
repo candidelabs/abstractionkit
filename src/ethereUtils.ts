@@ -758,7 +758,7 @@ export function encodeAbiParameters(
     return hexlify(encodeTuple(types.map(parseType), values as unknown[]));
 }
 
-export function decodeAbiParameters(types: ReadonlyArray<string>, data: BytesLike): unknown[] {
+export function decodeAbiParameters(types: ReadonlyArray<string>, data: BytesLike): any[] {
     return decodeTupleAt(types.map(parseType), getBytes(data), 0);
 }
 
