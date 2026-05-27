@@ -758,8 +758,40 @@ export function encodeAbiParameters(
     return hexlify(encodeTuple(types.map(parseType), values as unknown[]));
 }
 
-export function decodeAbiParameters(types: ReadonlyArray<string>, data: BytesLike): unknown[] {
-    return decodeTupleAt(types.map(parseType), getBytes(data), 0);
+type AbiDecodedValue<T extends string> =
+    T extends `${infer Element}[${string}]` ? AbiDecodedValue<Element>[] :
+    T extends `(${infer Components})` ? AbiDecodedValues<SplitAbiTuple<Components>> :
+    T extends "address" | "bytes" | "string" | `bytes${number}` ? string :
+    T extends "bool" ? boolean :
+    T extends "uint" | "int" | `uint${number}` | `int${number}` ? bigint :
+    unknown;
+
+type SplitAbiTuple<
+    T extends string,
+    Current extends string = "",
+    Depth extends unknown[] = [],
+    Values extends string[] = [],
+> = T extends `${infer Character}${infer Rest}` ?
+    Character extends "(" ?
+        SplitAbiTuple<Rest, `${Current}${Character}`, [...Depth, unknown], Values> :
+    Character extends ")" ?
+        SplitAbiTuple<Rest, `${Current}${Character}`, Depth extends [unknown, ...infer Tail] ? Tail : [], Values> :
+    Character extends "," ?
+        Depth extends [] ?
+            SplitAbiTuple<Rest, "", Depth, [...Values, Current]> :
+            SplitAbiTuple<Rest, `${Current}${Character}`, Depth, Values> :
+        SplitAbiTuple<Rest, `${Current}${Character}`, Depth, Values> :
+    Current extends "" ? Values : [...Values, Current];
+
+type AbiDecodedValues<T extends readonly string[]> = {
+    -readonly [K in keyof T]: T[K] extends string ? AbiDecodedValue<T[K]> : never;
+};
+
+export function decodeAbiParameters<const T extends readonly string[]>(
+    types: T,
+    data: BytesLike,
+): AbiDecodedValues<T> {
+    return decodeTupleAt(types.map(parseType), getBytes(data), 0) as unknown as AbiDecodedValues<T>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

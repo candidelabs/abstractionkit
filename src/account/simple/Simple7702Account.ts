@@ -135,7 +135,7 @@ export class BaseSimple7702Account extends SmartAccount {
 	/** Function selector for `execute(address,uint256,bytes)` */
 	static readonly executorFunctionSelector = "0xb61d27f6"; //execute
 	/** ABI parameter types for the single-call `execute` function */
-	static readonly executorFunctionInputAbi: string[] = [
+	static readonly executorFunctionInputAbi: ["address", "uint256", "bytes"] = [
 		"address", //dest
 		"uint256", //value
 		"bytes", //func
@@ -143,7 +143,7 @@ export class BaseSimple7702Account extends SmartAccount {
 	/** Function selector for `executeBatch((address,uint256,bytes)[])` */
 	static readonly batchExecutorFunctionSelector = "0x34fcd5be"; //executeBatch
 	/** ABI parameter types for the batch `executeBatch` function */
-	static readonly batchExecutorFunctionInputAbi = ["(address,uint256,bytes)[]"];
+	static readonly batchExecutorFunctionInputAbi: ["(address,uint256,bytes)[]"] = ["(address,uint256,bytes)[]"];
 	/** Dummy ECDSA signature used during gas estimation */
 	static readonly dummySignature =
 		"0xd2614025fc173b86704caf37b2fb447f7618101a0d31f5f304c777024cef38a060a29ee43fcf0c46f9107d4f670b8a85c2c017a1fe9e4af891f24f0be6ba5d671c";
@@ -951,10 +951,10 @@ export class BaseSimple7702Account extends SmartAccount {
 			const decodedParamsArray = decodeAbiParameters(
 				BaseSimple7702Account.batchExecutorFunctionInputAbi,
 				`0x${callData.slice(10)}`,
-			)[0] as [];
+			)[0];
 			decodedMetaTransactions = decodedParamsArray.map((decodedParams) => ({
 				to: decodedParams[0] as string,
-				value: BigInt(decodedParams[1] as string),
+				value: BigInt(decodedParams[1]),
 				data:
 					typeof decodedParams[2] !== "string"
 						? new TextDecoder().decode(decodedParams[2])
@@ -968,7 +968,7 @@ export class BaseSimple7702Account extends SmartAccount {
 			decodedMetaTransactions = [
 				{
 					to: decodedParams[0] as string,
-					value: BigInt(decodedParams[1] as string),
+					value: BigInt(decodedParams[1]),
 					data:
 						typeof decodedParams[2] !== "string"
 							? new TextDecoder().decode(decodedParams[2])

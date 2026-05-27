@@ -412,7 +412,7 @@ export class SafeAccount extends SmartAccount {
 			return [
 				{
 					to: decodedParams[0] as string,
-					value: BigInt(decodedParams[1] as string),
+					value: BigInt(decodedParams[1]),
 					data: accountCallDataString,
 					operation: Number(decodedParams[3]),
 				},

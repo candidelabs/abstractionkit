@@ -1261,7 +1261,7 @@ export class Calibur7702Account
 
 		if (typeof result === "string") {
 			const decoded = decodeAbiParameters(["(uint8,bytes)"], result);
-			const keyTuple = decoded[0] as [number, string];
+			const keyTuple = decoded[0];
 			return {
 				keyType: Number(keyTuple[0]) as CaliburKeyType,
 				publicKey: keyTuple[1] as string,
@@ -1343,7 +1343,7 @@ export class Calibur7702Account
 				);
 			}
 			const decoded = decodeAbiParameters(["(uint8,bytes)"], keyResult);
-			const keyTuple = decoded[0] as [number, string];
+			const keyTuple = decoded[0];
 			keys.push({
 				keyType: Number(keyTuple[0]) as CaliburKeyType,
 				publicKey: keyTuple[1] as string,
