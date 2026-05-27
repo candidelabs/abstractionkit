@@ -39,7 +39,8 @@
 		"url": "git+https://github.com/candidelabs/abstractionkit.git"
 	},
 	"files": [
-		"dist"
+		"dist",
+		"THIRD_PARTY_NOTICES.md"
 	],
 	"keywords": [
 		"Account Abstraction",

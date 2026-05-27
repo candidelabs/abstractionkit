@@ -9,6 +9,9 @@
  *   src.ts/address/{address,checks}.ts
  *   src.ts/abi/{abi-coder, coders/*}.ts
  *   src.ts/transaction/address.ts
+ *
+ * Portions adapted from ethers v6.13.x, Copyright (c) 2016-2025 Richard Moore,
+ * licensed under MIT. See THIRD_PARTY_NOTICES.md.
  */
 
 import { keccak_256 } from "@noble/hashes/sha3";
@@ -400,7 +403,7 @@ function _pack(type: string, value: unknown, isArray?: boolean): Uint8Array {
     let match = type.match(regexNumber);
     if (match) {
         const signed = match[1] === "int";
-        let size = parseInt(match[2] || "256");
+        let size = parseInt(match[2] || "256", 10);
         assertArgument(
             (!match[2] || match[2] === String(size)) && size % 8 === 0 && size !== 0 && size <= 256,
             "invalid number type", "type", type,
@@ -412,7 +415,7 @@ function _pack(type: string, value: unknown, isArray?: boolean): Uint8Array {
 
     match = type.match(regexBytes);
     if (match) {
-        const size = parseInt(match[1]);
+        const size = parseInt(match[1], 10);
         assertArgument(String(size) === match[1] && size !== 0 && size <= 32, "invalid bytes type", "type", type);
         assertArgument(dataLength(value as BytesLike) === size, `invalid value for ${type}`, "value", value);
         if (isArray) return getBytes(zeroPadBytes(value as BytesLike, 32));
@@ -422,7 +425,7 @@ function _pack(type: string, value: unknown, isArray?: boolean): Uint8Array {
     match = type.match(regexArray);
     if (match && Array.isArray(value)) {
         const baseType = match[1];
-        const count = parseInt(match[2] || String(value.length));
+        const count = parseInt(match[2] || String(value.length), 10);
         assertArgument(count === value.length, `invalid array length for ${type}`, "value", value);
         const result: Uint8Array[] = [];
         for (const v of value) result.push(_pack(baseType, v, true));
@@ -527,7 +530,7 @@ function parseType(s: string): AbiType {
     s = s.trim();
     const m = s.match(/^(.+?)((?:\[\d*\])*)$/);
     assertArgument(!!m, `invalid type`, "type", s);
-    const base = m![1], suffix = m![2];
+    const base = m[1], suffix = m[2];
 
     let t: AbiType;
     if (base.startsWith("(")) {
@@ -541,20 +544,20 @@ function parseType(s: string): AbiType {
     else {
         const um = base.match(regexNumber);
         if (um) {
-            const bits = parseInt(um[2] || "256");
+            const bits = parseInt(um[2] || "256", 10);
             assertArgument(bits !== 0 && bits <= 256 && bits % 8 === 0, "invalid number type", "type", base);
             t = { kind: "uint", bits, signed: um[1] === "int" };
         } else {
             const bm = base.match(regexBytes);
             assertArgument(!!bm, `unknown type ${base}`, "type", base);
-            const size = parseInt(bm![1]);
+            const size = parseInt(bm[1], 10);
             assertArgument(size !== 0 && size <= 32, "invalid bytes type", "type", base);
             t = { kind: "bytesN", size };
         }
     }
 
     for (const ap of suffix.matchAll(/\[(\d*)\]/g)) {
-        t = { kind: "array", child: t, size: ap[1] ? parseInt(ap[1]) : -1 };
+        t = { kind: "array", child: t, size: ap[1] ? parseInt(ap[1], 10) : -1 };
     }
     return t;
 }
@@ -813,7 +816,7 @@ function getBaseEncoder(type: string): null | ((value: unknown) => Hex) {
         const match = type.match(/^(u?)int(\d+)$/);
         if (match) {
             const signed = match[1] === "";
-            const width = parseInt(match[2]);
+            const width = parseInt(match[2], 10);
             assertArgument(
                 width % 8 === 0 && width !== 0 && width <= 256 && match[2] === String(width),
                 "invalid numeric width", "type", type,
@@ -830,7 +833,7 @@ function getBaseEncoder(type: string): null | ((value: unknown) => Hex) {
     {
         const match = type.match(/^bytes(\d+)$/);
         if (match) {
-            const width = parseInt(match[1]);
+            const width = parseInt(match[1], 10);
             assertArgument(width !== 0 && width <= 32 && match[1] === String(width), "invalid bytes width", "type", type);
             return (v: unknown) => {
                 const bytes = getBytes(v as BytesLike);
@@ -857,7 +860,7 @@ function splitArray(type: string): ArrayResult {
         return {
             base: match[1],
             index: match[2] + match[4],
-            array: { base: match[1], prefix: match[1] + match[2], count: match[5] ? parseInt(match[5]) : -1 },
+            array: { base: match[1], prefix: match[1] + match[2], count: match[5] ? parseInt(match[5], 10) : -1 },
         };
     }
     return { base: type };
@@ -882,8 +885,8 @@ function buildTypedDataState(_types: Record<string, ReadonlyArray<TypedDataField
     for (const type of Object.keys(_types)) {
         types[type] = _types[type].map(({ name, type }) => {
             let { base, index } = splitArray(type);
-            if (base === "int" && !_types["int"]) base = "int256";
-            if (base === "uint" && !_types["uint"]) base = "uint256";
+            if (base === "int" && !_types.int) base = "int256";
+            if (base === "uint" && !_types.uint) base = "uint256";
             return { name, type: base + (index || "") };
         });
         links.set(type, new Set());
@@ -899,13 +902,16 @@ function buildTypedDataState(_types: Record<string, ReadonlyArray<TypedDataField
             const baseType = splitArray(field.type).base;
             assertArgument(baseType !== name, `circular type reference to ${JSON.stringify(baseType)}`, "types", _types);
             if (getBaseEncoder(baseType)) continue;
-            assertArgument(parents.has(baseType), `unknown type ${JSON.stringify(baseType)}`, "types", _types);
-            parents.get(baseType)!.push(name);
-            links.get(name)!.add(baseType);
+            const parentTypes = parents.get(baseType);
+            assertArgument(parentTypes != null, `unknown type ${JSON.stringify(baseType)}`, "types", _types);
+            parentTypes.push(name);
+            const childTypes = links.get(name);
+            assertCheck(childTypes != null, `missing links for type ${name}`);
+            childTypes.add(baseType);
         }
     }
 
-    const primaryTypes = Array.from(parents.keys()).filter((n) => parents.get(n)!.length === 0);
+    const primaryTypes = Array.from(parents.keys()).filter((n) => (parents.get(n) ?? []).length === 0);
     assertArgument(primaryTypes.length !== 0, "missing primary type", "types", _types);
     assertArgument(primaryTypes.length === 1, `ambiguous primary types or unused types: ${primaryTypes.map((t) => JSON.stringify(t)).join(", ")}`, "types", _types);
     const primaryType = primaryTypes[0];
@@ -913,10 +919,14 @@ function buildTypedDataState(_types: Record<string, ReadonlyArray<TypedDataField
     function checkCircular(type: string, found: Set<string>): void {
         assertArgument(!found.has(type), `circular type reference to ${JSON.stringify(type)}`, "types", _types);
         found.add(type);
-        for (const child of links.get(type)!) {
+        for (const child of links.get(type) ?? []) {
             if (!parents.has(child)) continue;
             checkCircular(child, found);
-            for (const subtype of found) subtypes.get(subtype)!.add(child);
+            for (const subtype of found) {
+                const subtypeSet = subtypes.get(subtype);
+                assertCheck(subtypeSet != null, `missing subtype set for ${subtype}`);
+                subtypeSet.add(child);
+            }
         }
         found.delete(type);
     }
@@ -953,7 +963,9 @@ function buildTypedDataState(_types: Record<string, ReadonlyArray<TypedDataField
         }
         const fields = types[type];
         if (fields) {
-            const encodedType = id(fullTypes.get(type)!);
+            const fullType = fullTypes.get(type);
+            assertCheck(fullType != null, `missing fully encoded type ${type}`);
+            const encodedType = id(fullType);
             return (value: unknown) => {
                 const obj = value as Record<string, unknown>;
                 const values = fields.map(({ name, type }) => {
@@ -997,17 +1009,16 @@ function hashDomain(domain: TypedDataDomain): Hex {
     return hashStruct("EIP712Domain", domain as Record<string, unknown>);
 }
 
-export function hashTypedData(
+export function hashTypedData<T extends object>(
     domain: TypedDataDomain,
     types: Record<string, ReadonlyArray<TypedDataField>>,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    value: Record<string, any>,
+    value: T,
 ): Hex {
     // Strip EIP712Domain from user types (ethers does this implicitly).
     const userTypes: Record<string, ReadonlyArray<TypedDataField>> = {};
     for (const [k, v] of Object.entries(types)) if (k !== "EIP712Domain") userTypes[k] = v;
     const { primaryType, hashStruct } = buildTypedDataState(userTypes);
-    return keccak256(concat(["0x1901", hashDomain(domain), hashStruct(primaryType, value)]));
+    return keccak256(concat(["0x1901", hashDomain(domain), hashStruct(primaryType, value as Record<string, unknown>)]));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1049,12 +1060,11 @@ export function signHash(privateKey: string, hash: BytesLike): Signature {
     };
 }
 
-export function signTypedData(
+export function signTypedData<T extends object>(
     privateKey: string,
     domain: TypedDataDomain,
     types: Record<string, ReadonlyArray<TypedDataField>>,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    message: Record<string, any>,
+    message: T,
 ): Hex {
     return signHash(privateKey, hashTypedData(domain, types, message)).serialized;
 }

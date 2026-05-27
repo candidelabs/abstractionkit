@@ -38,6 +38,17 @@
 			}
 		}
 	},
+	"overrides": [
+		{
+			"includes": ["src/ethereUtils.ts"],
+			"formatter": { "enabled": false },
+			"linter": {
+				"rules": {
+					"style": { "useTemplate": "off" }
+				}
+			}
+		}
+	],
 	"assist": {
 		"enabled": true,
 		"actions": {
