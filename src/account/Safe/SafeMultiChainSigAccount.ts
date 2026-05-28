@@ -13,7 +13,7 @@ import {
 import {invokeSigner, pickScheme} from "src/signer/negotiate";
 import type {MultiOpSignContext, SignContext, Signer as AkSigner, TypedData} from "src/signer/types";
 import type {JsonRpcNode, Transport} from "src/transport";
-import type {MetaTransaction, OnChainIdentifierParamsType, UserOperationV9} from "../../types";
+import type {MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet, UserOperationV9} from "../../types";
 import {
 	DEFAULT_WEB_AUTHN_DAIMO_VERIFIER_V_0_2_1,
 	DEFAULT_WEB_AUTHN_PRECOMPILE_RIP_7951,
@@ -449,6 +449,132 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	}
 
 	/**
+	 * Estimate gas limits for a multichain UserOperation using the bundler.
+	 * Applies the multichain dummy-signature encoding and Safe Passkey module
+	 * v0.2.1 WebAuthn defaults.
+	 *
+	 * @param userOperation - The UserOperation to estimate gas for
+	 * @param bundlerRpc - Bundler RPC URL, transport, or Bundler instance
+	 * @param overrides - State overrides, dummy signatures, and WebAuthn configuration
+	 * @returns A tuple of [preVerificationGas, verificationGasLimit, callGasLimit]
+	 */
+	public async estimateUserOperationGas(
+		userOperation: UserOperationV9,
+		bundlerRpc: string | Transport | Bundler,
+		overrides: {
+			stateOverrideSet?: StateOverrideSet;
+			dummySignerSignaturePairs?: SignerSignaturePair[];
+			expectedSigners?: Signer[];
+			webAuthnSharedSigner?: string;
+			webAuthnSignerFactory?: string;
+			webAuthnSignerSingleton?: string;
+			webAuthnSignerProxyCreationCode?: string;
+			eip7212WebAuthnPrecompileVerifier?: string;
+			eip7212WebAuthnContractVerifier?: string;
+		} = {},
+	): Promise<[bigint, bigint, bigint]> {
+		return this.baseEstimateUserOperationGas(userOperation, bundlerRpc, {
+			...overrides,
+			isMultiChainSignature: true,
+			webAuthnSharedSigner:
+				overrides.webAuthnSharedSigner ??
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+			webAuthnSignerFactory:
+				overrides.webAuthnSignerFactory ??
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
+			webAuthnSignerSingleton:
+				overrides.webAuthnSignerSingleton ??
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
+			webAuthnSignerProxyCreationCode:
+				overrides.webAuthnSignerProxyCreationCode ??
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
+			eip7212WebAuthnPrecompileVerifier:
+				overrides.eip7212WebAuthnPrecompileVerifier ??
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifier:
+				overrides.eip7212WebAuthnContractVerifier ??
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
+		});
+	}
+
+	/**
+	 * Get the single-operation EIP-712 typed data for this multichain account.
+	 * Uses the instance EntryPoint and Safe 4337 module, and is the recommended
+	 * manual-signing path for length-1 multichain UserOperations.
+	 *
+	 * @param useroperation - UserOperation to get typed data for
+	 * @param chainId - target chain ID
+	 * @param overrides - optional validity window and explicit address overrides
+	 * @returns Object with domain, types, and messageValue for EIP-712 signing
+	 */
+	public getUserOperationEip712Data(
+		useroperation: UserOperationV9,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		} = {},
+	): {
+		domain: SafeUserOperationTypedDataDomain;
+		types: Record<string, { name: string; type: string }[]>;
+		messageValue: SafeUserOperationV9TypedMessageValue;
+	} {
+		return SafeMultiChainSigAccountV1.getUserOperationEip712Data(useroperation, chainId, {
+			...overrides,
+			entrypointAddress: overrides.entrypointAddress ?? this.entrypointAddress,
+			safe4337ModuleAddress: overrides.safe4337ModuleAddress ?? this.safe4337ModuleAddress,
+		});
+	}
+
+	/**
+	 * Hash the single-operation EIP-712 typed data for this multichain account.
+	 * Uses the instance EntryPoint and Safe 4337 module.
+	 *
+	 * @param useroperation - UserOperation to hash
+	 * @param chainId - target chain ID
+	 * @param overrides - optional validity window and explicit address overrides
+	 * @returns EIP-712 digest as a hex string
+	 */
+	public getUserOperationEip712Hash(
+		useroperation: UserOperationV9,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		} = {},
+	): string {
+		const data = this.getUserOperationEip712Data(useroperation, chainId, overrides);
+		return TypedDataEncoder.hash(data.domain, data.types, data.messageValue);
+	}
+
+	/**
+	 * Format signer/signature pairs for this multichain account. The multichain
+	 * signature flag, module address, and v0.2.1 WebAuthn defaults are applied
+	 * automatically.
+	 *
+	 * @param signerSignaturePairs - signer/signature pairs to encode
+	 * @param options - optional validity window, Merkle proof, module, and WebAuthn encoding overrides
+	 * @returns formatted UserOperation signature
+	 */
+	public formatUserOperationSignature(
+		signerSignaturePairs: SignerSignaturePair[],
+		options: SafeSignatureOptions & WebAuthnSignatureOverrides = {},
+	): string {
+		return SafeMultiChainSigAccountV1.formatSingleUserOperationSignature(
+			signerSignaturePairs,
+			{
+				...options,
+				safe4337ModuleAddress: options.safe4337ModuleAddress ?? this.safe4337ModuleAddress,
+			},
+			options,
+		);
+	}
+
+	/**
 	 * create a useroperation signature
 	 * @param useroperation - useroperation to sign
 	 * @param privateKeys - for the signers
@@ -858,6 +984,28 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		};
 	}
 
+	private static formatSingleUserOperationSignature(
+		signerSignaturePairs: SignerSignaturePair[],
+		options: SafeSignatureOptions = {},
+		webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
+	): string {
+		return SafeAccount.formatSignaturesToUseroperationSignature(signerSignaturePairs, {
+			safe4337ModuleAddress: SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+			eip7212WebAuthnPrecompileVerifier:
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifier:
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
+			webAuthnSignerFactory: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
+			webAuthnSignerSingleton: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
+			webAuthnSignerProxyCreationCode:
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
+			webAuthnSharedSigner: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+			...options,
+			...webAuthnSignatureOverrides,
+			isMultiChainSignature: true,
+		});
+	}
+
 	/**
 	 * format a list of eip712 signatures to a list of multi chain useroperations signatures
 	 * @param signerSignaturePairs - a list of a pair of a signer and it's signature
@@ -871,29 +1019,31 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		if (userOperationsToSign.length < 1) {
 			throw new RangeError("There should be at least one userOperationsToSign");
 		}
+		const defaultOptions: SafeSignatureOptions = {
+			safe4337ModuleAddress: SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+		};
 		const defaultWebAuthnOverrides: WebAuthnSignatureOverrides = {
-			eip7212WebAuthnPrecompileVerifier: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifier: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
+			eip7212WebAuthnPrecompileVerifier:
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifier:
+				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 			webAuthnSignerFactory: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
 			webAuthnSignerSingleton: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
 			webAuthnSignerProxyCreationCode:
 				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
 			webAuthnSharedSigner: SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
 		};
-		const defaultOptions: SafeSignatureOptions = {
-			safe4337ModuleAddress: SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS,
-		};
 		if (userOperationsToSign.length === 1) {
 			return [
-				SafeAccount.formatSignaturesToUseroperationSignature(signerSignaturePairs, {
-					...defaultOptions,
-					...defaultWebAuthnOverrides,
-					...userOperationsToSign[0].options,
-					...userOperationsToSign[0].webAuthnSignatureOverrides,
-					validAfter: userOperationsToSign[0].validAfter,
-					validUntil: userOperationsToSign[0].validUntil,
-					isMultiChainSignature: true,
-				}),
+				SafeMultiChainSigAccountV1.formatSingleUserOperationSignature(
+					signerSignaturePairs,
+					{
+						...userOperationsToSign[0].options,
+						validAfter: userOperationsToSign[0].validAfter,
+						validUntil: userOperationsToSign[0].validUntil,
+					},
+					userOperationsToSign[0].webAuthnSignatureOverrides,
+				),
 			];
 		}
 		const userOperationsHashes: string[] = [];

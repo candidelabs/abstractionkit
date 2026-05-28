@@ -548,6 +548,83 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
+	 * Get the EIP-712 typed data for this account's configured EntryPoint and
+	 * Safe 4337 module. Prefer this instance method for manual signing so
+	 * custom constructor overrides are carried through automatically.
+	 *
+	 * @param useroperation - UserOperation to get typed data for
+	 * @param chainId - target chain ID
+	 * @param overrides - optional validity window and explicit address overrides
+	 * @returns Object with domain, types, and messageValue for EIP-712 signing
+	 */
+	public getUserOperationEip712Data(
+		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV9,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		} = {},
+	): {
+		domain: SafeUserOperationTypedDataDomain;
+		types: Record<string, { name: string; type: string }[]>;
+		messageValue:
+			| SafeUserOperationV6TypedMessageValue
+			| SafeUserOperationV7TypedMessageValue
+			| SafeUserOperationV9TypedMessageValue;
+	} {
+		return SafeAccount.getUserOperationEip712Data(useroperation, chainId, {
+			...overrides,
+			entrypointAddress: overrides.entrypointAddress ?? this.entrypointAddress,
+			safe4337ModuleAddress: overrides.safe4337ModuleAddress ?? this.safe4337ModuleAddress,
+		});
+	}
+
+	/**
+	 * Hash the EIP-712 typed data for this account's configured EntryPoint and
+	 * Safe 4337 module. Prefer this instance method for manual signing so
+	 * custom constructor overrides are carried through automatically.
+	 *
+	 * @param useroperation - UserOperation to hash
+	 * @param chainId - target chain ID
+	 * @param overrides - optional validity window and explicit address overrides
+	 * @returns EIP-712 digest as a hex string
+	 */
+	public getUserOperationEip712Hash(
+		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV9,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		} = {},
+	): string {
+		const data = this.getUserOperationEip712Data(useroperation, chainId, overrides);
+		return TypedDataEncoder.hash(data.domain, data.types, data.messageValue);
+	}
+
+	/**
+	 * Format signer/signature pairs for this account's signature encoding.
+	 * Prefer this instance method for manual signing so account-level module
+	 * context is applied automatically.
+	 *
+	 * @param signerSignaturePairs - signer/signature pairs to encode
+	 * @param options - optional validity window, multi-chain, module, and WebAuthn encoding overrides
+	 * @returns formatted UserOperation signature
+	 */
+	public formatUserOperationSignature(
+		signerSignaturePairs: SignerSignaturePair[],
+		options: SafeSignatureOptions & WebAuthnSignatureOverrides = {},
+	): string {
+		return SafeAccount.formatSignaturesToUseroperationSignature(signerSignaturePairs, {
+			...options,
+			safe4337ModuleAddress: options.safe4337ModuleAddress ?? this.safe4337ModuleAddress,
+		});
+	}
+
+	/**
 	 * create a v0.07 or v0.06 useroperation eip712 data
 	 * @param useroperation - useroperation to hash
 	 * @param chainId - target chain id
@@ -956,7 +1033,14 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * @deprecated
+	 * @deprecated Use `account.formatUserOperationSignature([{ signer, signature }], options)`
+	 * when an account instance is available, or
+	 * `SafeAccount.formatSignaturesToUseroperationSignature([{ signer, signature }], options)`
+	 * for static formatting. For `SafeMultiChainSigAccountV1`, prefer the
+	 * instance method so `isMultiChainSignature` is applied automatically; if
+	 * using the lower-level static formatter directly, pass
+	 * `isMultiChainSignature: true`.
+	 *
 	 * format an eip712 signature to a useroperation signature
 	 * @param signature - an eip712 signature
 	 * @param overrides - overrides for the default values
