@@ -2,7 +2,6 @@ import type {Bundler} from "src/Bundler";
 import {ENTRYPOINT_V6} from "src/constants";
 import type {SignContext, Signer as AkSigner} from "src/signer/types";
 import type {JsonRpcNode, Transport} from "src/transport";
-import {createCallData} from "src/utils";
 import type {MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet, UserOperationV6,} from "../../types";
 import {SafeAccount} from "./SafeAccount";
 import {SafeAccountV0_3_0} from "./SafeAccountV0_3_0";
@@ -380,38 +379,16 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		const moduleV07Address =
 			overrides.safeV07ModuleAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 
-		const disableModuleMetaTransaction = await this.createDisableModuleMetaTransaction(
+		return this.createModuleMigrationMetaTransactions(
 			nodeRpcUrl,
 			moduleV06Address,
-			this.accountAddress,
+			moduleV07Address,
 			{
 				prevModuleAddress: overrides.safeV06ModuleAddress,
 				modulesPageSize: overrides.pageSize,
 				modulesStart: overrides.modulesStart,
 			},
 		);
-
-		const enableModuleMetaTransaction = SafeAccount.createEnableModuleMetaTransaction(
-			moduleV07Address,
-			this.accountAddress,
-		);
-
-		const setFallbackHandlerCallData = createCallData(
-			"0xf08a0323", //setFallbackHandler(address)
-			["address"],
-			[moduleV07Address],
-		);
-		const setFallbackHandlerMetaTransaction: MetaTransaction = {
-			to: this.accountAddress,
-			value: 0n,
-			data: setFallbackHandlerCallData,
-		};
-
-		return [
-			disableModuleMetaTransaction,
-			enableModuleMetaTransaction,
-			setFallbackHandlerMetaTransaction,
-		];
 	}
 
 	/**

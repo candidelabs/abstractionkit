@@ -22,6 +22,7 @@ import {
 	ENTRYPOINT_V6,
 	ENTRYPOINT_V7,
 	ENTRYPOINT_V9,
+	SAFE_FALLBACK_HANDLER_STORAGE_SLOT,
 	Safe_L2_V1_4_1,
 	ZeroAddress,
 } from "../../constants";
@@ -2740,6 +2741,25 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
+	 * read the Safe's current fallback handler address from storage.
+	 * For Safe ERC-4337 accounts the fallback handler is the 4337 module, so this
+	 * is the canonical way to confirm which module/EntryPoint version an account
+	 * is on (e.g. after a module migration).
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * @returns a promise of the fallback handler address (checksummed)
+	 */
+	public async getFallbackHandler(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+	): Promise<string> {
+		const word = await JsonRpcNode.from(nodeRpcUrl).getStorageAt(
+			this.accountAddress,
+			SAFE_FALLBACK_HANDLER_STORAGE_SLOT,
+			"latest",
+		);
+		return getAddress("0x" + word.slice(-40));
+	}
+
+	/**
 	 * create a list of dummy signer/signature pairs for gas estimation based on the expected signers.
 	 * @param expectedSigners - signers whose signatures will be produced at sign time
 	 * @param webAuthnSignatureOverrides - WebAuthn verifier/module configuration
@@ -3008,6 +3028,63 @@ export class SafeAccount extends SmartAccount {
 			data: callData,
 			value: 0n,
 		};
+	}
+
+	/**
+	 * create the MetaTransactions that migrate a DEPLOYED Safe from one ERC-4337
+	 * module (and EntryPoint) to another. For Safe 4337 accounts the module is
+	 * both the enabled module and the fallback handler, so a migration is exactly:
+	 *   1. disableModule(oldModule)
+	 *   2. enableModule(newModule)
+	 *   3. setFallbackHandler(newModule)
+	 *
+	 * @note Both the v0.6/v0.7 `Safe4337Module` and the v0.9
+	 * `Safe4337MultiChainSignatureModule` are stateless (no per-account storage),
+	 * so there is NO storage to clear when swapping modules — these three
+	 * transactions are the whole migration. The batch is validated and executed
+	 * by the OLD module on the OLD EntryPoint; disabling that module mid-batch is
+	 * safe because validation has already completed.
+	 *
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain (used to find
+	 *   the previous module in the linked list when not provided)
+	 * @param oldModuleAddress - the currently-enabled 4337 module to disable
+	 * @param newModuleAddress - the 4337 module to enable and set as fallback handler
+	 * @param overrides - overrides for finding the previous module
+	 * @returns a promise of [disableOld, enableNew, setFallbackHandler] MetaTransactions
+	 */
+	public async createModuleMigrationMetaTransactions(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		oldModuleAddress: string,
+		newModuleAddress: string,
+		overrides: {
+			prevModuleAddress?: string;
+			modulesStart?: string;
+			modulesPageSize?: bigint;
+		} = {},
+	): Promise<MetaTransaction[]> {
+		const disableOldModule = await this.createDisableModuleMetaTransaction(
+			nodeRpcUrl,
+			oldModuleAddress,
+			this.accountAddress,
+			overrides,
+		);
+
+		const enableNewModule = SafeAccount.createEnableModuleMetaTransaction(
+			newModuleAddress,
+			this.accountAddress,
+		);
+
+		const setFallbackHandler: MetaTransaction = {
+			to: this.accountAddress,
+			value: 0n,
+			data: createCallData(
+				"0xf08a0323", //setFallbackHandler(address)
+				["address"],
+				[newModuleAddress],
+			),
+		};
+
+		return [disableOldModule, enableNewModule, setFallbackHandler];
 	}
 
 	/**

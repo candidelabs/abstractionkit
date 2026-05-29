@@ -5,6 +5,7 @@ import type {JsonRpcNode, Transport} from "src/transport";
 
 import type {MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet, UserOperationV7,} from "../../types";
 import {SafeAccount} from "./SafeAccount";
+import {SafeMultiChainSigAccountV1} from "./SafeMultiChainSigAccount";
 import type {
 	CreateUserOperationV7Overrides,
 	InitCodeOverrides,
@@ -408,6 +409,48 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			context,
 			options,
 		});
+	}
+
+	/**
+	 * Create the MetaTransactions that migrate this DEPLOYED Safe from EntryPoint
+	 * v0.7 (this account's `Safe4337Module`) to EntryPoint v0.9
+	 * (`SafeMultiChainSigAccountV1`'s `Safe4337MultiChainSignatureModule`).
+	 *
+	 * The returned batch must be sent as a UserOperation FROM THIS v0.7 account
+	 * (it is validated/executed by the v0.7 module on the v0.7 EntryPoint). After
+	 * it lands, attach the same account address to `SafeMultiChainSigAccountV1` to
+	 * operate on EntryPoint v0.9. Both modules are stateless, so no storage
+	 * clearing is required. See {@link createModuleMigrationMetaTransactions}.
+	 *
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * @param overrides - override the source/target module addresses or module lookup
+	 * @returns a promise of [disableV07, enableV09, setFallbackHandler] MetaTransactions
+	 */
+	public async createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		overrides: {
+			safeV07ModuleAddress?: string;
+			safeV09ModuleAddress?: string;
+			prevModuleAddress?: string;
+			modulesStart?: string;
+			modulesPageSize?: bigint;
+		} = {},
+	): Promise<MetaTransaction[]> {
+		const moduleV07Address = overrides.safeV07ModuleAddress ?? this.safe4337ModuleAddress;
+		const moduleV09Address =
+			overrides.safeV09ModuleAddress ??
+			SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+
+		return this.createModuleMigrationMetaTransactions(
+			nodeRpcUrl,
+			moduleV07Address,
+			moduleV09Address,
+			{
+				prevModuleAddress: overrides.prevModuleAddress,
+				modulesStart: overrides.modulesStart,
+				modulesPageSize: overrides.modulesPageSize,
+			},
+		);
 	}
 }
 
