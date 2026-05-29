@@ -369,6 +369,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		overrides: {
 			safeV06ModuleAddress?: string;
 			safeV07ModuleAddress?: string;
+			prevModuleAddress?: string;
 			pageSize?: bigint;
 			modulesStart?: string;
 		} = {},
@@ -384,7 +385,9 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			moduleV06Address,
 			moduleV07Address,
 			{
-				prevModuleAddress: overrides.safeV06ModuleAddress,
+				// previous module in the linked list (skips the RPC lookup when set);
+				// left undefined by default so the predecessor is fetched on-chain.
+				prevModuleAddress: overrides.prevModuleAddress,
 				modulesPageSize: overrides.pageSize,
 				modulesStart: overrides.modulesStart,
 			},
