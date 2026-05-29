@@ -95,6 +95,36 @@ describe("JsonRpcNode", () => {
 		expect(typeof code).toBe("string");
 	});
 
+	test("getStorageAt() sends eth_getStorageAt with the expected params", async () => {
+		const slot = "0x6c9a6c4a39284e37ed1cf53d337577d14212a4870fb976a4366c693b939918d5";
+		const mock = tx(({ method, params }) => {
+			expect(method).toBe("eth_getStorageAt");
+			expect(params).toEqual(["0xdead", slot, "latest"]);
+			return "0x" + "0".repeat(24) + "22939e839e3c0f479b713eaf95e0df128554aead";
+		});
+		const node = new ak.JsonRpcNode(mock);
+		const word = await node.getStorageAt("0xdead", slot);
+		expect(typeof word).toBe("string");
+		expect(word.endsWith("22939e839e3c0f479b713eaf95e0df128554aead")).toBe(true);
+	});
+
+	test("getStorageAt() forwards an explicit block tag", async () => {
+		const mock = tx(({ params }) => {
+			expect(params[2]).toBe("0x10");
+			return "0x" + "0".repeat(64);
+		});
+		const node = new ak.JsonRpcNode(mock);
+		await node.getStorageAt("0xdead", "0x0", "0x10");
+	});
+
+	test("getStorageAt() throws BAD_DATA when the transport returns a non-string", async () => {
+		const mock = tx(() => 12345);
+		const node = new ak.JsonRpcNode(mock);
+		await expect(node.getStorageAt("0xdead", "0x0")).rejects.toMatchObject({
+			code: "BAD_DATA",
+		});
+	});
+
 	test("call() sends eth_call without state overrides", async () => {
 		const mock = tx(({ method, params }) => {
 			expect(method).toBe("eth_call");
