@@ -93,6 +93,13 @@ describe("HttpTransport", () => {
 		});
 	});
 
+	test("throws on non-2xx HTTP responses before parsing JSON-RPC", async () => {
+		const fetch = makeMockFetch(() => jsonResponse({ error: "rate limited" }, 429));
+		const t = new ak.HttpTransport("https://example.test/rpc", { fetch });
+
+		await expect(t.request({ method: "eth_chainId" })).rejects.toThrow("HTTP 429");
+	});
+
 	test("merges user-supplied headers and pins Content-Type", async () => {
 		const fetch = makeMockFetch(() => jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x" }));
 		const t = new ak.HttpTransport("https://example.test/rpc", {
