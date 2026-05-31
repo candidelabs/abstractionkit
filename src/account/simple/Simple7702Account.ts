@@ -948,27 +948,26 @@ export class BaseSimple7702Account extends SmartAccount {
 
 		let decodedMetaTransactions: SimpleMetaTransaction[];
 		if (callData.startsWith(BaseSimple7702Account.batchExecutorFunctionSelector)) {
-			const decodedParamsArray = decodeAbiParameters(
-				BaseSimple7702Account.batchExecutorFunctionInputAbi,
-				`0x${callData.slice(10)}`,
-			)[0] as [];
+			const decodedParamsArray = decodeAbiParameters<
+				[Array<[string, bigint, string | Uint8Array]>]
+			>(BaseSimple7702Account.batchExecutorFunctionInputAbi, `0x${callData.slice(10)}`)[0];
 			decodedMetaTransactions = decodedParamsArray.map((decodedParams) => ({
-				to: decodedParams[0] as string,
-				value: BigInt(decodedParams[1] as string),
+				to: decodedParams[0],
+				value: BigInt(decodedParams[1]),
 				data:
 					typeof decodedParams[2] !== "string"
 						? new TextDecoder().decode(decodedParams[2])
 						: decodedParams[2],
 			}));
 		} else if (callData.startsWith(BaseSimple7702Account.executorFunctionSelector)) {
-			const decodedParams = decodeAbiParameters(
+			const decodedParams = decodeAbiParameters<[string, bigint, string | Uint8Array]>(
 				BaseSimple7702Account.executorFunctionInputAbi,
 				`0x${callData.slice(10)}`,
 			);
 			decodedMetaTransactions = [
 				{
-					to: decodedParams[0] as string,
-					value: BigInt(decodedParams[1] as string),
+					to: decodedParams[0],
+					value: BigInt(decodedParams[1]),
 					data:
 						typeof decodedParams[2] !== "string"
 							? new TextDecoder().decode(decodedParams[2])
