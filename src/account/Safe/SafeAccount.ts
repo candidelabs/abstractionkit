@@ -393,7 +393,7 @@ export class SafeAccount extends SmartAccount {
 		}
 		if (safeModuleExecutorFunctionSelector != null) {
 			const params = `0x${callData.slice(10)}`;
-			const decodedParams = decodeAbiParameters(
+			const decodedParams = decodeAbiParameters<[string, bigint, string | Uint8Array, bigint]>(
 				[
 					"address", //to
 					"uint256", //value
@@ -411,8 +411,8 @@ export class SafeAccount extends SmartAccount {
 
 			return [
 				{
-					to: decodedParams[0] as string,
-					value: BigInt(decodedParams[1] as string),
+					to: decodedParams[0],
+					value: BigInt(decodedParams[1]),
 					data: accountCallDataString,
 					operation: Number(decodedParams[3]),
 				},
@@ -2632,7 +2632,7 @@ export class SafeAccount extends SmartAccount {
 		};
 		const getOwnersResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
-		const decodedCalldata = decodeAbiParameters(["address[]"], getOwnersResult);
+		const decodedCalldata = decodeAbiParameters<[string[]]>(["address[]"], getOwnersResult);
 
 		return decodedCalldata[0];
 	}
@@ -2652,7 +2652,7 @@ export class SafeAccount extends SmartAccount {
 		};
 		const getThresholdResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
-		const decodedCalldata = decodeAbiParameters(["uint256"], getThresholdResult);
+		const decodedCalldata = decodeAbiParameters<[bigint]>(["uint256"], getThresholdResult);
 
 		return Number(decodedCalldata[0]);
 	}
@@ -2700,7 +2700,10 @@ export class SafeAccount extends SmartAccount {
 						"probably not deployed yet.",
 				);
 			}
-			const decodedCalldata = decodeAbiParameters(["address[]", "address"], getModulesResult);
+			const decodedCalldata = decodeAbiParameters<[string[], string]>(
+				["address[]", "address"],
+				getModulesResult,
+			);
 			return [decodedCalldata[0], decodedCalldata[1]];
 		} catch (err) {
 			const error = ensureError(err);
@@ -2731,7 +2734,7 @@ export class SafeAccount extends SmartAccount {
 		};
 		const isModuleEnabledResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
-		const decodedCalldata = decodeAbiParameters(["bool"], isModuleEnabledResult);
+		const decodedCalldata = decodeAbiParameters<[boolean]>(["bool"], isModuleEnabledResult);
 
 		return decodedCalldata[0];
 	}
@@ -2869,7 +2872,7 @@ export class SafeAccount extends SmartAccount {
 			},
 		);
 
-		const decodedCalldata = decodeAbiParameters(["bool"], isModuleEnabledResult);
+		const decodedCalldata = decodeAbiParameters<[boolean]>(["bool"], isModuleEnabledResult);
 
 		return decodedCalldata[0];
 	}
