@@ -58,7 +58,7 @@ export async function shareTenderlySimulationAndCreateLink(
 			context: {
 				tenderlyAccountSlug,
 				tenderlyProjectSlug,
-				tenderlyAccessKey,
+				hasTenderlyAccessKey: tenderlyAccessKey.length > 0,
 				tenderlySimulationId,
 				status,
 			},
