@@ -1,3 +1,4 @@
+import {decodeAbiParameters} from "../../../ethereUtils";
 import type {Transport} from "../../../transport";
 import {JsonRpcNode} from "../../../transport";
 import type {MetaTransaction} from "../../../types";
@@ -313,7 +314,7 @@ export class AllowanceModule extends SafeModule {
 
 		const tokens = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 		this.checkForEmptyResultAndRevert(tokens, "getTokens");
-		const decodedCalldata = this.abiCoder.decode(["address[]"], tokens);
+		const decodedCalldata = decodeAbiParameters<[string[]]>(["address[]"], tokens);
 		return decodedCalldata[0];
 	}
 
@@ -346,7 +347,7 @@ export class AllowanceModule extends SafeModule {
 
 		const tokenAllowance = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 		this.checkForEmptyResultAndRevert(tokenAllowance, "getTokenAllowance");
-		const decodedCalldata = this.abiCoder.decode(["uint256[5]"], tokenAllowance);
+		const decodedCalldata = decodeAbiParameters<[bigint[]]>(["uint256[5]"], tokenAllowance);
 		const allowance = decodedCalldata[0];
 		return {
 			amount: BigInt(allowance[0]),
@@ -429,7 +430,10 @@ export class AllowanceModule extends SafeModule {
 
 		const delegates = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 		this.checkForEmptyResultAndRevert(delegates, "getDelegates");
-		const decodedCalldata = this.abiCoder.decode(["address[]", "uint48"], delegates);
+		const decodedCalldata = decodeAbiParameters<[string[], bigint]>(
+			["address[]", "uint48"],
+			delegates,
+		);
 
 		return {
 			results: decodedCalldata[0],
