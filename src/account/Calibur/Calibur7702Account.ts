@@ -1205,8 +1205,8 @@ export class Calibur7702Account
 		]);
 
 		if (typeof result === "string") {
-			const decoded = decodeAbiParameters(["bool"], result);
-			return decoded[0] as boolean;
+			const decoded = decodeAbiParameters<[boolean]>(["bool"], result);
+			return decoded[0];
 		}
 		throw new AbstractionKitError("BAD_DATA", "Unexpected response from isRegistered call");
 	}
@@ -1234,7 +1234,7 @@ export class Calibur7702Account
 		]);
 
 		if (typeof result === "string") {
-			const decoded = decodeAbiParameters(["uint256"], result);
+			const decoded = decodeAbiParameters<[bigint]>(["uint256"], result);
 			return Calibur7702Account.unpackKeySettings(BigInt(decoded[0]));
 		}
 		throw new AbstractionKitError("BAD_DATA", "Unexpected response from getKeySettings call");
@@ -1260,8 +1260,8 @@ export class Calibur7702Account
 		]);
 
 		if (typeof result === "string") {
-			const decoded = decodeAbiParameters(["(uint8,bytes)"], result);
-			const keyTuple = decoded[0] as [number, string];
+			const decoded = decodeAbiParameters<[[bigint, string]]>(["(uint8,bytes)"], result);
+			const keyTuple = decoded[0];
 			return {
 				keyType: Number(keyTuple[0]) as CaliburKeyType,
 				publicKey: keyTuple[1] as string,
@@ -1342,8 +1342,8 @@ export class Calibur7702Account
 					`Unexpected response from keyAt(${i}) call on ${this.accountAddress}`,
 				);
 			}
-			const decoded = decodeAbiParameters(["(uint8,bytes)"], keyResult);
-			const keyTuple = decoded[0] as [number, string];
+			const decoded = decodeAbiParameters<[[bigint, string]]>(["(uint8,bytes)"], keyResult);
+			const keyTuple = decoded[0];
 			keys.push({
 				keyType: Number(keyTuple[0]) as CaliburKeyType,
 				publicKey: keyTuple[1] as string,
@@ -1417,20 +1417,17 @@ export class Calibur7702Account
 		}
 
 		// Decode: strip selector -> decode BatchedCall struct
-		const batchedCallDecoded = decodeAbiParameters(
-			["((address,uint256,bytes)[],bool)"],
-			`0x${callData.slice(10)}`,
-		);
-		const existingCalls = batchedCallDecoded[0][0] as [];
-		const revertOnFailure = batchedCallDecoded[0][1] as boolean;
+		const batchedCallDecoded = decodeAbiParameters<
+			[[Array<[string, bigint, string | Uint8Array]>, boolean]]
+		>(["((address,uint256,bytes)[],bool)"], `0x${callData.slice(10)}`);
+		const existingCalls = batchedCallDecoded[0][0];
+		const revertOnFailure = batchedCallDecoded[0][1];
 
-		const decodedTransactions: SimpleMetaTransaction[] = existingCalls.map(
-			(call: [string, bigint, string]) => ({
-				to: call[0],
-				value: BigInt(call[1]),
-				data: typeof call[2] !== "string" ? new TextDecoder().decode(call[2]) : call[2],
-			}),
-		);
+		const decodedTransactions: SimpleMetaTransaction[] = existingCalls.map((call) => ({
+			to: call[0],
+			value: BigInt(call[1]),
+			data: typeof call[2] !== "string" ? new TextDecoder().decode(call[2]) : call[2],
+		}));
 
 		// Prepend approve
 		decodedTransactions.unshift({
