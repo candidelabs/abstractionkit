@@ -376,7 +376,7 @@ export class JsonRpcNode implements Transport {
 			options,
 		);
 		try {
-			const decoded = decodeAbiParameters(
+			const decoded = decodeAbiParameters<[bigint, boolean, bigint, bigint, bigint]>(
 				["uint256", "bool", "uint112", "uint32", "uint48"],
 				callResult,
 			);
