@@ -1,4 +1,9 @@
-import {getAddress, TypedDataEncoder, Wallet} from "ethers";
+import {
+	getAddress,
+	hashTypedData,
+	privateKeyToAddress,
+	signHash,
+} from "../../ethereUtils";
 import type {Bundler} from "src/Bundler";
 import {
 	EIP712_MULTI_CHAIN_OPERATIONS_PRIMARY_TYPE,
@@ -565,7 +570,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			});
 			const [root, proofs] = generateMerkleProofs(userOperationsHashes);
 
-			const merkleTreeRootHash = TypedDataEncoder.hash(
+			const merkleTreeRootHash = hashTypedData(
 				{ verifyingContract: this.safe4337ModuleAddress },
 				EIP712_MULTI_CHAIN_OPERATIONS_TYPE,
 				{ merkleTreeRoot: root },
@@ -573,10 +578,9 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 
 			const signerSignaturePairs: SignerSignaturePair[] = [];
 			for (const privateKey of privateKeys) {
-				const wallet = new Wallet(privateKey);
-				const signature = wallet.signingKey.sign(merkleTreeRootHash).serialized;
+				const signature = signHash(privateKey, merkleTreeRootHash).serialized;
 				signerSignaturePairs.push({
-					signer: wallet.address,
+					signer: privateKeyToAddress(privateKey),
 					signature,
 				});
 			}
@@ -673,7 +677,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			});
 			const [root, proofs] = generateMerkleProofs(userOperationsHashes);
 
-			const merkleTreeRootHash = TypedDataEncoder.hash(
+			const merkleTreeRootHash = hashTypedData(
 				{ verifyingContract: this.safe4337ModuleAddress },
 				EIP712_MULTI_CHAIN_OPERATIONS_TYPE,
 				{ merkleTreeRoot: root },
@@ -780,7 +784,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			userOperationsToSignsToSign,
 			overrides,
 		);
-		return TypedDataEncoder.hash(data.domain, data.types, data.messageValue);
+		return hashTypedData(data.domain, data.types, data.messageValue);
 	}
 
 	/**

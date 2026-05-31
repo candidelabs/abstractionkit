@@ -1,4 +1,4 @@
-import { keccak256 } from "ethers";
+import { keccak256 } from "../../ethereUtils";
 
 /**
  * Hashes two values together using keccak256, sorting them so the smaller

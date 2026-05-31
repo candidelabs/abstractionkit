@@ -1,4 +1,4 @@
-import {AbiCoder, Wallet} from "ethers";
+import {decodeAbiParameters, signHash} from "src/ethereUtils";
 import {Bundler} from "src/Bundler";
 import {BaseUserOperationDummyValues, ENTRYPOINT_V8, ENTRYPOINT_V9} from "src/constants";
 import {AbstractionKitError} from "src/errors";
@@ -760,8 +760,7 @@ export class BaseSimple7702Account extends SmartAccount {
 			chainId,
 		);
 
-		const wallet = new Wallet(privateKey);
-		return wallet.signingKey.sign(userOperationHash).serialized;
+		return signHash(privateKey, userOperationHash).serialized;
 	}
 
 	/**
@@ -947,30 +946,28 @@ export class BaseSimple7702Account extends SmartAccount {
 			data: approveCallData,
 		};
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
 		let decodedMetaTransactions: SimpleMetaTransaction[];
 		if (callData.startsWith(BaseSimple7702Account.batchExecutorFunctionSelector)) {
-			const decodedParamsArray = abiCoder.decode(
-				BaseSimple7702Account.batchExecutorFunctionInputAbi,
-				`0x${callData.slice(10)}`,
-			)[0] as [];
+			const decodedParamsArray = decodeAbiParameters<
+				[Array<[string, bigint, string | Uint8Array]>]
+			>(BaseSimple7702Account.batchExecutorFunctionInputAbi, `0x${callData.slice(10)}`)[0];
 			decodedMetaTransactions = decodedParamsArray.map((decodedParams) => ({
-				to: decodedParams[0] as string,
-				value: BigInt(decodedParams[1] as string),
+				to: decodedParams[0],
+				value: BigInt(decodedParams[1]),
 				data:
 					typeof decodedParams[2] !== "string"
 						? new TextDecoder().decode(decodedParams[2])
 						: decodedParams[2],
 			}));
 		} else if (callData.startsWith(BaseSimple7702Account.executorFunctionSelector)) {
-			const decodedParams = abiCoder.decode(
+			const decodedParams = decodeAbiParameters<[string, bigint, string | Uint8Array]>(
 				BaseSimple7702Account.executorFunctionInputAbi,
 				`0x${callData.slice(10)}`,
 			);
 			decodedMetaTransactions = [
 				{
-					to: decodedParams[0] as string,
-					value: BigInt(decodedParams[1] as string),
+					to: decodedParams[0],
+					value: BigInt(decodedParams[1]),
 					data:
 						typeof decodedParams[2] !== "string"
 							? new TextDecoder().decode(decodedParams[2])

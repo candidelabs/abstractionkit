@@ -1,13 +1,16 @@
 import {
-	AbiCoder,
-	ethers,
+	concat,
+	dataLength,
+	decodeAbiParameters,
+	encodeAbiParameters,
 	getAddress,
+	hashTypedData,
 	keccak256,
+	privateKeyToAddress,
+	signHash,
 	solidityPacked,
 	solidityPackedKeccak256,
-	TypedDataEncoder,
-	Wallet,
-} from "ethers";
+} from "src/ethereUtils";
 import {Bundler} from "src/Bundler";
 import {AbstractionKitError, ensureError} from "src/errors";
 import {SafeAccountFactory} from "src/factory/SafeAccountFactory";
@@ -390,9 +393,8 @@ export class SafeAccount extends SmartAccount {
 			safeModuleExecutorFunctionSelector = SafeModuleExecutorFunctionSelector.executeUserOp;
 		}
 		if (safeModuleExecutorFunctionSelector != null) {
-			const abiCoder = AbiCoder.defaultAbiCoder();
 			const params = `0x${callData.slice(10)}`;
-			const decodedParams = abiCoder.decode(
+			const decodedParams = decodeAbiParameters<[string, bigint, string | Uint8Array, bigint]>(
 				[
 					"address", //to
 					"uint256", //value
@@ -410,8 +412,8 @@ export class SafeAccount extends SmartAccount {
 
 			return [
 				{
-					to: decodedParams[0] as string,
-					value: BigInt(decodedParams[1] as string),
+					to: decodedParams[0],
+					value: BigInt(decodedParams[1]),
 					data: accountCallDataString,
 					operation: Number(decodedParams[3]),
 				},
@@ -731,7 +733,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): string {
 		const data = SafeAccount.getUserOperationEip712Data_V6(useroperation, chainId, overrides);
-		return TypedDataEncoder.hash(data.domain, data.types, data.messageValue);
+		return hashTypedData(data.domain, data.types, data.messageValue);
 	}
 
 	private static baseGetUserOperationEip712DataV7V8V9(
@@ -755,8 +757,6 @@ export class SafeAccount extends SmartAccount {
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ?? "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226";
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
-
 		let initCode = "0x";
 		if (useroperation.factory != null) {
 			initCode = useroperation.factory;
@@ -769,14 +769,16 @@ export class SafeAccount extends SmartAccount {
 		if (useroperation.paymaster != null) {
 			paymasterAndData = useroperation.paymaster;
 			if (useroperation.paymasterVerificationGasLimit != null) {
-				paymasterAndData += abiCoder
-					.encode(["uint128"], [useroperation.paymasterVerificationGasLimit])
-					.slice(34);
+				paymasterAndData += encodeAbiParameters(
+					["uint128"],
+					[useroperation.paymasterVerificationGasLimit],
+				).slice(34);
 			}
 			if (useroperation.paymasterPostOpGasLimit != null) {
-				paymasterAndData += abiCoder
-					.encode(["uint128"], [useroperation.paymasterPostOpGasLimit])
-					.slice(34);
+				paymasterAndData += encodeAbiParameters(
+					["uint128"],
+					[useroperation.paymasterPostOpGasLimit],
+				).slice(34);
 			}
 			if (useroperation.paymasterData != null) {
 				const PAYMASTER_SIG_MAGIC = "22e325a297439656";
@@ -882,7 +884,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): string {
 		const data = SafeAccount.getUserOperationEip712Data_V7(useroperation, chainId, overrides);
-		return TypedDataEncoder.hash(data.domain, data.types, data.messageValue);
+		return hashTypedData(data.domain, data.types, data.messageValue);
 	}
 
 	/**
@@ -950,7 +952,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): string {
 		const data = SafeAccount.getUserOperationEip712Data_V9(useroperation, chainId, overrides);
-		return TypedDataEncoder.hash(data.domain, data.types, data.messageValue);
+		return hashTypedData(data.domain, data.types, data.messageValue);
 	}
 
 	/**
@@ -1800,10 +1802,9 @@ export class SafeAccount extends SmartAccount {
 
 		const signerSignaturePairs: SignerSignaturePair[] = [];
 		for (const privateKey of privateKeys) {
-			const wallet = new Wallet(privateKey);
-			const signature = wallet.signingKey.sign(userOperationEip712Hash).serialized;
+			const signature = signHash(privateKey, userOperationEip712Hash).serialized;
 			signerSignaturePairs.push({
-				signer: wallet.address,
+				signer: privateKeyToAddress(privateKey),
 				signature,
 			});
 		}
@@ -1876,7 +1877,7 @@ export class SafeAccount extends SmartAccount {
 			entrypointAddress,
 			safe4337ModuleAddress: moduleAddress,
 		});
-		const userOpHash = TypedDataEncoder.hash(
+		const userOpHash = hashTypedData(
 			typedDataRaw.domain,
 			typedDataRaw.types,
 			typedDataRaw.messageValue,
@@ -2176,27 +2177,27 @@ export class SafeAccount extends SmartAccount {
 					return {
 						segments: [
 							...segments,
-							ethers.solidityPacked(["uint256", "uint256", "uint8"], [signer, start + offset, 0]),
+							solidityPacked(["uint256", "uint256", "uint8"], [signer, start + offset, 0]),
 						],
-						offset: offset + 32 + ethers.dataLength(signature),
+						offset: offset + 32 + dataLength(signature),
 					};
 				} else {
 					return {
-						segments: [...segments, ethers.solidityPacked(["bytes"], [signature])],
+						segments: [...segments, solidityPacked(["bytes"], [signature])],
 						offset: offset,
 					};
 				}
 			},
 			{ segments: [] as string[], offset: 0 },
 		);
-		return ethers.concat([
+		return concat([
 			...segments,
 			...signerSignaturePairs.map(({ signer, signature, isContractSignature }) => {
 				isContractSignature = isContractSignature || typeof signer !== "string";
 				if (isContractSignature) {
-					return ethers.solidityPacked(
+					return solidityPacked(
 						["uint256", "bytes"],
-						[ethers.dataLength(signature), signature],
+						[dataLength(signature), signature],
 					);
 				} else {
 					//only append signatures if a contract signature
@@ -2212,7 +2213,7 @@ export class SafeAccount extends SmartAccount {
 	 * @returns formatted signature
 	 */
 	public static createWebAuthnSignature(signatureData: WebauthnSignatureData): string {
-		return ethers.AbiCoder.defaultAbiCoder().encode(
+		return encodeAbiParameters(
 			["bytes", "bytes", "uint256[2]"],
 			[
 				new Uint8Array(signatureData.authenticatorData),
@@ -2632,8 +2633,7 @@ export class SafeAccount extends SmartAccount {
 		};
 		const getOwnersResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const decodedCalldata = abiCoder.decode(["address[]"], getOwnersResult);
+		const decodedCalldata = decodeAbiParameters<[string[]]>(["address[]"], getOwnersResult);
 
 		return decodedCalldata[0];
 	}
@@ -2653,8 +2653,7 @@ export class SafeAccount extends SmartAccount {
 		};
 		const getThresholdResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const decodedCalldata = abiCoder.decode(["uint256"], getThresholdResult);
+		const decodedCalldata = decodeAbiParameters<[bigint]>(["uint256"], getThresholdResult);
 
 		return Number(decodedCalldata[0]);
 	}
@@ -2702,8 +2701,10 @@ export class SafeAccount extends SmartAccount {
 						"probably not deployed yet.",
 				);
 			}
-			const abiCoder = AbiCoder.defaultAbiCoder();
-			const decodedCalldata = abiCoder.decode(["address[]", "address"], getModulesResult);
+			const decodedCalldata = decodeAbiParameters<[string[], string]>(
+				["address[]", "address"],
+				getModulesResult,
+			);
 			return [decodedCalldata[0], decodedCalldata[1]];
 		} catch (err) {
 			const error = ensureError(err);
@@ -2734,8 +2735,7 @@ export class SafeAccount extends SmartAccount {
 		};
 		const isModuleEnabledResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const decodedCalldata = abiCoder.decode(["bool"], isModuleEnabledResult);
+		const decodedCalldata = decodeAbiParameters<[boolean]>(["bool"], isModuleEnabledResult);
 
 		return decodedCalldata[0];
 	}
@@ -2892,7 +2892,7 @@ export class SafeAccount extends SmartAccount {
 			},
 		);
 
-		const decodedCalldata = AbiCoder.defaultAbiCoder().decode(["bool"], isModuleEnabledResult);
+		const decodedCalldata = decodeAbiParameters<[boolean]>(["bool"], isModuleEnabledResult);
 
 		return decodedCalldata[0];
 	}
@@ -2903,10 +2903,9 @@ export class SafeAccount extends SmartAccount {
 		eip7212WebAuthnContractVerifier: string,
 		webAuthnSignerSingleton: string,
 	): string {
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const x = abiCoder.encode(["uint256"], [signer.x]);
-		const y = abiCoder.encode(["uint256"], [signer.y]);
-		const verifiers = abiCoder.encode(
+		const x = encodeAbiParameters(["uint256"], [signer.x]);
+		const y = encodeAbiParameters(["uint256"], [signer.y]);
+		const verifiers = encodeAbiParameters(
 			["uint176"],
 			[
 				"0x" +
