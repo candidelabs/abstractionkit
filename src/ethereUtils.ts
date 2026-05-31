@@ -758,8 +758,13 @@ export function encodeAbiParameters(
     return hexlify(encodeTuple(types.map(parseType), values as unknown[]));
 }
 
-export function decodeAbiParameters(types: ReadonlyArray<string>, data: BytesLike): any[] {
-    return decodeTupleAt(types.map(parseType), getBytes(data), 0);
+// Caller-asserted return shape: the generic T is not validated against `types`
+// at compile time or runtime. Mismatched (types, T) pairs will mistype values.
+export function decodeAbiParameters<T extends readonly unknown[] = unknown[]>(
+    types: ReadonlyArray<string>,
+    data: BytesLike,
+): T {
+    return decodeTupleAt(types.map(parseType), getBytes(data), 0) as unknown as T;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
