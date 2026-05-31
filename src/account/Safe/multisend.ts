@@ -34,6 +34,6 @@ export function encodeMultiSendCallData(metaTransactions: MetaTransaction[]): st
  * @returns The decoded packed transaction bytes as a hex string.
  */
 export function decodeMultiSendCallData(callData: string): string {
-	const decodedCalldata = decodeAbiParameters(["bytes"], `0x${callData.slice(10)}`);
-	return decodedCalldata[0] as string;
+	const decodedCalldata = decodeAbiParameters<[string]>(["bytes"], `0x${callData.slice(10)}`);
+	return decodedCalldata[0];
 }
