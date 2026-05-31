@@ -1,4 +1,3 @@
-import { AbiCoder } from "ethers";
 import { AbstractionKitError } from "src/errors";
 import type { MetaTransaction } from "../../../types";
 import { SafeAccount } from "../SafeAccount";
@@ -9,14 +8,12 @@ import { SafeAccount } from "../SafeAccount";
  */
 export abstract class SafeModule {
 	readonly moduleAddress: string;
-	protected readonly abiCoder: AbiCoder;
 
 	/**
 	 * @param moduleAddress - The deployed address of the Safe module contract.
 	 */
 	constructor(moduleAddress: string) {
 		this.moduleAddress = moduleAddress;
-		this.abiCoder = AbiCoder.defaultAbiCoder();
 	}
 
 	/**
