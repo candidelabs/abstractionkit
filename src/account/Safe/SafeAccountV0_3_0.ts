@@ -434,6 +434,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			prevModuleAddress?: string;
 			modulesStart?: string;
 			modulesPageSize?: bigint;
+			skipPreflight?: boolean;
 		} = {},
 	): Promise<MetaTransaction[]> {
 		const moduleV07Address = overrides.safeV07ModuleAddress ?? this.safe4337ModuleAddress;
@@ -449,6 +450,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 				prevModuleAddress: overrides.prevModuleAddress,
 				modulesStart: overrides.modulesStart,
 				modulesPageSize: overrides.modulesPageSize,
+				skipPreflight: overrides.skipPreflight,
 			},
 		);
 	}

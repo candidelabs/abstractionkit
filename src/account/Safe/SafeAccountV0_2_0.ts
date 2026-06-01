@@ -372,6 +372,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			prevModuleAddress?: string;
 			pageSize?: bigint;
 			modulesStart?: string;
+			skipPreflight?: boolean;
 		} = {},
 	): Promise<MetaTransaction[]> {
 		const moduleV06Address =
@@ -390,6 +391,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 				prevModuleAddress: overrides.prevModuleAddress,
 				modulesPageSize: overrides.pageSize,
 				modulesStart: overrides.modulesStart,
+				skipPreflight: overrides.skipPreflight,
 			},
 		);
 	}
