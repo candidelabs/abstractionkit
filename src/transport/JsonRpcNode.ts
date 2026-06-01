@@ -1,4 +1,4 @@
-import {AbiCoder, getAddress} from "ethers";
+import {decodeAbiParameters, encodeAbiParameters, getAddress} from "../ethereUtils";
 import {
 	AbstractionKitError,
 	type BasicErrorCode,
@@ -348,8 +348,7 @@ export class JsonRpcNode implements Transport {
 	): Promise<bigint> {
 		// getNonce(address,uint192) selector
 		const getNonceSelector = "0x35567e1a";
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const params = abiCoder.encode(["address", "uint192"], [account, key]);
+		const params = encodeAbiParameters(["address", "uint192"], [account, key]);
 		const data = getNonceSelector + params.slice(2);
 
 		const callResult = await this.call(
@@ -393,8 +392,7 @@ export class JsonRpcNode implements Transport {
 	): Promise<DepositInfo> {
 		// getDepositInfo(address) selector
 		const getDepositInfoSelector = "0x5287ce12";
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const params = abiCoder.encode(["address"], [address]);
+		const params = encodeAbiParameters(["address"], [address]);
 		const data = getDepositInfoSelector + params.slice(2);
 
 		const callResult = await this.call(
@@ -404,7 +402,7 @@ export class JsonRpcNode implements Transport {
 			options,
 		);
 		try {
-			const decoded = abiCoder.decode(
+			const decoded = decodeAbiParameters<[bigint, boolean, bigint, bigint, bigint]>(
 				["uint256", "bool", "uint112", "uint32", "uint48"],
 				callResult,
 			);

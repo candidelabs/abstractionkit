@@ -1,4 +1,4 @@
-import { getAddress, Wallet } from "ethers";
+import { privateKeyToAddress, signHash, signTypedData } from "../ethereUtils";
 import type { Signer, TypedData } from "./types";
 
 // Structural types for well-known signers. NO imports from viem / ethers
@@ -90,12 +90,10 @@ export interface EthersWalletLike {
  * userOp.signature = await safe.signUserOperationWithSigners(userOp, [signer], chainId);
  */
 export function fromPrivateKey(privateKey: string): Signer<unknown> {
-	const wallet = new Wallet(privateKey);
 	return {
-		address: getAddress(wallet.address) as `0x${string}`,
-		signHash: async (hash) => wallet.signingKey.sign(hash).serialized as `0x${string}`,
-		signTypedData: async (td) =>
-			(await wallet.signTypedData(td.domain, td.types, td.message)) as `0x${string}`,
+		address: privateKeyToAddress(privateKey),
+		signHash: (hash) => signHash(privateKey, hash).serialized,
+		signTypedData: (td) => signTypedData(privateKey, td.domain, td.types, td.message),
 	};
 }
 

@@ -1,4 +1,4 @@
-import {AbiCoder} from "ethers";
+import {encodeAbiParameters} from "./ethereUtils";
 import {AbstractionKitError, ensureError} from "./errors";
 import type {
 	SingleTransactionTenderlySimulationResult,
@@ -142,7 +142,6 @@ export async function simulateUserOperationWithTenderly(
 ): Promise<SingleTransactionTenderlySimulationResult> {
 	const entrypointAddressLowerCase = entrypointAddress.toLowerCase();
 	let callData: string | null = null;
-	const abiCoder = AbiCoder.defaultAbiCoder();
 	const isV6UserOperation = "initCode" in userOperation;
 	const isV6Entrypoint =
 		entrypointAddressLowerCase === "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789";
@@ -167,7 +166,7 @@ export async function simulateUserOperationWithTenderly(
 			userOperation.signature,
 		];
 
-		const encodedUserOperation = abiCoder.encode(
+		const encodedUserOperation = encodeAbiParameters(
 			[
 				"(address,uint256,bytes,bytes,uint256,uint256,uint256,uint256,uint256,bytes,bytes)[]",
 				"address",
@@ -187,26 +186,28 @@ export async function simulateUserOperationWithTenderly(
 
 		const accountGasLimits =
 			"0x" +
-			abiCoder.encode(["uint128"], [userOperation.verificationGasLimit]).slice(34) +
-			abiCoder.encode(["uint128"], [userOperation.callGasLimit]).slice(34);
+			encodeAbiParameters(["uint128"], [userOperation.verificationGasLimit]).slice(34) +
+			encodeAbiParameters(["uint128"], [userOperation.callGasLimit]).slice(34);
 
 		const gasFees =
 			"0x" +
-			abiCoder.encode(["uint128"], [userOperation.maxPriorityFeePerGas]).slice(34) +
-			abiCoder.encode(["uint128"], [userOperation.maxFeePerGas]).slice(34);
+			encodeAbiParameters(["uint128"], [userOperation.maxPriorityFeePerGas]).slice(34) +
+			encodeAbiParameters(["uint128"], [userOperation.maxFeePerGas]).slice(34);
 
 		let paymasterAndData = "0x";
 		if (userOperation.paymaster != null) {
 			paymasterAndData = userOperation.paymaster;
 			if (userOperation.paymasterVerificationGasLimit != null) {
-				paymasterAndData += abiCoder
-					.encode(["uint128"], [userOperation.paymasterVerificationGasLimit])
-					.slice(34);
+				paymasterAndData += encodeAbiParameters(
+					["uint128"],
+					[userOperation.paymasterVerificationGasLimit],
+				).slice(34);
 			}
 			if (userOperation.paymasterPostOpGasLimit != null) {
-				paymasterAndData += abiCoder
-					.encode(["uint128"], [userOperation.paymasterPostOpGasLimit])
-					.slice(34);
+				paymasterAndData += encodeAbiParameters(
+					["uint128"],
+					[userOperation.paymasterPostOpGasLimit],
+				).slice(34);
 			}
 			if (userOperation.paymasterData != null) {
 				paymasterAndData += userOperation.paymasterData.slice(2);
@@ -225,7 +226,7 @@ export async function simulateUserOperationWithTenderly(
 			userOperation.signature,
 		];
 
-		const encodedUserOperation = abiCoder.encode(
+		const encodedUserOperation = encodeAbiParameters(
 			["(address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)[]", "address"],
 			[[useroperationValuesArray], "0x1000000000000000000000000000000000000000"],
 		);
@@ -498,8 +499,6 @@ export async function simulateUserOperationCallDataWithTenderly(
 		// sender.call(callData). Replicate here.
 		const EXECUTE_USEROP_SELECTOR = "0x8dd7712f";
 		if (callData.toLowerCase().startsWith(EXECUTE_USEROP_SELECTOR)) {
-			const abiCoder = AbiCoder.defaultAbiCoder();
-
 			let initCode = "0x";
 			if (userOperation.factory != null) {
 				initCode = userOperation.factory;
@@ -510,26 +509,28 @@ export async function simulateUserOperationCallDataWithTenderly(
 
 			const accountGasLimits =
 				"0x" +
-				abiCoder.encode(["uint128"], [userOperation.verificationGasLimit]).slice(34) +
-				abiCoder.encode(["uint128"], [userOperation.callGasLimit]).slice(34);
+				encodeAbiParameters(["uint128"], [userOperation.verificationGasLimit]).slice(34) +
+				encodeAbiParameters(["uint128"], [userOperation.callGasLimit]).slice(34);
 
 			const gasFees =
 				"0x" +
-				abiCoder.encode(["uint128"], [userOperation.maxPriorityFeePerGas]).slice(34) +
-				abiCoder.encode(["uint128"], [userOperation.maxFeePerGas]).slice(34);
+				encodeAbiParameters(["uint128"], [userOperation.maxPriorityFeePerGas]).slice(34) +
+				encodeAbiParameters(["uint128"], [userOperation.maxFeePerGas]).slice(34);
 
 			let paymasterAndData = "0x";
 			if (userOperation.paymaster != null) {
 				paymasterAndData = userOperation.paymaster;
 				if (userOperation.paymasterVerificationGasLimit != null) {
-					paymasterAndData += abiCoder
-						.encode(["uint128"], [userOperation.paymasterVerificationGasLimit])
-						.slice(34);
+					paymasterAndData += encodeAbiParameters(
+						["uint128"],
+						[userOperation.paymasterVerificationGasLimit],
+					).slice(34);
 				}
 				if (userOperation.paymasterPostOpGasLimit != null) {
-					paymasterAndData += abiCoder
-						.encode(["uint128"], [userOperation.paymasterPostOpGasLimit])
-						.slice(34);
+					paymasterAndData += encodeAbiParameters(
+						["uint128"],
+						[userOperation.paymasterPostOpGasLimit],
+					).slice(34);
 				}
 				if (userOperation.paymasterData != null) {
 					paymasterAndData += userOperation.paymasterData.slice(2);
@@ -554,7 +555,7 @@ export async function simulateUserOperationCallDataWithTenderly(
 				userOperation.signature,
 			];
 
-			const encodedParams = abiCoder.encode(
+			const encodedParams = encodeAbiParameters(
 				["(address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)", "bytes32"],
 				[packedUserOp, userOpHash],
 			);

@@ -1,4 +1,4 @@
-import {isAddress} from "ethers";
+import {isAddress} from "src/ethereUtils";
 import {Bundler} from "src/Bundler";
 import {ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8} from "src/constants";
 import {AbstractionKitError, ensureError} from "src/errors";

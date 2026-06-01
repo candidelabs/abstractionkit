@@ -1,4 +1,5 @@
 import {AbstractionKitError} from "../../../errors";
+import {decodeAbiParameters} from "../../../ethereUtils";
 import type {Transport} from "../../../transport";
 import {JsonRpcNode} from "../../../transport";
 import type {MetaTransaction} from "../../../types";
@@ -321,7 +322,7 @@ export class SocialRecoveryModule extends SafeModule {
 		const recoveryHashResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(recoveryHashResult, "getRecoveryHash");
-		const decodedCalldata = this.abiCoder.decode(["bytes32"], recoveryHashResult);
+		const decodedCalldata = decodeAbiParameters<[string]>(["bytes32"], recoveryHashResult);
 		return decodedCalldata[0];
 	}
 
@@ -347,7 +348,7 @@ export class SocialRecoveryModule extends SafeModule {
 		const recoveryRequestResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(recoveryRequestResult, "getRecoveryRequest");
-		const decodedCalldata = this.abiCoder.decode(
+		const decodedCalldata = decodeAbiParameters<[[bigint, bigint, bigint, string[]]]>(
 			["(uint256,uint256,uint64,address[])"],
 			recoveryRequestResult,
 		);
@@ -389,7 +390,7 @@ export class SocialRecoveryModule extends SafeModule {
 		const recoveryApprovalResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(recoveryApprovalResult, "getRecoveryApprovals");
-		const decodedCalldata = this.abiCoder.decode(["uint256"], recoveryApprovalResult);
+		const decodedCalldata = decodeAbiParameters<[bigint]>(["uint256"], recoveryApprovalResult);
 
 		return BigInt(decodedCalldata[0]);
 	}
@@ -425,7 +426,7 @@ export class SocialRecoveryModule extends SafeModule {
 		const hasGuardianApprovedResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(hasGuardianApprovedResult, "hasGuardianApproved");
-		const decodedCalldata = this.abiCoder.decode(["bool"], hasGuardianApprovedResult);
+		const decodedCalldata = decodeAbiParameters<[boolean]>(["bool"], hasGuardianApprovedResult);
 
 		return Boolean(decodedCalldata[0]);
 	}
@@ -458,7 +459,7 @@ export class SocialRecoveryModule extends SafeModule {
 		const isGuardianResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(isGuardianResult, "isGuardian");
-		const decodedCalldata = this.abiCoder.decode(["bool"], isGuardianResult);
+		const decodedCalldata = decodeAbiParameters<[boolean]>(["bool"], isGuardianResult);
 
 		return Boolean(decodedCalldata[0]);
 	}
@@ -484,7 +485,7 @@ export class SocialRecoveryModule extends SafeModule {
 		const guardiansCountResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(guardiansCountResult, "guardiansCount");
-		const decodedCalldata = this.abiCoder.decode(["uint256"], guardiansCountResult);
+		const decodedCalldata = decodeAbiParameters<[bigint]>(["uint256"], guardiansCountResult);
 
 		return BigInt(decodedCalldata[0]);
 	}
@@ -510,7 +511,7 @@ export class SocialRecoveryModule extends SafeModule {
 		const thresholdResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(thresholdResult, "threshold");
-		const decodedCalldata = this.abiCoder.decode(["uint256"], thresholdResult);
+		const decodedCalldata = decodeAbiParameters<[bigint]>(["uint256"], thresholdResult);
 
 		return BigInt(decodedCalldata[0]);
 	}
@@ -536,7 +537,7 @@ export class SocialRecoveryModule extends SafeModule {
 		const getGuardiansResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(getGuardiansResult, "threshold");
-		const decodedCalldata = this.abiCoder.decode(["address[]"], getGuardiansResult);
+		const decodedCalldata = decodeAbiParameters<[string[]]>(["address[]"], getGuardiansResult);
 
 		return decodedCalldata[0];
 	}
@@ -562,7 +563,7 @@ export class SocialRecoveryModule extends SafeModule {
 		const nonceResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
 		this.checkForEmptyResultAndRevert(nonceResult, "threshold");
-		const decodedCalldata = this.abiCoder.decode(["uint256"], nonceResult);
+		const decodedCalldata = decodeAbiParameters<[bigint]>(["uint256"], nonceResult);
 
 		return BigInt(decodedCalldata[0]);
 	}
