@@ -3073,8 +3073,14 @@ export class SafeAccount extends SmartAccount {
 	 * @param newModuleAddress - the 4337 module to enable and set as fallback handler
 	 * @param overrides - previous-module lookup overrides and `skipPreflight`
 	 * @returns a promise of [disableOld, enableNew, setFallbackHandler] MetaTransactions
+	 *
+	 * @remarks Shared implementation behind the version-specific migration helpers
+	 * (e.g. {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions}).
+	 * It is `protected` on purpose: those wrappers pin the correct module addresses,
+	 * so callers reach migration through them rather than supplying raw module
+	 * addresses directly.
 	 */
-	public async createModuleMigrationMetaTransactions(
+	protected async createModuleMigrationMetaTransactions(
 		nodeRpcUrl: string | Transport | JsonRpcNode,
 		oldModuleAddress: string,
 		newModuleAddress: string,

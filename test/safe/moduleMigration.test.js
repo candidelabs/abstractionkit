@@ -67,13 +67,13 @@ function safeMock({ fallback = V07_MODULE, moduleEnabled = true, version = '1.4.
     });
 }
 
-describe('SafeAccount.createModuleMigrationMetaTransactions (builder shape)', () => {
+// createModuleMigrationMetaTransactions is protected; its shape and predecessor
+// lookup are exercised through the public version-specific wrapper.
+describe('SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions', () => {
     test('returns [disable, enable, setFallbackHandler] with correct selectors and targets', async () => {
         const account = new SafeAccountV0_3_0(ACCOUNT);
-        const batch = await account.createModuleMigrationMetaTransactions(
+        const batch = await account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
             'https://unused.invalid',
-            V07_MODULE,
-            V09_MODULE,
             { prevModuleAddress: SENTINEL, skipPreflight: true },
         );
 
@@ -83,13 +83,14 @@ describe('SafeAccount.createModuleMigrationMetaTransactions (builder shape)', ()
             expect(tx.value).toBe(0n);
         }
 
+        // 1. disableModule(prev, oldModule = v0.7)
         expect(batch[0].data.slice(0, 10)).toBe(DISABLE_MODULE);
         expect(addrArg(batch[0].data, 0)).toBe(getAddress(SENTINEL));
         expect(addrArg(batch[0].data, 1)).toBe(getAddress(V07_MODULE));
-
+        // 2. enableModule(newModule = v0.9)
         expect(batch[1].data.slice(0, 10)).toBe(ENABLE_MODULE);
         expect(addrArg(batch[1].data, 0)).toBe(getAddress(V09_MODULE));
-
+        // 3. setFallbackHandler(newModule = v0.9)
         expect(batch[2].data.slice(0, 10)).toBe(SET_FALLBACK_HANDLER);
         expect(addrArg(batch[2].data, 0)).toBe(getAddress(V09_MODULE));
     });
@@ -97,10 +98,8 @@ describe('SafeAccount.createModuleMigrationMetaTransactions (builder shape)', ()
     test('looks up the predecessor on-chain when prevModuleAddress is omitted', async () => {
         const transport = safeMock();
         const account = new SafeAccountV0_3_0(ACCOUNT);
-        const batch = await account.createModuleMigrationMetaTransactions(
+        const batch = await account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
             transport,
-            V07_MODULE,
-            V09_MODULE,
             { skipPreflight: true },
         );
 
@@ -108,21 +107,6 @@ describe('SafeAccount.createModuleMigrationMetaTransactions (builder shape)', ()
         expect(batch[0].data.slice(0, 10)).toBe(DISABLE_MODULE);
         expect(addrArg(batch[0].data, 0)).toBe(getAddress(SENTINEL)); // predecessor
         expect(addrArg(batch[0].data, 1)).toBe(getAddress(V07_MODULE)); // module disabled
-    });
-});
-
-describe('SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions', () => {
-    test('disables the v0.7 module and enables/sets the v0.9 module', async () => {
-        const account = new SafeAccountV0_3_0(ACCOUNT);
-        const batch = await account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
-            'https://unused.invalid',
-            { prevModuleAddress: SENTINEL, skipPreflight: true },
-        );
-
-        expect(batch).toHaveLength(3);
-        expect(addrArg(batch[0].data, 1)).toBe(getAddress(V07_MODULE));
-        expect(addrArg(batch[1].data, 0)).toBe(getAddress(V09_MODULE));
-        expect(addrArg(batch[2].data, 0)).toBe(getAddress(V09_MODULE));
     });
 
     test('honors explicit module overrides', async () => {
