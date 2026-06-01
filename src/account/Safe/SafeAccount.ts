@@ -2772,8 +2772,7 @@ export class SafeAccount extends SmartAccount {
 			{ to: this.accountAddress, data: callData },
 			"latest",
 		);
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const [version] = abiCoder.decode(["string"], result);
+		const [version] = decodeAbiParameters<[string]>(["string"], result);
 		return version;
 	}
 
