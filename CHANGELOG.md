@@ -2,6 +2,15 @@
 
 ## [UNRELEASED]
 
+### New Features
+
+- **Safe ERC-4337 module migration helpers.** `SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(nodeRpcUrl, overrides?)` builds the `disableModule` + `enableModule` + `setFallbackHandler` batch that migrates a deployed Safe from the EntryPoint v0.7 module to the v0.9 `Safe4337MultiChainSignatureModule`. Both modules are stateless, so no storage clearing is required. Unless `{ skipPreflight: true }` is passed, it first verifies on-chain that the account is actually a Safe running the old module (the module is enabled **and** is the current fallback handler) on a Safe version `>= 1.4.1`, turning a would-be cryptic on-chain `AA23`/`AA24` into a clear up-front error.
+- **New Safe / transport readers.** `SafeAccount.getFallbackHandler(nodeRpcUrl)` (the active 4337 module), `SafeAccount.getSafeVersion(nodeRpcUrl)` (reads `VERSION()`), `JsonRpcNode.getStorageAt(address, slot, blockTag?)`, and the exported `SAFE_FALLBACK_HANDLER_STORAGE_SLOT` constant.
+
+### Bug Fixes
+
+- **`SafeAccountV0_2_0.createMigrateToSafeAccountV0_3_0MetaTransactions` predecessor wiring.** When `safeV06ModuleAddress` was set explicitly, the v0.6 → v0.7 migration passed the module being disabled as its own linked-list predecessor, producing `disableModule(prev = module, module)`. It now exposes a dedicated `prevModuleAddress` override (defaulting to the on-chain lookup) and shares the generic migration implementation. Default callers are unaffected.
+
 ## 0.3.8
 
 ### New Features
