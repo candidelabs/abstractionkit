@@ -225,6 +225,47 @@ describe('migration preflight', () => {
         expect(batch).toHaveLength(3);
         expect(transport.calls.some((c) => c.method === 'eth_getStorageAt')).toBe(false);
     });
+
+    test('normalizes a raw error from the module-enabled check to BAD_DATA', async () => {
+        // fallback handler passes, but the isModuleEnabled eth_call reverts.
+        const transport = mockTransport(({ method, params }) => {
+            if (method === 'eth_getStorageAt') return leftPadAddress(V07_MODULE);
+            if (method === 'eth_call' && params[0].data.startsWith(IS_MODULE_ENABLED_SELECTOR)) {
+                throw new Error('execution reverted');
+            }
+            return AbiCoder.defaultAbiCoder().encode(['address[]', 'address'], [[V07_MODULE], SENTINEL]);
+        });
+        const account = new SafeAccountV0_3_0(ACCOUNT);
+        await expect(
+            account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(transport),
+        ).rejects.toMatchObject({ name: 'AbstractionKitError', code: 'BAD_DATA' });
+    });
+
+    test('normalizes a raw error from the VERSION() read to BAD_DATA', async () => {
+        const transport = mockTransport(({ method, params }) => {
+            if (method === 'eth_getStorageAt') return leftPadAddress(V07_MODULE);
+            if (method === 'eth_call') {
+                if (params[0].data.startsWith(VERSION_SELECTOR)) throw new Error('execution reverted');
+                if (params[0].data.startsWith(IS_MODULE_ENABLED_SELECTOR)) {
+                    return AbiCoder.defaultAbiCoder().encode(['bool'], [true]);
+                }
+            }
+            return AbiCoder.defaultAbiCoder().encode(['address[]', 'address'], [[V07_MODULE], SENTINEL]);
+        });
+        const account = new SafeAccountV0_3_0(ACCOUNT);
+        await expect(
+            account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(transport),
+        ).rejects.toMatchObject({ name: 'AbstractionKitError', code: 'BAD_DATA' });
+    });
+
+    test('treats an empty VERSION() string as a failed preflight', async () => {
+        const account = new SafeAccountV0_3_0(ACCOUNT);
+        await expect(
+            account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
+                safeMock({ version: '' }),
+            ),
+        ).rejects.toMatchObject({ code: 'BAD_DATA' });
+    });
 });
 
 describe('SafeAccount readers', () => {

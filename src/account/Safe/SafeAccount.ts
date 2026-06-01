@@ -3155,7 +3155,18 @@ export class SafeAccount extends SmartAccount {
 
 		// The old module must also be enabled so execTransactionFromModule (which
 		// executes the migration batch) is authorized.
-		if (!(await this.isModuleEnabled(node, oldModuleAddress))) {
+		let moduleEnabled: boolean;
+		try {
+			moduleEnabled = await this.isModuleEnabled(node, oldModuleAddress);
+		} catch (err) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Could not check whether module ${oldModuleAddress} is enabled on Safe ` +
+					`${this.accountAddress} — is it a deployed Safe? Pass { skipPreflight: true } to bypass.`,
+				{ cause: ensureError(err) },
+			);
+		}
+		if (!moduleEnabled) {
 			throw new AbstractionKitError(
 				"BAD_DATA",
 				`The 4337 module ${oldModuleAddress} is not enabled on Safe ${this.accountAddress}. ` +
@@ -3163,13 +3174,29 @@ export class SafeAccount extends SmartAccount {
 			);
 		}
 
-		// Both modules require Safe >= 1.4.1.
-		const version = await this.getSafeVersion(node);
-		if (!SafeAccount.isVersionAtLeast(version, SafeAccount.MIN_SAFE_4337_VERSION)) {
+		// Both modules require Safe >= 1.4.1. Treat read/decode failures and
+		// empty/invalid version strings as a failed preflight.
+		let version: string;
+		try {
+			version = await this.getSafeVersion(node);
+		} catch (err) {
 			throw new AbstractionKitError(
 				"BAD_DATA",
-				`Safe version ${version} is below the minimum ${SafeAccount.MIN_SAFE_4337_VERSION} ` +
-					"required by the 4337 modules. Pass { skipPreflight: true } to bypass.",
+				`Could not read the Safe version (VERSION()) of ${this.accountAddress} — is it a ` +
+					`deployed Safe running module ${oldModuleAddress}? Pass { skipPreflight: true } to bypass.`,
+				{ cause: ensureError(err) },
+			);
+		}
+		if (
+			typeof version !== "string" ||
+			version.trim() === "" ||
+			!SafeAccount.isVersionAtLeast(version, SafeAccount.MIN_SAFE_4337_VERSION)
+		) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Safe ${this.accountAddress} reported version "${version}", which does not meet the ` +
+					`minimum ${SafeAccount.MIN_SAFE_4337_VERSION} required by the 4337 modules ` +
+					`(module ${oldModuleAddress}). Pass { skipPreflight: true } to bypass.`,
 			);
 		}
 	}
