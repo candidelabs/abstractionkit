@@ -79,6 +79,7 @@ export {
 	ENTRYPOINT_V7,
 	ENTRYPOINT_V8,
 	ENTRYPOINT_V9,
+	SAFE_FALLBACK_HANDLER_STORAGE_SLOT,
 	ZeroAddress,
 } from "./constants";
 export { AbstractionKitError } from "./errors";

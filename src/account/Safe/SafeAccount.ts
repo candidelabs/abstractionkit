@@ -25,6 +25,7 @@ import {
 	ENTRYPOINT_V6,
 	ENTRYPOINT_V7,
 	ENTRYPOINT_V9,
+	SAFE_FALLBACK_HANDLER_STORAGE_SLOT,
 	Safe_L2_V1_4_1,
 	ZeroAddress,
 } from "../../constants";
@@ -2740,6 +2741,42 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
+	 * read the Safe's current fallback handler address from storage.
+	 * For Safe ERC-4337 accounts the fallback handler is the 4337 module, so this
+	 * is the canonical way to confirm which module/EntryPoint version an account
+	 * is on (e.g. after a module migration).
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * @returns a promise of the fallback handler address (checksummed)
+	 */
+	public async getFallbackHandler(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+	): Promise<string> {
+		const word = await JsonRpcNode.from(nodeRpcUrl).getStorageAt(
+			this.accountAddress,
+			SAFE_FALLBACK_HANDLER_STORAGE_SLOT,
+			"latest",
+		);
+		return getAddress("0x" + word.slice(-40));
+	}
+
+	/**
+	 * read the Safe's version string via `VERSION()` (e.g. "1.4.1").
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * @returns a promise of the Safe singleton version string
+	 */
+	public async getSafeVersion(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+	): Promise<string> {
+		const callData = createCallData(getFunctionSelector("VERSION()"), [], []);
+		const result = await JsonRpcNode.from(nodeRpcUrl).call(
+			{ to: this.accountAddress, data: callData },
+			"latest",
+		);
+		const [version] = decodeAbiParameters<[string]>(["string"], result);
+		return version;
+	}
+
+	/**
 	 * create a list of dummy signer/signature pairs for gas estimation based on the expected signers.
 	 * @param expectedSigners - signers whose signatures will be produced at sign time
 	 * @param webAuthnSignatureOverrides - WebAuthn verifier/module configuration
@@ -3007,6 +3044,187 @@ export class SafeAccount extends SmartAccount {
 			data: callData,
 			value: 0n,
 		};
+	}
+
+	/**
+	 * create the MetaTransactions that migrate a DEPLOYED Safe from one ERC-4337
+	 * module (and EntryPoint) to another. For Safe 4337 accounts the module is
+	 * both the enabled module and the fallback handler, so a migration is exactly:
+	 *   1. disableModule(oldModule)
+	 *   2. enableModule(newModule)
+	 *   3. setFallbackHandler(newModule)
+	 *
+	 * @note Both the v0.6/v0.7 `Safe4337Module` and the v0.9
+	 * `Safe4337MultiChainSignatureModule` are stateless (no per-account storage),
+	 * so there is NO storage to clear when swapping modules — these three
+	 * transactions are the whole migration. The batch is validated and executed
+	 * by the OLD module on the OLD EntryPoint; disabling that module mid-batch is
+	 * safe because validation has already completed.
+	 *
+	 * Unless `skipPreflight` is set, this verifies on-chain that the account is
+	 * actually a Safe running `oldModuleAddress` (the module is enabled AND is the
+	 * current fallback handler) and that its Safe version meets the module minimum
+	 * (>= 1.4.1) — turning a would-be cryptic on-chain `AA23`/`AA24` into a clear
+	 * up-front error.
+	 *
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain (used to find
+	 *   the previous module in the linked list when not provided, and for preflight)
+	 * @param oldModuleAddress - the currently-enabled 4337 module to disable
+	 * @param newModuleAddress - the 4337 module to enable and set as fallback handler
+	 * @param overrides - previous-module lookup overrides and `skipPreflight`
+	 * @returns a promise of [disableOld, enableNew, setFallbackHandler] MetaTransactions
+	 *
+	 * @remarks Shared implementation behind the version-specific migration helpers
+	 * (e.g. {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions}).
+	 * It is `protected` on purpose: those wrappers pin the correct module addresses,
+	 * so callers reach migration through them rather than supplying raw module
+	 * addresses directly.
+	 */
+	protected async createModuleMigrationMetaTransactions(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		oldModuleAddress: string,
+		newModuleAddress: string,
+		overrides: {
+			prevModuleAddress?: string;
+			modulesStart?: string;
+			modulesPageSize?: bigint;
+			skipPreflight?: boolean;
+		} = {},
+	): Promise<MetaTransaction[]> {
+		if (overrides.skipPreflight !== true) {
+			await this.assertMigratableFromModule(nodeRpcUrl, oldModuleAddress);
+		}
+
+		const disableOldModule = await this.createDisableModuleMetaTransaction(
+			nodeRpcUrl,
+			oldModuleAddress,
+			this.accountAddress,
+			overrides,
+		);
+
+		const enableNewModule = SafeAccount.createEnableModuleMetaTransaction(
+			newModuleAddress,
+			this.accountAddress,
+		);
+
+		const setFallbackHandler: MetaTransaction = {
+			to: this.accountAddress,
+			value: 0n,
+			data: createCallData(
+				"0xf08a0323", //setFallbackHandler(address)
+				["address"],
+				[newModuleAddress],
+			),
+		};
+
+		return [disableOldModule, enableNewModule, setFallbackHandler];
+	}
+
+	/**
+	 * Minimum Safe singleton version required by the ERC-4337 modules.
+	 */
+	private static readonly MIN_SAFE_4337_VERSION = "1.4.1";
+
+	/**
+	 * Assert that this account is a deployed Safe currently running `oldModuleAddress`
+	 * as both its enabled module and its fallback handler, on a Safe version that
+	 * meets the 4337 module minimum. Throws a descriptive `BAD_DATA` error otherwise.
+	 */
+	private async assertMigratableFromModule(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		oldModuleAddress: string,
+	): Promise<void> {
+		const node = JsonRpcNode.from(nodeRpcUrl);
+
+		// The migration UserOperation is validated through the Safe's fallback
+		// handler on the old EntryPoint, so the old module must be the fallback
+		// handler for the migration to be processable at all.
+		let fallbackHandler: string;
+		try {
+			fallbackHandler = await this.getFallbackHandler(node);
+		} catch (err) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Could not read the fallback handler of ${this.accountAddress} — is it a deployed Safe? ` +
+					"Pass { skipPreflight: true } to bypass this check.",
+				{ cause: ensureError(err) },
+			);
+		}
+		if (fallbackHandler.toLowerCase() !== oldModuleAddress.toLowerCase()) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Safe ${this.accountAddress} fallback handler is ${fallbackHandler}, expected the ` +
+					`old 4337 module ${oldModuleAddress}. This account is not a Safe running that ` +
+					"module; pass { skipPreflight: true } to bypass.",
+			);
+		}
+
+		// The old module must also be enabled so execTransactionFromModule (which
+		// executes the migration batch) is authorized.
+		let moduleEnabled: boolean;
+		try {
+			moduleEnabled = await this.isModuleEnabled(node, oldModuleAddress);
+		} catch (err) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Could not check whether module ${oldModuleAddress} is enabled on Safe ` +
+					`${this.accountAddress} — is it a deployed Safe? Pass { skipPreflight: true } to bypass.`,
+				{ cause: ensureError(err) },
+			);
+		}
+		if (!moduleEnabled) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`The 4337 module ${oldModuleAddress} is not enabled on Safe ${this.accountAddress}. ` +
+					"Pass { skipPreflight: true } to bypass.",
+			);
+		}
+
+		// Both modules require Safe >= 1.4.1. Treat read/decode failures and
+		// empty/invalid version strings as a failed preflight.
+		let version: string;
+		try {
+			version = await this.getSafeVersion(node);
+		} catch (err) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Could not read the Safe version (VERSION()) of ${this.accountAddress} — is it a ` +
+					`deployed Safe running module ${oldModuleAddress}? Pass { skipPreflight: true } to bypass.`,
+				{ cause: ensureError(err) },
+			);
+		}
+		if (
+			typeof version !== "string" ||
+			version.trim() === "" ||
+			!SafeAccount.isVersionAtLeast(version, SafeAccount.MIN_SAFE_4337_VERSION)
+		) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Safe ${this.accountAddress} reported version "${version}", which does not meet the ` +
+					`minimum ${SafeAccount.MIN_SAFE_4337_VERSION} required by the 4337 modules ` +
+					`(module ${oldModuleAddress}). Pass { skipPreflight: true } to bypass.`,
+			);
+		}
+	}
+
+	/**
+	 * Compare dotted version strings numerically (ignoring any "+suffix"), e.g.
+	 * isVersionAtLeast("1.4.1", "1.4.1") === true, ("1.5.0", "1.4.1") === true.
+	 */
+	private static isVersionAtLeast(version: string, minimum: string): boolean {
+		const parse = (v: string): number[] =>
+			v
+				.split("+")[0]
+				.split(".")
+				.map((n) => parseInt(n, 10) || 0);
+		const a = parse(version);
+		const b = parse(minimum);
+		for (let i = 0; i < Math.max(a.length, b.length); i++) {
+			const x = a[i] ?? 0;
+			const y = b[i] ?? 0;
+			if (x !== y) return x > y;
+		}
+		return true;
 	}
 
 	/**

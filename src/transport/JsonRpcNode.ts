@@ -156,6 +156,32 @@ export class JsonRpcNode implements Transport {
 	}
 
 	/**
+	 * `eth_getStorageAt`. Returns the 32-byte storage word at `slot` for
+	 * `address` at the given block tag (default `"latest"`), as a hex string.
+	 */
+	async getStorageAt(
+		address: string,
+		slot: string,
+		blockTag: string | bigint = "latest",
+		options?: RequestOptions,
+	): Promise<string> {
+		try {
+			const result = await this.outbound.request<unknown>(
+				{method: "eth_getStorageAt", params: [address, slot, blockTag]},
+				options,
+			);
+			if (typeof result !== "string") {
+				throw new AbstractionKitError("BAD_DATA", "eth_getStorageAt returned ill formed data", {
+					context: JSON.stringify(result),
+				});
+			}
+			return result;
+		} catch (err) {
+			throw translateNodeError(err, "eth_getStorageAt");
+		}
+	}
+
+	/**
 	 * `eth_call`. Executes a read-only call against `to` and returns the raw
 	 * return data as a hex string. Supports state overrides via the optional
 	 * third parameter.
