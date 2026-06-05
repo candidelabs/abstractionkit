@@ -602,7 +602,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): string {
 		const data = this.getUserOperationEip712Data(useroperation, chainId, overrides);
-		return TypedDataEncoder.hash(data.domain, data.types, data.messageValue);
+		return hashTypedData(data.domain, data.types, data.messageValue);
 	}
 
 	/**

@@ -548,7 +548,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		} = {},
 	): string {
 		const data = this.getUserOperationEip712Data(useroperation, chainId, overrides);
-		return TypedDataEncoder.hash(data.domain, data.types, data.messageValue);
+		return hashTypedData(data.domain, data.types, data.messageValue);
 	}
 
 	/**
