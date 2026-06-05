@@ -4,6 +4,7 @@ import {
 	type BundlerErrorCode,
 	BundlerErrorCodeDict,
 	ensureError,
+	parseAaCode,
 } from "./errors";
 import {
 	HttpTransport,
@@ -223,7 +224,6 @@ export class Bundler implements Transport {
 					res.receipt.effectiveGasPrice == null
 						? undefined
 						: BigInt(res.receipt.effectiveGasPrice),
-				logs: JSON.stringify(res.receipt.logs),
 			};
 
 			return {
@@ -231,7 +231,6 @@ export class Bundler implements Transport {
 				nonce: BigInt(res.nonce),
 				actualGasCost: BigInt(res.actualGasCost),
 				actualGasUsed: BigInt(res.actualGasUsed),
-				logs: JSON.stringify(res.logs),
 				receipt: userOperationReceipt,
 			};
 		} catch (err) {
@@ -287,6 +286,7 @@ function translateBundlerError(
 			cause: err,
 			errno: err.errno,
 			context,
+			aaCode: err.aaCode,
 		});
 	}
 	const code = (err as ProviderRpcError | undefined)?.code;
@@ -294,9 +294,13 @@ function translateBundlerError(
 	const innerCode: BundlerErrorCode | BasicErrorCode =
 		codeString in BundlerErrorCodeDict ? BundlerErrorCodeDict[codeString] : "UNKNOWN_ERROR";
 	const error = ensureError(err);
+	// The EntryPoint AAxx code lives only inside the message text. Parse it once
+	// here so callers can branch on a stable code instead of matching the message.
+	const aaCode = parseAaCode(error.message);
 	return new AbstractionKitError("BUNDLER_ERROR", `bundler ${method} rpc call failed`, {
-		cause: new AbstractionKitError(innerCode, error.message, { errno: code }),
+		cause: new AbstractionKitError(innerCode, error.message, { errno: code, aaCode }),
 		errno: code,
 		context,
+		aaCode,
 	});
 }

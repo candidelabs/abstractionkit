@@ -163,6 +163,28 @@ export type UserOperationByHashResult = {
 	transactionHash: string | null;
 } | null;
 
+/** A single EVM event log, as returned by the node and bundler. */
+export type Log = {
+	/** Address of the contract that emitted the log */
+	address: string;
+	/** Indexed topics; topics[0] is the event signature hash */
+	topics: string[];
+	/** Non-indexed event data, ABI-encoded */
+	data: string;
+	/** Block number (hex), when present */
+	blockNumber?: string;
+	/** Hash of the block containing the log, when present */
+	blockHash?: string;
+	/** Hash of the transaction that produced the log, when present */
+	transactionHash?: string;
+	/** Transaction index in the block (hex), when present */
+	transactionIndex?: string;
+	/** Log index in the block (hex), when present */
+	logIndex?: string;
+	/** Whether the log was removed due to a chain reorg */
+	removed?: boolean;
+};
+
 /** On-chain transaction receipt for the bundle that included a UserOperation. */
 export type UserOperationReceipt = {
 	/** Hash of the block containing the transaction */
@@ -175,8 +197,8 @@ export type UserOperationReceipt = {
 	cumulativeGasUsed: bigint;
 	/** Gas used by this specific transaction */
 	gasUsed: bigint;
-	/** Encoded logs emitted during execution */
-	logs: string;
+	/** Logs emitted during the bundle transaction */
+	logs: Log[];
 	/** Bloom filter for the transaction logs */
 	logsBloom: string;
 	/** Hash of the bundle transaction */
@@ -205,8 +227,8 @@ export type UserOperationReceiptResult = {
 	actualGasUsed: bigint;
 	/** Whether the inner account execution succeeded */
 	success: boolean;
-	/** Encoded logs emitted during execution */
-	logs: string;
+	/** Logs emitted during this UserOperation's execution */
+	logs: Log[];
 	/** The underlying transaction receipt */
 	receipt: UserOperationReceipt;
 } | null;

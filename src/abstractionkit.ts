@@ -82,7 +82,7 @@ export {
 	SAFE_FALLBACK_HANDLER_STORAGE_SLOT,
 	ZeroAddress,
 } from "./constants";
-export { AbstractionKitError } from "./errors";
+export { AbstractionKitError, parseAaCode } from "./errors";
 export { SafeAccountFactory } from "./factory/SafeAccountFactory";
 export { SmartAccountFactory } from "./factory/SmartAccountFactory";
 export { ExperimentalAllowAllParallelPaymaster } from "./paymaster/AllowAllPaymaster";
@@ -142,6 +142,7 @@ export type {
 	JsonRpcParam,
 	JsonRpcResponse,
 	JsonRpcResult,
+	Log,
 	MetaTransaction,
 	ParallelPaymasterInitValues,
 	SponsorInfo,
@@ -185,6 +186,8 @@ export {
 	getFunctionSelector,
 	sendJsonRpcRequest,
 } from "./utils";
+export type { UserOperationRevert } from "./userOperationRevert";
+export { decodeUserOperationRevertReason } from "./userOperationRevert";
 export type { Authorization7702, Authorization7702Hex } from "./utils7702";
 export {
 	createAndSignEip7702DelegationAuthorization,
