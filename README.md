@@ -49,7 +49,9 @@ See [CHANGELOG.md](./CHANGELOG.md) for the full list of new features, renames, t
 
 ### Which account class to use?
 
-| Class | EntryPoint | Account Type | When to use |
+Default EntryPoint is class-specific. Override `entrypointAddress` only when your account/module deployment matches that EntryPoint.
+
+| Class | Default EntryPoint | Account Type | When to use |
 |---|---|---|---|
 | `SafeAccountV0_3_0` | EP v0.7 | Safe (counterfactual) | Recommended for most new projects |
 | `SafeAccountV1_5_0_M_0_3_0` | EP v0.7 | Safe v1.5.0 (counterfactual) | Safe v1.5.0 with EIP-7951 / Daimo P256 verifier for WebAuthn |
