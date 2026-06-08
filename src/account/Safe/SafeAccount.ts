@@ -5,6 +5,7 @@ import {
 	encodeAbiParameters,
 	getAddress,
 	hashTypedData,
+	hexlify,
 	keccak256,
 	privateKeyToAddress,
 	signHash,
@@ -403,12 +404,12 @@ export class SafeAccount extends SmartAccount {
 				],
 				params,
 			);
-			let accountCallDataString: string;
-			if (typeof decodedParams[2] !== "string") {
-				accountCallDataString = new TextDecoder().decode(decodedParams[2]);
-			} else {
-				accountCallDataString = decodedParams[2];
-			}
+			// decodeAbiParameters returns the "bytes" field as either a hex
+			// string or a Uint8Array. UTF-8 decoding the bytes would corrupt
+			// any non-text payload (function selectors, addresses, multisend
+			// blobs); hex-encode instead so the calldata round-trips.
+			const accountCallDataString: string =
+				typeof decodedParams[2] === "string" ? decodedParams[2] : hexlify(decodedParams[2]);
 
 			return [
 				{
