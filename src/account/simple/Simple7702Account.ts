@@ -1,4 +1,4 @@
-import {decodeAbiParameters, signHash} from "src/ethereUtils";
+import {decodeAbiParameters, hexlify, signHash} from "src/ethereUtils";
 import {Bundler} from "src/Bundler";
 import {BaseUserOperationDummyValues, ENTRYPOINT_V8, ENTRYPOINT_V9} from "src/constants";
 import {AbstractionKitError} from "src/errors";
@@ -951,13 +951,15 @@ export class BaseSimple7702Account extends SmartAccount {
 			const decodedParamsArray = decodeAbiParameters<
 				[Array<[string, bigint, string | Uint8Array]>]
 			>(BaseSimple7702Account.batchExecutorFunctionInputAbi, `0x${callData.slice(10)}`)[0];
+			// decodeAbiParameters can return the "bytes" field as a Uint8Array;
+			// UTF-8 decoding would corrupt arbitrary calldata, so hex-encode it.
 			decodedMetaTransactions = decodedParamsArray.map((decodedParams) => ({
 				to: decodedParams[0],
 				value: BigInt(decodedParams[1]),
 				data:
-					typeof decodedParams[2] !== "string"
-						? new TextDecoder().decode(decodedParams[2])
-						: decodedParams[2],
+					typeof decodedParams[2] === "string"
+						? decodedParams[2]
+						: hexlify(decodedParams[2]),
 			}));
 		} else if (callData.startsWith(BaseSimple7702Account.executorFunctionSelector)) {
 			const decodedParams = decodeAbiParameters<[string, bigint, string | Uint8Array]>(
@@ -969,9 +971,9 @@ export class BaseSimple7702Account extends SmartAccount {
 					to: decodedParams[0],
 					value: BigInt(decodedParams[1]),
 					data:
-						typeof decodedParams[2] !== "string"
-							? new TextDecoder().decode(decodedParams[2])
-							: decodedParams[2],
+						typeof decodedParams[2] === "string"
+							? decodedParams[2]
+							: hexlify(decodedParams[2]),
 				},
 			];
 		} else {
