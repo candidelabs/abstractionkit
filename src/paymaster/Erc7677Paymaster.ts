@@ -825,7 +825,8 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 
 		// Step 5 — calculate real token cost.
 		const maxGasCostWei = calculateUserOperationMaxGasCost(userOp);
-		const tokenCost = (exchangeRate * maxGasCostWei) / 10n ** 18n;
+		let tokenCost = (exchangeRate * maxGasCostWei) / 10n ** 18n;
+		if (tokenCost === 0n) tokenCost = 1n;
 		const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
 		const tokenQuote: TokenQuote = { token: tokenAddress, exchangeRate, tokenCost };
 

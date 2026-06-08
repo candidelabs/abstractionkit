@@ -661,7 +661,8 @@ export class CandidePaymaster extends Paymaster implements Transport {
 
 				const exchangeRate = await this.fetchTokenPaymasterExchangeRate(context.token, entrypoint);
 				const gasCostWei = calculateUserOperationMaxGasCost(userOp);
-				const tokenCost = (exchangeRate * gasCostWei) / 10n ** 18n;
+				let tokenCost = (exchangeRate * gasCostWei) / 10n ** 18n;
+				if (tokenCost === 0n) tokenCost = 1n;
 				tokenQuote = { token: context.token, exchangeRate, tokenCost };
 				const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
 				callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
@@ -723,7 +724,8 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				entrypoint,
 			);
 			const cost = calculateUserOperationMaxGasCost(userOperation);
-			return (exchangeRate * cost) / BigInt(10 ** 18);
+			const tokenCost = (exchangeRate * cost) / BigInt(10 ** 18);
+			return tokenCost === 0n ? 1n : tokenCost;
 		} catch (err) {
 			const error = ensureError(err);
 
