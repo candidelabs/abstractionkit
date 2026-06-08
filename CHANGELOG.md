@@ -2,14 +2,33 @@
 
 ## [UNRELEASED]
 
+## 0.4.0
+
 ### New Features
 
 - **Safe ERC-4337 module migration helpers.** `SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(nodeRpcUrl, overrides?)` builds the `disableModule` + `enableModule` + `setFallbackHandler` batch that migrates a deployed Safe from the EntryPoint v0.7 module to the v0.9 `Safe4337MultiChainSignatureModule`. Both modules are stateless, so no storage clearing is required. Unless `{ skipPreflight: true }` is passed, it first verifies on-chain that the account is actually a Safe running the old module (the module is enabled **and** is the current fallback handler) on a Safe version `>= 1.4.1`, turning a would-be cryptic on-chain `AA23`/`AA24` into a clear up-front error.
 - **New Safe / transport readers.** `SafeAccount.getFallbackHandler(nodeRpcUrl)` (the active 4337 module), `SafeAccount.getSafeVersion(nodeRpcUrl)` (reads `VERSION()`), `JsonRpcNode.getStorageAt(address, slot, blockTag?)`, and the exported `SAFE_FALLBACK_HANDLER_STORAGE_SLOT` constant.
+- **Safe instance manual signing helpers.** `SafeAccount` and `SafeMultiChainSigAccount` expose instance-level manual signing helpers that match the existing static EIP-712 helper API, so apps that already hold a Safe instance can sign without re-deriving the static call surface.
+- **UserOperation revert-reason decoding and AA-code parsing.** New `decodeUserOperationRevertReason(receipt)` reads the EntryPoint `UserOperationRevertReason` log directly from a mined receipt and returns the decoded reason (Error string, Panic code, or empty for likely out-of-gas) with no extra RPC call, matching the receipt's `userOpHash` so multi-op bundles return the right entry. EntryPoint `AAxx` revert codes (e.g. `AA21`) are parsed into `AbstractionKitError.aaCode` so callers can branch on a stable contract-defined code instead of message-text matching. `UserOperationRevert` type and `parseAaCode` helper are exported.
+- **`ethers` runtime dependency removed.** Account, paymaster, transport, signer, and utility surfaces now use an internal `ethereUtils` module for ABI encoding/decoding, keccak/hashing, typed-data, and `BigInt`-safe helpers, shrinking the install footprint. Public API shapes are unchanged.
+
+### Breaking Changes
+
+- **`UserOperationReceipt.logs` and `UserOperationReceiptResult.logs` are now structured `Log[]`** instead of a JSON-encoded string. Callers that previously did `JSON.parse(receipt.logs)` should drop the parse and read the array directly:
+  ```ts
+  // Before
+  const logs = JSON.parse(receipt.logs);
+
+  // After
+  const logs = receipt.logs;
+  ```
 
 ### Bug Fixes
 
 - **`SafeAccountV0_2_0.createMigrateToSafeAccountV0_3_0MetaTransactions` predecessor wiring.** When `safeV06ModuleAddress` was set explicitly, the v0.6 → v0.7 migration passed the module being disabled as its own linked-list predecessor, producing `disableModule(prev = module, module)`. It now exposes a dedicated `prevModuleAddress` override (defaulting to the on-chain lookup) and shares the generic migration implementation. Default callers are unaffected.
+- **v0.6 `verificationGasLimit` multiplier in `calculateUserOperationMaxGasCost`.** The paymaster multiplier was applied to the wrong factor on v0.6 UserOperations, undercounting the maximum gas cost. Fixed.
+- **ERC-7677 / Candide paymaster `tokenCost` rounds-to-zero on cheap-gas chains.** On chains where `exchangeRate * maxGasCostWei < 10^18`, the floor division collapsed `tokenCost` to `0n` and the prepended ERC-20 approval was also `0n`, causing the UserOperation to revert or the paymaster to absorb the full cost. The two `Erc7677Paymaster` / `CandidePaymaster` cost paths and the public `calculateUserOperationErc20TokenMaxGasCost` helper now floor `tokenCost` to a minimum of `1` token smallest-unit. `pimlico_getTokenQuotes` and `pm_supportedERC20Tokens` responses with a non-positive `exchangeRate` now throw `PAYMASTER_ERROR` instead of silently feeding a zero rate into the math.
+- **Tenderly API key masked in error context.** `callTenderlySimulateBundle` errors no longer surface the raw access key in their context payload.
 
 ## 0.3.8
 
