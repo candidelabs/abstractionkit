@@ -65,20 +65,36 @@ export function decodeUserOperationRevertReason(
 		return {reverted: true, outOfGas: false, revertData: "0x"};
 	}
 
-	// log.data is abi.encode(uint256 nonce, bytes revertReason)
-	const [, revertData] = decodeAbiParameters<[bigint, string]>(["uint256", "bytes"], log.data);
+	// log.data is abi.encode(uint256 nonce, bytes revertReason). A malformed
+	// or truncated payload would throw from decodeAbiParameters; surface that
+	// as a best-effort "reverted, reason unknown" result rather than letting
+	// the exception bubble.
+	let revertData: string;
+	try {
+		[, revertData] = decodeAbiParameters<[bigint, string]>(["uint256", "bytes"], log.data);
+	} catch {
+		return {reverted: true, outOfGas: false, revertData: "0x"};
+	}
 	const data = revertData.toLowerCase();
 
 	if (data === "0x" || data === "") {
 		return {reverted: true, outOfGas: true, revertData: "0x"};
 	}
 	if (data.startsWith(ERROR_SELECTOR)) {
-		const [errorMessage] = decodeAbiParameters<[string]>(["string"], "0x" + data.slice(10));
-		return {reverted: true, outOfGas: false, errorMessage, revertData};
+		try {
+			const [errorMessage] = decodeAbiParameters<[string]>(["string"], "0x" + data.slice(10));
+			return {reverted: true, outOfGas: false, errorMessage, revertData};
+		} catch {
+			return {reverted: true, outOfGas: false, revertData};
+		}
 	}
 	if (data.startsWith(PANIC_SELECTOR)) {
-		const [code] = decodeAbiParameters<[bigint]>(["uint256"], "0x" + data.slice(10));
-		return {reverted: true, outOfGas: false, panicCode: Number(code), revertData};
+		try {
+			const [code] = decodeAbiParameters<[bigint]>(["uint256"], "0x" + data.slice(10));
+			return {reverted: true, outOfGas: false, panicCode: Number(code), revertData};
+		} catch {
+			return {reverted: true, outOfGas: false, revertData};
+		}
 	}
 	return {reverted: true, outOfGas: false, revertData};
 }

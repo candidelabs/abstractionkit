@@ -282,11 +282,15 @@ function translateBundlerError(
 		// translation has already happened (e.g. via JsonRpcNode reuse, future
 		// proofing). Re-wrap if not already a BUNDLER_ERROR.
 		if (err.code === "BUNDLER_ERROR") return err;
+		// Upstream wrappers (JsonRpcNode, transport layers) may have set the
+		// message but not the aaCode. Fall back to parsing it out of the
+		// message so the AAxx code survives the re-wrap.
+		const aaCode = err.aaCode ?? parseAaCode(err.message);
 		return new AbstractionKitError("BUNDLER_ERROR", `bundler ${method} rpc call failed`, {
 			cause: err,
 			errno: err.errno,
 			context,
-			aaCode: err.aaCode,
+			aaCode,
 		});
 	}
 	const code = (err as ProviderRpcError | undefined)?.code;

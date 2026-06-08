@@ -153,6 +153,84 @@ describe('SafeAccountV0_2_0.createMigrateToSafeAccountV0_3_0MetaTransactions (pr
     });
 });
 
+describe('createDisableModuleMetaTransaction pagination', () => {
+    // getModulesPaginated(start, pageSize) returns [array, next]. Our test
+    // Safe has many modules; we serve them one page at a time keyed on `start`,
+    // and the target sits on page 2 — exactly the case the single-page lookup
+    // used to miss.
+    function multiPageSafeMock({ pages }) {
+        // pages: Map<startCursor, { modules: string[], next: string }>
+        return mockTransport(({ method, params }) => {
+            if (method !== 'eth_call') throw new Error(`unexpected method ${method}`);
+            // getModulesPaginated(address start, uint256 pageSize) — start is the
+            // first arg (20-byte address right-padded in a 32-byte word).
+            const data = params[0].data;
+            const startWord = data.slice(10, 10 + 64);
+            const startAddr = getAddress('0x' + startWord.slice(-40));
+            const entry = pages.get(startAddr.toLowerCase());
+            if (entry == null) throw new Error(`no page for cursor ${startAddr}`);
+            return AbiCoder.defaultAbiCoder().encode(
+                ['address[]', 'address'],
+                [entry.modules, entry.next],
+            );
+        });
+    }
+
+    test('finds a module that lives on the second page (predecessor is last entry of page 1)', async () => {
+        const M1 = '0x00000000000000000000000000000000000000c1';
+        const M2 = '0x00000000000000000000000000000000000000c2';
+        const M3 = '0x00000000000000000000000000000000000000c3'; // last of page 1
+        const TARGET = '0x00000000000000000000000000000000000000c4'; // first of page 2
+
+        const transport = multiPageSafeMock({
+            pages: new Map([
+                // page 1: cursor = SENTINEL
+                [SENTINEL.toLowerCase(), { modules: [M1, M2, M3], next: M3 }],
+                // page 2: cursor = M3 — TARGET is the first element, so its
+                // predecessor must be M3 (carried across the page boundary).
+                [M3.toLowerCase(), { modules: [TARGET], next: SENTINEL }],
+            ]),
+        });
+
+        const account = new SafeAccountV0_3_0(ACCOUNT);
+        const tx = await account.createDisableModuleMetaTransaction(
+            transport,
+            TARGET,
+            ACCOUNT,
+        );
+
+        expect(tx.data.slice(0, 10)).toBe(DISABLE_MODULE);
+        expect(addrArg(tx.data, 0)).toBe(getAddress(M3));     // predecessor
+        expect(addrArg(tx.data, 1)).toBe(getAddress(TARGET)); // module
+    });
+
+    test('throws "not an enabled module" only after exhausting all pages', async () => {
+        const FILLER = '0x00000000000000000000000000000000000000d1';
+        const MISSING = '0x00000000000000000000000000000000000000d2';
+
+        const transport = multiPageSafeMock({
+            pages: new Map([
+                [SENTINEL.toLowerCase(), { modules: [FILLER], next: FILLER }],
+                [FILLER.toLowerCase(), { modules: [], next: SENTINEL }],
+            ]),
+        });
+
+        const account = new SafeAccountV0_3_0(ACCOUNT);
+        let caught;
+        try {
+            await account.createDisableModuleMetaTransaction(transport, MISSING, ACCOUNT);
+        } catch (err) {
+            caught = err;
+        }
+        expect(caught).toBeDefined();
+        expect(caught.message).toMatch(/createDisableModuleMetaTransaction failed/);
+        expect(caught.cause?.message).toMatch(/not an enabled module/);
+
+        // It must have visited at least the first page before giving up.
+        expect(transport.calls.length).toBeGreaterThanOrEqual(1);
+    });
+});
+
 describe('migration preflight', () => {
     test('passes when the old module is the fallback handler, enabled, and version >= 1.4.1', async () => {
         const account = new SafeAccountV0_3_0(ACCOUNT);
