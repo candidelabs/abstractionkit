@@ -57,6 +57,44 @@ describe("decodeUserOperationRevertReason", () => {
 		expect(r.errorMessage).toBe("legacy");
 	});
 
+	it("returns best-effort fallback when the outer log.data is malformed", () => {
+		// Outer decodeAbiParameters(uint256, bytes) sees garbage that isn't even
+		// a complete 32-byte word. Used to throw; should now return a
+		// reverted-with-unknown-reason result.
+		const receipt = {
+			success: false,
+			logs: [{ topics: [REVERT_TOPIC, "0xhash", "0xsender"], data: "0xdeadbeef" }],
+			receipt: { logs: [] },
+		};
+		const r = decodeUserOperationRevertReason(receipt);
+		expect(r.reverted).toBe(true);
+		expect(r.outOfGas).toBe(false);
+		expect(r.revertData).toBe("0x");
+		expect(r.errorMessage).toBeUndefined();
+		expect(r.panicCode).toBeUndefined();
+	});
+
+	it("returns best-effort fallback when an Error(string) payload is truncated", () => {
+		// Selector is the real Error(string) selector but the trailing payload
+		// is too short to decode as `string`. Inner decode throws; we should
+		// fall through to the custom-error shape (raw revertData, no message).
+		const truncated = "0x08c379a0" + "00".repeat(16); // selector + 16 bytes of zeros
+		const r = decodeUserOperationRevertReason(receiptWithRevert(truncated));
+		expect(r.reverted).toBe(true);
+		expect(r.outOfGas).toBe(false);
+		expect(r.errorMessage).toBeUndefined();
+		expect(r.revertData.toLowerCase()).toBe(truncated);
+	});
+
+	it("returns best-effort fallback when a Panic(uint256) payload is truncated", () => {
+		const truncated = "0x4e487b71" + "00".repeat(16); // selector + 16 bytes of zeros
+		const r = decodeUserOperationRevertReason(receiptWithRevert(truncated));
+		expect(r.reverted).toBe(true);
+		expect(r.outOfGas).toBe(false);
+		expect(r.panicCode).toBeUndefined();
+		expect(r.revertData.toLowerCase()).toBe(truncated);
+	});
+
 	it("picks this op's revert reason in a multi-op bundle", () => {
 		const mine = "0x" + "a".repeat(64);
 		const other = "0x" + "b".repeat(64);
