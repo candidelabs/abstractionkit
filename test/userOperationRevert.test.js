@@ -56,6 +56,24 @@ describe("decodeUserOperationRevertReason", () => {
 		const r = decodeUserOperationRevertReason(legacy);
 		expect(r.errorMessage).toBe("legacy");
 	});
+
+	it("picks this op's revert reason in a multi-op bundle", () => {
+		const mine = "0x" + "a".repeat(64);
+		const other = "0x" + "b".repeat(64);
+		const logFor = (hash, msg) => ({
+			topics: [REVERT_TOPIC, hash, "0xsender"],
+			data: coder.encode(["uint256", "bytes"], [0n, errorData(msg)]),
+		});
+		// The bundle reverted two ops; the other op's log comes first.
+		const receipt = {
+			success: false,
+			userOpHash: mine,
+			logs: [logFor(other, "other op error"), logFor(mine, "my op error")],
+			receipt: { logs: [], transactionHash: "0xtx" },
+		};
+		const r = decodeUserOperationRevertReason(receipt);
+		expect(r.errorMessage).toBe("my op error");
+	});
 });
 
 describe("parseAaCode", () => {

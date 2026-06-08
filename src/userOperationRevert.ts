@@ -49,8 +49,17 @@ export function decodeUserOperationRevertReason(
 		return {reverted: false, outOfGas: false, revertData: "0x"};
 	}
 
+	// UserOperationRevertReason is indexed by userOpHash (topic[1]). A bundle can
+	// contain several reverted ops, so match this op's hash as well as the event
+	// topic; otherwise we could pick up another op's revert reason from the bundle
+	// logs. The guard keeps it working if a caller passes a receipt without the
+	// top-level userOpHash. (Inner-call logs of this op do not carry the hash and
+	// would have to be located by logIndex range, which is out of scope here.)
+	const userOpHash = (receipt as {userOpHash?: string}).userOpHash?.toLowerCase();
 	const log = collectLogs(receipt).find(
-		(l) => l?.topics?.[0]?.toLowerCase() === REVERT_REASON_TOPIC,
+		(l) =>
+			l?.topics?.[0]?.toLowerCase() === REVERT_REASON_TOPIC &&
+			(userOpHash == null || l?.topics?.[1]?.toLowerCase() === userOpHash),
 	);
 	if (log == null) {
 		return {reverted: true, outOfGas: false, revertData: "0x"};
