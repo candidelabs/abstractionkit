@@ -80,9 +80,10 @@ export interface EthersWalletLike {
 
 /**
  * Build a Signer from a raw private-key hex string. Supports both raw-hash
- * and typed-data signing, via the library's existing ethers dep (no extra
- * packages needed). If you already hold a viem Account or ethers Wallet,
- * use {@link fromViem} or {@link fromEthersWallet} instead.
+ * and typed-data signing, delegated to the internal `ethereUtils` helpers
+ * ({@link signHash}, {@link signTypedData}) — no extra packages needed.
+ * If you already hold a viem Account or ethers Wallet, use {@link fromViem}
+ * or {@link fromEthersWallet} instead.
  *
  * @example
  * import { fromPrivateKey } from "abstractionkit";
