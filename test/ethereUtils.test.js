@@ -274,6 +274,50 @@ describe('getBytes', () => {
         expect(() => u.getBytes('bad', 'myField')).toThrow(/myField/);
     });
 
+    // Regression: errors from invalid-input paths used to echo the raw value,
+    // which leaked private keys passed to computePublicKey / signHash when
+    // those keys happened to be malformed.
+    describe('does not leak secrets in error messages', () => {
+        // 66-char "0x" + 64 hex chars — same shape as a real secp256k1 key.
+        const FAKE_KEY = '0x' + 'a'.repeat(64);
+
+        test('redacts when name hints at a secret (name="key")', () => {
+            try {
+                u.getBytes(FAKE_KEY + 'zz', 'key'); // trailing non-hex forces a throw
+                throw new Error('expected to throw');
+            } catch (err) {
+                expect(err.message).not.toContain(FAKE_KEY);
+                expect(err.message).toContain('[REDACTED]');
+            }
+        });
+
+        test('truncates long hex values when name is generic ("value")', () => {
+            try {
+                // Long hex that looks valid up to the end so it actually
+                // reaches assertArgument with the full string. We use an odd
+                // length so the regex in _getBytes rejects it.
+                const longBad = '0x' + 'a'.repeat(65);
+                u.getBytes(longBad);
+                throw new Error('expected to throw');
+            } catch (err) {
+                // The full string must NOT appear in the message; a truncated
+                // preview is OK and intentional.
+                expect(err.message).not.toMatch(/a{64}/);
+                expect(err.message).toMatch(/0x[0-9a-f]+…[0-9a-f]+/i);
+            }
+        });
+
+        test('redacts long opaque non-hex strings by length', () => {
+            try {
+                u.getBytes('z'.repeat(80)); // not hex, too long → falls into length-based redaction
+                throw new Error('expected to throw');
+            } catch (err) {
+                expect(err.message).not.toMatch(/z{40}/);
+                expect(err.message).toMatch(/\[REDACTED string length=80\]/);
+            }
+        });
+    });
+
     test(`property: ${ITER} random hex strings parse identically to ethers`, () => {
         resetRng();
         for (let i = 0; i < ITER; i++) {

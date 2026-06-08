@@ -54,8 +54,43 @@ export interface Signature {
 //   sites discriminate on them.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Format an argument value for inclusion in an error message without leaking
+// secrets. Private keys, digests, and calldata flow through `getBytes` and
+// can land here on malformed input, so:
+//   1. If the parameter name hints at a secret, fully redact.
+//   2. Hex strings get a prefix/suffix preview (callers can recognize the
+//      value in logs without copying the whole thing into a bug report).
+//   3. Any string long enough to be a key but missed by (1) and (2) is
+//      redacted by length, as defense-in-depth.
+//   4. Uint8Array is never echoed (a raw private key can flow this way too).
+function redactArgumentValue(name: string, value: unknown): string {
+    if (value === null || value === undefined) return String(value);
+    if (typeof value === "string") {
+        const n = name.toLowerCase();
+        if (
+            n.includes("key") ||
+            n.includes("secret") ||
+            n.includes("token") ||
+            n.includes("password") ||
+            n.includes("mnemonic")
+        ) {
+            return "[REDACTED]";
+        }
+        if (/^0x[0-9a-f]+$/i.test(value) && value.length > 18) {
+            return `${value.slice(0, 10)}…${value.slice(-6)}`;
+        }
+        if (value.length > 64) return `[REDACTED string length=${value.length}]`;
+        return value;
+    }
+    if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+        return String(value);
+    }
+    if (value instanceof Uint8Array) return `[REDACTED Uint8Array length=${value.length}]`;
+    return `[REDACTED ${typeof value}]`;
+}
+
 function assertArgument(check: unknown, message: string, name: string, value: unknown): asserts check {
-    if (!check) throw new Error(`invalid argument (${name}=${String(value)}, message=${message})`);
+    if (!check) throw new Error(`invalid argument (${name}=${redactArgumentValue(name, value)}, message=${message})`);
 }
 function assertCheck(check: unknown, message: string): asserts check {
     if (!check) throw new Error(message);
