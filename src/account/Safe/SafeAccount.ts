@@ -3074,22 +3074,37 @@ export class SafeAccount extends SmartAccount {
 		try {
 			let prevModuleAddressT = overrides.prevModuleAddress;
 			if (prevModuleAddressT == null) {
-				const [modules, _] = await this.getModules(nodeRpcUrl, {
-					start: overrides.modulesStart,
-					pageSize: overrides.modulesPageSize,
-				});
-
-				const moduleToDisableIndex = modules.indexOf(moduleToDisableAddress);
-				if (moduleToDisableIndex === -1) {
-					throw new RangeError(
-						`moduleToDisable ${moduleToDisableAddress} is not an enabled module.`,
-					);
-				} else if (moduleToDisableIndex === 0) {
-					prevModuleAddressT = "0x0000000000000000000000000000000000000001";
-				} else if (moduleToDisableIndex > 0) {
-					prevModuleAddressT = modules[moduleToDisableIndex - 1];
-				} else {
-					throw new RangeError(`Invalid module index for ${moduleToDisableAddress}`);
+				const SENTINEL_MODULES = "0x0000000000000000000000000000000000000001";
+				const target = moduleToDisableAddress.toLowerCase();
+				let cursor = overrides.modulesStart ?? SENTINEL_MODULES;
+				// The predecessor of the first entry on page N is the cursor passed
+				// to that page (SENTINEL on page 1; the last seen address on later
+				// pages). We carry it across page boundaries so the lookup works
+				// even when the module list spans multiple pages.
+				let prev = cursor;
+				while (prevModuleAddressT == null) {
+					const [modules, next] = await this.getModules(nodeRpcUrl, {
+						start: cursor,
+						pageSize: overrides.modulesPageSize,
+					});
+					for (const module of modules) {
+						if (module.toLowerCase() === target) {
+							prevModuleAddressT = prev;
+							break;
+						}
+						prev = module;
+					}
+					if (prevModuleAddressT != null) break;
+					if (
+						modules.length === 0 ||
+						next.toLowerCase() === SENTINEL_MODULES ||
+						next.toLowerCase() === cursor.toLowerCase()
+					) {
+						throw new RangeError(
+							`moduleToDisable ${moduleToDisableAddress} is not an enabled module.`,
+						);
+					}
+					cursor = next;
 				}
 			}
 			return SafeAccount.createStandardDisableModuleMetaTransaction(
