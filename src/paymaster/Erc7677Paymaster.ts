@@ -41,6 +41,22 @@ const TOKENS_REQUIRING_ALLOWANCE_RESET: string[] = [
 const CANDIDE_TOKEN_QUOTE_TTL_MS = 45_000;
 
 /**
+ * Parse a raw exchange-rate value (bigint or hex/decimal string) into a
+ * positive bigint. Returns `null` if the value is missing, unparseable, or
+ * `<= 0` — callers throw with their own RPC-method-specific error context.
+ */
+function parsePositiveExchangeRate(raw: string | bigint | undefined | null): bigint | null {
+	if (raw == null) return null;
+	let value: bigint;
+	try {
+		value = BigInt(raw);
+	} catch {
+		return null;
+	}
+	return value > 0n ? value : null;
+}
+
+/**
  * Opaque context object forwarded to the paymaster RPC as the fourth argument
  * of `pm_getPaymasterStubData` / `pm_getPaymasterData`.
  *
@@ -52,9 +68,11 @@ const CANDIDE_TOKEN_QUOTE_TTL_MS = 45_000;
  * ## Reserved fields consumed by this class (not forwarded to the RPC)
  *
  * - `exchangeRate` - token-to-ETH exchange rate as a bigint or hex/decimal
- *   string, scaled by 10^18 (i.e. the value of 1 ETH expressed in the token's
- *   smallest unit). Used to calculate the ERC-20 approval amount when no
- *   provider is auto-detected. Not needed when `provider` is `"pimlico"` or
+ *   string. Represents the count of token smallest-units equivalent to 1 ETH
+ *   (10^18 wei) — e.g. for USDC ($1, 6 decimals) at $3000/ETH this is
+ *   `3000 * 10^6 = 3e9`. Used to calculate the ERC-20 approval amount when no
+ *   provider is auto-detected (floored to a minimum of 1 token smallest-unit
+ *   to handle cheap-gas chains). Not needed when `provider` is `"pimlico"` or
  *   `"candide"`; the class fetches the rate from the provider's RPC.
  */
 export type Erc7677Context = Record<string, unknown>;
@@ -566,9 +584,12 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 * Fetch token exchange rate and paymaster address via Pimlico's
 	 * `pimlico_getTokenQuotes` RPC.
 	 *
-	 * @returns `exchangeRate` as a bigint scaled by 10^18 (the value of 1 ETH
-	 *   expressed in the token's smallest unit). Used to compute the token
-	 *   approval amount via `(exchangeRate * gasCostWei) / 10^18`.
+	 * @returns `exchangeRate` as a bigint: the count of token smallest-units
+	 *   equivalent to 1 ETH (10^18 wei). E.g. for USDC ($1, 6 decimals) at
+	 *   $3000/ETH this is `3000 * 10^6 = 3e9`. Used to compute the token
+	 *   approval amount via `(exchangeRate * gasCostWei) / 10^18`, floored to
+	 *   a minimum of 1 token smallest-unit (see
+	 *   {@link Erc7677Paymaster.tokenFlow}).
 	 */
 	private async fetchPimlicoTokenQuote(
 		tokenAddress: string,
@@ -594,8 +615,15 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 				`pimlico_getTokenQuotes did not include token ${tokenAddress}`,
 			);
 		}
+		const exchangeRate = parsePositiveExchangeRate(quote.exchangeRate);
+		if (exchangeRate == null) {
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				`pimlico_getTokenQuotes returned a non-positive exchangeRate for token ${tokenAddress} (got ${String(quote.exchangeRate)})`,
+			);
+		}
 		return {
-			exchangeRate: BigInt(quote.exchangeRate),
+			exchangeRate,
 			paymasterAddress: quote.paymaster,
 		};
 	}
@@ -635,9 +663,12 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 * Fetch token exchange rate and paymaster address via Candide's
 	 * `pm_supportedERC20Tokens` RPC.
 	 *
-	 * @returns `exchangeRate` as a bigint scaled by 10^18 (the value of 1 ETH
-	 *   expressed in the token's smallest unit). Used to compute the token
-	 *   approval amount via `(exchangeRate * gasCostWei) / 10^18`.
+	 * @returns `exchangeRate` as a bigint: the count of token smallest-units
+	 *   equivalent to 1 ETH (10^18 wei). E.g. for USDC ($1, 6 decimals) at
+	 *   $3000/ETH this is `3000 * 10^6 = 3e9`. Used to compute the token
+	 *   approval amount via `(exchangeRate * gasCostWei) / 10^18`, floored to
+	 *   a minimum of 1 token smallest-unit (see
+	 *   {@link Erc7677Paymaster.tokenFlow}).
 	 */
 	private async fetchCandideTokenQuote(
 		tokenAddress: string,
@@ -654,8 +685,15 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 				`${tokenAddress} token is not supported by the Candide paymaster`,
 			);
 		}
+		const exchangeRate = parsePositiveExchangeRate(token.exchangeRate);
+		if (exchangeRate == null) {
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				`pm_supportedERC20Tokens returned a non-positive exchangeRate for token ${tokenAddress} (got ${String(token.exchangeRate)})`,
+			);
+		}
 		return {
-			exchangeRate: BigInt(token.exchangeRate),
+			exchangeRate,
 			paymasterAddress: result.paymasterMetadata.address,
 		};
 	}
@@ -825,7 +863,8 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 
 		// Step 5 — calculate real token cost.
 		const maxGasCostWei = calculateUserOperationMaxGasCost(userOp);
-		const tokenCost = (exchangeRate * maxGasCostWei) / 10n ** 18n;
+		let tokenCost = (exchangeRate * maxGasCostWei) / 10n ** 18n;
+		if (tokenCost === 0n) tokenCost = 1n;
 		const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
 		const tokenQuote: TokenQuote = { token: tokenAddress, exchangeRate, tokenCost };
 
