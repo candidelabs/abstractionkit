@@ -724,7 +724,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				entrypoint,
 			);
 			const cost = calculateUserOperationMaxGasCost(userOperation);
-			const tokenCost = (exchangeRate * cost) / BigInt(10 ** 18);
+			const tokenCost = (exchangeRate * cost) / 10n ** 18n;
 			return tokenCost === 0n ? 1n : tokenCost;
 		} catch (err) {
 			const error = ensureError(err);
@@ -773,9 +773,15 @@ export class CandidePaymaster extends Paymaster implements Transport {
 						},
 					},
 				);
-			} else {
-				return BigInt(gasToken.exchangeRate);
 			}
+			const exchangeRate = BigInt(gasToken.exchangeRate);
+			if (exchangeRate <= 0n) {
+				throw new AbstractionKitError(
+					"PAYMASTER_ERROR",
+					`pm_supportedERC20Tokens returned a non-positive exchangeRate for token ${erc20TokenAddress} (got ${exchangeRate})`,
+				);
+			}
+			return exchangeRate;
 		} catch (err) {
 			const error = ensureError(err);
 

@@ -944,6 +944,127 @@ describe('Erc7677Paymaster', () => {
     }
   });
 
+  // ── Token paymaster flow: sub-unit cost clamps to 1 ────────────────
+
+  test('sub-unit tokenCost clamps to 1n (cheap-gas chain scenario)', async () => {
+    // Reproduces the round-to-zero footgun on cheap-gas / low-rate chains:
+    // when (exchangeRate * maxGasCostWei) < 10^18, floor division would give
+    // 0n and the paymaster approval would also be 0n. The clamp at
+    // Erc7677Paymaster.ts:828 forces a minimum of 1 token smallest-unit.
+    const PAYMASTER_ADDR = '0x' + 'ee'.repeat(20);
+    const TOKEN_ADDR = '0x' + 'ff'.repeat(20);
+
+    const server = await makeMockRpcServer({
+      pm_getPaymasterStubData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xstub',
+        paymasterVerificationGasLimit: '0x8000',
+        paymasterPostOpGasLimit: '0xa000',
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1000',
+        verificationGasLimit: '0x2000',
+        preVerificationGas: '0x3000',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xfinal',
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: null });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+      // maxFeePerGas = 1n keeps maxGasCostWei tiny (~ requiredGas wei). With
+      // exchangeRate = 1n the numerator is ~1e5 < 1e18, so floor gives 0n.
+      const userOp = v7UserOp({ maxFeePerGas: 1n, maxPriorityFeePerGas: 1n });
+
+      const { tokenQuote } = await paymaster.createPaymasterUserOperation(
+        smartAccount,
+        userOp,
+        server.url,
+        { token: TOKEN_ADDR, exchangeRate: 1n },
+      );
+
+      // Clamp fired: tokenCost is exactly 1n (not 0n, not "> 0n").
+      expect(tokenQuote.tokenCost).toBe(1n);
+
+      // approveAmount on the second prepend call = tokenCost * MULTIPLIER (= 2n).
+      // First call is approve(MAX) for gas estimation; second is the real one.
+      const realApproveCall = smartAccount.calls[smartAccount.calls.length - 1];
+      expect(realApproveCall.approveAmount).toBe(2n);
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('Case A: non-positive exchangeRate from RPC throws', async () => {
+    const PAYMASTER_ADDR = '0x' + 'aa'.repeat(20);
+    const TOKEN_ADDR = '0x' + 'bb'.repeat(20);
+
+    const server = await makeMockRpcServer({
+      pimlico_getTokenQuotes: () => ({
+        quotes: [{
+          paymaster: PAYMASTER_ADDR,
+          token: TOKEN_ADDR,
+          exchangeRate: '0x0',
+        }],
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'pimlico' });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+
+      await expect(
+        paymaster.createPaymasterUserOperation(
+          smartAccount,
+          v7UserOp(),
+          server.url,
+          { token: TOKEN_ADDR },
+        ),
+      ).rejects.toThrow(/non-positive exchangeRate/);
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('Case B: non-positive exchangeRate from RPC throws', async () => {
+    const PAYMASTER_ADDR = '0x' + 'cc'.repeat(20);
+    const TOKEN_ADDR = '0x' + 'dd'.repeat(20);
+
+    const server = await makeMockRpcServer({
+      pm_supportedERC20Tokens: () => ({
+        tokens: [{ address: TOKEN_ADDR, exchangeRate: '0x0' }],
+        paymasterMetadata: {
+          address: PAYMASTER_ADDR,
+          dummyPaymasterAndData: {
+            paymaster: PAYMASTER_ADDR,
+            paymasterVerificationGasLimit: '0x8000',
+            paymasterPostOpGasLimit: '0xa000',
+            paymasterData: '0xdummy',
+          },
+        },
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'candide' });
+      const smartAccount = makeTokenAccount(ENTRYPOINT_V7);
+
+      await expect(
+        paymaster.createPaymasterUserOperation(
+          smartAccount,
+          v7UserOp(),
+          server.url,
+          { token: TOKEN_ADDR },
+        ),
+      ).rejects.toThrow(/non-positive exchangeRate/);
+    } finally {
+      await server.close();
+    }
+  });
+
   // ── Token paymaster flow: USDT allowance reset ──────────────────────
 
   test('USDT-like token gets approve(0) prepended', async () => {

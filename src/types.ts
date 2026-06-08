@@ -252,9 +252,16 @@ export type SponsorMetadata = {
 export type TokenQuote = {
 	/** ERC-20 token contract address used to pay gas */
 	token: string;
-	/** Exchange rate scaled by 10^18 (1 ETH expressed in the token's smallest unit) */
+	/**
+	 * Count of token smallest-units equivalent to 1 ETH (10^18 wei). E.g. for
+	 * USDC ($1, 6 decimals) at $3000/ETH this is `3000 * 10^6 = 3e9`.
+	 */
 	exchangeRate: bigint;
-	/** Maximum token cost charged for this UserOperation (token's smallest unit) */
+	/**
+	 * Maximum token cost charged for this UserOperation, in the token's
+	 * smallest unit. Computed as `(exchangeRate * maxGasCostWei) / 10^18` and
+	 * floored to a minimum of `1n` so cheap-gas chains never quote `0n`.
+	 */
 	tokenCost: bigint;
 };
 
