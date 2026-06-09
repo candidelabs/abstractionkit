@@ -144,7 +144,10 @@ export class AbstractionKitError extends Error {
  * message, if one is present. Returns the uppercased code or undefined.
  */
 export function parseAaCode(message: string): string | undefined {
-	return message.match(/AA\d\d/i)?.[0].toUpperCase();
+	// Word boundaries keep the code from matching digit pairs embedded in hex
+	// blobs (revert data, hashes, addresses, chain ids) that bundler messages
+	// routinely carry, e.g. "0x3aa21f" or chainId "0xaa36a7".
+	return message.match(/\bAA\d{2}\b/i)?.[0].toUpperCase();
 }
 
 /**

@@ -826,6 +826,11 @@ function decodeValue(t: AbiType, data: Uint8Array, base: number): unknown {
             if (t.size === -1) {
                 ensureRange(data, base, WordSize, "array length");
                 const len = toNumber(data.slice(base, base + WordSize));
+                // Every element occupies at least one word (its value or its
+                // offset slot), so a length claiming more words than the buffer
+                // can hold is malformed. Bound it before allocating to avoid an
+                // out-of-memory crash on a hostile/short payload.
+                ensureRange(data, base + WordSize, len * WordSize, "array elements");
                 return decodeTupleAt(Array<AbiType>(len).fill(t.child), data, base + WordSize);
             }
             return decodeTupleAt(Array<AbiType>(t.size).fill(t.child), data, base);

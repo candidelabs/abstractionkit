@@ -61,8 +61,12 @@ export function decodeUserOperationRevertReason(
 			l?.topics?.[0]?.toLowerCase() === REVERT_REASON_TOPIC &&
 			(userOpHash == null || l?.topics?.[1]?.toLowerCase() === userOpHash),
 	);
+	// The EntryPoint emits UserOperationRevertReason only when the inner call
+	// left non-empty revert data (`if (result.length > 0) emit ...`). So a
+	// failed op with no such log left no revert data at all, which is the
+	// out-of-gas / bare-revert()/assert / call-to-non-contract case.
 	if (log == null) {
-		return {reverted: true, outOfGas: false, revertData: "0x"};
+		return {reverted: true, outOfGas: true, revertData: "0x"};
 	}
 
 	// log.data is abi.encode(uint256 nonce, bytes revertReason). A malformed
