@@ -119,6 +119,128 @@ describe('Calibur7702Account.getUserOperationEip712Data', () => {
     });
 });
 
+// Regression for the executor-calldata decode in
+// prependTokenPaymasterApproveToCallDataStatic. Before the fix, the inner
+// `data` bytes of each BatchedCall were UTF-8-decoded (TextDecoder, then
+// fromUtf8Bytes), which corrupted any byte >= 0x80. The fix hex-encodes
+// instead. Randomized so the test covers a broad set of binary payloads
+// rather than a single hand-crafted vector.
+describe('Calibur prependTokenPaymasterApproveToCallDataStatic round-trip', () => {
+    const coder = AbiCoder.defaultAbiCoder();
+    const EXECUTE_USER_OP_SELECTOR = '0x8dd7712f';
+    const TOKEN = '0x' + '11'.repeat(20);
+    const PAYMASTER = '0x' + '22'.repeat(20);
+
+    // Seeded PRNG so failures are reproducible; mirrors the style used in
+    // test/ethereUtils.test.js. Mulberry32 — fine for property tests.
+    let _seed = 0x9e3779b1 >>> 0;
+    const resetRng = (s = 0x9e3779b1) => { _seed = s >>> 0; };
+    const randInt = (maxExclusive) => {
+        _seed = (_seed + 0x6d2b79f5) >>> 0;
+        let t = _seed;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) % maxExclusive;
+    };
+    const randomBytes = (n) => {
+        const out = new Uint8Array(n);
+        for (let i = 0; i < n; i++) out[i] = randInt(256);
+        return out;
+    };
+    const randomAddress = () =>
+        '0x' + Array.from(randomBytes(20), (b) => b.toString(16).padStart(2, '0')).join('');
+    const randomHex = (n) =>
+        '0x' + Array.from(randomBytes(n), (b) => b.toString(16).padStart(2, '0')).join('');
+
+    function buildExecuteUserOpCalldata(calls, revertOnFailure) {
+        const encoded = coder.encode(
+            ['tuple(tuple(address to, uint256 value, bytes data)[] calls, bool revertOnFailure)'],
+            [{ calls, revertOnFailure }],
+        );
+        return EXECUTE_USER_OP_SELECTOR + encoded.slice(2);
+    }
+
+    function decodeBatchedCallFromCalldata(callData) {
+        const body = '0x' + callData.slice(10);
+        const [decoded] = coder.decode(
+            ['tuple(tuple(address to, uint256 value, bytes data)[] calls, bool revertOnFailure)'],
+            body,
+        );
+        return { calls: decoded[0], revertOnFailure: decoded[1] };
+    }
+
+    const ITER = 25;
+    test(`property: ${ITER} random batches preserve binary data bytes through prepend`, () => {
+        resetRng();
+        for (let iter = 0; iter < ITER; iter++) {
+            // Build N random calls with random binary data payloads — sizes
+            // chosen so we hit empty, sub-32-byte, 32-byte aligned, and
+            // ragged (>32 with trailing partial word) shapes within the run.
+            const n = 1 + randInt(4);
+            const originals = [];
+            for (let i = 0; i < n; i++) {
+                const dataLen = randInt(80); // 0..79 bytes
+                originals.push({
+                    to: randomAddress(),
+                    value: BigInt(randInt(1_000_000)),
+                    data: randomHex(dataLen),
+                });
+            }
+
+            const revertOnFailure = randInt(2) === 1;
+            const calldata = buildExecuteUserOpCalldata(
+                originals.map((c) => [c.to, c.value, c.data]),
+                revertOnFailure,
+            );
+
+            const approveAmount = BigInt(randInt(1_000_000_000));
+            const out = ak.Calibur7702Account.prependTokenPaymasterApproveToCallDataStatic(
+                calldata,
+                TOKEN,
+                PAYMASTER,
+                approveAmount,
+            );
+
+            const { calls: outCalls, revertOnFailure: outRevert } =
+                decodeBatchedCallFromCalldata(out);
+
+            // First call is the prepended approve(token, paymaster, amount).
+            expect(outCalls.length).toBe(originals.length + 1);
+            expect(outCalls[0][0].toLowerCase()).toBe(TOKEN.toLowerCase());
+            expect(outCalls[0][1]).toBe(0n);
+            expect(outRevert).toBe(revertOnFailure);
+
+            // The N original calls are preserved at indices 1..n with binary
+            // data round-tripping bit-for-bit. This is what the bug broke:
+            // bytes >= 0x80 used to be UTF-8-decoded into multi-byte garbage.
+            for (let i = 0; i < originals.length; i++) {
+                const orig = originals[i];
+                const got = outCalls[i + 1];
+                expect(got[0].toLowerCase()).toBe(orig.to.toLowerCase());
+                expect(got[1]).toBe(orig.value);
+                expect(got[2].toLowerCase()).toBe(orig.data.toLowerCase());
+            }
+        }
+    });
+
+    // Explicit single-vector test pinning the exact byte ≥ 0x80 case that
+    // demonstrates the bug — keeps the regression obvious even if the
+    // randomized run happens to miss it on a future RNG change.
+    test('preserves a call whose data is all bytes >= 0x80 (the explicit bug case)', () => {
+        const trickyData = '0x' + Array.from({ length: 32 }, (_, i) => (0x80 + i).toString(16).padStart(2, '0')).join('');
+        const calldata = buildExecuteUserOpCalldata(
+            [['0x' + '33'.repeat(20), 0n, trickyData]],
+            false,
+        );
+
+        const out = ak.Calibur7702Account.prependTokenPaymasterApproveToCallDataStatic(
+            calldata, TOKEN, PAYMASTER, 1n,
+        );
+        const { calls } = decodeBatchedCallFromCalldata(out);
+        expect(calls[1][2].toLowerCase()).toBe(trickyData.toLowerCase());
+    });
+});
+
 describe('Calibur signTypedData / signHash byte-equivalence (root key)', () => {
     PERMUTATIONS.forEach(({ name, build }) => {
         test(`v0.8 — ${name}`, async () => {
