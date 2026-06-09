@@ -308,10 +308,10 @@ export function toBeArray(_value: BigNumberish, _width?: Numeric): Uint8Array {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UTF-8 (src.ts/utils/utf8.ts — encoding only)
+// UTF-8 (src.ts/utils/utf8.ts — encoding + decoding)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function toUtf8Bytes(str: string): Uint8Array {
+export function toUtf8Bytes(str: string): Uint8Array {
     assertArgument(typeof str === "string", "invalid string value", "str", str);
     const result: number[] = [];
     for (let i = 0; i < str.length; i++) {
@@ -337,6 +337,81 @@ function toUtf8Bytes(str: string): Uint8Array {
         }
     }
     return new Uint8Array(result);
+}
+
+/**
+ * Decode UTF-8 bytes to a string. Pure JS so it works in every runtime,
+ * including React Native / Hermes where `TextDecoder` is not defined by default.
+ *
+ * Throws on bad prefix, truncated sequences, missing or unexpected continuation bytes,
+ * overlong encodings, surrogate code points (U+D800..U+DFFF), and code
+ * points above U+10FFFF. For ABI string payloads this is the right policy —
+ * well-formed contracts never emit broken UTF-8, so an error signals a
+ * real problem rather than silently corrupting the decoded value.
+ *
+ * @throws Error when `bytes` is not a valid UTF-8 sequence.
+ */
+export function fromUtf8Bytes(bytes: Uint8Array): string {
+    const codepoints: number[] = [];
+    let i = 0;
+    while (i < bytes.length) {
+        const c = bytes[i++];
+
+        // 1-byte ASCII.
+        if ((c & 0x80) === 0) {
+            codepoints.push(c);
+            continue;
+        }
+
+        // Lead-byte classification per RFC 3629. Bytes 0xf8..0xff are not
+        // valid UTF-8 lead bytes and fall through to the error branch.
+        let extraLength: number;
+        let overlongMask: number;
+        if ((c & 0xe0) === 0xc0) {
+            extraLength = 1;
+            overlongMask = 0x7f;
+        } else if ((c & 0xf0) === 0xe0) {
+            extraLength = 2;
+            overlongMask = 0x7ff;
+        } else if ((c & 0xf8) === 0xf0) {
+            extraLength = 3;
+            overlongMask = 0xffff;
+        } else {
+            const kind = (c & 0xc0) === 0x80 ? "unexpected continuation" : "bad prefix";
+            throw new Error(`invalid UTF-8: ${kind} byte 0x${c.toString(16)} at index ${i - 1}`);
+        }
+
+        if (i + extraLength > bytes.length) {
+            throw new Error(`invalid UTF-8: truncated sequence at index ${i - 1}`);
+        }
+
+        let res = c & ((1 << (8 - extraLength - 1)) - 1);
+        for (let j = 0; j < extraLength; j++) {
+            const next = bytes[i++];
+            if ((next & 0xc0) !== 0x80) {
+                throw new Error(
+                    `invalid UTF-8: missing continuation byte 0x${next.toString(16)} at index ${i - 1}`,
+                );
+            }
+            res = (res << 6) | (next & 0x3f);
+        }
+
+        if (res <= overlongMask) {
+            throw new Error(`invalid UTF-8: overlong encoding of U+${res.toString(16).toUpperCase()}`);
+        }
+        if (res >= 0xd800 && res <= 0xdfff) {
+            throw new Error(`invalid UTF-8: surrogate code point U+${res.toString(16).toUpperCase()}`);
+        }
+        if (res > 0x10ffff) {
+            throw new Error(`invalid UTF-8: code point U+${res.toString(16).toUpperCase()} out of range`);
+        }
+
+        codepoints.push(res);
+    }
+
+    let result = "";
+    for (const cp of codepoints) result += String.fromCodePoint(cp);
+    return result;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -745,7 +820,7 @@ function decodeValue(t: AbiType, data: Uint8Array, base: number): unknown {
             ensureRange(data, base, WordSize, "string length");
             const len = toNumber(data.slice(base, base + WordSize));
             ensureRange(data, base + WordSize, len, "string payload");
-            return new TextDecoder().decode(data.slice(base + WordSize, base + WordSize + len));
+            return fromUtf8Bytes(data.slice(base + WordSize, base + WordSize + len));
         }
         case "array": {
             if (t.size === -1) {

@@ -374,6 +374,49 @@ describe('isHexString', () => {
 });
 
 // ===========================================================================
+//                              fromUtf8Bytes
+// ===========================================================================
+
+describe('fromUtf8Bytes', () => {
+    const utf8 = (s) => new TextEncoder().encode(s);
+
+    test('round-trips ASCII', () => {
+        expect(u.fromUtf8Bytes(utf8('hello world'))).toBe('hello world');
+    });
+
+    test('round-trips multi-byte BMP and astral code points', () => {
+        // 2-byte Latin, 3-byte CJK, 4-byte emoji (surrogate-pair).
+        expect(u.fromUtf8Bytes(utf8('café 中文 😀'))).toBe('café 中文 😀');
+    });
+
+    test(`property: ${ITER} random UTF-8 strings round-trip via TextEncoder/TextDecoder`, () => {
+        resetRng();
+        for (let i = 0; i < ITER; i++) {
+            const s = randomUtf8String(64);
+            // Reference: TextEncoder.encode + ours == identity for valid strings.
+            expect(u.fromUtf8Bytes(utf8(s))).toBe(new TextDecoder().decode(utf8(s)));
+        }
+    });
+
+    // Strict-mode parity with ethers' default Utf8ErrorFuncs.error: throws on
+    // every malformed sequence, rather than silently emitting U+FFFD or junk.
+    describe('rejects malformed UTF-8 (strict, matches ethers default)', () => {
+        test.each([
+            ['stray continuation byte', Uint8Array.from([0x80])],
+            ['bad prefix (0xff)', Uint8Array.from([0xff])],
+            ['truncated 2-byte sequence', Uint8Array.from([0xc2])],
+            ['truncated 3-byte sequence', Uint8Array.from([0xe0, 0xa0])],
+            ['truncated 4-byte sequence', Uint8Array.from([0xf0, 0x9f, 0x98])],
+            ['missing continuation byte', Uint8Array.from([0xc2, 0x20])],
+            ['overlong "/" encoded as 2 bytes', Uint8Array.from([0xc0, 0xaf])],
+            ['surrogate U+D800 encoded as 3 bytes', Uint8Array.from([0xed, 0xa0, 0x80])],
+        ])('throws on %s', (_label, bytes) => {
+            expect(() => u.fromUtf8Bytes(bytes)).toThrow(/invalid UTF-8/);
+        });
+    });
+});
+
+// ===========================================================================
 //                              hexlify
 // ===========================================================================
 
@@ -783,6 +826,73 @@ describe('encodeAbiParameters / decodeAbiParameters', () => {
             expect(JSON.stringify(ours, bigintReplacer)).toBe(
                 JSON.stringify([...ref], bigintReplacer),
             );
+        }
+    });
+});
+
+// ===========================================================================
+//                              fromUtf8Bytes
+// ===========================================================================
+
+describe('fromUtf8Bytes', () => {
+    // Default (non-fatal) TextDecoder is the reference: malformed input must be
+    // replaced with U+FFFD, never coerced into other characters.
+    const td = new TextDecoder('utf-8', { fatal: false });
+    const dec = (arr) => u.fromUtf8Bytes(Uint8Array.from(arr));
+
+    const valid = [
+        ['ascii', [...Buffer.from('hello, world!', 'utf8')]],
+        ['latin-1 (2-byte)', [...Buffer.from('héllo wörld', 'utf8')]],
+        ['cjk (3-byte)', [...Buffer.from('日本語 你好', 'utf8')]],
+        ['emoji / astral (4-byte, surrogate pairs)', [...Buffer.from('𝄞🦀🎉', 'utf8')]],
+        ['empty', []],
+    ];
+    test.each(valid)('decodes valid UTF-8 %s', (_label, arr) => {
+        expect(dec(arr)).toBe(td.decode(Uint8Array.from(arr)));
+    });
+
+    const malformed = [
+        ['overlong 2-byte (C0 AF) is not "/"', [0xc0, 0xaf]],
+        ['overlong 3-byte (E0 80 AF)', [0xe0, 0x80, 0xaf]],
+        ['overlong 4-byte (F0 80 80 80)', [0xf0, 0x80, 0x80, 0x80]],
+        ['surrogate half (ED A0 80)', [0xed, 0xa0, 0x80]],
+        ['above U+10FFFF (F4 90 80 80)', [0xf4, 0x90, 0x80, 0x80]],
+        ['invalid lead F5', [0xf5, 0x80, 0x80, 0x80]],
+        ['lone continuation byte 80', [0x80]],
+        ['truncated 3-byte at EOF (E2 82)', [0xe2, 0x82]],
+        ['valid lead, bad continuation (A + C3 28)', [0x41, 0xc3, 0x28]],
+        ['valid then truncated tail (hi + E4 BD)', [0x68, 0x69, 0xe4, 0xbd]],
+        ['C1 BF (overlong lead)', [0xc1, 0xbf]],
+    ];
+    // Strict policy (matches ethers' default Utf8ErrorFuncs.error): malformed
+    // sequences throw rather than being replaced with U+FFFD. The vectors below
+    // are the cases TextDecoder-non-fatal would have silently FFFD'd.
+    test.each(malformed)('throws on malformed: %s', (_label, arr) => {
+        expect(() => dec(arr)).toThrow(/invalid UTF-8/);
+    });
+
+    test('every partial prefix of a 4-byte sequence throws (no buffer over-read)', () => {
+        // Under strict policy each truncated prefix is invalid. The asserted
+        // property is that the throw is structured (`invalid UTF-8: ...`) \u2014
+        // not a TypeError on `undefined`, which would indicate reading past
+        // the end of the buffer.
+        for (const seq of [[0xf0], [0xf0, 0x9f], [0xf0, 0x9f, 0x98]]) {
+            expect(() => dec(seq)).toThrow(/invalid UTF-8/);
+        }
+        // The complete 4-byte sequence decodes normally (sanity check).
+        expect(dec([0xf0, 0x9f, 0x98, 0x80])).toBe('\uD83D\uDE00');
+    });
+
+    test('5000 random valid UTF-8 strings round-trip byte-for-byte against TextEncoder/TextDecoder', () => {
+        // Random-byte-string parity isn't meaningful under strict policy \u2014
+        // most random byte strings are malformed, so the test would only
+        // exercise the throw path. Random valid strings keep the byte-for-byte
+        // spirit (large iteration count, all four UTF-8 byte-length classes).
+        const enc = new TextEncoder();
+        for (let t = 0; t < 5000; t++) {
+            const s = randomUtf8String(8);
+            const bytes = enc.encode(s);
+            expect(u.fromUtf8Bytes(bytes)).toBe(td.decode(bytes));
         }
     });
 });

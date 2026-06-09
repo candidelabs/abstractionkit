@@ -11,6 +11,7 @@ import {
 	signHash,
 	solidityPacked,
 	solidityPackedKeccak256,
+	toUtf8Bytes,
 } from "src/ethereUtils";
 import {Bundler} from "src/Bundler";
 import {AbstractionKitError, ensureError} from "src/errors";
@@ -3462,17 +3463,16 @@ function generateOnChainIdentifier(
 ): string {
 	const identifierPrefix = "5afe"; // Safe identifier prefix
 	const identifierVersion = "00"; // First version
-	const projectHash = keccak256(`0x${Buffer.from(project, "utf8").toString("hex")}`).slice(-20);
-	const platformHash = keccak256(`0x${Buffer.from(platform, "utf8").toString("hex")}`).slice(-3);
-	const toolHash = keccak256(`0x${Buffer.from(tool, "utf8").toString("hex")}`).slice(-3);
-	const toolVersionHash = keccak256(`0x${Buffer.from(toolVersion, "utf8").toString("hex")}`).slice(
-		-3,
-	);
+	const projectHash = keccak256(hexlify(toUtf8Bytes(project))).slice(-20);
+	const platformHash = keccak256(hexlify(toUtf8Bytes(platform))).slice(-3);
+	const toolHash = keccak256(hexlify(toUtf8Bytes(tool))).slice(-3);
+	const toolVersionHash = keccak256(hexlify(toUtf8Bytes(toolVersion))).slice(-3);
 
-	const projectHashEncoded = Buffer.from(projectHash, "utf8").toString("hex");
-	const platformHashEncoded = Buffer.from(platformHash, "utf8").toString("hex");
-	const toolHashEncoded = Buffer.from(toolHash, "utf8").toString("hex");
-	const toolVersionHashEncoded = Buffer.from(toolVersionHash, "utf8").toString("hex");
+	// hex of the UTF-8 bytes, no 0x prefix (Buffer is undefined in browsers / React Native)
+	const projectHashEncoded = hexlify(toUtf8Bytes(projectHash)).slice(2);
+	const platformHashEncoded = hexlify(toUtf8Bytes(platformHash)).slice(2);
+	const toolHashEncoded = hexlify(toUtf8Bytes(toolHash)).slice(2);
+	const toolVersionHashEncoded = hexlify(toUtf8Bytes(toolVersionHash)).slice(2);
 
 	const res = `${identifierPrefix}${identifierVersion}${projectHashEncoded}${platformHashEncoded}${toolHashEncoded}${toolVersionHashEncoded}`;
 	return res;
