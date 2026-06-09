@@ -8,7 +8,6 @@
 	"description": "Account Abstraction 4337 SDK by Candidelabs",
 	"main": "dist/index.cjs",
 	"module": "dist/index.mjs",
-	"unpkg": "dist/index.iife.js",
 	"types": "dist/index.d.cts",
 	"exports": {
 		".": {
