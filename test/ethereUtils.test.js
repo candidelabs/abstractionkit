@@ -788,6 +788,66 @@ describe('encodeAbiParameters / decodeAbiParameters', () => {
 });
 
 // ===========================================================================
+//                              fromUtf8Bytes
+// ===========================================================================
+
+describe('fromUtf8Bytes', () => {
+    // Default (non-fatal) TextDecoder is the reference: malformed input must be
+    // replaced with U+FFFD, never coerced into other characters.
+    const td = new TextDecoder('utf-8', { fatal: false });
+    const dec = (arr) => u.fromUtf8Bytes(Uint8Array.from(arr));
+
+    const valid = [
+        ['ascii', [...Buffer.from('hello, world!', 'utf8')]],
+        ['latin-1 (2-byte)', [...Buffer.from('héllo wörld', 'utf8')]],
+        ['cjk (3-byte)', [...Buffer.from('日本語 你好', 'utf8')]],
+        ['emoji / astral (4-byte, surrogate pairs)', [...Buffer.from('𝄞🦀🎉', 'utf8')]],
+        ['empty', []],
+    ];
+    test.each(valid)('decodes valid UTF-8 %s', (_label, arr) => {
+        expect(dec(arr)).toBe(td.decode(Uint8Array.from(arr)));
+    });
+
+    const malformed = [
+        ['overlong 2-byte (C0 AF) is not "/"', [0xc0, 0xaf]],
+        ['overlong 3-byte (E0 80 AF)', [0xe0, 0x80, 0xaf]],
+        ['overlong 4-byte (F0 80 80 80)', [0xf0, 0x80, 0x80, 0x80]],
+        ['surrogate half (ED A0 80)', [0xed, 0xa0, 0x80]],
+        ['above U+10FFFF (F4 90 80 80)', [0xf4, 0x90, 0x80, 0x80]],
+        ['invalid lead F5', [0xf5, 0x80, 0x80, 0x80]],
+        ['lone continuation byte 80', [0x80]],
+        ['truncated 3-byte at EOF (E2 82)', [0xe2, 0x82]],
+        ['valid lead, bad continuation (A + C3 28)', [0x41, 0xc3, 0x28]],
+        ['valid then truncated tail (hi + E4 BD)', [0x68, 0x69, 0xe4, 0xbd]],
+        ['C1 BF (overlong lead)', [0xc1, 0xbf]],
+    ];
+    test.each(malformed)('matches TextDecoder on malformed: %s', (_label, arr) => {
+        const out = dec(arr);
+        expect(out).toBe(td.decode(Uint8Array.from(arr)));
+        // none of the original bytes leak through as a non-replacement char
+        expect(out.replace(/\uFFFD/g, '')).toBe(td.decode(Uint8Array.from(arr)).replace(/\uFFFD/g, ''));
+    });
+
+    test('never reads past the end of the buffer', () => {
+        // Every prefix of a 4-byte sequence must decode without throwing.
+        for (const seq of [[0xf0], [0xf0, 0x9f], [0xf0, 0x9f, 0x98], [0xf0, 0x9f, 0x98, 0x80]]) {
+            expect(() => dec(seq)).not.toThrow();
+            expect(dec(seq)).toBe(td.decode(Uint8Array.from(seq)));
+        }
+    });
+
+    test('byte-for-byte parity with TextDecoder over random byte strings', () => {
+        for (let t = 0; t < 5000; t++) {
+            const len = randIntRange(0, 6);
+            const arr = [];
+            for (let j = 0; j < len; j++) arr.push(randIntRange(0, 255));
+            const bytes = Uint8Array.from(arr);
+            expect(u.fromUtf8Bytes(bytes)).toBe(td.decode(bytes));
+        }
+    });
+});
+
+// ===========================================================================
 //                              solidityPacked / solidityPackedKeccak256
 // ===========================================================================
 

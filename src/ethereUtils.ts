@@ -342,27 +342,72 @@ export function toUtf8Bytes(str: string): Uint8Array {
 /**
  * Decode UTF-8 bytes to a string. Pure JS so it works in every runtime,
  * including React Native / Hermes where `TextDecoder` is not defined by default.
- * Mirrors the encoder above; handles 1- to 4-byte sequences (surrogate pairs).
+ * Validates the encoding like `TextDecoder` in its default (non-fatal) mode:
+ * invalid lead bytes, missing/ malformed continuation bytes, overlong
+ * encodings, surrogate-range code points (U+D800..U+DFFF) and values above
+ * U+10FFFF are replaced with U+FFFD rather than being coerced into other
+ * characters. Never reads past the end of the buffer.
  */
 export function fromUtf8Bytes(bytes: Uint8Array): string {
     let result = "";
     let i = 0;
-    while (i < bytes.length) {
+    const n = bytes.length;
+    while (i < n) {
         const b0 = bytes[i++];
         if (b0 < 0x80) {
             result += String.fromCharCode(b0);
-        } else if (b0 >= 0xc0 && b0 < 0xe0) {
-            const b1 = bytes[i++] & 0x3f;
-            result += String.fromCharCode(((b0 & 0x1f) << 6) | b1);
-        } else if (b0 >= 0xe0 && b0 < 0xf0) {
-            const b1 = bytes[i++] & 0x3f;
-            const b2 = bytes[i++] & 0x3f;
-            result += String.fromCharCode(((b0 & 0x0f) << 12) | (b1 << 6) | b2);
+            continue;
+        }
+        // Sequence length, initial code-point bits, and the allowed range for
+        // the FIRST continuation byte. The tighter first-byte range is what
+        // rejects overlong encodings (0xe0/0xf0), surrogates (0xed) and code
+        // points above U+10FFFF (0xf4) at the earliest byte, matching the
+        // WHATWG / TextDecoder algorithm (including how many U+FFFD it emits).
+        let needed: number;
+        let cp: number;
+        let lower = 0x80;
+        let upper = 0xbf;
+        if (b0 >= 0xc2 && b0 <= 0xdf) {
+            needed = 1;
+            cp = b0 & 0x1f;
+        } else if (b0 >= 0xe0 && b0 <= 0xef) {
+            needed = 2;
+            cp = b0 & 0x0f;
+            if (b0 === 0xe0) lower = 0xa0;
+            else if (b0 === 0xed) upper = 0x9f;
+        } else if (b0 >= 0xf0 && b0 <= 0xf4) {
+            needed = 3;
+            cp = b0 & 0x07;
+            if (b0 === 0xf0) lower = 0x90;
+            else if (b0 === 0xf4) upper = 0x8f;
         } else {
-            const b1 = bytes[i++] & 0x3f;
-            const b2 = bytes[i++] & 0x3f;
-            const b3 = bytes[i++] & 0x3f;
-            const cp = (((b0 & 0x07) << 18) | (b1 << 12) | (b2 << 6) | b3) - 0x10000;
+            // 0x80..0xc1 (continuation byte as lead, or overlong 2-byte lead)
+            // and 0xf5..0xff (would exceed U+10FFFF) are never valid leads.
+            result += "\ufffd";
+            continue;
+        }
+        let valid = true;
+        for (let k = 0; k < needed; k++) {
+            const lo = k === 0 ? lower : 0x80;
+            const hi = k === 0 ? upper : 0xbf;
+            // Truncated, or a byte outside the allowed continuation range: emit
+            // one U+FFFD and leave the offending byte unconsumed so it is
+            // reprocessed as a fresh lead byte.
+            if (i >= n || bytes[i] < lo || bytes[i] > hi) {
+                valid = false;
+                break;
+            }
+            cp = (cp << 6) | (bytes[i] & 0x3f);
+            i++;
+        }
+        if (!valid) {
+            result += "\ufffd";
+            continue;
+        }
+        if (cp <= 0xffff) {
+            result += String.fromCharCode(cp);
+        } else {
+            cp -= 0x10000;
             result += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff));
         }
     }
