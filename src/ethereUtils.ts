@@ -689,6 +689,10 @@ function staticSize(t: AbiType): number {
 
 const WordSize = 32;
 const Padding = new Uint8Array(WordSize);
+// Allocation cap for dynamic arrays whose element type has zero head footprint
+// (e.g. empty tuples), where the payload carries no per-element bytes to bound
+// the length against. Far above any realistic decode, low enough to stay safe.
+const MaxZeroFootprintArrayLen = 1 << 20;
 
 function padLeft(b: Uint8Array, size: number): Uint8Array {
     assertCheck(b.length <= size, "padLeft: overflow");
@@ -826,11 +830,27 @@ function decodeValue(t: AbiType, data: Uint8Array, base: number): unknown {
             if (t.size === -1) {
                 ensureRange(data, base, WordSize, "array length");
                 const len = toNumber(data.slice(base, base + WordSize));
-                // Every element occupies at least one word (its value or its
-                // offset slot), so a length claiming more words than the buffer
-                // can hold is malformed. Bound it before allocating to avoid an
-                // out-of-memory crash on a hostile/short payload.
-                ensureRange(data, base + WordSize, len * WordSize, "array elements");
+                // Bound the element count before allocating, so a hostile length
+                // word can't trigger an out-of-memory allocation. Each element
+                // occupies a fixed head footprint in the array body: a 32-byte
+                // offset slot for a dynamic element, its static size for a static
+                // one. Zero-footprint elements (e.g. empty tuples) consume no
+                // body bytes, so there is nothing to bound the length against;
+                // cap those by an absolute length instead.
+                const elementHeadSize = isDynamic(t.child)
+                    ? WordSize
+                    : staticSize(t.child);
+                const bodyBytes = data.length - (base + WordSize);
+                const maxElements =
+                    elementHeadSize > 0
+                        ? Math.floor(bodyBytes / elementHeadSize)
+                        : MaxZeroFootprintArrayLen;
+                if (len > maxElements) {
+                    throw new Error(
+                        `ABI decode: array length ${len} exceeds payload capacity ` +
+                        `(maxElements=${maxElements}, data.length=${data.length})`,
+                    );
+                }
                 return decodeTupleAt(Array<AbiType>(len).fill(t.child), data, base + WordSize);
             }
             return decodeTupleAt(Array<AbiType>(t.size).fill(t.child), data, base);

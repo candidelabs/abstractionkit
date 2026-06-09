@@ -768,6 +768,17 @@ describe('encodeAbiParameters / decodeAbiParameters', () => {
         expect(() => ethers.AbiCoder.defaultAbiCoder().decode(['uint8[]'], payload)).toThrow();
     });
 
+    test('still decodes a zero-footprint element array (empty tuples)', () => {
+        const word = (n) => n.toString(16).padStart(64, '0');
+        // Two empty tuples encode to just offset + length; the body is empty,
+        // so the length must not be bounded by per-element body bytes.
+        const payload = '0x' + word(0x20) + word(2);
+        expect(u.decodeAbiParameters(['()[]'], payload)).toEqual([[[], []]]);
+        // ...but a hostile length on the same zero-footprint type is still capped.
+        const hostile = '0x' + word(0x20) + word(2 ** 27);
+        expect(() => u.decodeAbiParameters(['()[]'], hostile)).toThrow();
+    });
+
     // Random parameter-list generator.
     function genAtomicType() {
         const buckets = [
