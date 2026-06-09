@@ -1,6 +1,7 @@
 import {
 	decodeAbiParameters,
 	encodeAbiParameters,
+	fromUtf8Bytes,
 	keccak256,
 	privateKeyToAddress,
 	signHash,
@@ -1426,7 +1427,7 @@ export class Calibur7702Account
 		const decodedTransactions: SimpleMetaTransaction[] = existingCalls.map((call) => ({
 			to: call[0],
 			value: BigInt(call[1]),
-			data: typeof call[2] !== "string" ? new TextDecoder().decode(call[2]) : call[2],
+			data: typeof call[2] !== "string" ? fromUtf8Bytes(call[2]) : call[2],
 		}));
 
 		// Prepend approve

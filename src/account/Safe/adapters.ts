@@ -1,4 +1,4 @@
-import { getBytes, hexlify } from "../../ethereUtils";
+import { fromUtf8Bytes, getBytes, hexlify, toUtf8Bytes } from "../../ethereUtils";
 import type { Signer } from "src/signer/types";
 import { SafeAccount } from "./SafeAccount";
 import type { WebauthnPublicKey, WebauthnSignatureData } from "./types";
@@ -389,8 +389,8 @@ function toArrayBuffer(input: ArrayBuffer | Uint8Array | string): ArrayBuffer {
 function toUtf8String(input: ArrayBuffer | Uint8Array | string): string {
 	if (typeof input === "string") return input;
 	const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
-	// TextDecoder is available in all modern browsers and Node 11+.
-	return new TextDecoder("utf-8").decode(bytes);
+	// Pure-JS decode so it works in React Native / Hermes too (no TextDecoder there).
+	return fromUtf8Bytes(bytes);
 }
 
 function toRSPair(
@@ -415,8 +415,8 @@ function toRSPair(
  * Robust to authenticators adding or reordering keys (e.g. Safari's
  * `crossOrigin`, future WebAuthn L3 fields) — parses JSON instead of
  * using a regex, validates the shape is a plain object, and emits hex
- * via `TextEncoder` (browser-safe; `Buffer` isn't defined in Vite /
- * Rollup / esbuild bundles without a polyfill).
+ * via the pure-JS `toUtf8Bytes` (works in browsers and React Native /
+ * Hermes; neither `Buffer` nor `TextEncoder` is defined there by default).
  */
 function extractClientDataFieldsHex(clientDataJSON: string): string {
 	let parsed: unknown;
@@ -440,7 +440,7 @@ function extractClientDataFieldsHex(clientDataJSON: string): string {
 	// `hexlify` mirrors what the prior hand-rolled hex loop produced —
 	// each byte gets exactly 2 lowercase hex chars, no separators, `0x`
 	// prefix. Confirmed identical for all input sizes via the test suite.
-	return hexlify(new TextEncoder().encode(fields));
+	return hexlify(toUtf8Bytes(fields));
 }
 
 /**

@@ -308,10 +308,10 @@ export function toBeArray(_value: BigNumberish, _width?: Numeric): Uint8Array {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UTF-8 (src.ts/utils/utf8.ts — encoding only)
+// UTF-8 (src.ts/utils/utf8.ts — encoding + decoding)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function toUtf8Bytes(str: string): Uint8Array {
+export function toUtf8Bytes(str: string): Uint8Array {
     assertArgument(typeof str === "string", "invalid string value", "str", str);
     const result: number[] = [];
     for (let i = 0; i < str.length; i++) {
@@ -337,6 +337,36 @@ function toUtf8Bytes(str: string): Uint8Array {
         }
     }
     return new Uint8Array(result);
+}
+
+/**
+ * Decode UTF-8 bytes to a string. Pure JS so it works in every runtime,
+ * including React Native / Hermes where `TextDecoder` is not defined by default.
+ * Mirrors the encoder above; handles 1- to 4-byte sequences (surrogate pairs).
+ */
+export function fromUtf8Bytes(bytes: Uint8Array): string {
+    let result = "";
+    let i = 0;
+    while (i < bytes.length) {
+        const b0 = bytes[i++];
+        if (b0 < 0x80) {
+            result += String.fromCharCode(b0);
+        } else if (b0 >= 0xc0 && b0 < 0xe0) {
+            const b1 = bytes[i++] & 0x3f;
+            result += String.fromCharCode(((b0 & 0x1f) << 6) | b1);
+        } else if (b0 >= 0xe0 && b0 < 0xf0) {
+            const b1 = bytes[i++] & 0x3f;
+            const b2 = bytes[i++] & 0x3f;
+            result += String.fromCharCode(((b0 & 0x0f) << 12) | (b1 << 6) | b2);
+        } else {
+            const b1 = bytes[i++] & 0x3f;
+            const b2 = bytes[i++] & 0x3f;
+            const b3 = bytes[i++] & 0x3f;
+            const cp = (((b0 & 0x07) << 18) | (b1 << 12) | (b2 << 6) | b3) - 0x10000;
+            result += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff));
+        }
+    }
+    return result;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -745,7 +775,7 @@ function decodeValue(t: AbiType, data: Uint8Array, base: number): unknown {
             ensureRange(data, base, WordSize, "string length");
             const len = toNumber(data.slice(base, base + WordSize));
             ensureRange(data, base + WordSize, len, "string payload");
-            return new TextDecoder().decode(data.slice(base + WordSize, base + WordSize + len));
+            return fromUtf8Bytes(data.slice(base + WordSize, base + WordSize + len));
         }
         case "array": {
             if (t.size === -1) {
