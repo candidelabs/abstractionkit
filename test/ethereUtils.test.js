@@ -756,6 +756,29 @@ describe('encodeAbiParameters / decodeAbiParameters', () => {
         expect(() => u.encodeAbiParameters(['uint256[3]'], [[1n, 2n]])).toThrow();
     });
 
+    // A dynamic-array length word comes from untrusted data (RPC/bundler
+    // responses). A short payload claiming a huge element count must throw a
+    // bounded decode error, not allocate the array and crash the process.
+    // ethers throws BUFFER_OVERRUN on the same input; we match that intent.
+    test('rejects a dynamic array whose length word exceeds the payload', () => {
+        const word = (n) => n.toString(16).padStart(64, '0');
+        // offset to the array (0x20) + an absurd length, no element data.
+        const payload = '0x' + word(0x20) + word(2 ** 27);
+        expect(() => u.decodeAbiParameters(['uint8[]'], payload)).toThrow();
+        expect(() => ethers.AbiCoder.defaultAbiCoder().decode(['uint8[]'], payload)).toThrow();
+    });
+
+    test('still decodes a zero-footprint element array (empty tuples)', () => {
+        const word = (n) => n.toString(16).padStart(64, '0');
+        // Two empty tuples encode to just offset + length; the body is empty,
+        // so the length must not be bounded by per-element body bytes.
+        const payload = '0x' + word(0x20) + word(2);
+        expect(u.decodeAbiParameters(['()[]'], payload)).toEqual([[[], []]]);
+        // ...but a hostile length on the same zero-footprint type is still capped.
+        const hostile = '0x' + word(0x20) + word(2 ** 27);
+        expect(() => u.decodeAbiParameters(['()[]'], hostile)).toThrow();
+    });
+
     // Random parameter-list generator.
     function genAtomicType() {
         const buckets = [

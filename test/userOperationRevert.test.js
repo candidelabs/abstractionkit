@@ -43,10 +43,13 @@ describe("decodeUserOperationRevertReason", () => {
 		expect(r.outOfGas).toBe(false);
 	});
 
-	it("reverted without a reason when there is no revert log", () => {
+	it("flags out-of-gas when a failed op has no revert log", () => {
+		// The EntryPoint emits UserOperationRevertReason only for non-empty
+		// revert data, so a failed op with no such log left no revert data:
+		// out-of-gas / bare revert() / call-to-non-contract.
 		const r = decodeUserOperationRevertReason({ success: false, logs: [], receipt: { logs: [] } });
 		expect(r.reverted).toBe(true);
-		expect(r.outOfGas).toBe(false);
+		expect(r.outOfGas).toBe(true);
 		expect(r.errorMessage).toBeUndefined();
 	});
 
@@ -125,6 +128,14 @@ describe("parseAaCode", () => {
 
 	it("returns undefined when there is no code", () => {
 		expect(parseAaCode("some unrelated bundler message")).toBeUndefined();
+	});
+
+	it("does not match digit pairs embedded in hex blobs", () => {
+		// Bundler messages carry revert data, hashes, addresses and chain ids;
+		// none of these should be misread as a FailedOp code.
+		expect(parseAaCode("reverted with data 0x3aa21f00deadbeef")).toBeUndefined();
+		expect(parseAaCode("wrong chain: expected 0xaa36a7")).toBeUndefined();
+		expect(parseAaCode("paymaster 0xaa21cafebabe rejected")).toBeUndefined();
 	});
 });
 
