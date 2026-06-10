@@ -99,18 +99,25 @@ export class AbstractionKitError extends Error {
 	public readonly code: BundlerErrorCode | BasicErrorCode | JsonRpcErrorCode;
 	public readonly context?: Jsonable;
 	public readonly errno?: number;
+	/**
+	 * The EntryPoint FailedOp revert code parsed from the message (e.g. "AA21"),
+	 * when present. EntryPoint codes are contract-defined and stable across
+	 * bundlers, so they are a reliable signal for classifying a failure without
+	 * matching the human-readable message text.
+	 */
+	public readonly aaCode?: string;
 
 	/**
 	 * @param code - Error code identifying the category of failure
 	 * @param message - Human-readable error description
-	 * @param options - Optional cause, numeric errno, and JSON-serializable context
+	 * @param options - Optional cause, numeric errno, JSON-serializable context, and AAxx code
 	 */
 	constructor(
 		code: BundlerErrorCode | BasicErrorCode | JsonRpcErrorCode,
 		message: string,
-		options: { cause?: Error; errno?: number; context?: Jsonable } = {},
+		options: { cause?: Error; errno?: number; context?: Jsonable; aaCode?: string } = {},
 	) {
-		const { cause, errno, context } = options;
+		const { cause, errno, context, aaCode } = options;
 
 		super(message, { cause });
 		this.name = this.constructor.name;
@@ -118,17 +125,29 @@ export class AbstractionKitError extends Error {
 		this.code = code;
 		this.errno = errno;
 		this.context = context;
+		this.aaCode = aaCode;
 	}
 
 	/**
 	 * Returns a JSON string representation of this error including name, code,
-	 * message, cause, errno, and context. Useful in React Native where the
-	 * Error "cause" property is not shown in stack traces.
+	 * message, cause, errno, context, and aaCode. Useful in React Native where
+	 * the Error "cause" property is not shown in stack traces.
 	 * @returns JSON string of the error
 	 */
 	stringify(): string {
-		return JSON.stringify(this, ["name", "code", "message", "cause", "errno", "context"]);
+		return JSON.stringify(this, ["name", "code", "message", "cause", "errno", "context", "aaCode"]);
 	}
+}
+
+/**
+ * Parse the EntryPoint FailedOp revert code (e.g. "AA21") from a bundler error
+ * message, if one is present. Returns the uppercased code or undefined.
+ */
+export function parseAaCode(message: string): string | undefined {
+	// Word boundaries keep the code from matching digit pairs embedded in hex
+	// blobs (revert data, hashes, addresses, chain ids) that bundler messages
+	// routinely carry, e.g. "0x3aa21f" or chainId "0xaa36a7".
+	return message.match(/\bAA\d{2}\b/i)?.[0].toUpperCase();
 }
 
 /**

@@ -1,4 +1,4 @@
-import { hashMessage } from "ethers";
+import { hashMessage } from "../../ethereUtils";
 
 /** The primary EIP-712 type name used for Safe message signing. */
 export const SAFE_MESSAGE_PRIMARY_TYPE = "SafeMessage";

@@ -1,4 +1,4 @@
-import {AbiCoder, getAddress} from "ethers";
+import {decodeAbiParameters, encodeAbiParameters, getAddress} from "../ethereUtils";
 import {
 	AbstractionKitError,
 	type BasicErrorCode,
@@ -152,6 +152,32 @@ export class JsonRpcNode implements Transport {
 			return result;
 		} catch (err) {
 			throw translateNodeError(err, "eth_getCode");
+		}
+	}
+
+	/**
+	 * `eth_getStorageAt`. Returns the 32-byte storage word at `slot` for
+	 * `address` at the given block tag (default `"latest"`), as a hex string.
+	 */
+	async getStorageAt(
+		address: string,
+		slot: string,
+		blockTag: string | bigint = "latest",
+		options?: RequestOptions,
+	): Promise<string> {
+		try {
+			const result = await this.outbound.request<unknown>(
+				{method: "eth_getStorageAt", params: [address, slot, blockTag]},
+				options,
+			);
+			if (typeof result !== "string") {
+				throw new AbstractionKitError("BAD_DATA", "eth_getStorageAt returned ill formed data", {
+					context: JSON.stringify(result),
+				});
+			}
+			return result;
+		} catch (err) {
+			throw translateNodeError(err, "eth_getStorageAt");
 		}
 	}
 
@@ -322,8 +348,7 @@ export class JsonRpcNode implements Transport {
 	): Promise<bigint> {
 		// getNonce(address,uint192) selector
 		const getNonceSelector = "0x35567e1a";
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const params = abiCoder.encode(["address", "uint192"], [account, key]);
+		const params = encodeAbiParameters(["address", "uint192"], [account, key]);
 		const data = getNonceSelector + params.slice(2);
 
 		const callResult = await this.call(
@@ -367,8 +392,7 @@ export class JsonRpcNode implements Transport {
 	): Promise<DepositInfo> {
 		// getDepositInfo(address) selector
 		const getDepositInfoSelector = "0x5287ce12";
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const params = abiCoder.encode(["address"], [address]);
+		const params = encodeAbiParameters(["address"], [address]);
 		const data = getDepositInfoSelector + params.slice(2);
 
 		const callResult = await this.call(
@@ -378,7 +402,7 @@ export class JsonRpcNode implements Transport {
 			options,
 		);
 		try {
-			const decoded = abiCoder.decode(
+			const decoded = decodeAbiParameters<[bigint, boolean, bigint, bigint, bigint]>(
 				["uint256", "bool", "uint112", "uint32", "uint48"],
 				callResult,
 			);

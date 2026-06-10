@@ -1,4 +1,4 @@
-import {AbiCoder, id, keccak256, TypedDataEncoder} from "ethers";
+import {encodeAbiParameters, hashTypedData, id, keccak256} from "./ethereUtils";
 import {ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8, ENTRYPOINT_V9} from "./constants";
 import {AbstractionKitError, ensureError} from "./errors";
 import type {TypedData} from "./signer/types";
@@ -29,8 +29,7 @@ function buildDomainSeparator(chainId: bigint, entrypoint: string): string {
 	// TYPE_HASH = keccak("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 	const type_hash = "0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f";
 
-	const abiCoder = AbiCoder.defaultAbiCoder();
-	const encodedUserOperationHash = abiCoder.encode(
+	const encodedUserOperationHash = encodeAbiParameters(
 		["(bytes32,bytes32,bytes32,uint256,address)"],
 		[[type_hash, hashed_name, hashed_version, chainId, entrypoint]],
 	);
@@ -53,13 +52,12 @@ export function createUserOperationHash(
 	chainId: bigint,
 ): string {
 	let packedUserOperationHash: string;
-	const abiCoder = AbiCoder.defaultAbiCoder();
 	let userOperationHash: string;
 	if (entrypointAddress.toLowerCase() === ENTRYPOINT_V6.toLowerCase()) {
 		packedUserOperationHash = keccak256(
 			createPackedUserOperationV6(useroperation as UserOperationV6),
 		);
-		const encodedUserOperationHash = abiCoder.encode(
+		const encodedUserOperationHash = encodeAbiParameters(
 			["bytes32", "address", "uint256"],
 			[packedUserOperationHash, entrypointAddress, chainId],
 		);
@@ -68,7 +66,7 @@ export function createUserOperationHash(
 		packedUserOperationHash = keccak256(
 			createPackedUserOperationV7(useroperation as UserOperationV7),
 		);
-		const encodedUserOperationHash = abiCoder.encode(
+		const encodedUserOperationHash = encodeAbiParameters(
 			["bytes32", "address", "uint256"],
 			[packedUserOperationHash, entrypointAddress, chainId],
 		);
@@ -129,11 +127,10 @@ export function buildPackedInitCodeV8V9(useroperation: UserOperationV8 | UserOpe
  * `PackedUserOperation.accountGasLimits` layout used by EntryPoint v0.7+.
  */
 function packAccountGasLimits(verificationGasLimit: bigint, callGasLimit: bigint): string {
-	const abiCoder = AbiCoder.defaultAbiCoder();
 	return (
 		"0x" +
-		abiCoder.encode(["uint128"], [verificationGasLimit]).slice(34) +
-		abiCoder.encode(["uint128"], [callGasLimit]).slice(34)
+		encodeAbiParameters(["uint128"], [verificationGasLimit]).slice(34) +
+		encodeAbiParameters(["uint128"], [callGasLimit]).slice(34)
 	);
 }
 
@@ -144,11 +141,10 @@ function packAccountGasLimits(verificationGasLimit: bigint, callGasLimit: bigint
  * `PackedUserOperation.gasFees` layout used by EntryPoint v0.7+.
  */
 function packGasFees(maxPriorityFeePerGas: bigint, maxFeePerGas: bigint): string {
-	const abiCoder = AbiCoder.defaultAbiCoder();
 	return (
 		"0x" +
-		abiCoder.encode(["uint128"], [maxPriorityFeePerGas]).slice(34) +
-		abiCoder.encode(["uint128"], [maxFeePerGas]).slice(34)
+		encodeAbiParameters(["uint128"], [maxPriorityFeePerGas]).slice(34) +
+		encodeAbiParameters(["uint128"], [maxFeePerGas]).slice(34)
 	);
 }
 
@@ -175,17 +171,18 @@ export function buildPaymasterAndData(
 	stripV9PaymasterSig: boolean = false,
 ): string {
 	if (useroperation.paymaster == null) return "0x";
-	const abiCoder = AbiCoder.defaultAbiCoder();
 	let paymasterAndData = useroperation.paymaster;
 	if (useroperation.paymasterVerificationGasLimit != null) {
-		paymasterAndData += abiCoder
-			.encode(["uint128"], [useroperation.paymasterVerificationGasLimit])
-			.slice(34);
+		paymasterAndData += encodeAbiParameters(
+			["uint128"],
+			[useroperation.paymasterVerificationGasLimit],
+		).slice(34);
 	}
 	if (useroperation.paymasterPostOpGasLimit != null) {
-		paymasterAndData += abiCoder
-			.encode(["uint128"], [useroperation.paymasterPostOpGasLimit])
-			.slice(34);
+		paymasterAndData += encodeAbiParameters(
+			["uint128"],
+			[useroperation.paymasterPostOpGasLimit],
+		).slice(34);
 	}
 	if (useroperation.paymasterData != null) {
 		const PAYMASTER_SIG_MAGIC = "22e325a297439656";
@@ -300,7 +297,7 @@ export function getUserOperationEip712HashV8V9(
 	chainId: bigint,
 ): string {
 	const data = getUserOperationEip712DataV8V9(userOperation, entrypointAddress, chainId);
-	return TypedDataEncoder.hash(data.domain, data.types, data.message);
+	return hashTypedData(data.domain, data.types, data.message);
 }
 
 /**
@@ -324,8 +321,7 @@ export function createPackedUserOperationV6(useroperation: UserOperationV6): str
 		keccak256(useroperation.paymasterAndData),
 	];
 
-	const abiCoder = AbiCoder.defaultAbiCoder();
-	const packedUserOperation = abiCoder.encode(
+	const packedUserOperation = encodeAbiParameters(
 		[
 			"address",
 			"uint256",
@@ -351,8 +347,6 @@ export function createPackedUserOperationV6(useroperation: UserOperationV6): str
  * @returns ABI-encoded packed UserOperation as a hex string
  */
 export function createPackedUserOperationV7(useroperation: UserOperationV7): string {
-	const abiCoder = AbiCoder.defaultAbiCoder();
-
 	let initCode = "0x";
 	if (useroperation.factory != null) {
 		initCode = useroperation.factory;
@@ -379,7 +373,7 @@ export function createPackedUserOperationV7(useroperation: UserOperationV7): str
 		keccak256(paymasterAndData),
 	];
 
-	const packedUserOperation = abiCoder.encode(
+	const packedUserOperation = encodeAbiParameters(
 		["address", "uint256", "bytes32", "bytes32", "bytes32", "uint256", "bytes32", "bytes32"],
 		useroperationValuesArrayWithHashedByteValues,
 	);
@@ -416,8 +410,6 @@ function baseCreatePackedUserOperationV8V9(
 	useroperation: UserOperationV8 | UserOperationV9,
 	is_v9: boolean,
 ): string {
-	const abiCoder = AbiCoder.defaultAbiCoder();
-
 	const initCode = buildPackedInitCodeV8V9(useroperation);
 	const accountGasLimits = packAccountGasLimits(
 		useroperation.verificationGasLimit,
@@ -439,7 +431,7 @@ function baseCreatePackedUserOperationV8V9(
 		keccak256(paymasterAndData),
 	];
 
-	const packedUserOperation = abiCoder.encode(
+	const packedUserOperation = encodeAbiParameters(
 		[
 			"bytes32",
 			"address",
@@ -476,8 +468,7 @@ export function createCallData(
 	functionInputAbi: string[],
 	functionInputParameters: AbiInputValue[],
 ): string {
-	const abiCoder = AbiCoder.defaultAbiCoder();
-	const params: string = abiCoder.encode(functionInputAbi, functionInputParameters);
+	const params: string = encodeAbiParameters(functionInputAbi, functionInputParameters);
 	const callData = functionSelector + params.slice(2);
 
 	return callData;
@@ -648,7 +639,7 @@ export function calculateUserOperationMaxGasCost(
 	if ("initCode" in useroperation) {
 		const isPaymasterAndData =
 			useroperation.paymasterAndData !== "0x" && useroperation.paymasterAndData != null;
-		const mul = isPaymasterAndData ? 3n : 0n;
+		const mul = isPaymasterAndData ? 3n : 1n;
 		const requiredGas =
 			useroperation.callGasLimit +
 			useroperation.verificationGasLimit * mul +

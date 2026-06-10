@@ -12,6 +12,14 @@ export const ENTRYPOINT_V7 = "0x0000000071727De22E5E9d8BAf0edAc6f37da032";
 /** EntryPoint v0.6 contract address */
 export const ENTRYPOINT_V6 = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
 
+/**
+ * Safe fallback-handler storage slot: keccak256("fallback_manager.handler.address").
+ * The address of a Safe's fallback handler (which is the 4337 module) is stored
+ * in the lower 20 bytes of the word at this slot.
+ */
+export const SAFE_FALLBACK_HANDLER_STORAGE_SLOT =
+	"0x6c9a6c4a39284e37ed1cf53d337577d14212a4870fb976a4366c693b939918d5";
+
 /** Safe L2 singleton v1.5.0 address and init hash */
 export const Safe_L2_V1_5_0: SafeAccountSingleton = {
 	singletonAddress: "0xEdd160fEBBD92E350D4D398fb636302fccd67C7e",

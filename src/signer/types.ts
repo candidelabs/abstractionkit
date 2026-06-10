@@ -83,6 +83,10 @@ interface SignerBase {
  * Sign a 32-byte hash raw (no EIP-191 prefix). Required for Simple7702 /
  * Calibur; acceptable fallback for Safe.
  *
+ * Return type widens to `Hex | Promise<Hex>` so local-key signers (which
+ * do ECDSA over a precomputed digest with no I/O) can be sync, while
+ * remote signers (HSM, JSON-RPC wallet) stay async. `await` works on both.
+ *
  * Generic over the context type the SDK will pass. Defaults to
  * {@link SignContext} (single-op) — set explicitly to
  * {@link MultiOpSignContext} for multi-op signers, or to `unknown` for
@@ -91,18 +95,19 @@ interface SignerBase {
 export type SignHashFn<C = SignContext> = (
 	hash: `0x${string}`,
 	context: C,
-) => Promise<`0x${string}`>;
+) => `0x${string}` | Promise<`0x${string}`>;
 
 /**
  * Sign an EIP-712 typed data payload. Preferred for Safe because wallets
  * can display structured fields instead of a hex blob.
  *
- * Generic over context — see {@link SignHashFn}.
+ * Generic over context — see {@link SignHashFn}. Same sync/async dual
+ * return shape.
  */
 export type SignTypedDataFn<C = SignContext> = (
 	data: TypedData,
 	context: C,
-) => Promise<`0x${string}`>;
+) => `0x${string}` | Promise<`0x${string}`>;
 
 /**
  * A capability-oriented signer. Must declare at least one of `signHash` or

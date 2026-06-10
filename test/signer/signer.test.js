@@ -709,6 +709,38 @@ describe('SafeMultiChainSigAccountV1 signUserOperationWithSigners', () => {
         expect(hash).toBe(refHash);
     });
 
+    test('instance manual helpers inherit multichain account context', () => {
+        const customModule = '0x3333333333333333333333333333333333333333';
+        const customSafe = new ak.SafeMultiChainSigAccountV1(safe.accountAddress, {
+            safe4337ModuleAddress: customModule,
+        });
+        const customOp = buildSafeMultiChainOp(customSafe);
+        const typedData = customSafe.getUserOperationEip712Data(customOp, CHAIN_ID);
+
+        expect(typedData.domain.verifyingContract).toBe(customModule);
+        expect(typedData.messageValue.entryPoint).toBe(customSafe.entrypointAddress);
+        expect(customSafe.getUserOperationEip712Hash(customOp, CHAIN_ID)).toBe(
+            ak.SafeMultiChainSigAccountV1.getUserOperationEip712Hash(customOp, CHAIN_ID, {
+                entrypointAddress: customSafe.entrypointAddress,
+                safe4337ModuleAddress: customModule,
+            }),
+        );
+    });
+
+    test('instance manual formatter emits the same single-op multichain signature as signUserOperation', () => {
+        const wallet = new Wallet(PK1);
+        const digest = safe.getUserOperationEip712Hash(op, CHAIN_ID);
+        const signature = wallet.signingKey.sign(digest).serialized;
+        const manual = safe.formatUserOperationSignature([{ signer: wallet.address, signature }]);
+
+        expect(manual).toBe(safe.signUserOperation(op, [PK1], CHAIN_ID));
+        expect(manual).not.toBe(
+            ak.SafeAccountV0_3_0.formatSignaturesToUseroperationSignature([
+                { signer: wallet.address, signature },
+            ]),
+        );
+    });
+
     test('getMultiChainSingleSignatureUserOperationsEip712Hash length=2 returns the Merkle wrapper digest (distinct from any per-op hash)', () => {
         const op2 = { ...op, nonce: 1n };
         const ops = [

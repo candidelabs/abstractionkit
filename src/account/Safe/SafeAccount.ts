@@ -1,13 +1,18 @@
 import {
-	AbiCoder,
-	ethers,
+	concat,
+	dataLength,
+	decodeAbiParameters,
+	encodeAbiParameters,
 	getAddress,
+	hashTypedData,
+	hexlify,
 	keccak256,
+	privateKeyToAddress,
+	signHash,
 	solidityPacked,
 	solidityPackedKeccak256,
-	TypedDataEncoder,
-	Wallet,
-} from "ethers";
+	toUtf8Bytes,
+} from "src/ethereUtils";
 import {Bundler} from "src/Bundler";
 import {AbstractionKitError, ensureError} from "src/errors";
 import {SafeAccountFactory} from "src/factory/SafeAccountFactory";
@@ -22,6 +27,7 @@ import {
 	ENTRYPOINT_V6,
 	ENTRYPOINT_V7,
 	ENTRYPOINT_V9,
+	SAFE_FALLBACK_HANDLER_STORAGE_SLOT,
 	Safe_L2_V1_4_1,
 	ZeroAddress,
 } from "../../constants";
@@ -389,9 +395,8 @@ export class SafeAccount extends SmartAccount {
 			safeModuleExecutorFunctionSelector = SafeModuleExecutorFunctionSelector.executeUserOp;
 		}
 		if (safeModuleExecutorFunctionSelector != null) {
-			const abiCoder = AbiCoder.defaultAbiCoder();
 			const params = `0x${callData.slice(10)}`;
-			const decodedParams = abiCoder.decode(
+			const decodedParams = decodeAbiParameters<[string, bigint, string | Uint8Array, bigint]>(
 				[
 					"address", //to
 					"uint256", //value
@@ -400,17 +405,17 @@ export class SafeAccount extends SmartAccount {
 				],
 				params,
 			);
-			let accountCallDataString: string;
-			if (typeof decodedParams[2] !== "string") {
-				accountCallDataString = new TextDecoder().decode(decodedParams[2]);
-			} else {
-				accountCallDataString = decodedParams[2];
-			}
+			// decodeAbiParameters returns the "bytes" field as either a hex
+			// string or a Uint8Array. UTF-8 decoding the bytes would corrupt
+			// any non-text payload (function selectors, addresses, multisend
+			// blobs); hex-encode instead so the calldata round-trips.
+			const accountCallDataString: string =
+				typeof decodedParams[2] === "string" ? decodedParams[2] : hexlify(decodedParams[2]);
 
 			return [
 				{
-					to: decodedParams[0] as string,
-					value: BigInt(decodedParams[1] as string),
+					to: decodedParams[0],
+					value: BigInt(decodedParams[1]),
 					data: accountCallDataString,
 					operation: Number(decodedParams[3]),
 				},
@@ -541,6 +546,83 @@ export class SafeAccount extends SmartAccount {
 			validUntil: overrides.validUntil,
 			isMultiChainSignature: overrides.isMultiChainSignature,
 			multiChainMerkleProof: overrides.merkleProof,
+		});
+	}
+
+	/**
+	 * Get the EIP-712 typed data for this account's configured EntryPoint and
+	 * Safe 4337 module. Prefer this instance method for manual signing so
+	 * custom constructor overrides are carried through automatically.
+	 *
+	 * @param useroperation - UserOperation to get typed data for
+	 * @param chainId - target chain ID
+	 * @param overrides - optional validity window and explicit address overrides
+	 * @returns Object with domain, types, and messageValue for EIP-712 signing
+	 */
+	public getUserOperationEip712Data(
+		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV9,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		} = {},
+	): {
+		domain: SafeUserOperationTypedDataDomain;
+		types: Record<string, { name: string; type: string }[]>;
+		messageValue:
+			| SafeUserOperationV6TypedMessageValue
+			| SafeUserOperationV7TypedMessageValue
+			| SafeUserOperationV9TypedMessageValue;
+	} {
+		return SafeAccount.getUserOperationEip712Data(useroperation, chainId, {
+			...overrides,
+			entrypointAddress: overrides.entrypointAddress ?? this.entrypointAddress,
+			safe4337ModuleAddress: overrides.safe4337ModuleAddress ?? this.safe4337ModuleAddress,
+		});
+	}
+
+	/**
+	 * Hash the EIP-712 typed data for this account's configured EntryPoint and
+	 * Safe 4337 module. Prefer this instance method for manual signing so
+	 * custom constructor overrides are carried through automatically.
+	 *
+	 * @param useroperation - UserOperation to hash
+	 * @param chainId - target chain ID
+	 * @param overrides - optional validity window and explicit address overrides
+	 * @returns EIP-712 digest as a hex string
+	 */
+	public getUserOperationEip712Hash(
+		useroperation: UserOperationV6 | UserOperationV7 | UserOperationV9,
+		chainId: bigint,
+		overrides: {
+			validAfter?: bigint;
+			validUntil?: bigint;
+			entrypointAddress?: string;
+			safe4337ModuleAddress?: string;
+		} = {},
+	): string {
+		const data = this.getUserOperationEip712Data(useroperation, chainId, overrides);
+		return hashTypedData(data.domain, data.types, data.messageValue);
+	}
+
+	/**
+	 * Format signer/signature pairs for this account's signature encoding.
+	 * Prefer this instance method for manual signing so account-level module
+	 * context is applied automatically.
+	 *
+	 * @param signerSignaturePairs - signer/signature pairs to encode
+	 * @param options - optional validity window, multi-chain, module, and WebAuthn encoding overrides
+	 * @returns formatted UserOperation signature
+	 */
+	public formatUserOperationSignature(
+		signerSignaturePairs: SignerSignaturePair[],
+		options: SafeSignatureOptions & WebAuthnSignatureOverrides = {},
+	): string {
+		return SafeAccount.formatSignaturesToUseroperationSignature(signerSignaturePairs, {
+			...options,
+			safe4337ModuleAddress: options.safe4337ModuleAddress ?? this.safe4337ModuleAddress,
 		});
 	}
 
@@ -730,7 +812,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): string {
 		const data = SafeAccount.getUserOperationEip712Data_V6(useroperation, chainId, overrides);
-		return TypedDataEncoder.hash(data.domain, data.types, data.messageValue);
+		return hashTypedData(data.domain, data.types, data.messageValue);
 	}
 
 	private static baseGetUserOperationEip712DataV7V8V9(
@@ -754,8 +836,6 @@ export class SafeAccount extends SmartAccount {
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ?? "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226";
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
-
 		let initCode = "0x";
 		if (useroperation.factory != null) {
 			initCode = useroperation.factory;
@@ -768,14 +848,16 @@ export class SafeAccount extends SmartAccount {
 		if (useroperation.paymaster != null) {
 			paymasterAndData = useroperation.paymaster;
 			if (useroperation.paymasterVerificationGasLimit != null) {
-				paymasterAndData += abiCoder
-					.encode(["uint128"], [useroperation.paymasterVerificationGasLimit])
-					.slice(34);
+				paymasterAndData += encodeAbiParameters(
+					["uint128"],
+					[useroperation.paymasterVerificationGasLimit],
+				).slice(34);
 			}
 			if (useroperation.paymasterPostOpGasLimit != null) {
-				paymasterAndData += abiCoder
-					.encode(["uint128"], [useroperation.paymasterPostOpGasLimit])
-					.slice(34);
+				paymasterAndData += encodeAbiParameters(
+					["uint128"],
+					[useroperation.paymasterPostOpGasLimit],
+				).slice(34);
 			}
 			if (useroperation.paymasterData != null) {
 				const PAYMASTER_SIG_MAGIC = "22e325a297439656";
@@ -881,7 +963,7 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): string {
 		const data = SafeAccount.getUserOperationEip712Data_V7(useroperation, chainId, overrides);
-		return TypedDataEncoder.hash(data.domain, data.types, data.messageValue);
+		return hashTypedData(data.domain, data.types, data.messageValue);
 	}
 
 	/**
@@ -949,11 +1031,18 @@ export class SafeAccount extends SmartAccount {
 		} = {},
 	): string {
 		const data = SafeAccount.getUserOperationEip712Data_V9(useroperation, chainId, overrides);
-		return TypedDataEncoder.hash(data.domain, data.types, data.messageValue);
+		return hashTypedData(data.domain, data.types, data.messageValue);
 	}
 
 	/**
-	 * @deprecated
+	 * @deprecated Use `account.formatUserOperationSignature([{ signer, signature }], options)`
+	 * when an account instance is available, or
+	 * `SafeAccount.formatSignaturesToUseroperationSignature([{ signer, signature }], options)`
+	 * for static formatting. For `SafeMultiChainSigAccountV1`, prefer the
+	 * instance method so `isMultiChainSignature` is applied automatically; if
+	 * using the lower-level static formatter directly, pass
+	 * `isMultiChainSignature: true`.
+	 *
 	 * format an eip712 signature to a useroperation signature
 	 * @param signature - an eip712 signature
 	 * @param overrides - overrides for the default values
@@ -1799,10 +1888,9 @@ export class SafeAccount extends SmartAccount {
 
 		const signerSignaturePairs: SignerSignaturePair[] = [];
 		for (const privateKey of privateKeys) {
-			const wallet = new Wallet(privateKey);
-			const signature = wallet.signingKey.sign(userOperationEip712Hash).serialized;
+			const signature = signHash(privateKey, userOperationEip712Hash).serialized;
 			signerSignaturePairs.push({
-				signer: wallet.address,
+				signer: privateKeyToAddress(privateKey),
 				signature,
 			});
 		}
@@ -1875,7 +1963,7 @@ export class SafeAccount extends SmartAccount {
 			entrypointAddress,
 			safe4337ModuleAddress: moduleAddress,
 		});
-		const userOpHash = TypedDataEncoder.hash(
+		const userOpHash = hashTypedData(
 			typedDataRaw.domain,
 			typedDataRaw.types,
 			typedDataRaw.messageValue,
@@ -2175,27 +2263,27 @@ export class SafeAccount extends SmartAccount {
 					return {
 						segments: [
 							...segments,
-							ethers.solidityPacked(["uint256", "uint256", "uint8"], [signer, start + offset, 0]),
+							solidityPacked(["uint256", "uint256", "uint8"], [signer, start + offset, 0]),
 						],
-						offset: offset + 32 + ethers.dataLength(signature),
+						offset: offset + 32 + dataLength(signature),
 					};
 				} else {
 					return {
-						segments: [...segments, ethers.solidityPacked(["bytes"], [signature])],
+						segments: [...segments, solidityPacked(["bytes"], [signature])],
 						offset: offset,
 					};
 				}
 			},
 			{ segments: [] as string[], offset: 0 },
 		);
-		return ethers.concat([
+		return concat([
 			...segments,
 			...signerSignaturePairs.map(({ signer, signature, isContractSignature }) => {
 				isContractSignature = isContractSignature || typeof signer !== "string";
 				if (isContractSignature) {
-					return ethers.solidityPacked(
+					return solidityPacked(
 						["uint256", "bytes"],
-						[ethers.dataLength(signature), signature],
+						[dataLength(signature), signature],
 					);
 				} else {
 					//only append signatures if a contract signature
@@ -2211,7 +2299,7 @@ export class SafeAccount extends SmartAccount {
 	 * @returns formatted signature
 	 */
 	public static createWebAuthnSignature(signatureData: WebauthnSignatureData): string {
-		return ethers.AbiCoder.defaultAbiCoder().encode(
+		return encodeAbiParameters(
 			["bytes", "bytes", "uint256[2]"],
 			[
 				new Uint8Array(signatureData.authenticatorData),
@@ -2631,8 +2719,7 @@ export class SafeAccount extends SmartAccount {
 		};
 		const getOwnersResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const decodedCalldata = abiCoder.decode(["address[]"], getOwnersResult);
+		const decodedCalldata = decodeAbiParameters<[string[]]>(["address[]"], getOwnersResult);
 
 		return decodedCalldata[0];
 	}
@@ -2652,8 +2739,7 @@ export class SafeAccount extends SmartAccount {
 		};
 		const getThresholdResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const decodedCalldata = abiCoder.decode(["uint256"], getThresholdResult);
+		const decodedCalldata = decodeAbiParameters<[bigint]>(["uint256"], getThresholdResult);
 
 		return Number(decodedCalldata[0]);
 	}
@@ -2701,8 +2787,10 @@ export class SafeAccount extends SmartAccount {
 						"probably not deployed yet.",
 				);
 			}
-			const abiCoder = AbiCoder.defaultAbiCoder();
-			const decodedCalldata = abiCoder.decode(["address[]", "address"], getModulesResult);
+			const decodedCalldata = decodeAbiParameters<[string[], string]>(
+				["address[]", "address"],
+				getModulesResult,
+			);
 			return [decodedCalldata[0], decodedCalldata[1]];
 		} catch (err) {
 			const error = ensureError(err);
@@ -2733,10 +2821,45 @@ export class SafeAccount extends SmartAccount {
 		};
 		const isModuleEnabledResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const decodedCalldata = abiCoder.decode(["bool"], isModuleEnabledResult);
+		const decodedCalldata = decodeAbiParameters<[boolean]>(["bool"], isModuleEnabledResult);
 
 		return decodedCalldata[0];
+	}
+
+	/**
+	 * read the Safe's current fallback handler address from storage.
+	 * For Safe ERC-4337 accounts the fallback handler is the 4337 module, so this
+	 * is the canonical way to confirm which module/EntryPoint version an account
+	 * is on (e.g. after a module migration).
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * @returns a promise of the fallback handler address (checksummed)
+	 */
+	public async getFallbackHandler(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+	): Promise<string> {
+		const word = await JsonRpcNode.from(nodeRpcUrl).getStorageAt(
+			this.accountAddress,
+			SAFE_FALLBACK_HANDLER_STORAGE_SLOT,
+			"latest",
+		);
+		return getAddress("0x" + word.slice(-40));
+	}
+
+	/**
+	 * read the Safe's version string via `VERSION()` (e.g. "1.4.1").
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
+	 * @returns a promise of the Safe singleton version string
+	 */
+	public async getSafeVersion(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+	): Promise<string> {
+		const callData = createCallData(getFunctionSelector("VERSION()"), [], []);
+		const result = await JsonRpcNode.from(nodeRpcUrl).call(
+			{ to: this.accountAddress, data: callData },
+			"latest",
+		);
+		const [version] = decodeAbiParameters<[string]>(["string"], result);
+		return version;
 	}
 
 	/**
@@ -2872,7 +2995,7 @@ export class SafeAccount extends SmartAccount {
 			},
 		);
 
-		const decodedCalldata = AbiCoder.defaultAbiCoder().decode(["bool"], isModuleEnabledResult);
+		const decodedCalldata = decodeAbiParameters<[boolean]>(["bool"], isModuleEnabledResult);
 
 		return decodedCalldata[0];
 	}
@@ -2883,10 +3006,9 @@ export class SafeAccount extends SmartAccount {
 		eip7212WebAuthnContractVerifier: string,
 		webAuthnSignerSingleton: string,
 	): string {
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const x = abiCoder.encode(["uint256"], [signer.x]);
-		const y = abiCoder.encode(["uint256"], [signer.y]);
-		const verifiers = abiCoder.encode(
+		const x = encodeAbiParameters(["uint256"], [signer.x]);
+		const y = encodeAbiParameters(["uint256"], [signer.y]);
+		const verifiers = encodeAbiParameters(
 			["uint176"],
 			[
 				"0x" +
@@ -2954,22 +3076,37 @@ export class SafeAccount extends SmartAccount {
 		try {
 			let prevModuleAddressT = overrides.prevModuleAddress;
 			if (prevModuleAddressT == null) {
-				const [modules, _] = await this.getModules(nodeRpcUrl, {
-					start: overrides.modulesStart,
-					pageSize: overrides.modulesPageSize,
-				});
-
-				const moduleToDisableIndex = modules.indexOf(moduleToDisableAddress);
-				if (moduleToDisableIndex === -1) {
-					throw new RangeError(
-						`moduleToDisable ${moduleToDisableAddress} is not an enabled module.`,
-					);
-				} else if (moduleToDisableIndex === 0) {
-					prevModuleAddressT = "0x0000000000000000000000000000000000000001";
-				} else if (moduleToDisableIndex > 0) {
-					prevModuleAddressT = modules[moduleToDisableIndex - 1];
-				} else {
-					throw new RangeError(`Invalid module index for ${moduleToDisableAddress}`);
+				const SENTINEL_MODULES = "0x0000000000000000000000000000000000000001";
+				const target = moduleToDisableAddress.toLowerCase();
+				let cursor = overrides.modulesStart ?? SENTINEL_MODULES;
+				// The predecessor of the first entry on page N is the cursor passed
+				// to that page (SENTINEL on page 1; the last seen address on later
+				// pages). We carry it across page boundaries so the lookup works
+				// even when the module list spans multiple pages.
+				let prev = cursor;
+				while (prevModuleAddressT == null) {
+					const [modules, next] = await this.getModules(nodeRpcUrl, {
+						start: cursor,
+						pageSize: overrides.modulesPageSize,
+					});
+					for (const module of modules) {
+						if (module.toLowerCase() === target) {
+							prevModuleAddressT = prev;
+							break;
+						}
+						prev = module;
+					}
+					if (prevModuleAddressT != null) break;
+					if (
+						modules.length === 0 ||
+						next.toLowerCase() === SENTINEL_MODULES ||
+						next.toLowerCase() === cursor.toLowerCase()
+					) {
+						throw new RangeError(
+							`moduleToDisable ${moduleToDisableAddress} is not an enabled module.`,
+						);
+					}
+					cursor = next;
 				}
 			}
 			return SafeAccount.createStandardDisableModuleMetaTransaction(
@@ -3008,6 +3145,187 @@ export class SafeAccount extends SmartAccount {
 			data: callData,
 			value: 0n,
 		};
+	}
+
+	/**
+	 * create the MetaTransactions that migrate a DEPLOYED Safe from one ERC-4337
+	 * module (and EntryPoint) to another. For Safe 4337 accounts the module is
+	 * both the enabled module and the fallback handler, so a migration is exactly:
+	 *   1. disableModule(oldModule)
+	 *   2. enableModule(newModule)
+	 *   3. setFallbackHandler(newModule)
+	 *
+	 * @note Both the v0.6/v0.7 `Safe4337Module` and the v0.9
+	 * `Safe4337MultiChainSignatureModule` are stateless (no per-account storage),
+	 * so there is NO storage to clear when swapping modules — these three
+	 * transactions are the whole migration. The batch is validated and executed
+	 * by the OLD module on the OLD EntryPoint; disabling that module mid-batch is
+	 * safe because validation has already completed.
+	 *
+	 * Unless `skipPreflight` is set, this verifies on-chain that the account is
+	 * actually a Safe running `oldModuleAddress` (the module is enabled AND is the
+	 * current fallback handler) and that its Safe version meets the module minimum
+	 * (>= 1.4.1) — turning a would-be cryptic on-chain `AA23`/`AA24` into a clear
+	 * up-front error.
+	 *
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain (used to find
+	 *   the previous module in the linked list when not provided, and for preflight)
+	 * @param oldModuleAddress - the currently-enabled 4337 module to disable
+	 * @param newModuleAddress - the 4337 module to enable and set as fallback handler
+	 * @param overrides - previous-module lookup overrides and `skipPreflight`
+	 * @returns a promise of [disableOld, enableNew, setFallbackHandler] MetaTransactions
+	 *
+	 * @remarks Shared implementation behind the version-specific migration helpers
+	 * (e.g. {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions}).
+	 * It is `protected` on purpose: those wrappers pin the correct module addresses,
+	 * so callers reach migration through them rather than supplying raw module
+	 * addresses directly.
+	 */
+	protected async createModuleMigrationMetaTransactions(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		oldModuleAddress: string,
+		newModuleAddress: string,
+		overrides: {
+			prevModuleAddress?: string;
+			modulesStart?: string;
+			modulesPageSize?: bigint;
+			skipPreflight?: boolean;
+		} = {},
+	): Promise<MetaTransaction[]> {
+		if (overrides.skipPreflight !== true) {
+			await this.assertMigratableFromModule(nodeRpcUrl, oldModuleAddress);
+		}
+
+		const disableOldModule = await this.createDisableModuleMetaTransaction(
+			nodeRpcUrl,
+			oldModuleAddress,
+			this.accountAddress,
+			overrides,
+		);
+
+		const enableNewModule = SafeAccount.createEnableModuleMetaTransaction(
+			newModuleAddress,
+			this.accountAddress,
+		);
+
+		const setFallbackHandler: MetaTransaction = {
+			to: this.accountAddress,
+			value: 0n,
+			data: createCallData(
+				"0xf08a0323", //setFallbackHandler(address)
+				["address"],
+				[newModuleAddress],
+			),
+		};
+
+		return [disableOldModule, enableNewModule, setFallbackHandler];
+	}
+
+	/**
+	 * Minimum Safe singleton version required by the ERC-4337 modules.
+	 */
+	private static readonly MIN_SAFE_4337_VERSION = "1.4.1";
+
+	/**
+	 * Assert that this account is a deployed Safe currently running `oldModuleAddress`
+	 * as both its enabled module and its fallback handler, on a Safe version that
+	 * meets the 4337 module minimum. Throws a descriptive `BAD_DATA` error otherwise.
+	 */
+	private async assertMigratableFromModule(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		oldModuleAddress: string,
+	): Promise<void> {
+		const node = JsonRpcNode.from(nodeRpcUrl);
+
+		// The migration UserOperation is validated through the Safe's fallback
+		// handler on the old EntryPoint, so the old module must be the fallback
+		// handler for the migration to be processable at all.
+		let fallbackHandler: string;
+		try {
+			fallbackHandler = await this.getFallbackHandler(node);
+		} catch (err) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Could not read the fallback handler of ${this.accountAddress} — is it a deployed Safe? ` +
+					"Pass { skipPreflight: true } to bypass this check.",
+				{ cause: ensureError(err) },
+			);
+		}
+		if (fallbackHandler.toLowerCase() !== oldModuleAddress.toLowerCase()) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Safe ${this.accountAddress} fallback handler is ${fallbackHandler}, expected the ` +
+					`old 4337 module ${oldModuleAddress}. This account is not a Safe running that ` +
+					"module; pass { skipPreflight: true } to bypass.",
+			);
+		}
+
+		// The old module must also be enabled so execTransactionFromModule (which
+		// executes the migration batch) is authorized.
+		let moduleEnabled: boolean;
+		try {
+			moduleEnabled = await this.isModuleEnabled(node, oldModuleAddress);
+		} catch (err) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Could not check whether module ${oldModuleAddress} is enabled on Safe ` +
+					`${this.accountAddress} — is it a deployed Safe? Pass { skipPreflight: true } to bypass.`,
+				{ cause: ensureError(err) },
+			);
+		}
+		if (!moduleEnabled) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`The 4337 module ${oldModuleAddress} is not enabled on Safe ${this.accountAddress}. ` +
+					"Pass { skipPreflight: true } to bypass.",
+			);
+		}
+
+		// Both modules require Safe >= 1.4.1. Treat read/decode failures and
+		// empty/invalid version strings as a failed preflight.
+		let version: string;
+		try {
+			version = await this.getSafeVersion(node);
+		} catch (err) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Could not read the Safe version (VERSION()) of ${this.accountAddress} — is it a ` +
+					`deployed Safe running module ${oldModuleAddress}? Pass { skipPreflight: true } to bypass.`,
+				{ cause: ensureError(err) },
+			);
+		}
+		if (
+			typeof version !== "string" ||
+			version.trim() === "" ||
+			!SafeAccount.isVersionAtLeast(version, SafeAccount.MIN_SAFE_4337_VERSION)
+		) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Safe ${this.accountAddress} reported version "${version}", which does not meet the ` +
+					`minimum ${SafeAccount.MIN_SAFE_4337_VERSION} required by the 4337 modules ` +
+					`(module ${oldModuleAddress}). Pass { skipPreflight: true } to bypass.`,
+			);
+		}
+	}
+
+	/**
+	 * Compare dotted version strings numerically (ignoring any "+suffix"), e.g.
+	 * isVersionAtLeast("1.4.1", "1.4.1") === true, ("1.5.0", "1.4.1") === true.
+	 */
+	private static isVersionAtLeast(version: string, minimum: string): boolean {
+		const parse = (v: string): number[] =>
+			v
+				.split("+")[0]
+				.split(".")
+				.map((n) => parseInt(n, 10) || 0);
+		const a = parse(version);
+		const b = parse(minimum);
+		for (let i = 0; i < Math.max(a.length, b.length); i++) {
+			const x = a[i] ?? 0;
+			const y = b[i] ?? 0;
+			if (x !== y) return x > y;
+		}
+		return true;
 	}
 
 	/**
@@ -3141,21 +3459,20 @@ function generateOnChainIdentifier(
 	project: string,
 	platform: "Web" | "Mobile" | "Safe App" | "Widget" = "Web",
 	tool: string = "abstractionkit",
-	toolVersion: string = "0.3.8",
+	toolVersion: string = "0.4.0",
 ): string {
 	const identifierPrefix = "5afe"; // Safe identifier prefix
 	const identifierVersion = "00"; // First version
-	const projectHash = keccak256(`0x${Buffer.from(project, "utf8").toString("hex")}`).slice(-20);
-	const platformHash = keccak256(`0x${Buffer.from(platform, "utf8").toString("hex")}`).slice(-3);
-	const toolHash = keccak256(`0x${Buffer.from(tool, "utf8").toString("hex")}`).slice(-3);
-	const toolVersionHash = keccak256(`0x${Buffer.from(toolVersion, "utf8").toString("hex")}`).slice(
-		-3,
-	);
+	const projectHash = keccak256(hexlify(toUtf8Bytes(project))).slice(-20);
+	const platformHash = keccak256(hexlify(toUtf8Bytes(platform))).slice(-3);
+	const toolHash = keccak256(hexlify(toUtf8Bytes(tool))).slice(-3);
+	const toolVersionHash = keccak256(hexlify(toUtf8Bytes(toolVersion))).slice(-3);
 
-	const projectHashEncoded = Buffer.from(projectHash, "utf8").toString("hex");
-	const platformHashEncoded = Buffer.from(platformHash, "utf8").toString("hex");
-	const toolHashEncoded = Buffer.from(toolHash, "utf8").toString("hex");
-	const toolVersionHashEncoded = Buffer.from(toolVersionHash, "utf8").toString("hex");
+	// hex of the UTF-8 bytes, no 0x prefix (Buffer is undefined in browsers / React Native)
+	const projectHashEncoded = hexlify(toUtf8Bytes(projectHash)).slice(2);
+	const platformHashEncoded = hexlify(toUtf8Bytes(platformHash)).slice(2);
+	const toolHashEncoded = hexlify(toUtf8Bytes(toolHash)).slice(2);
+	const toolVersionHashEncoded = hexlify(toUtf8Bytes(toolVersionHash)).slice(2);
 
 	const res = `${identifierPrefix}${identifierVersion}${projectHashEncoded}${platformHashEncoded}${toolHashEncoded}${toolVersionHashEncoded}`;
 	return res;

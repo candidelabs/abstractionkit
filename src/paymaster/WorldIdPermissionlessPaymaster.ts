@@ -1,4 +1,4 @@
-import {AbiCoder, keccak256, solidityPacked} from "ethers";
+import {encodeAbiParameters, keccak256, solidityPacked} from "src/ethereUtils";
 import {Bundler} from "src/Bundler";
 import {ENTRYPOINT_V7, ENTRYPOINT_V8} from "src/constants";
 import type {Transport} from "src/transport";
@@ -91,11 +91,10 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 			`0x${proof.slice(448, 512)}`,
 		];
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
 		const paymasterData =
-			abiCoder.encode(["uint256"], [root]) +
-			abiCoder.encode(["uint256"], [nullifierHash]).slice(2) +
-			abiCoder.encode(["uint256[8]"], [proofArr]).slice(2);
+			encodeAbiParameters(["uint256"], [root]) +
+			encodeAbiParameters(["uint256"], [nullifierHash]).slice(2) +
+			encodeAbiParameters(["uint256[8]"], [proofArr]).slice(2);
 
 		userOperation.paymaster = this.address;
 		userOperation.paymasterData = paymasterData;

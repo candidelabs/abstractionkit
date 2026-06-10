@@ -4,6 +4,7 @@ import {
 	fromSafeWebauthn,
 	type ExternalSigner,
 	type MultiOpSignContext,
+	SafeMultiChainSigAccountV1,
 	type SignContext,
 	type TypedData,
 	type UserOperationV9,
@@ -95,3 +96,26 @@ const webauthnSigner: ExternalSigner<unknown> = fromSafeWebauthn({
 	}),
 });
 void webauthnSigner;
+
+const safe = SafeMultiChainSigAccountV1.initializeNewAccount([address]);
+const userOperationV9: UserOperationV9 = {
+	sender: address,
+	nonce: 0n,
+	factory: null,
+	factoryData: null,
+	callData: "0x",
+	callGasLimit: 1n,
+	verificationGasLimit: 1n,
+	preVerificationGas: 1n,
+	maxFeePerGas: 1n,
+	maxPriorityFeePerGas: 1n,
+	paymaster: null,
+	paymasterVerificationGasLimit: null,
+	paymasterPostOpGasLimit: null,
+	paymasterData: null,
+	signature: "0x",
+	eip7702Auth: null,
+};
+void safe.estimateUserOperationGas(userOperationV9, "http://localhost:4337", {
+	expectedSigners: [address],
+});

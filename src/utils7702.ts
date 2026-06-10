@@ -1,7 +1,13 @@
 //https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md
 //rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, destination, value, data, access_list, authorization_list, yParity, r, s])
 //authorization_list = [[chain_id, address, nonce, yParity, r, s], ...]
-import { encodeRlp, getBytes, keccak256, toBeArray, Wallet } from "ethers";
+import {
+	encodeRlp,
+	getBytes,
+	keccak256,
+	signHash as ecdsaSignHash,
+	toBeArray,
+} from "./ethereUtils";
 
 const SET_CODE_TX_TYPE = "0x04";
 
@@ -91,8 +97,7 @@ export function createAndSignLegacyRawTransaction(
 
 	const txHash = keccak256(encodeRlp(payload));
 
-	const eoa = new Wallet(eoaPrivateKey);
-	const signature = eoa.signingKey.sign(txHash);
+	const signature = ecdsaSignHash(eoaPrivateKey, txHash);
 
 	payload = [
 		bigintToBytes(nonce),
@@ -227,8 +232,7 @@ export function signHash(
 	authHash: string,
 	eoaPrivateKey: string,
 ): { yParity: 0 | 1; r: bigint; s: bigint } {
-	const eoa = new Wallet(eoaPrivateKey);
-	const signature = eoa.signingKey.sign(authHash);
+	const signature = ecdsaSignHash(eoaPrivateKey, authHash);
 	return {
 		yParity: signature.yParity,
 		r: BigInt(signature.r),

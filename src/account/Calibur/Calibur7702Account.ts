@@ -1,4 +1,11 @@
-import {AbiCoder, keccak256, Wallet} from "ethers";
+import {
+	decodeAbiParameters,
+	encodeAbiParameters,
+	hexlify,
+	keccak256,
+	privateKeyToAddress,
+	signHash,
+} from "src/ethereUtils";
 import {Bundler} from "src/Bundler";
 import {
 	BaseUserOperationDummyValues,
@@ -106,7 +113,7 @@ export class Calibur7702Account
 	 * Dummy ECDSA signature for gas estimation with root key signing.
 	 * Format: `abi.encode(bytes32 keyHash, bytes sig, bytes hookData)`
 	 */
-	static readonly dummySignature: string = AbiCoder.defaultAbiCoder().encode(
+	static readonly dummySignature: string = encodeAbiParameters(
 		["bytes32", "bytes", "bytes"],
 		[
 			ROOT_KEY_HASH,
@@ -124,16 +131,15 @@ export class Calibur7702Account
 	 * @returns A dummy signature suitable for passing as `dummySignature` override
 	 */
 	public static createDummyWebAuthnSignature(keyHash: string): string {
-		const abiCoder = AbiCoder.defaultAbiCoder();
 		const dummyClientDataJSON =
 			'{"type":"webauthn.get","challenge":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","origin":"https://example.com","crossOrigin":false}';
 		const challengeIndex = BigInt(dummyClientDataJSON.indexOf('"challenge":"'));
 		const typeIndex = BigInt(dummyClientDataJSON.indexOf('"type":"webauthn.get"'));
-		return abiCoder.encode(
+		return encodeAbiParameters(
 			["bytes32", "bytes", "bytes"],
 			[
 				keyHash,
-				abiCoder.encode(
+				encodeAbiParameters(
 					["(bytes,string,uint256,uint256,uint256,uint256)"],
 					[
 						[
@@ -164,8 +170,7 @@ export class Calibur7702Account
 	 * @returns Hex-encoded wrapped signature ready for `userOp.signature`
 	 */
 	public static wrapSignature(keyHash: string, rawSignature: string, hookData = "0x"): string {
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		return abiCoder.encode(["bytes32", "bytes", "bytes"], [keyHash, rawSignature, hookData]);
+		return encodeAbiParameters(["bytes32", "bytes", "bytes"], [keyHash, rawSignature, hookData]);
 	}
 
 	/**
@@ -298,12 +303,11 @@ export class Calibur7702Account
 		transactions: SimpleMetaTransaction[],
 		revertOnFailure = true,
 	): string {
-		const abiCoder = AbiCoder.defaultAbiCoder();
 		const calls = transactions.map((tx) => [tx.to, tx.value, tx.data]);
 		// BatchedCall struct { Call[] calls; bool revertOnFailure; }
 		// Solidity's abi.decode(data, (BatchedCall)) expects a single struct/tuple
 		// parameter, which has an extra offset layer compared to two separate args.
-		const batchedCallEncoded = abiCoder.encode(
+		const batchedCallEncoded = encodeAbiParameters(
 			["((address,uint256,bytes)[],bool)"],
 			[[calls, revertOnFailure]],
 		);
@@ -681,8 +685,7 @@ export class Calibur7702Account
 		);
 		const keyHash = overrides.keyHash ?? ROOT_KEY_HASH;
 		const hookData = overrides.hookData ?? "0x";
-		const wallet = new Wallet(privateKey);
-		const ecdsaSig = wallet.signingKey.sign(userOperationHash).serialized;
+		const ecdsaSig = signHash(privateKey, userOperationHash).serialized;
 		return Calibur7702Account.wrapSignature(keyHash, ecdsaSig, hookData);
 	}
 
@@ -759,13 +762,12 @@ export class Calibur7702Account
 		webAuthnAuth: WebAuthnSignatureData,
 		overrides: CaliburSignatureOverrides = {},
 	): string {
-		const abiCoder = AbiCoder.defaultAbiCoder();
 		const hookData = overrides.hookData ?? "0x";
 
 		// Encode as a struct/tuple — Calibur decodes with:
 		//   abi.decode(signature, (WebAuthn.WebAuthnAuth))
 		// which expects struct-wrapped encoding (extra offset for dynamic tuple).
-		const webAuthnEncoded = abiCoder.encode(
+		const webAuthnEncoded = encodeAbiParameters(
 			["(bytes,string,uint256,uint256,uint256,uint256)"],
 			[
 				[
@@ -779,7 +781,7 @@ export class Calibur7702Account
 			],
 		);
 
-		return abiCoder.encode(["bytes32", "bytes", "bytes"], [keyHash, webAuthnEncoded, hookData]);
+		return encodeAbiParameters(["bytes32", "bytes", "bytes"], [keyHash, webAuthnEncoded, hookData]);
 	}
 
 	/**
@@ -810,10 +812,9 @@ export class Calibur7702Account
 	 * @returns A {@link CaliburKey} with type Secp256k1
 	 */
 	public static createSecp256k1Key(address: string): CaliburKey {
-		const abiCoder = AbiCoder.defaultAbiCoder();
 		return {
 			keyType: CaliburKeyType.Secp256k1,
-			publicKey: abiCoder.encode(["address"], [address]),
+			publicKey: encodeAbiParameters(["address"], [address]),
 		};
 	}
 
@@ -824,10 +825,9 @@ export class Calibur7702Account
 	 * @returns A {@link CaliburKey} with type WebAuthnP256
 	 */
 	public static createWebAuthnP256Key(x: bigint, y: bigint): CaliburKey {
-		const abiCoder = AbiCoder.defaultAbiCoder();
 		return {
 			keyType: CaliburKeyType.WebAuthnP256,
-			publicKey: abiCoder.encode(["uint256", "uint256"], [x, y]),
+			publicKey: encodeAbiParameters(["uint256", "uint256"], [x, y]),
 		};
 	}
 
@@ -838,10 +838,9 @@ export class Calibur7702Account
 	 * @returns A {@link CaliburKey} with type P256
 	 */
 	public static createP256Key(x: bigint, y: bigint): CaliburKey {
-		const abiCoder = AbiCoder.defaultAbiCoder();
 		return {
 			keyType: CaliburKeyType.P256,
-			publicKey: abiCoder.encode(["uint256", "uint256"], [x, y]),
+			publicKey: encodeAbiParameters(["uint256", "uint256"], [x, y]),
 		};
 	}
 
@@ -854,8 +853,7 @@ export class Calibur7702Account
 	 */
 	public static getKeyHash(key: CaliburKey): string {
 		const innerHash = keccak256(key.publicKey);
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const encoded = abiCoder.encode(["uint8", "bytes32"], [key.keyType, innerHash]);
+		const encoded = encodeAbiParameters(["uint8", "bytes32"], [key.keyType, innerHash]);
 		return keccak256(encoded);
 	}
 
@@ -913,12 +911,11 @@ export class Calibur7702Account
 			);
 		}
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
 
 		// Register: register((uint8 keyType, bytes publicKey))
 		const registerCallData =
 			REGISTER_SELECTOR +
-			abiCoder.encode(["(uint8,bytes)"], [[key.keyType, key.publicKey]]).slice(2);
+			encodeAbiParameters(["(uint8,bytes)"], [[key.keyType, key.publicKey]]).slice(2);
 
 		// Update: update(bytes32 keyHash, uint256 packedSettings)
 		const safeSettings: CaliburKeySettings = {
@@ -928,7 +925,7 @@ export class Calibur7702Account
 		const keyHash = Calibur7702Account.getKeyHash(key);
 		const packedSettings = Calibur7702Account.packKeySettings(safeSettings);
 		const updateCallData =
-			UPDATE_SELECTOR + abiCoder.encode(["bytes32", "uint256"], [keyHash, packedSettings]).slice(2);
+			UPDATE_SELECTOR + encodeAbiParameters(["bytes32", "uint256"], [keyHash, packedSettings]).slice(2);
 
 		return [
 			{ to: ZeroAddress, value: 0n, data: registerCallData },
@@ -943,8 +940,7 @@ export class Calibur7702Account
 	 * @returns A {@link SimpleMetaTransaction} that calls `revoke(bytes32)`
 	 */
 	public static createRevokeKeyMetaTransaction(keyHash: string): SimpleMetaTransaction {
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const callData = REVOKE_SELECTOR + abiCoder.encode(["bytes32"], [keyHash]).slice(2);
+		const callData = REVOKE_SELECTOR + encodeAbiParameters(["bytes32"], [keyHash]).slice(2);
 
 		return { to: ZeroAddress, value: 0n, data: callData };
 	}
@@ -1026,7 +1022,7 @@ export class Calibur7702Account
 		} = {},
 	): Promise<string> {
 		// Verify the private key matches this account
-		const signerAddress = new Wallet(eoaPrivateKey).address;
+		const signerAddress = privateKeyToAddress(eoaPrivateKey);
 		if (signerAddress.toLowerCase() !== this.accountAddress.toLowerCase()) {
 			throw new AbstractionKitError(
 				"BAD_DATA",
@@ -1143,10 +1139,9 @@ export class Calibur7702Account
 			);
 		}
 
-		const abiCoder = AbiCoder.defaultAbiCoder();
 		const packedSettings = Calibur7702Account.packKeySettings(settings);
 		const callData =
-			UPDATE_SELECTOR + abiCoder.encode(["bytes32", "uint256"], [keyHash, packedSettings]).slice(2);
+			UPDATE_SELECTOR + encodeAbiParameters(["bytes32", "uint256"], [keyHash, packedSettings]).slice(2);
 
 		return { to: ZeroAddress, value: 0n, data: callData };
 	}
@@ -1158,8 +1153,7 @@ export class Calibur7702Account
 	 * @returns A {@link SimpleMetaTransaction} that calls `invalidateNonce(uint256)`
 	 */
 	public static createInvalidateNonceMetaTransaction(newNonce: bigint): SimpleMetaTransaction {
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const callData = INVALIDATE_NONCE_SELECTOR + abiCoder.encode(["uint256"], [newNonce]).slice(2);
+		const callData = INVALIDATE_NONCE_SELECTOR + encodeAbiParameters(["uint256"], [newNonce]).slice(2);
 
 		return { to: ZeroAddress, value: 0n, data: callData };
 	}
@@ -1200,8 +1194,7 @@ export class Calibur7702Account
 	 * @returns True if the key is registered
 	 */
 	public async isKeyRegistered(providerRpc: string | Transport | JsonRpcNode, keyHash: string): Promise<boolean> {
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const callData = IS_REGISTERED_SELECTOR + abiCoder.encode(["bytes32"], [keyHash]).slice(2);
+		const callData = IS_REGISTERED_SELECTOR + encodeAbiParameters(["bytes32"], [keyHash]).slice(2);
 
 		const result = await sendJsonRpcRequest(providerRpc, "eth_call", [
 			{
@@ -1213,8 +1206,8 @@ export class Calibur7702Account
 		]);
 
 		if (typeof result === "string") {
-			const decoded = abiCoder.decode(["bool"], result);
-			return decoded[0] as boolean;
+			const decoded = decodeAbiParameters<[boolean]>(["bool"], result);
+			return decoded[0];
 		}
 		throw new AbstractionKitError("BAD_DATA", "Unexpected response from isRegistered call");
 	}
@@ -1230,8 +1223,7 @@ export class Calibur7702Account
 		providerRpc: string | Transport | JsonRpcNode,
 		keyHash: string,
 	): Promise<CaliburKeySettingsResult> {
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const callData = GET_KEY_SETTINGS_SELECTOR + abiCoder.encode(["bytes32"], [keyHash]).slice(2);
+		const callData = GET_KEY_SETTINGS_SELECTOR + encodeAbiParameters(["bytes32"], [keyHash]).slice(2);
 
 		const result = await sendJsonRpcRequest(providerRpc, "eth_call", [
 			{
@@ -1243,7 +1235,7 @@ export class Calibur7702Account
 		]);
 
 		if (typeof result === "string") {
-			const decoded = abiCoder.decode(["uint256"], result);
+			const decoded = decodeAbiParameters<[bigint]>(["uint256"], result);
 			return Calibur7702Account.unpackKeySettings(BigInt(decoded[0]));
 		}
 		throw new AbstractionKitError("BAD_DATA", "Unexpected response from getKeySettings call");
@@ -1257,8 +1249,7 @@ export class Calibur7702Account
 	 * @returns Parsed {@link CaliburKey}
 	 */
 	public async getKey(providerRpc: string | Transport | JsonRpcNode, keyHash: string): Promise<CaliburKey> {
-		const abiCoder = AbiCoder.defaultAbiCoder();
-		const callData = GET_KEY_SELECTOR + abiCoder.encode(["bytes32"], [keyHash]).slice(2);
+		const callData = GET_KEY_SELECTOR + encodeAbiParameters(["bytes32"], [keyHash]).slice(2);
 
 		const result = await sendJsonRpcRequest(providerRpc, "eth_call", [
 			{
@@ -1270,8 +1261,8 @@ export class Calibur7702Account
 		]);
 
 		if (typeof result === "string") {
-			const decoded = abiCoder.decode(["(uint8,bytes)"], result);
-			const keyTuple = decoded[0] as [number, string];
+			const decoded = decodeAbiParameters<[[bigint, string]]>(["(uint8,bytes)"], result);
+			const keyTuple = decoded[0];
 			return {
 				keyType: Number(keyTuple[0]) as CaliburKeyType,
 				publicKey: keyTuple[1] as string,
@@ -1294,7 +1285,6 @@ export class Calibur7702Account
 		providerRpc: string | Transport | JsonRpcNode,
 		overrides: { blockNumber?: bigint } = {},
 	): Promise<CaliburKey[]> {
-		const abiCoder = AbiCoder.defaultAbiCoder();
 		let blockTag: string;
 		if (overrides.blockNumber != null) {
 			blockTag = `0x${overrides.blockNumber.toString(16)}`;
@@ -1328,7 +1318,7 @@ export class Calibur7702Account
 		// Batch all keyAt calls in parallel
 		const keyAtPromises: Promise<unknown>[] = [];
 		for (let i = 0; i < count; i++) {
-			const keyAtCallData = KEY_AT_SELECTOR + abiCoder.encode(["uint256"], [i]).slice(2);
+			const keyAtCallData = KEY_AT_SELECTOR + encodeAbiParameters(["uint256"], [i]).slice(2);
 
 			keyAtPromises.push(
 				sendJsonRpcRequest(providerRpc, "eth_call", [
@@ -1353,8 +1343,8 @@ export class Calibur7702Account
 					`Unexpected response from keyAt(${i}) call on ${this.accountAddress}`,
 				);
 			}
-			const decoded = abiCoder.decode(["(uint8,bytes)"], keyResult);
-			const keyTuple = decoded[0] as [number, string];
+			const decoded = decodeAbiParameters<[[bigint, string]]>(["(uint8,bytes)"], keyResult);
+			const keyTuple = decoded[0];
 			keys.push({
 				keyType: Number(keyTuple[0]) as CaliburKeyType,
 				publicKey: keyTuple[1] as string,
@@ -1408,7 +1398,6 @@ export class Calibur7702Account
 		paymasterAddress: string,
 		approveAmount: bigint,
 	): string {
-		const abiCoder = AbiCoder.defaultAbiCoder();
 
 		// Build approve transaction
 		const approveFunctionSelector = getFunctionSelector("approve(address,uint256)");
@@ -1429,20 +1418,20 @@ export class Calibur7702Account
 		}
 
 		// Decode: strip selector -> decode BatchedCall struct
-		const batchedCallDecoded = abiCoder.decode(
-			["((address,uint256,bytes)[],bool)"],
-			`0x${callData.slice(10)}`,
-		);
-		const existingCalls = batchedCallDecoded[0][0] as [];
-		const revertOnFailure = batchedCallDecoded[0][1] as boolean;
+		const batchedCallDecoded = decodeAbiParameters<
+			[[Array<[string, bigint, string | Uint8Array]>, boolean]]
+		>(["((address,uint256,bytes)[],bool)"], `0x${callData.slice(10)}`);
+		const existingCalls = batchedCallDecoded[0][0];
+		const revertOnFailure = batchedCallDecoded[0][1];
 
-		const decodedTransactions: SimpleMetaTransaction[] = existingCalls.map(
-			(call: [string, bigint, string]) => ({
-				to: call[0],
-				value: BigInt(call[1]),
-				data: typeof call[2] !== "string" ? new TextDecoder().decode(call[2]) : call[2],
-			}),
-		);
+		const decodedTransactions: SimpleMetaTransaction[] = existingCalls.map((call) => ({
+			to: call[0],
+			value: BigInt(call[1]),
+			// call[2] is the inner transaction calldata (binary). When the ABI
+			// decoder hands it back as bytes, hex-encode it (do NOT UTF-8 decode,
+			// which would corrupt the selector/arguments).
+			data: typeof call[2] !== "string" ? hexlify(call[2]) : call[2],
+		}));
 
 		// Prepend approve
 		decodedTransactions.unshift({
@@ -1453,7 +1442,7 @@ export class Calibur7702Account
 
 		// Re-encode as BatchedCall struct
 		const calls = decodedTransactions.map((tx) => [tx.to, tx.value, tx.data]);
-		const batchedCallEncoded = abiCoder.encode(
+		const batchedCallEncoded = encodeAbiParameters(
 			["((address,uint256,bytes)[],bool)"],
 			[[calls, revertOnFailure]],
 		);
