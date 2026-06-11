@@ -4,7 +4,7 @@
 
 ### Bug Fixes
 
-- **`SafeAccountV1_5_0_M_0_3_0.initializeNewAccount` returns the right runtime type.** The subclass factory delegated to `SafeAccountV0_3_0.initializeNewAccount`, which hard-coded `new SafeAccountV0_3_0(...)`, so the returned instance failed `instanceof SafeAccountV1_5_0_M_0_3_0` and lost subclass behavior. The base factory now instantiates polymorphically through `new this(...)`, so any subclass (including consumer-defined ones) gets its own type back. (#116)
+- **`SafeAccountV1_5_0_M_0_3_0.initializeNewAccount` returns the right runtime type.** The subclass factory delegated to `SafeAccountV0_3_0.initializeNewAccount`, which hard-coded `new SafeAccountV0_3_0(...)`, so the returned instance failed `instanceof SafeAccountV1_5_0_M_0_3_0` and lost subclass behavior. The base factory now instantiates polymorphically through `new this(...)`, so any subclass (including consumer-defined ones) gets its own type back. Detached calls (the factory extracted into a bare function, where strict-mode `this` is undefined) fall back to constructing the base class, preserving the previous behavior for plain-JS callers. (#116)
 
 ## 0.4.0
 

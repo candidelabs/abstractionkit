@@ -89,7 +89,10 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 	 *
 	 * Instantiates through `new this(...)`, so subclasses calling this
 	 * factory (directly or via `super`) get an instance of the subclass,
-	 * not a plain SafeAccountV0_3_0.
+	 * not a plain SafeAccountV0_3_0. A detached call (the method extracted
+	 * into a bare function, where `this` is undefined) falls back to
+	 * constructing a SafeAccountV0_3_0, matching the pre-polymorphic
+	 * behavior.
 	 *
 	 * @param owners - Array of owner signers (at least one required)
 	 * @param overrides - Override default initialization values
@@ -127,8 +130,13 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 				overrides.safeModuleSetupAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
+		// Plain-JS callers may invoke this factory detached
+		// (`const init = SafeAccountV0_3_0.initializeNewAccount; init(...)`),
+		// leaving strict-mode `this` undefined; fall back to this class so
+		// such calls keep working instead of throwing on `new this(...)`.
 		// biome-ignore lint/complexity/noThisInStatic: polymorphic factory; subclasses must get their own type back
-		const safe: SafeAccountV0_3_0 = new this(accountAddress, {
+		const ctor = (this as T | undefined) ?? SafeAccountV0_3_0;
+		const safe: SafeAccountV0_3_0 = new ctor(accountAddress, {
 			safe4337ModuleAddress: overrides.safe4337ModuleAddress,
 			entrypointAddress: overrides.entrypointAddress,
 			onChainIdentifierParams: overrides.onChainIdentifierParams,
