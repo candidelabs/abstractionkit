@@ -97,10 +97,11 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 	 * @example
 	 * const smartAccount = SafeAccountV1_5_0_M_0_3_0.initializeNewAccount(["0xOwnerAddress"]);
 	 */
-	public static initializeNewAccount(
+	public static initializeNewAccount<T extends typeof SafeAccountV0_3_0>(
+		this: T,
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
-	): SafeAccountV1_5_0_M_0_3_0 {
+	): InstanceType<T> {
 		const modOverrides = {
 			...overrides,
 			safeAccountSingleton: overrides.safeAccountSingleton ?? Safe_L2_V1_5_0,
@@ -111,7 +112,11 @@ export class SafeAccountV1_5_0_M_0_3_0 extends SafeAccountV0_3_0 {
 				overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
 				SafeAccountV1_5_0_M_0_3_0.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		};
-		return SafeAccountV0_3_0.initializeNewAccount(owners, modOverrides);
+		// `super` keeps `this` bound to the calling class, so the base
+		// factory's `new this(...)` constructs an instance of this class
+		// (SafeAccountV1_5_0_M_0_3_0 or a subclass), not SafeAccountV0_3_0.
+		// biome-ignore lint/complexity/noThisInStatic: polymorphic factory dispatch through super
+		return super.initializeNewAccount(owners, modOverrides) as InstanceType<T>;
 	}
 
 	/**

@@ -87,17 +87,22 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 	 * The account address is deterministically computed but not yet deployed on-chain.
 	 * The first UserOperation sent will deploy it automatically via factory data.
 	 *
+	 * Instantiates through `new this(...)`, so subclasses calling this
+	 * factory (directly or via `super`) get an instance of the subclass,
+	 * not a plain SafeAccountV0_3_0.
+	 *
 	 * @param owners - Array of owner signers (at least one required)
 	 * @param overrides - Override default initialization values
-	 * @returns A SafeAccountV0_3_0 instance with factory data set for deployment
+	 * @returns An instance of the calling class with factory data set for deployment
 	 *
 	 * @example
 	 * const smartAccount = SafeAccountV0_3_0.initializeNewAccount(["0xOwnerAddress"]);
 	 */
-	public static initializeNewAccount(
+	public static initializeNewAccount<T extends typeof SafeAccountV0_3_0>(
+		this: T,
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
-	): SafeAccountV0_3_0 {
+	): InstanceType<T> {
 		let isInitWebAuthn = false;
 		let x = 0n;
 		let y = 0n;
@@ -122,7 +127,8 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 				overrides.safeModuleSetupAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
-		const safe = new SafeAccountV0_3_0(accountAddress, {
+		// biome-ignore lint/complexity/noThisInStatic: polymorphic factory; subclasses must get their own type back
+		const safe: SafeAccountV0_3_0 = new this(accountAddress, {
 			safe4337ModuleAddress: overrides.safe4337ModuleAddress,
 			entrypointAddress: overrides.entrypointAddress,
 			onChainIdentifierParams: overrides.onChainIdentifierParams,
@@ -137,7 +143,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			safe.y = y;
 		}
 
-		return safe;
+		return safe as InstanceType<T>;
 	}
 
 	/**

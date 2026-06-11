@@ -2,6 +2,10 @@
 
 ## [UNRELEASED]
 
+### Bug Fixes
+
+- **`SafeAccountV1_5_0_M_0_3_0.initializeNewAccount` returns the right runtime type.** The subclass factory delegated to `SafeAccountV0_3_0.initializeNewAccount`, which hard-coded `new SafeAccountV0_3_0(...)`, so the returned instance failed `instanceof SafeAccountV1_5_0_M_0_3_0` and lost subclass behavior. The base factory now instantiates polymorphically through `new this(...)`, so any subclass (including consumer-defined ones) gets its own type back. (#116)
+
 ## 0.4.0
 
 ### New Features
