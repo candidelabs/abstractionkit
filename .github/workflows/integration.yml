@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   integration:
-    name: integration/chainId
+    name: integration
     runs-on: ubuntu-latest
     strategy:
       matrix:
