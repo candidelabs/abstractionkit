@@ -2,6 +2,10 @@
 
 ## [UNRELEASED]
 
+### Bug Fixes
+
+- **Legacy transaction `v` precision for chain IDs above 2^53.** `createAndSignLegacyRawTransaction` computed the EIP-155 `v` field via `Number(chainId)`, silently rounding large chain IDs and producing a transaction whose signature recovers to the wrong sender. The computation now stays in `BigInt`. (#128)
+
 ## 0.4.0
 
 ### New Features
