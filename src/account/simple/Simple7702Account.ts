@@ -507,19 +507,12 @@ export class BaseSimple7702Account extends SmartAccount {
 		}
 		maxFeePerGas =
 			overrides.maxFeePerGas ??
-			BigInt(
-				Math.floor(
-					Number(maxFeePerGas) * (((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100) / 100),
-				),
-			);
+			(maxFeePerGas * BigInt((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100)) / 100n;
 		maxPriorityFeePerGas =
 			overrides.maxPriorityFeePerGas ??
-			BigInt(
-				Math.floor(
-					Number(maxPriorityFeePerGas) *
-						(((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100) / 100),
-				),
-			);
+			(maxPriorityFeePerGas *
+				BigInt((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100)) /
+				100n;
 		if (nonce == null) {
 			throw new RangeError("failed to determine nonce");
 		} else if (nonce < 0n) {
@@ -672,29 +665,18 @@ export class BaseSimple7702Account extends SmartAccount {
 
 		userOperation.preVerificationGas =
 			overrides.preVerificationGas ??
-			BigInt(
-				Math.floor(
-					Number(preVerificationGas) *
-						(((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100) / 100),
-				),
-			);
+			(preVerificationGas * BigInt((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100)) /
+				100n;
 
 		userOperation.verificationGasLimit =
 			overrides.verificationGasLimit ??
-			BigInt(
-				Math.floor(
-					Number(verificationGasLimit) *
-						(((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100) / 100),
-				),
-			);
+			(verificationGasLimit *
+				BigInt((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100)) /
+				100n;
 
 		userOperation.callGasLimit =
 			overrides.callGasLimit ??
-			BigInt(
-				Math.floor(
-					Number(callGasLimit) * (((overrides.callGasLimitPercentageMultiplier ?? 0) + 100) / 100),
-				),
-			);
+			(callGasLimit * BigInt((overrides.callGasLimitPercentageMultiplier ?? 0) + 100)) / 100n;
 
 		return userOperation;
 	}
