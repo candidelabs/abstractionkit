@@ -54,15 +54,20 @@ export class SendUseroperationResponse {
 		if (timeoutInSeconds < requestIntervalInSeconds) {
 			throw new RangeError("timeoutInSeconds can't be less than requestIntervalInSeconds");
 		}
-		let count = 0;
-		while (count <= timeoutInSeconds) {
-			await this.delay(requestIntervalInSeconds * 1000);
+		// Poll immediately, then wait between attempts; cap the last wait to
+		// the time remaining so the total never overshoots the timeout by a
+		// full interval.
+		const deadline = Date.now() + timeoutInSeconds * 1000;
+		for (;;) {
 			const res = await this.bundler.getUserOperationReceipt(this.userOperationHash);
-			if (res == null) {
-				count += requestIntervalInSeconds;
-			} else {
+			if (res != null) {
 				return res;
 			}
+			const remainingMs = deadline - Date.now();
+			if (remainingMs <= 0) {
+				break;
+			}
+			await this.delay(Math.min(requestIntervalInSeconds * 1000, remainingMs));
 		}
 		throw new AbstractionKitError("TIMEOUT", "can't find useroperation", {
 			context: this.userOperationHash,
