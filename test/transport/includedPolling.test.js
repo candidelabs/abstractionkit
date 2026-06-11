@@ -78,4 +78,14 @@ describe("SendUseroperationResponse.included() polling (#130)", () => {
 		},
 		15000,
 	);
+
+	test("non-finite timeout or interval is rejected up front", async () => {
+		const response = makeResponse(() => null);
+		// NaN slips past <= comparisons (every NaN comparison is false) and
+		// previously turned the sleep into a ~1ms timer polling indefinitely.
+		await expect(response.included(NaN, 2)).rejects.toThrow(RangeError);
+		await expect(response.included(10, NaN)).rejects.toThrow(RangeError);
+		await expect(response.included(Infinity, 2)).rejects.toThrow(RangeError);
+		await expect(response.included(10, Infinity)).rejects.toThrow(RangeError);
+	});
 });

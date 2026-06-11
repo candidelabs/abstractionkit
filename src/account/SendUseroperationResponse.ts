@@ -39,16 +39,24 @@ export class SendUseroperationResponse {
 	 * @param timeoutInSeconds - Maximum time to wait for inclusion (default: 180s)
 	 * @param requestIntervalInSeconds - Time between polling requests (default: 2s)
 	 * @returns The UserOperation receipt once included
-	 * @throws RangeError if timeout or interval are <= 0, or timeout < interval
+	 * @throws RangeError if timeout or interval are not finite, <= 0, or timeout < interval
 	 * @throws AbstractionKitError with code "TIMEOUT" if the operation is not found within the timeout
 	 */
 	async included(
 		timeoutInSeconds: number = 180,
 		requestIntervalInSeconds: number = 2,
 	): Promise<UserOperationReceiptResult> {
-		if (timeoutInSeconds <= 0 || requestIntervalInSeconds <= 0) {
+		// Reject non-finite values explicitly: NaN slips past <= comparisons
+		// (every NaN comparison is false) and would otherwise turn the sleep
+		// below into a ~1ms timer that polls the bundler indefinitely.
+		if (
+			!Number.isFinite(timeoutInSeconds) ||
+			!Number.isFinite(requestIntervalInSeconds) ||
+			timeoutInSeconds <= 0 ||
+			requestIntervalInSeconds <= 0
+		) {
 			throw new RangeError(
-				"timeoutInSeconds and requestIntervalInSeconds should be bigger than zero",
+				"timeoutInSeconds and requestIntervalInSeconds should be finite and bigger than zero",
 			);
 		}
 		if (timeoutInSeconds < requestIntervalInSeconds) {

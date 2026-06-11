@@ -4,7 +4,7 @@
 
 ### Bug Fixes
 
-- **`SendUseroperationResponse.included()` polls immediately and respects its timeout.** The receipt loop slept a full polling interval before the first lookup (adding a flat `requestIntervalInSeconds` of latency to every call, even when the operation was already included) and could overshoot `timeoutInSeconds` by up to one interval. It now polls first, sleeps between attempts, and caps the final sleep to the time remaining. (#130)
+- **`SendUseroperationResponse.included()` polls immediately and respects its timeout.** The receipt loop slept a full polling interval before the first lookup (adding a flat `requestIntervalInSeconds` of latency to every call, even when the operation was already included) and could overshoot `timeoutInSeconds` by up to one interval. It now polls first, sleeps between attempts, and caps the final sleep to the time remaining. Non-finite `timeoutInSeconds`/`requestIntervalInSeconds` (e.g. `NaN` from an unset env var) are now rejected with a `RangeError` up front; `NaN` previously slipped past the `<= 0` validation and degraded into a `setTimeout` 1ms timer, polling the bundler at high frequency. (#130)
 
 ## 0.4.0
 
