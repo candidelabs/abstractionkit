@@ -1360,6 +1360,13 @@ export class SafeAccount extends SmartAccount {
 
 	/**
 	 * estimate gas limits for a useroperation
+	 *
+	 * The returned verificationGasLimit includes ~55k gas per dummy signer
+	 * this method places on the operation (from dummySignerSignaturePairs,
+	 * expectedSigners, or the single-EOA default), compensating for the
+	 * per-signature verification cost bundler simulation skips. If the
+	 * operation already carries a signature, no compensation is added and
+	 * the caller is responsible for it.
 	 * @param userOperation - useroperation to estimate gas for
 	 * @param bundlerRpc - bundler rpc for gas estimation
 	 * @param overrides - overrides for the default values
@@ -1387,6 +1394,11 @@ export class SafeAccount extends SmartAccount {
 		const validAfter = 0xffffffffffffn;
 		const validUntil = 0xffffffffffffn;
 
+		// Number of dummy signatures this method placed on the operation.
+		// Zero when the caller supplied a ready-made signature, in which
+		// case the signer count is unknown here and per-signer gas
+		// compensation is left to the caller.
+		let dummySignersCount = 0;
 		if (overrides.dummySignerSignaturePairs != null) {
 			if (overrides.expectedSigners != null) {
 				throw new RangeError(
@@ -1396,6 +1408,7 @@ export class SafeAccount extends SmartAccount {
 			if (overrides.dummySignerSignaturePairs.length < 1) {
 				throw new RangeError("Number of dummy signers signature pairs can't be less than 1");
 			}
+			dummySignersCount = overrides.dummySignerSignaturePairs.length;
 			userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
 				overrides.dummySignerSignaturePairs,
 				{
@@ -1424,6 +1437,7 @@ export class SafeAccount extends SmartAccount {
 					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
 					webAuthnSignerProxyCreationCode: overrides.webAuthnSignerProxyCreationCode,
 				});
+			dummySignersCount = dummySignerSignaturePairs.length;
 			userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
 				dummySignerSignaturePairs,
 				{
@@ -1433,6 +1447,7 @@ export class SafeAccount extends SmartAccount {
 				},
 			);
 		} else if (userOperation.signature.length < 3) {
+			dummySignersCount = 1;
 			userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
 				[EOADummySignerSignaturePair],
 				{
@@ -1459,14 +1474,13 @@ export class SafeAccount extends SmartAccount {
 
 		const preVerificationGas = BigInt(estimation.preVerificationGas);
 
-		let verificationGasLimit: bigint;
-		if (overrides.dummySignerSignaturePairs != null) {
-			verificationGasLimit =
-				BigInt(estimation.verificationGasLimit) +
-				BigInt(overrides.dummySignerSignaturePairs.length) * 55_000n;
-		} else {
-			verificationGasLimit = BigInt(estimation.verificationGasLimit);
-		}
+		// Compensate for per-signer signature verification cost the bundler
+		// skips during estimation: dummy signatures short-circuit validation,
+		// but Safe iterates owner signatures inside `validateUserOp`, so each
+		// real signature pays ~55k gas at inclusion that simulation never
+		// paid for.
+		const verificationGasLimit =
+			BigInt(estimation.verificationGasLimit) + BigInt(dummySignersCount) * 55_000n;
 
 		const callGasLimit = BigInt(estimation.callGasLimit);
 
