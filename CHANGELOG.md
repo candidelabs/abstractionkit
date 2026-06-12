@@ -5,6 +5,9 @@
 ### Bug Fixes
 
 - **Legacy transaction `v` precision for chain IDs above 2^53.** `createAndSignLegacyRawTransaction` computed the EIP-155 `v` field via `Number(chainId)`, silently rounding large chain IDs and producing a transaction whose signature recovers to the wrong sender. The computation now stays in `BigInt`. (#128)
+- **`sendJsonRpcRequest` accepts Tenderly-style `simulation_results` responses again.** The transport refactor made the URL path return only when the JSON body has a `result` field, so non-standard endpoints answering with `{ simulation_results: ... }` fell through to the (undefined) `error` branch and threw a `TypeError`. The `simulation_results` branch is restored, matching the documented behavior and the `JsonRpcResponse` type. (#182)
+- **Gas estimation no longer mutates the caller's UserOperation.** `baseEstimateUserOperationGas` on `SafeAccount` and `Simple7702Account` (and their public `estimateUserOperationGas` wrappers) overwrote the operation's `signature` with a dummy and zeroed `maxFeePerGas`/`maxPriorityFeePerGas` in place, restoring the fees only on success. A bundler error left the caller's operation corrupted (zeroed fees, dummy signature). Estimation now runs on an internal shallow copy and the passed operation is never touched. (#132)
+- **`SafeAccount.baseEstimateUserOperationGas` per-signer `verificationGasLimit` compensation now applies on every dummy-signature path.** The ~55k-per-signer margin (covering signature verification cost that bundler simulation skips with short-circuiting dummy signatures) was only added when `dummySignerSignaturePairs` was passed explicitly. Calls using `expectedSigners` or the default single-EOA dummy got the raw bundler estimate back, underpricing `verificationGasLimit` for multi-signer Safes. Operations that already carry a caller-supplied signature are still returned uncompensated, since the signer count is unknown. (#152)
 
 ## 0.4.0
 

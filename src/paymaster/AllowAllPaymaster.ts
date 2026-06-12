@@ -44,7 +44,7 @@ export class ExperimentalAllowAllParallelPaymaster extends Paymaster {
 	/**
 	 * getApprovedPaymasterData will return a valid paymasterData
 	 * This function is async to simulate a paymaster service
-	 * that require an http call to fetch approved data.
+	 * that requires an HTTP call to fetch approved data.
 	 * @param userOperation - User operation to be sponsored
 	 * @returns a promise of string
 	 */
