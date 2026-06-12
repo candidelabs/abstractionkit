@@ -90,6 +90,16 @@ import {
  * static `initializeNewAccount` to produce a counterfactual account + factory
  * data for first-time deployment.
  */
+
+function percentageMultiplierToBigInt(value: number | undefined, name: string): bigint {
+	const percentage = value ?? 0;
+	if (!Number.isFinite(percentage) || !Number.isInteger(percentage)) {
+		throw new RangeError(`${name} must be a finite integer`);
+	}
+
+	return BigInt(percentage + 100);
+}
+
 export class SafeAccount extends SmartAccount {
 	static readonly DEFAULT_WEB_AUTHN_SHARED_SIGNER: string =
 		"0xfD90FAd33ee8b58f32c00aceEad1358e4AFC23f9";
@@ -1550,11 +1560,11 @@ export class SafeAccount extends SmartAccount {
 
 		maxFeePerGas =
 			overrides.maxFeePerGas ??
-			(maxFeePerGas * BigInt((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100)) / 100n;
+			(maxFeePerGas * percentageMultiplierToBigInt(overrides.maxFeePerGasPercentageMultiplier, "maxFeePerGasPercentageMultiplier")) / 100n;
 		maxPriorityFeePerGas =
 			overrides.maxPriorityFeePerGas ??
 			(maxPriorityFeePerGas *
-				BigInt((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100)) /
+				percentageMultiplierToBigInt(overrides.maxPriorityFeePerGasPercentageMultiplier, "maxPriorityFeePerGasPercentageMultiplier")) /
 				100n;
 
 		const eip7212WebAuthnPrecompileVerifier =
@@ -1828,18 +1838,18 @@ export class SafeAccount extends SmartAccount {
 
 		userOperation.preVerificationGas =
 			overrides.preVerificationGas ??
-			(preVerificationGas * BigInt((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100)) /
+			(preVerificationGas * percentageMultiplierToBigInt(overrides.preVerificationGasPercentageMultiplier, "preVerificationGasPercentageMultiplier")) /
 				100n;
 
 		userOperation.verificationGasLimit =
 			overrides.verificationGasLimit ??
 			(verificationGasLimit *
-				BigInt((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100)) /
+				percentageMultiplierToBigInt(overrides.verificationGasLimitPercentageMultiplier, "verificationGasLimitPercentageMultiplier")) /
 				100n;
 
 		userOperation.callGasLimit =
 			overrides.callGasLimit ??
-			(callGasLimit * BigInt((overrides.callGasLimitPercentageMultiplier ?? 0) + 100)) / 100n;
+			(callGasLimit * percentageMultiplierToBigInt(overrides.callGasLimitPercentageMultiplier, "callGasLimitPercentageMultiplier")) / 100n;
 
 		return [userOperation, factoryAddress, factoryData];
 	}

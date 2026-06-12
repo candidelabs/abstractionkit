@@ -32,6 +32,16 @@ import {
 import {SendUseroperationResponse} from "../SendUseroperationResponse";
 import {SmartAccount} from "../SmartAccount";
 
+
+function percentageMultiplierToBigInt(value: number | undefined, name: string): bigint {
+	const percentage = value ?? 0;
+	if (!Number.isFinite(percentage) || !Number.isInteger(percentage)) {
+		throw new RangeError(`${name} must be a finite integer`);
+	}
+
+	return BigInt(percentage + 100);
+}
+
 /**
  * A minimal transaction object for EIP-7702 simple accounts.
  * Represents a single call with a target address, ETH value, and calldata.
@@ -507,11 +517,11 @@ export class BaseSimple7702Account extends SmartAccount {
 		}
 		maxFeePerGas =
 			overrides.maxFeePerGas ??
-			(maxFeePerGas * BigInt((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100)) / 100n;
+			(maxFeePerGas * percentageMultiplierToBigInt(overrides.maxFeePerGasPercentageMultiplier, "maxFeePerGasPercentageMultiplier")) / 100n;
 		maxPriorityFeePerGas =
 			overrides.maxPriorityFeePerGas ??
 			(maxPriorityFeePerGas *
-				BigInt((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100)) /
+				percentageMultiplierToBigInt(overrides.maxPriorityFeePerGasPercentageMultiplier, "maxPriorityFeePerGasPercentageMultiplier")) /
 				100n;
 		if (nonce == null) {
 			throw new RangeError("failed to determine nonce");
@@ -665,18 +675,18 @@ export class BaseSimple7702Account extends SmartAccount {
 
 		userOperation.preVerificationGas =
 			overrides.preVerificationGas ??
-			(preVerificationGas * BigInt((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100)) /
+			(preVerificationGas * percentageMultiplierToBigInt(overrides.preVerificationGasPercentageMultiplier, "preVerificationGasPercentageMultiplier")) /
 				100n;
 
 		userOperation.verificationGasLimit =
 			overrides.verificationGasLimit ??
 			(verificationGasLimit *
-				BigInt((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100)) /
+				percentageMultiplierToBigInt(overrides.verificationGasLimitPercentageMultiplier, "verificationGasLimitPercentageMultiplier")) /
 				100n;
 
 		userOperation.callGasLimit =
 			overrides.callGasLimit ??
-			(callGasLimit * BigInt((overrides.callGasLimitPercentageMultiplier ?? 0) + 100)) / 100n;
+			(callGasLimit * percentageMultiplierToBigInt(overrides.callGasLimitPercentageMultiplier, "callGasLimitPercentageMultiplier")) / 100n;
 
 		return userOperation;
 	}

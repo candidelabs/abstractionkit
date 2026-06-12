@@ -48,6 +48,16 @@ import {
 	type WebAuthnSignatureData,
 } from "./types";
 
+
+function percentageMultiplierToBigInt(value: number | undefined, name: string): bigint {
+	const percentage = value ?? 0;
+	if (!Number.isFinite(percentage) || !Number.isInteger(percentage)) {
+		throw new RangeError(`${name} must be a finite integer`);
+	}
+
+	return BigInt(percentage + 100);
+}
+
 const DEFAULT_SINGLETON_ADDRESS = CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS;
 
 /** Root key hash (bytes32 zero) — used for the EOA's own secp256k1 key */
@@ -465,11 +475,11 @@ export class Calibur7702Account
 
 		maxFeePerGas =
 			overrides.maxFeePerGas ??
-			(maxFeePerGas * BigInt((overrides.maxFeePerGasPercentageMultiplier ?? 0) + 100)) / 100n;
+			(maxFeePerGas * percentageMultiplierToBigInt(overrides.maxFeePerGasPercentageMultiplier, "maxFeePerGasPercentageMultiplier")) / 100n;
 		maxPriorityFeePerGas =
 			overrides.maxPriorityFeePerGas ??
 			(maxPriorityFeePerGas *
-				BigInt((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100)) /
+				percentageMultiplierToBigInt(overrides.maxPriorityFeePerGasPercentageMultiplier, "maxPriorityFeePerGasPercentageMultiplier")) /
 				100n;
 
 		if (nonce == null) {
@@ -613,18 +623,18 @@ export class Calibur7702Account
 
 		userOperation.preVerificationGas =
 			overrides.preVerificationGas ??
-			(preVerificationGas * BigInt((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100)) /
+			(preVerificationGas * percentageMultiplierToBigInt(overrides.preVerificationGasPercentageMultiplier, "preVerificationGasPercentageMultiplier")) /
 				100n;
 
 		userOperation.verificationGasLimit =
 			overrides.verificationGasLimit ??
 			(verificationGasLimit *
-				BigInt((overrides.verificationGasLimitPercentageMultiplier ?? 0) + 100)) /
+				percentageMultiplierToBigInt(overrides.verificationGasLimitPercentageMultiplier, "verificationGasLimitPercentageMultiplier")) /
 				100n;
 
 		userOperation.callGasLimit =
 			overrides.callGasLimit ??
-			(callGasLimit * BigInt((overrides.callGasLimitPercentageMultiplier ?? 0) + 100)) / 100n;
+			(callGasLimit * percentageMultiplierToBigInt(overrides.callGasLimitPercentageMultiplier, "callGasLimitPercentageMultiplier")) / 100n;
 
 		// Set the dummy signature so paymaster sponsorship calls can simulate
 		// validateUserOp (Calibur's signature decoder rejects empty signatures).
