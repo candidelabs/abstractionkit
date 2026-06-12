@@ -716,21 +716,21 @@ export class BaseSimple7702Account extends SmartAccount {
 			dummySignature?: string;
 		} = {},
 	): Promise<[bigint, bigint, bigint]> {
-		userOperation.signature = overrides.dummySignature ?? BaseSimple7702Account.dummySignature;
-
 		const bundler = Bundler.from(bundlerRpc);
 
-		const inputMaxFeePerGas = userOperation.maxFeePerGas;
-		const inputMaxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
-		userOperation.maxFeePerGas = 0n;
-		userOperation.maxPriorityFeePerGas = 0n;
+		// Estimate on a shallow copy so the caller's operation is never
+		// mutated, even when estimation throws.
+		const userOperationToEstimate = {
+			...userOperation,
+			signature: overrides.dummySignature ?? BaseSimple7702Account.dummySignature,
+			maxFeePerGas: 0n,
+			maxPriorityFeePerGas: 0n,
+		};
 		const estimation = await bundler.estimateUserOperationGas(
-			userOperation,
+			userOperationToEstimate,
 			this.entrypointAddress,
 			overrides.stateOverrideSet,
 		);
-		userOperation.maxFeePerGas = inputMaxFeePerGas;
-		userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas;
 
 		const preVerificationGas = BigInt(estimation.preVerificationGas);
 

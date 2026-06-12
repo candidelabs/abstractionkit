@@ -1360,6 +1360,16 @@ export class SafeAccount extends SmartAccount {
 
 	/**
 	 * estimate gas limits for a useroperation
+	 *
+	 * The returned verificationGasLimit includes ~55k gas per dummy signer
+	 * used for estimation (from dummySignerSignaturePairs, expectedSigners,
+	 * or the single-EOA default), compensating for the per-signature
+	 * verification cost bundler simulation skips. If the operation already
+	 * carries a signature, no compensation is added and the caller is
+	 * responsible for it.
+	 *
+	 * The passed userOperation is not mutated; estimation runs on an
+	 * internal copy carrying the dummy signature and zeroed gas fees.
 	 * @param userOperation - useroperation to estimate gas for
 	 * @param bundlerRpc - bundler rpc for gas estimation
 	 * @param overrides - overrides for the default values
@@ -1387,6 +1397,12 @@ export class SafeAccount extends SmartAccount {
 		const validAfter = 0xffffffffffffn;
 		const validUntil = 0xffffffffffffn;
 
+		// Number of dummy signatures this method placed on the estimated
+		// operation. Zero when the caller supplied a ready-made signature,
+		// in which case the signer count is unknown here and per-signer gas
+		// compensation is left to the caller.
+		let dummySignersCount = 0;
+		let estimationSignature = userOperation.signature;
 		if (overrides.dummySignerSignaturePairs != null) {
 			if (overrides.expectedSigners != null) {
 				throw new RangeError(
@@ -1396,7 +1412,8 @@ export class SafeAccount extends SmartAccount {
 			if (overrides.dummySignerSignaturePairs.length < 1) {
 				throw new RangeError("Number of dummy signers signature pairs can't be less than 1");
 			}
-			userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
+			dummySignersCount = overrides.dummySignerSignaturePairs.length;
+			estimationSignature = SafeAccount.formatSignaturesToUseroperationSignature(
 				overrides.dummySignerSignaturePairs,
 				{
 					validAfter,
@@ -1424,7 +1441,8 @@ export class SafeAccount extends SmartAccount {
 					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
 					webAuthnSignerProxyCreationCode: overrides.webAuthnSignerProxyCreationCode,
 				});
-			userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
+			dummySignersCount = dummySignerSignaturePairs.length;
+			estimationSignature = SafeAccount.formatSignaturesToUseroperationSignature(
 				dummySignerSignaturePairs,
 				{
 					validAfter,
@@ -1433,7 +1451,8 @@ export class SafeAccount extends SmartAccount {
 				},
 			);
 		} else if (userOperation.signature.length < 3) {
-			userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
+			dummySignersCount = 1;
+			estimationSignature = SafeAccount.formatSignaturesToUseroperationSignature(
 				[EOADummySignerSignaturePair],
 				{
 					validAfter,
@@ -1445,28 +1464,29 @@ export class SafeAccount extends SmartAccount {
 
 		const bundler = Bundler.from(bundlerRpc);
 
-		const inputMaxFeePerGas = userOperation.maxFeePerGas;
-		const inputMaxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
-		userOperation.maxFeePerGas = 0n;
-		userOperation.maxPriorityFeePerGas = 0n;
+		// Estimate on a shallow copy so the caller's operation is never
+		// mutated, even when estimation throws.
+		const userOperationToEstimate = {
+			...userOperation,
+			signature: estimationSignature,
+			maxFeePerGas: 0n,
+			maxPriorityFeePerGas: 0n,
+		};
 		const estimation = await bundler.estimateUserOperationGas(
-			userOperation,
+			userOperationToEstimate,
 			this.entrypointAddress,
 			overrides.stateOverrideSet,
 		);
-		userOperation.maxFeePerGas = inputMaxFeePerGas;
-		userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas;
 
 		const preVerificationGas = BigInt(estimation.preVerificationGas);
 
-		let verificationGasLimit: bigint;
-		if (overrides.dummySignerSignaturePairs != null) {
-			verificationGasLimit =
-				BigInt(estimation.verificationGasLimit) +
-				BigInt(overrides.dummySignerSignaturePairs.length) * 55_000n;
-		} else {
-			verificationGasLimit = BigInt(estimation.verificationGasLimit);
-		}
+		// Compensate for per-signer signature verification cost the bundler
+		// skips during estimation: dummy signatures short-circuit validation,
+		// but Safe iterates owner signatures inside `validateUserOp`, so each
+		// real signature pays ~55k gas at inclusion that simulation never
+		// paid for.
+		const verificationGasLimit =
+			BigInt(estimation.verificationGasLimit) + BigInt(dummySignersCount) * 55_000n;
 
 		const callGasLimit = BigInt(estimation.callGasLimit);
 
