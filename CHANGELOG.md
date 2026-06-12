@@ -2,6 +2,10 @@
 
 ## [UNRELEASED]
 
+### Bug Fixes
+
+- **`SafeAccount.baseEstimateUserOperationGas` per-signer `verificationGasLimit` compensation now applies on every dummy-signature path.** The ~55k-per-signer margin (covering signature verification cost that bundler simulation skips with short-circuiting dummy signatures) was only added when `dummySignerSignaturePairs` was passed explicitly. Calls using `expectedSigners` or the default single-EOA dummy got the raw bundler estimate back, underpricing `verificationGasLimit` for multi-signer Safes. Operations that already carry a caller-supplied signature are still returned uncompensated, since the signer count is unknown. (#152)
+
 ## 0.4.0
 
 ### New Features
