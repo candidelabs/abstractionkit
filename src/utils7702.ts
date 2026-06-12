@@ -106,7 +106,7 @@ export function createAndSignLegacyRawTransaction(
 		destination,
 		bigintToBytes(value),
 		data,
-		bigintToBytes(BigInt(signature.yParity + Number(chainId) * 2 + 35)),
+		bigintToBytes(BigInt(signature.yParity) + chainId * 2n + 35n),
 		getBytes(signature.r),
 		getBytes(signature.s),
 	];

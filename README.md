@@ -297,7 +297,7 @@ const response = await account.sendUserOperation(userOp, bundlerRpc);
 const receipt = await response.included();
 ```
 
-After the first UserOp deploys the delegation, subsequent UserOps no longer need `eip7702Auth`. Use `getDelegatedAddress(eoaAddress, nodeRpc)` to check delegation status.
+After the first UserOp deploys the delegation, subsequent UserOps no longer need `eip7702Auth`. Use `JsonRpcNode.from(nodeRpc).getDelegatedAddress(eoaAddress)` (import `JsonRpcNode` from `"abstractionkit"`) to check delegation status; it returns the delegatee address, or `null` when the EOA has no delegation.
 
 ### Calibur 7702: register a WebAuthn passkey
 

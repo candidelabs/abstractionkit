@@ -542,6 +542,11 @@ export async function sendJsonRpcRequest(
 	if ("result" in response) {
 		return response.result as JsonRpcResult;
 	}
+	// Non-standard servers (e.g. Tenderly's simulate-bundle API) return the
+	// payload under `simulation_results` instead of `result`.
+	if ("simulation_results" in response) {
+		return response.simulation_results as JsonRpcResult;
+	}
 	const err = response.error as JsonRpcError;
 	throw new TransportRpcError(err.code, err.message);
 }
