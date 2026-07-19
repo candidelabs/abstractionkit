@@ -296,6 +296,12 @@ export class JsonRpcNode implements Transport {
 			} else if (gasPrice != null) {
 				maxFeePerGas = scaleBigIntByGasLevel(gasPrice, gasLevel);
 				priorityFee = maxFeePerGas;
+			} else if (maxPriorityFeePerGas != null) {
+				// eth_gasPrice unsupported but the node served a priority fee —
+				// use it rather than discarding it for the 1-gwei floor
+				// (the clamp below raises maxFeePerGas to at least priorityFee)
+				priorityFee = scaleBigIntByGasLevel(maxPriorityFeePerGas, gasLevel);
+				maxFeePerGas = scaleBigIntByGasLevel(1_000_000_000n, gasLevel);
 			} else {
 				maxFeePerGas = scaleBigIntByGasLevel(1_000_000_000n, gasLevel);
 				priorityFee = maxFeePerGas;
