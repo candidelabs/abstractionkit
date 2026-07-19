@@ -1,0 +1,48 @@
+// Offline tests for SendUseroperationResponse.included() polling:
+// immediate first poll, wall-clock timeout, and transient-error tolerance.
+
+const ak = require("../../dist/index.cjs");
+
+const HASH = "0x" + "11".repeat(32);
+const ENTRYPOINT = "0x0000000071727De22E5E9d8BAf0edAc6f37da032";
+const RECEIPT = { success: true };
+
+function responseWith(getReceipt) {
+	const bundler = new ak.Bundler({ request: async () => null });
+	bundler.getUserOperationReceipt = getReceipt;
+	return new ak.SendUseroperationResponse(HASH, bundler, ENTRYPOINT);
+}
+
+describe("SendUseroperationResponse.included", () => {
+	test("returns an already-available receipt without waiting an interval", async () => {
+		const response = responseWith(async () => RECEIPT);
+		const start = Date.now();
+		expect(await response.included(5, 2)).toBe(RECEIPT);
+		expect(Date.now() - start).toBeLessThan(500);
+	});
+
+	test("keeps polling through a transient RPC error", async () => {
+		let calls = 0;
+		const response = responseWith(async () => {
+			calls += 1;
+			if (calls === 1) throw new Error("502 bad gateway");
+			return RECEIPT;
+		});
+		expect(await response.included(5, 0.1)).toBe(RECEIPT);
+		expect(calls).toBe(2);
+	});
+
+	test("times out against wall-clock time and reports the last error", async () => {
+		const response = responseWith(async () => {
+			throw new Error("still failing");
+		});
+		const start = Date.now();
+		await expect(response.included(0.5, 0.1)).rejects.toMatchObject({
+			code: "TIMEOUT",
+			cause: expect.objectContaining({ message: "still failing" }),
+		});
+		const elapsed = Date.now() - start;
+		expect(elapsed).toBeGreaterThanOrEqual(450);
+		expect(elapsed).toBeLessThan(2000);
+	});
+});
