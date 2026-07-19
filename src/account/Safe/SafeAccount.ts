@@ -2105,7 +2105,7 @@ export class SafeAccount extends SmartAccount {
 			],
 		).slice(-40);
 
-		return `0x${proxyAdd}`;
+		return getAddress(`0x${proxyAdd}`); //to checksummed
 	}
 
 	/**
@@ -2405,7 +2405,9 @@ export class SafeAccount extends SmartAccount {
 		let prevOwnerT = overrides.prevOwner;
 		if (prevOwnerT == null) {
 			const owners = await this.getOwners(nodeRpcUrl);
-			const oldOwnerIndex = owners.indexOf(oldOwnerT);
+			const oldOwnerIndex = owners.findIndex(
+				(owner) => owner.toLowerCase() === oldOwnerT.toLowerCase(),
+			);
 			if (oldOwnerIndex === -1) {
 				throw new RangeError("oldOwner is not a current owner.");
 			} else if (oldOwnerIndex === 0) {
@@ -2476,7 +2478,9 @@ export class SafeAccount extends SmartAccount {
 		let prevOwnerT = overrides.prevOwner;
 		if (prevOwnerT == null) {
 			const owners = await this.getOwners(nodeRpcUrl);
-			const ownerToDeleteIndex = owners.indexOf(ownerToDeleteT);
+			const ownerToDeleteIndex = owners.findIndex(
+				(owner) => owner.toLowerCase() === ownerToDeleteT.toLowerCase(),
+			);
 			if (ownerToDeleteIndex === -1) {
 				throw new RangeError("ownerToDelete is not a current owner.");
 			} else if (ownerToDeleteIndex === 0) {
