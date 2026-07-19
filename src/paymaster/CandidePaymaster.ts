@@ -485,7 +485,14 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			overrides.callGasLimit ??
 			applyMultiplier(callGasLimit, overrides.callGasLimitPercentageMultiplier ?? 10);
 
-		if (entrypoint === ENTRYPOINT_V6) {
+		// Lowercase compare — the entrypoint comes from arbitrary user input
+		// and ENTRYPOINT_V6 is checksummed. Skip the buffer when the caller
+		// pinned verificationGasLimit explicitly: the override is documented
+		// to be used verbatim.
+		if (
+			overrides.verificationGasLimit == null &&
+			entrypoint.toLowerCase() === ENTRYPOINT_V6.toLowerCase()
+		) {
 			userOp.verificationGasLimit += PAYMASTER_V06_VERIFICATION_OVERHEAD;
 		}
 	}
