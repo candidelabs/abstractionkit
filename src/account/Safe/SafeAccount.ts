@@ -1706,6 +1706,7 @@ export class SafeAccount extends SmartAccount {
 		const validAfter = 0xffffffffffffn;
 		const validUntil = 0xffffffffffffn;
 
+		const isInit = factoryAddress != null && factoryAddress !== "0x";
 		let dummySignerSignaturePairs: SignerSignaturePair[];
 		if (overrides.dummySignerSignaturePairs != null) {
 			if (overrides.expectedSigners != null) {
@@ -1721,7 +1722,6 @@ export class SafeAccount extends SmartAccount {
 			if (overrides.expectedSigners == null) {
 				dummySignerSignaturePairs = [EOADummySignerSignaturePair];
 			} else {
-				const isInit = factoryAddress != null && factoryAddress !== "0x";
 				dummySignerSignaturePairs = SafeAccount.createDummySignerSignaturePairForExpectedSigners(
 					overrides.expectedSigners,
 					{
@@ -1743,6 +1743,9 @@ export class SafeAccount extends SmartAccount {
 				validUntil,
 				isMultiChainSignature: overrides.isMultiChainSignature,
 				webAuthnSharedSigner,
+				// needed when user-supplied dummySignerSignaturePairs contain raw
+				// WebauthnPublicKey signers — the encoder requires the init flag
+				isInit,
 			},
 		);
 
@@ -1791,12 +1794,18 @@ export class SafeAccount extends SmartAccount {
 
 					const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
 					if (parallelPaymasterInitValues != null) {
-						if (!parallelPaymasterInitValues.paymasterData.endsWith("22e325a297439656")) {
+						// lowercase like the EIP-712 trimmer and the MultiChain
+						// subclass — uppercase hex is valid input
+						if (
+							!parallelPaymasterInitValues.paymasterData
+								.toLowerCase()
+								.endsWith("22e325a297439656")
+						) {
 							throw new RangeError(
 								"Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'.",
 							);
 						}
-						if (this.entrypointAddress !== ENTRYPOINT_V9) {
+						if (this.entrypointAddress.toLowerCase() !== ENTRYPOINT_V9.toLowerCase()) {
 							throw new RangeError("parallelPaymasterInitValues only works with ep v0.9");
 						}
 						userOperationToEstimate.paymaster = parallelPaymasterInitValues.paymaster;
