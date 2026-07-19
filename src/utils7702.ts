@@ -454,24 +454,37 @@ function parseRawSignature(rawSig: string): { yParity: 0 | 1; r: bigint; s: bigi
 		);
 	}
 	const r = BigInt(`0x${sig.slice(0, 64)}`);
+	let yParity: 0 | 1;
+	let s: bigint;
 
 	if (sig.length === 128) {
 		// EIP-2098 compact signature (64 bytes): r (32) + yParity||s (32)
 		const yParityAndS = BigInt(`0x${sig.slice(64, 128)}`);
-		const yParity = Number((yParityAndS >> 255n) & 1n) as 0 | 1;
-		const s = yParityAndS & ((1n << 255n) - 1n);
-		return { yParity, r, s };
+		yParity = Number((yParityAndS >> 255n) & 1n) as 0 | 1;
+		s = yParityAndS & ((1n << 255n) - 1n);
+	} else {
+		// Standard 65-byte signature: r (32) + s (32) + v (1)
+		s = BigInt(`0x${sig.slice(64, 128)}`);
+		const v = parseInt(sig.slice(128, 130), 16);
+		if (v !== 0 && v !== 1 && v !== 27 && v !== 28) {
+			throw new RangeError(`invalid signature v value: ${v}`);
+		}
+		yParity = (v >= 27 ? v - 27 : v) as 0 | 1;
 	}
 
-	// Standard 65-byte signature: r (32) + s (32) + v (1)
-	const s = BigInt(`0x${sig.slice(64, 128)}`);
-	const v = parseInt(sig.slice(128, 130), 16);
-	if (v !== 0 && v !== 1 && v !== 27 && v !== 28) {
-		throw new RangeError(`invalid signature v value: ${v}`);
+	// EIP-7702 requires s <= n/2; nodes silently skip high-s authorization
+	// tuples. Normalize to the complementary low-s signature.
+	if (s > SECP256K1_HALF_N) {
+		s = SECP256K1_N - s;
+		yParity = (1 - yParity) as 0 | 1;
 	}
-	const yParity = (v >= 27 ? v - 27 : v) as 0 | 1;
 	return { yParity, r, s };
 }
+
+const SECP256K1_N = BigInt(
+	"0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
+);
+const SECP256K1_HALF_N = SECP256K1_N / 2n;
 
 /**
  * Converts a bigint to a 0x-prefixed hex string with even-length padding.

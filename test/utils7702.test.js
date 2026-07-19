@@ -68,3 +68,39 @@ describe("createAndSignLegacyRawTransaction canonical RLP r/s", () => {
 		},
 	);
 });
+
+describe("createAndSignEip7702DelegationAuthorization low-s normalization", () => {
+	const N = BigInt(
+		"0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
+	);
+
+	test("normalizes a high-s callback signature to the low-s complement", async () => {
+		const { SigningKey } = require("ethers");
+		const wallet = new Wallet("0x" + "11".repeat(32));
+		const chainId = 1n;
+		const delegatee = "0x" + "aa".repeat(20);
+		const nonce = 0n;
+
+		const authHash = ak.createEip7702DelegationAuthorizationHash(chainId, delegatee, nonce);
+		const lowSig = wallet.signingKey.sign(authHash); // ethers always low-s
+		// construct the complementary high-s signature with flipped parity
+		const highS = N - BigInt(lowSig.s);
+		const highV = lowSig.yParity === 0 ? 28 : 27;
+		const highSig =
+			"0x" +
+			lowSig.r.slice(2) +
+			highS.toString(16).padStart(64, "0") +
+			highV.toString(16).padStart(2, "0");
+
+		const auth = await ak.createAndSignEip7702DelegationAuthorization(
+			chainId,
+			delegatee,
+			nonce,
+			async () => highSig,
+		);
+		// must come back as the original low-s signature
+		expect(BigInt(auth.s)).toBe(BigInt(lowSig.s));
+		expect(Number(BigInt(auth.yParity))).toBe(lowSig.yParity);
+		expect(BigInt(auth.s) <= N / 2n).toBe(true);
+	});
+});
