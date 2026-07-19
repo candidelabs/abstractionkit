@@ -2186,6 +2186,12 @@ export class SafeAccount extends SmartAccount {
 	): string {
 		if (typeof signer === "string") {
 			return signer.toLowerCase();
+		} else if (overrides.isInit) {
+			// on init the encoded owner is the WebAuthn shared signer, not the
+			// per-owner verifier proxy — sort by the same address that gets encoded
+			const webAuthnSharedSigner =
+				overrides.webAuthnSharedSigner ?? SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
+			return webAuthnSharedSigner.toLowerCase();
 		} else {
 			const eip7212WebAuthnPrecompileVerifier =
 				overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
