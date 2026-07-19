@@ -250,8 +250,27 @@ export class Bundler implements Transport {
 				params: [useroperationhash],
 			});
 			if (jsonRpcResult == null) return null;
+			// the wire format carries hex strings; convert the numeric fields
+			// to the bigints the declared type promises
+			const wireOp = jsonRpcResult.userOperation as unknown as Record<string, unknown>;
+			const userOperation = { ...wireOp };
+			for (const field of [
+				"nonce",
+				"callGasLimit",
+				"verificationGasLimit",
+				"preVerificationGas",
+				"maxFeePerGas",
+				"maxPriorityFeePerGas",
+				"paymasterVerificationGasLimit",
+				"paymasterPostOpGasLimit",
+			]) {
+				if (wireOp[field] != null) {
+					userOperation[field] = BigInt(wireOp[field] as string | bigint);
+				}
+			}
 			return {
 				...jsonRpcResult,
+				userOperation: userOperation as unknown as UserOperationV6 | UserOperationV7,
 				blockNumber: jsonRpcResult.blockNumber == null ? null : BigInt(jsonRpcResult.blockNumber),
 			};
 		} catch (err) {
