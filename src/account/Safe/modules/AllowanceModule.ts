@@ -388,6 +388,13 @@ export class AllowanceModule extends SafeModule {
 	): Promise<string[]> {
 		let start = overrides.start ?? 0n;
 		if (overrides.maxNumberOfResults != null) {
+			// the module's page-size parameter is a uint8
+			if (overrides.maxNumberOfResults > 255n) {
+				throw new RangeError(
+					"maxNumberOfResults can't exceed 255 (the module's page size is a " +
+						"uint8) — omit it to fetch all delegates via pagination.",
+				);
+			}
 			return (
 				await this.baseGetDelegates(nodeRpcUrl, safeAddress, start, overrides.maxNumberOfResults)
 			).results;
