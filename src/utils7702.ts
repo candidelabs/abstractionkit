@@ -107,8 +107,10 @@ export function createAndSignLegacyRawTransaction(
 		bigintToBytes(value),
 		data,
 		bigintToBytes(BigInt(signature.yParity) + chainId * 2n + 35n),
-		getBytes(signature.r),
-		getBytes(signature.s),
+		// r and s must be minimal big-endian integers — nodes reject RLP
+		// scalars with leading zero bytes as non-canonical
+		bigintToBytes(BigInt(signature.r)),
+		bigintToBytes(BigInt(signature.s)),
 	];
 	const transactionPayload = encodeRlp(payload);
 	return transactionPayload;
