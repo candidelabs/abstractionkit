@@ -568,7 +568,12 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			overrides.callGasLimit ??
 			applyMultiplier(callGasLimit, overrides.callGasLimitPercentageMultiplier ?? 10);
 
-		if (entrypoint.toLowerCase() === ENTRYPOINT_V6.toLowerCase()) {
+		// Skip the buffer when the caller pinned verificationGasLimit
+		// explicitly: the override is documented to be used verbatim.
+		if (
+			overrides.verificationGasLimit == null &&
+			entrypoint.toLowerCase() === ENTRYPOINT_V6.toLowerCase()
+		) {
 			// Align with CandidePaymaster: add paymaster verification overhead for v0.6.
 			// Lowercase compare — overrides.entrypoint is arbitrary user input
 			// and ENTRYPOINT_V6 is checksummed.
