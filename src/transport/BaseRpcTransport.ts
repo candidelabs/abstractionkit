@@ -14,13 +14,13 @@ export interface JsonRpcEnvelope {
 /**
  * JSON-RPC 2.0 response. Either `result` or `error` is set.
  */
-type JsonRpcResponseEnvelope =
-	| { jsonrpc?: string; id: number | string | null; result: unknown }
-	| {
-			jsonrpc?: string;
-			id: number | string | null;
-			error: { code: number; message: string; data?: unknown };
-	  };
+type JsonRpcResponseEnvelope = {
+	jsonrpc?: string;
+	id: number | string | null;
+	result?: unknown;
+	// null is tolerated: some non-strict servers send "error": null on success
+	error?: { code: number; message: string; data?: unknown } | null;
+};
 
 /**
  * Optional convenience base class for users writing new wire-level
@@ -98,7 +98,9 @@ export abstract class BaseRpcTransport implements Transport {
 			throw new TransportRpcError(-32603, "malformed JSON-RPC response", raw);
 		}
 		const response = raw as JsonRpcResponseEnvelope;
-		if ("error" in response) {
+		// null check, not key presence — some servers include "error": null
+		// on successful responses
+		if (response.error != null) {
 			const { code, message, data } = response.error;
 			throw new TransportRpcError(code, message, data);
 		}

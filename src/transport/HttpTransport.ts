@@ -1,5 +1,5 @@
 import {BaseRpcTransport, type JsonRpcEnvelope} from "./BaseRpcTransport";
-import type {RequestOptions, Transport} from "./Transport";
+import {type RequestOptions, type Transport, TransportRpcError} from "./Transport";
 
 /**
  * Construction options for {@link HttpTransport}.
@@ -67,7 +67,35 @@ export class HttpTransport extends BaseRpcTransport {
 			redirect: "follow",
 			signal: options?.signal,
 		});
-		return await response.json();
+		const responseText = await response.text();
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(responseText);
+		} catch {
+			// non-JSON body (HTML error page, plain text) — the HTTP status is
+			// the real diagnostic, so surface it instead of a JSON parse error
+			throw new TransportRpcError(
+				-32603,
+				`HTTP ${response.status} ${response.statusText}: response body is not JSON`.trim(),
+				responseText.slice(0, 1000),
+			);
+		}
+		if (
+			!response.ok &&
+			(typeof parsed !== "object" ||
+				parsed == null ||
+				(!("error" in parsed) && !("result" in parsed)))
+		) {
+			// HTTP failure without a JSON-RPC envelope (e.g. a gateway's own
+			// error object) — keep the status; a proper envelope falls through
+			// to parseResponse which reports the server's JSON-RPC error
+			throw new TransportRpcError(
+				-32603,
+				`HTTP ${response.status} ${response.statusText}`.trim(),
+				parsed,
+			);
+		}
+		return parsed;
 	}
 }
 

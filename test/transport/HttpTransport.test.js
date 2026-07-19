@@ -18,6 +18,8 @@ describe("HttpTransport", () => {
 		return {
 			ok: status < 400,
 			status,
+			statusText: "",
+			text: async () => JSON.stringify(body),
 			json: async () => body,
 		};
 	}
