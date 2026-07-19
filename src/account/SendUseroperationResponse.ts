@@ -54,18 +54,31 @@ export class SendUseroperationResponse {
 		if (timeoutInSeconds < requestIntervalInSeconds) {
 			throw new RangeError("timeoutInSeconds can't be less than requestIntervalInSeconds");
 		}
-		let count = 0;
-		while (count <= timeoutInSeconds) {
-			await this.delay(requestIntervalInSeconds * 1000);
-			const res = await this.bundler.getUserOperationReceipt(this.userOperationHash);
-			if (res == null) {
-				count += requestIntervalInSeconds;
-			} else {
-				return res;
+		// poll immediately, then measure the timeout against wall-clock time so
+		// slow RPC calls count toward it rather than stretching it
+		const startTime = Date.now();
+		const timeoutInMs = timeoutInSeconds * 1000;
+		let lastError: Error | undefined;
+		while (true) {
+			try {
+				const res = await this.bundler.getUserOperationReceipt(this.userOperationHash);
+				if (res != null) {
+					return res;
+				}
+			} catch (err) {
+				// a transient RPC failure shouldn't abort the poll — the op may
+				// still land on-chain; surface the last error on timeout instead
+				lastError = err instanceof Error ? err : new Error(String(err));
 			}
+			const elapsed = Date.now() - startTime;
+			if (elapsed >= timeoutInMs) {
+				break;
+			}
+			await this.delay(Math.min(requestIntervalInSeconds * 1000, timeoutInMs - elapsed));
 		}
 		throw new AbstractionKitError("TIMEOUT", "can't find useroperation", {
 			context: this.userOperationHash,
+			cause: lastError,
 		});
 	}
 }
