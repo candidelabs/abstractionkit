@@ -80,4 +80,23 @@ describe("sendJsonRpcRequest error handling", () => {
 			message: expect.stringContaining("502"),
 		});
 	});
+
+	test.each([['"ok"'], ["null"], ["42"]])(
+		"reports a scalar/null JSON payload (%s) as malformed instead of a TypeError",
+		async (body) => {
+			globalThis.fetch = async () => ({
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				text: async () => body,
+				json: async () => JSON.parse(body),
+			});
+			await expect(
+				ak.sendJsonRpcRequest("https://example.test/rpc", "eth_chainId", []),
+			).rejects.toMatchObject({
+				name: "TransportRpcError",
+				message: expect.stringContaining("malformed"),
+			});
+		},
+	);
 });

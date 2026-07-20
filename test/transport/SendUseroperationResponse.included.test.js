@@ -32,6 +32,30 @@ describe("SendUseroperationResponse.included", () => {
 		expect(calls).toBe(2);
 	});
 
+	test.each([-32601, -32602])(
+		"rethrows deterministic protocol error %i immediately instead of polling to timeout",
+		async (errno) => {
+			let calls = 0;
+			const response = responseWith(async () => {
+				calls += 1;
+				throw Object.assign(new Error("deterministic failure"), { errno });
+			});
+			const start = Date.now();
+			await expect(response.included(5, 0.1)).rejects.toMatchObject({ errno });
+			expect(calls).toBe(1);
+			expect(Date.now() - start).toBeLessThan(500);
+		},
+	);
+
+	test.each([NaN, Infinity, -Infinity])(
+		"rejects non-finite timeout/interval %p instead of looping forever",
+		async (bad) => {
+			const response = responseWith(async () => null);
+			await expect(response.included(bad, 1)).rejects.toThrow(RangeError);
+			await expect(response.included(60, bad)).rejects.toThrow(RangeError);
+		},
+	);
+
 	test("times out against wall-clock time and reports the last error", async () => {
 		const response = responseWith(async () => {
 			throw new Error("still failing");
