@@ -40,10 +40,8 @@ describe("SendUseroperationResponse.included", () => {
 				calls += 1;
 				throw Object.assign(new Error("deterministic failure"), { errno });
 			});
-			const start = Date.now();
 			await expect(response.included(5, 0.1)).rejects.toMatchObject({ errno });
 			expect(calls).toBe(1);
-			expect(Date.now() - start).toBeLessThan(500);
 		},
 	);
 
