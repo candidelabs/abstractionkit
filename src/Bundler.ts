@@ -4,6 +4,7 @@ import {
 	type BundlerErrorCode,
 	BundlerErrorCodeDict,
 	ensureError,
+	type JsonRpcErrorCode,
 	parseAaCode,
 } from "./errors";
 import {
@@ -286,7 +287,9 @@ export class Bundler implements Transport {
  *
  * - `AbstractionKitError` passes through unchanged (already domain-translated).
  * - {@link ProviderRpcError} with a known 4337 code → inner code from
- *   {@link BundlerErrorCodeDict}.
+ *   {@link BundlerErrorCodeDict}; -32601 is the standard JSON-RPC
+ *   METHOD_NOT_FOUND (neither ERC-7769 nor bundler implementations assign
+ *   it any 4337-specific meaning — an invalid hash arrives as -32602).
  * - Anything else → inner `UNKNOWN_ERROR`.
  *
  * @internal
@@ -314,8 +317,14 @@ function translateBundlerError(
 	}
 	const code = (err as ProviderRpcError | undefined)?.code;
 	const codeString = code != null ? String(code) : "";
-	const innerCode: BundlerErrorCode | BasicErrorCode =
+	let innerCode: BundlerErrorCode | BasicErrorCode | JsonRpcErrorCode =
 		codeString in BundlerErrorCodeDict ? BundlerErrorCodeDict[codeString] : "UNKNOWN_ERROR";
+	// -32601 keeps its standard JSON-RPC meaning: neither ERC-7769 nor
+	// bundler implementations (Voltaire returns -32602 for an invalid
+	// userOpHash) assign it 4337 semantics.
+	if (codeString === "-32601") {
+		innerCode = "METHOD_NOT_FOUND";
+	}
 	const error = ensureError(err);
 	// The EntryPoint AAxx code lives only inside the message text. Parse it once
 	// here so callers can branch on a stable code instead of matching the message.
