@@ -2184,10 +2184,23 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * calculate a signer public address lowercase
-	 * @param signer - a signer to compute address for
-	 * @param overrides - overrides for the default values
-	 * @returns signer address
+	 * Resolve a {@link Signer} to the lowercase address the Safe contract
+	 * sees as the owner — not merely a case conversion:
+	 *
+	 * - string signer: returned lowercased as-is.
+	 * - WebAuthn public key with `overrides.isInit` set: resolves to the
+	 *   WebAuthn **shared signer** address, since during account init the
+	 *   shared signer is the enabled owner rather than a per-owner verifier.
+	 * - WebAuthn public key otherwise: **derives** the deterministic CREATE2
+	 *   address of the per-owner WebAuthn verifier proxy from the key's x/y
+	 *   coordinates and the verifier/factory configuration.
+	 *
+	 * Used as the sort key in {@link sortSignatures}, so it must always match
+	 * the owner address that signature encoding will emit for the same
+	 * overrides — pass the same overrides bag to both.
+	 * @param signer - a signer to compute the owner address for
+	 * @param overrides - WebAuthn verifier configuration and the init flag
+	 * @returns the owner address, lowercased
 	 */
 	public static getSignerLowerCaseAddress(
 		signer: Signer,
