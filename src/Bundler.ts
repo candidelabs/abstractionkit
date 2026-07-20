@@ -319,11 +319,11 @@ function translateBundlerError(
 	const codeString = code != null ? String(code) : "";
 	let innerCode: BundlerErrorCode | BasicErrorCode | JsonRpcErrorCode =
 		codeString in BundlerErrorCodeDict ? BundlerErrorCodeDict[codeString] : "UNKNOWN_ERROR";
-	// -32601 keeps its standard JSON-RPC meaning: neither ERC-7769 nor
-	// bundler implementations (Voltaire returns -32602 for an invalid
-	// userOpHash) assign it 4337 semantics.
+	// Standard JSON-RPC codes without 4337 semantics keep their standard names.
 	if (codeString === "-32601") {
 		innerCode = "METHOD_NOT_FOUND";
+	} else if (codeString === "-32603") {
+		innerCode = "INTERNAL_ERROR";
 	}
 	const error = ensureError(err);
 	// The EntryPoint AAxx code lives only inside the message text. Parse it once

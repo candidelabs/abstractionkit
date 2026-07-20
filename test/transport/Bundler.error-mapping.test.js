@@ -57,6 +57,33 @@ describe("Bundler error mapping (moved from sendJsonRpcRequest)", () => {
 		}
 	});
 
+	test("-32508 → inner PAYMASTER_DEPOSIT_TOO_LOW (ERC-7769; raised by Voltaire's mempool)", async () => {
+		const t = mockTransportThatThrows(
+			rpcError(-32508, "paymaster deposit too low for all mempool UserOperations"),
+		);
+		const b = new ak.Bundler(t);
+		try {
+			await b.chainId();
+			throw new Error("expected throw");
+		} catch (err) {
+			expect(err.code).toBe("BUNDLER_ERROR");
+			expect(err.cause.code).toBe("PAYMASTER_DEPOSIT_TOO_LOW");
+			expect(err.cause.errno).toBe(-32508);
+		}
+	});
+
+	test("-32603 → inner INTERNAL_ERROR (standard JSON-RPC meaning; bundler internal failure)", async () => {
+		const t = mockTransportThatThrows(rpcError(-32603, "unexpected internal error"));
+		const b = new ak.Bundler(t);
+		try {
+			await b.chainId();
+			throw new Error("expected throw");
+		} catch (err) {
+			expect(err.code).toBe("BUNDLER_ERROR");
+			expect(err.cause.code).toBe("INTERNAL_ERROR");
+		}
+	});
+
 	test("-32602 → inner INVALID_FIELDS (how an invalid userOpHash actually surfaces)", async () => {
 		const t = mockTransportThatThrows(rpcError(-32602, "Missing/invalid userOpHash"));
 		const b = new ak.Bundler(t);
