@@ -34,6 +34,9 @@ export type BundlerErrorCode =
 	| "INSUFFICIENT_STAKE"
 	| "UNSUPPORTED_SIGNATURE_AGGREGATOR"
 	| "INVALID_SIGNATURE"
+	/** @deprecated no longer produced: -32601 was mismapped to this code; an
+	 * invalid hash surfaces as INVALID_FIELDS (-32602) per the bundler spec
+	 * tests and Voltaire, while -32601 is the standard METHOD_NOT_FOUND. */
 	| "INVALID_USEROPERATION_HASH"
 	| "EXECUTION_REVERTED";
 
@@ -65,7 +68,6 @@ export const BundlerErrorCodeDict: Dictionary<BundlerErrorCode> = {
 	"-32505": "INSUFFICIENT_STAKE",
 	"-32506": "UNSUPPORTED_SIGNATURE_AGGREGATOR",
 	"-32507": "INVALID_SIGNATURE",
-	"-32601": "INVALID_USEROPERATION_HASH",
 	"-32521": "EXECUTION_REVERTED",
 };
 

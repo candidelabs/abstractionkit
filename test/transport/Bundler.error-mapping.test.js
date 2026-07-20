@@ -40,15 +40,32 @@ describe("Bundler error mapping (moved from sendJsonRpcRequest)", () => {
 		}
 	});
 
-	test("-32601 → outer BUNDLER_ERROR, inner INVALID_USEROPERATION_HASH (Bundler-specific override of the standard JSON-RPC meaning)", async () => {
-		const t = mockTransportThatThrows(rpcError(-32601, "not found"));
+	test("-32601 → inner METHOD_NOT_FOUND (standard JSON-RPC meaning; an invalid userOpHash arrives as -32602 per bundler behavior, e.g. Voltaire)", async () => {
+		const t = mockTransportThatThrows(rpcError(-32601, "method not found"));
+		for (const call of [
+			(b) => b.getUserOperationReceipt("0xabc"),
+			(b) => b.chainId(),
+		]) {
+			const b = new ak.Bundler(t);
+			try {
+				await call(b);
+				throw new Error("expected throw");
+			} catch (err) {
+				expect(err.code).toBe("BUNDLER_ERROR");
+				expect(err.cause.code).toBe("METHOD_NOT_FOUND");
+			}
+		}
+	});
+
+	test("-32602 → inner INVALID_FIELDS (how an invalid userOpHash actually surfaces)", async () => {
+		const t = mockTransportThatThrows(rpcError(-32602, "Missing/invalid userOpHash"));
 		const b = new ak.Bundler(t);
 		try {
-			await b.getUserOperationReceipt("0xabc");
+			await b.getUserOperationReceipt("0xnothex");
 			throw new Error("expected throw");
 		} catch (err) {
 			expect(err.code).toBe("BUNDLER_ERROR");
-			expect(err.cause.code).toBe("INVALID_USEROPERATION_HASH");
+			expect(err.cause.code).toBe("INVALID_FIELDS");
 		}
 	});
 
