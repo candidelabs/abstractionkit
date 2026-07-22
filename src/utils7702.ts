@@ -440,6 +440,11 @@ function bigintToBytes(bi: bigint) {
 	return getBytes(toBeArray(bi));
 }
 
+const SECP256K1_N = BigInt(
+	"0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
+);
+const SECP256K1_HALF_N = SECP256K1_N / 2n;
+
 /**
  * Parse a raw ECDSA signature into its components.
  * Supports standard 65-byte (r + s + v) and EIP-2098 64-byte compact formats.
@@ -480,11 +485,6 @@ function parseRawSignature(rawSig: string): { yParity: 0 | 1; r: bigint; s: bigi
 	}
 	return { yParity, r, s };
 }
-
-const SECP256K1_N = BigInt(
-	"0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
-);
-const SECP256K1_HALF_N = SECP256K1_N / 2n;
 
 /**
  * Converts a bigint to a 0x-prefixed hex string with even-length padding.
