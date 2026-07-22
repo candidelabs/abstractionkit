@@ -1,5 +1,6 @@
 // Offline tests for SendUseroperationResponse.included() polling:
-// immediate first poll, wall-clock timeout, and transient-error tolerance.
+// interval-delayed first poll (by design), wall-clock timeout, and
+// transient-error tolerance.
 
 const ak = require("../../dist/index.cjs");
 
@@ -14,11 +15,13 @@ function responseWith(getReceipt) {
 }
 
 describe("SendUseroperationResponse.included", () => {
-	test("returns an already-available receipt without waiting an interval", async () => {
+	test("waits one interval before the first poll by design", async () => {
 		const response = responseWith(async () => RECEIPT);
 		const start = Date.now();
-		expect(await response.included(5, 2)).toBe(RECEIPT);
-		expect(Date.now() - start).toBeLessThan(500);
+		expect(await response.included(5, 0.5)).toBe(RECEIPT);
+		const elapsed = Date.now() - start;
+		expect(elapsed).toBeGreaterThanOrEqual(450);
+		expect(elapsed).toBeLessThan(2000);
 	});
 
 	test("keeps polling through a transient RPC error", async () => {

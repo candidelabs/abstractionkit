@@ -36,6 +36,11 @@ export class SendUseroperationResponse {
 	/**
 	 * Poll the bundler for the UserOperation receipt until it is included on-chain or times out.
 	 *
+	 * By design the first receipt request is delayed by one polling interval:
+	 * a UserOperation is essentially never included in the same instant it is
+	 * submitted, so an immediate poll would be a wasted RPC call. Pass a
+	 * smaller `requestIntervalInSeconds` to poll sooner.
+	 *
 	 * @param timeoutInSeconds - Maximum time to wait for inclusion (default: 180s)
 	 * @param requestIntervalInSeconds - Time between polling requests (default: 2s)
 	 * @returns The UserOperation receipt once included
@@ -59,12 +64,18 @@ export class SendUseroperationResponse {
 		if (timeoutInSeconds < requestIntervalInSeconds) {
 			throw new RangeError("timeoutInSeconds can't be less than requestIntervalInSeconds");
 		}
-		// poll immediately, then measure the timeout against wall-clock time so
-		// slow RPC calls count toward it rather than stretching it
+		// measure the timeout against wall-clock time so slow RPC calls count
+		// toward it rather than stretching it
 		const startTime = Date.now();
 		const timeoutInMs = timeoutInSeconds * 1000;
 		let lastError: Error | undefined;
 		while (true) {
+			const elapsed = Date.now() - startTime;
+			if (elapsed >= timeoutInMs) {
+				break;
+			}
+			// the first request intentionally waits one interval — see the JSDoc
+			await this.delay(Math.min(requestIntervalInSeconds * 1000, timeoutInMs - elapsed));
 			try {
 				const res = await this.bundler.getUserOperationReceipt(this.userOperationHash);
 				if (res != null) {
@@ -81,11 +92,6 @@ export class SendUseroperationResponse {
 				// still land on-chain; surface the last error on timeout instead
 				lastError = err instanceof Error ? err : new Error(String(err));
 			}
-			const elapsed = Date.now() - startTime;
-			if (elapsed >= timeoutInMs) {
-				break;
-			}
-			await this.delay(Math.min(requestIntervalInSeconds * 1000, timeoutInMs - elapsed));
 		}
 		throw new AbstractionKitError("TIMEOUT", "can't find useroperation", {
 			context: this.userOperationHash,
