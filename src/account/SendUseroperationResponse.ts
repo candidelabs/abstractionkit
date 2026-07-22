@@ -46,9 +46,14 @@ export class SendUseroperationResponse {
 		timeoutInSeconds: number = 180,
 		requestIntervalInSeconds: number = 2,
 	): Promise<UserOperationReceiptResult> {
-		if (timeoutInSeconds <= 0 || requestIntervalInSeconds <= 0) {
+		if (
+			!Number.isFinite(timeoutInSeconds) ||
+			!Number.isFinite(requestIntervalInSeconds) ||
+			timeoutInSeconds <= 0 ||
+			requestIntervalInSeconds <= 0
+		) {
 			throw new RangeError(
-				"timeoutInSeconds and requestIntervalInSeconds should be bigger than zero",
+				"timeoutInSeconds and requestIntervalInSeconds should be finite numbers bigger than zero",
 			);
 		}
 		if (timeoutInSeconds < requestIntervalInSeconds) {
@@ -66,6 +71,12 @@ export class SendUseroperationResponse {
 					return res;
 				}
 			} catch (err) {
+				// deterministic protocol errors (method not found, invalid
+				// params/hash) won't resolve by retrying — rethrow immediately
+				const errno = (err as AbstractionKitError | undefined)?.errno;
+				if (errno === -32601 || errno === -32602) {
+					throw err;
+				}
 				// a transient RPC failure shouldn't abort the poll — the op may
 				// still land on-chain; surface the last error on timeout instead
 				lastError = err instanceof Error ? err : new Error(String(err));
