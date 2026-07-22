@@ -448,8 +448,29 @@ const SECP256K1_HALF_N = SECP256K1_N / 2n;
 /**
  * Parse a raw ECDSA signature into its components.
  * Supports standard 65-byte (r + s + v) and EIP-2098 64-byte compact formats.
+ *
+ * High-s signatures are normalized to the complementary low-s form
+ * (s' = n - s, flipped yParity) rather than rejected. A high-s value is not
+ * a signer defect: plain ECDSA produces s uniformly across the range, so
+ * generic signers (AWS KMS, HSMs, WebCrypto) return high-s for ~half of all
+ * signatures — the low-s rule is an Ethereum canonicalization convention
+ * (EIP-2), not part of ECDSA. Per the EIP-2 rationale, the complementary
+ * signature is equally valid for the same signer and payload, so the
+ * conversion changes the encoding, not the authorization. Rejecting instead
+ * would fail nondeterministically on ~half of all signatures from such
+ * signers, and EIP-7702 makes the unnormalized failure mode silent: nodes
+ * validate s <= secp256k1n/2 per tuple and skip invalid tuples without
+ * error, so a high-s authorization would "succeed" without ever applying
+ * the delegation.
+ *
+ * @see https://eips.ethereum.org/EIPS/eip-2 - s-value bound and the
+ * malleability rationale (flipping s to secp256k1n - s with the v flip
+ * "would still be valid")
+ * @see https://eips.ethereum.org/EIPS/eip-7702 - Behavior steps: "Verify s
+ * is less than or equal to secp256k1n/2" and "If any step above fails,
+ * immediately stop processing the tuple and continue to the next tuple"
  * @param rawSig - Hex string: 128 chars (EIP-2098 compact), or 130/132 chars (standard with 0x prefix)
- * @returns An object with yParity (0 or 1), r, and s components
+ * @returns An object with yParity (0 or 1), r, and s components (low-s normalized)
  */
 function parseRawSignature(rawSig: string): { yParity: 0 | 1; r: bigint; s: bigint } {
 	const sig = rawSig.startsWith("0x") ? rawSig.slice(2) : rawSig;
