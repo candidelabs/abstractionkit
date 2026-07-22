@@ -551,6 +551,15 @@ export async function sendJsonRpcRequest(
 			responseText.slice(0, 1000),
 		);
 	}
+	if (typeof response !== "object" || response === null) {
+		// scalar or null payload — the `in` checks below would throw a
+		// TypeError; report it as a malformed response with the HTTP status
+		throw new TransportRpcError(
+			-32603,
+			`HTTP ${fetchResult.status} ${fetchResult.statusText}: malformed JSON-RPC response`.trim(),
+			response,
+		);
+	}
 	if ("result" in response) {
 		return response.result as JsonRpcResult;
 	}
