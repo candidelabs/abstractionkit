@@ -396,10 +396,10 @@ export class AllowanceModule extends SafeModule {
 		let start = overrides.start ?? 0n;
 		if (overrides.maxNumberOfResults != null) {
 			// the module's page-size parameter is a uint8
-			if (overrides.maxNumberOfResults > 255n) {
+			if (overrides.maxNumberOfResults < 0n || overrides.maxNumberOfResults > 255n) {
 				throw new RangeError(
-					"maxNumberOfResults can't exceed 255 (the module's page size is a " +
-						"uint8) — omit it to fetch all delegates via pagination.",
+					"maxNumberOfResults must be between 0 and 255 (the module's page " +
+						"size is a uint8) — omit it to fetch all delegates via pagination.",
 				);
 			}
 			return (

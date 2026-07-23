@@ -65,4 +65,13 @@ describe('AllowanceModule setAllowance encoding', () => {
             module.createRecurringAllowanceMetaTransaction(DELEGATE, TOKEN, 100n, 1440n, bad),
         ).toThrow(RangeError);
     });
+
+    test.each([
+        ['negative', -1n],
+        ['above 255', 256n],
+    ])('getDelegates rejects a maxNumberOfResults outside the uint8 range (%s)', async (_label, bad) => {
+        await expect(
+            module.getDelegates('http://localhost:1', DELEGATE, { maxNumberOfResults: bad }),
+        ).rejects.toThrow(RangeError);
+    });
 });
