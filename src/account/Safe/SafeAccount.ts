@@ -1397,6 +1397,26 @@ export class SafeAccount extends SmartAccount {
 		const validAfter = 0xffffffffffffn;
 		const validUntil = 0xffffffffffffn;
 
+		// Derived from the operation's own init fields; the signature encoder
+		// needs the init flag and verifier config whenever a dummy pair
+		// carries a raw WebauthnPublicKey signer.
+		let initCode: string | null;
+		if ("initCode" in userOperation) {
+			initCode = userOperation.initCode;
+		} else {
+			initCode = userOperation.factory;
+		}
+		const isInit = initCode != null && initCode !== "0x";
+		const webAuthnSignatureOverrides = {
+			isInit,
+			webAuthnSharedSigner: overrides.webAuthnSharedSigner,
+			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
+			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
+			webAuthnSignerFactory: overrides.webAuthnSignerFactory,
+			webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
+			webAuthnSignerProxyCreationCode: overrides.webAuthnSignerProxyCreationCode,
+		};
+
 		// Number of dummy signatures this method placed on the estimated
 		// operation. Zero when the caller supplied a ready-made signature,
 		// in which case the signer count is unknown here and per-signer gas
@@ -1419,28 +1439,15 @@ export class SafeAccount extends SmartAccount {
 					validAfter,
 					validUntil,
 					isMultiChainSignature: overrides.isMultiChainSignature,
+					...webAuthnSignatureOverrides,
 				},
 			);
 		} else if (overrides.expectedSigners != null) {
-			let initCode: string | null;
-
-			if ("initCode" in userOperation) {
-				initCode = userOperation.initCode;
-			} else {
-				initCode = userOperation.factory;
-			}
-			const isInit = initCode != null && initCode !== "0x";
-
 			const dummySignerSignaturePairs =
-				SafeAccount.createDummySignerSignaturePairForExpectedSigners(overrides.expectedSigners, {
-					isInit,
-					webAuthnSharedSigner: overrides.webAuthnSharedSigner,
-					eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-					eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-					webAuthnSignerProxyCreationCode: overrides.webAuthnSignerProxyCreationCode,
-				});
+				SafeAccount.createDummySignerSignaturePairForExpectedSigners(
+					overrides.expectedSigners,
+					webAuthnSignatureOverrides,
+				);
 			dummySignersCount = dummySignerSignaturePairs.length;
 			estimationSignature = SafeAccount.formatSignaturesToUseroperationSignature(
 				dummySignerSignaturePairs,
@@ -1448,6 +1455,7 @@ export class SafeAccount extends SmartAccount {
 					validAfter,
 					validUntil,
 					isMultiChainSignature: overrides.isMultiChainSignature,
+					...webAuthnSignatureOverrides,
 				},
 			);
 		} else if (userOperation.signature.length < 3) {
@@ -1742,10 +1750,17 @@ export class SafeAccount extends SmartAccount {
 				validAfter,
 				validUntil,
 				isMultiChainSignature: overrides.isMultiChainSignature,
-				webAuthnSharedSigner,
 				// needed when user-supplied dummySignerSignaturePairs contain raw
-				// WebauthnPublicKey signers — the encoder requires the init flag
+				// WebauthnPublicKey signers — the encoder requires the init flag,
+				// and for deployed accounts derives the per-owner verifier
+				// address from the verifier config
 				isInit,
+				webAuthnSharedSigner,
+				eip7212WebAuthnPrecompileVerifier,
+				eip7212WebAuthnContractVerifier,
+				webAuthnSignerFactory,
+				webAuthnSignerSingleton,
+				webAuthnSignerProxyCreationCode,
 			},
 		);
 
