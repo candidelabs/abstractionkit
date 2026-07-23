@@ -29,24 +29,40 @@ describe('AllowanceModule setAllowance encoding', () => {
         expect(resetBaseMin).toBe(0n);
     });
 
-    test('recurring allowance encodes the validity period and past baseline', () => {
-        const baseline = BigInt(Math.floor(Date.now() / 60_000)) - 60n;
+    test('recurring allowance converts the seconds timestamp to epoch-minutes', () => {
+        const baselineSeconds = BigInt(Math.floor(Date.now() / 1000)) - 3600n;
         const tx = module.createRecurringAllowanceMetaTransaction(
             DELEGATE,
             TOKEN,
             100n,
             1440n,
-            baseline,
+            baselineSeconds,
         );
         const { resetTimeMin, resetBaseMin } = decodeSetAllowance(tx.data);
         expect(resetTimeMin).toBe(1440n);
-        expect(resetBaseMin).toBe(baseline);
+        expect(resetBaseMin).toBe(baselineSeconds / 60n);
     });
 
-    test('recurring allowance rejects a future baseline (reverts on-chain)', () => {
-        const future = BigInt(Math.floor(Date.now() / 60_000)) + 60n;
+    test('sub-minute precision is floored', () => {
+        const tx = module.createRecurringAllowanceMetaTransaction(DELEGATE, TOKEN, 100n, 1440n, 119n);
+        const { resetBaseMin } = decodeSetAllowance(tx.data);
+        expect(resetBaseMin).toBe(1n);
+    });
+
+    test('recurring allowance accepts a near-future baseline (contract enforces the past bound at execution)', () => {
+        const futureSeconds = BigInt(Math.floor(Date.now() / 1000)) + 3600n;
+        const tx = module.createRecurringAllowanceMetaTransaction(DELEGATE, TOKEN, 100n, 1440n, futureSeconds);
+        const { resetBaseMin } = decodeSetAllowance(tx.data);
+        expect(resetBaseMin).toBe(futureSeconds / 60n);
+    });
+
+    test.each([
+        ['negative', -1n],
+        ['uint32 overflow after conversion', 2n ** 32n * 60n],
+        ['millisecond timestamp', 1_770_000_000_000n],
+    ])('recurring allowance rejects a timestamp whose minutes cannot be a uint32 (%s)', (_label, bad) => {
         expect(() =>
-            module.createRecurringAllowanceMetaTransaction(DELEGATE, TOKEN, 100n, 1440n, future),
+            module.createRecurringAllowanceMetaTransaction(DELEGATE, TOKEN, 100n, 1440n, bad),
         ).toThrow(RangeError);
     });
 });

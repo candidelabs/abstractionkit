@@ -45,8 +45,8 @@ export class AllowanceModule extends SafeModule {
 	 * active as soon as the Safe executes the transaction.
 	 *
 	 * Note: the deployed AllowanceModule cannot delay activation of a one-time
-	 * allowance — `setAllowance` with `resetTimeMin == 0` reverts for any nonzero
-	 * `resetBaseMin` (division by zero in the period alignment).
+	 * allowance — `setAllowance` explicitly requires `resetTimeMin > 0` whenever
+	 * `resetBaseMin` is nonzero and reverts otherwise.
 	 * @param delegate - Address of the delegate to grant the allowance to.
 	 * @param token - ERC-20 token contract address (use zero address for native token).
 	 * @param allowanceAmount - Maximum amount the delegate can spend, in the token's smallest unit.
@@ -68,10 +68,16 @@ export class AllowanceModule extends SafeModule {
 	 * @param token - ERC-20 token contract address (use zero address for native token).
 	 * @param allowanceAmount - Maximum amount per period, in the token's smallest unit.
 	 * @param recurringAllowanceValidityPeriodInMinutes - Duration of each allowance period in minutes.
-	 * @param periodStartBaseInMinutes - Optional absolute baseline that period
-	 * boundaries are aligned to, in minutes since the unix epoch (not a relative
-	 * delay — the module has no delayed-activation concept and requires this
-	 * baseline to be in the past). Defaults to 0n, aligning periods to the epoch.
+	 * @param inThePastPeriodStartBaseTimeStamp - Optional unix
+	 * timestamp **in seconds** that must be in the past (less than the block timestamp).
+	 * It represents the start of the recurring allowance period accounting — it does
+	 * **not** delay activation: the allowance is active and spendable immediately once
+	 * the Safe executes the transaction; this value only sets when each period resets.
+	 * So if you want to start accounting from a Saturday 10am for example, calculate the
+	 * timestamp of any previous Saturday 10am and use it as the value for this param.
+	 * Defaults to 0n, which starts the period accounting at the moment the Safe
+	 * executes the transaction for a new allowance; when updating an existing
+	 * allowance, 0n keeps its current accounting anchor unchanged.
 	 * @returns A MetaTransaction to be executed by the Safe.
 	 */
 	public createRecurringAllowanceMetaTransaction(
@@ -79,15 +85,16 @@ export class AllowanceModule extends SafeModule {
 		token: string,
 		allowanceAmount: bigint,
 		recurringAllowanceValidityPeriodInMinutes: bigint,
-		periodStartBaseInMinutes: bigint = 0n,
+		inThePastPeriodStartBaseTimeStamp: bigint = 0n,
 	): MetaTransaction {
-		const nowInMinutes = BigInt(Math.floor(Date.now() / 60_000));
-		if (periodStartBaseInMinutes > nowInMinutes) {
+		const baseInMinutes = inThePastPeriodStartBaseTimeStamp / 60n;
+		// resetBaseMin is a uint32 of minutes since the epoch; a millisecond
+		// timestamp (Date.now()) still overflows this bound after conversion
+		if (inThePastPeriodStartBaseTimeStamp < 0n || baseInMinutes >= 2n ** 32n) {
 			throw new RangeError(
-				"periodStartBaseInMinutes is an absolute baseline in minutes since " +
-					"the unix epoch and must be in the past — the AllowanceModule " +
-					"contract reverts on a future baseline and has no " +
-					"delayed-activation concept.",
+				"inThePastPeriodStartBaseTimeStamp must be a unix timestamp in " +
+					"seconds — its minutes equivalent must fit the contract's " +
+					"uint32 resetBaseMin; a millisecond timestamp does not.",
 			);
 		}
 		return this.createBaseSetAllowanceMetaTransaction(
@@ -95,7 +102,7 @@ export class AllowanceModule extends SafeModule {
 			token,
 			allowanceAmount,
 			recurringAllowanceValidityPeriodInMinutes,
-			periodStartBaseInMinutes,
+			baseInMinutes,
 		);
 	}
 
