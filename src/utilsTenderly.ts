@@ -18,6 +18,12 @@ import type {Authorization7702Hex} from "./utils7702";
 export type OverrideType = Record<string, Record<string, string | Record<string, string>>>;
 
 /**
+ * The 20-byte right-padded EIP-7702 marker EntryPoint v0.8+ expects at the
+ * head of `initCode` (any trailing bytes are the sender initialization call).
+ */
+const EIP7702_INITCODE_MARKER = "0x7702000000000000000000000000000000000000";
+
+/**
  * EIP-7702 userOps mark the factory field with a sentinel instead of a real
  * factory: either the short form "0x7702" or the 20-byte right-padded form
  * accepted by EntryPoint v0.8 (initCode starting with bytes 0x7702).
@@ -27,10 +33,23 @@ function isEip7702FactorySentinel(factory: string | null | undefined): boolean {
 		return false;
 	}
 	const factoryLowerCase = factory.toLowerCase();
-	return (
-		factoryLowerCase === "0x7702" ||
-		factoryLowerCase === "0x7702000000000000000000000000000000000000"
-	);
+	return factoryLowerCase === "0x7702" || factoryLowerCase === EIP7702_INITCODE_MARKER;
+}
+
+/**
+ * Rebuild the packed `initCode` from split factory/factoryData fields,
+ * normalizing the short "0x7702" sentinel to the 20-byte right-padded marker
+ * so non-empty factoryData lands after a well-formed head.
+ */
+function buildWireInitCode(factory: string | null, factoryData: string | null): string {
+	if (factory == null) {
+		return "0x";
+	}
+	let initCode = isEip7702FactorySentinel(factory) ? EIP7702_INITCODE_MARKER : factory;
+	if (factoryData != null) {
+		initCode += factoryData.slice(2);
+	}
+	return initCode;
 }
 
 /**
@@ -192,13 +211,7 @@ export async function simulateUserOperationWithTenderly(
 		callData = `0x1fad948c${encodedUserOperation.slice(2)}`;
 	} else {
 		userOperation = userOperation as UserOperationV7 | UserOperationV8 | UserOperationV9;
-		let initCode = "0x";
-		if (userOperation.factory != null) {
-			initCode = userOperation.factory;
-			if (userOperation.factoryData != null) {
-				initCode += userOperation.factoryData.slice(2);
-			}
-		}
+		const initCode = buildWireInitCode(userOperation.factory, userOperation.factoryData);
 
 		const accountGasLimits =
 			"0x" +
@@ -504,12 +517,29 @@ export async function simulateUserOperationCallDataWithTenderly(
 		factory = userOperation.factory;
 		factoryData = userOperation.factoryData;
 
-		// EIP-7702 userOps use factory:"0x7702" as a sentinel with
-		// factoryData:null. This doesn't represent an actual factory
-		// deployment, so normalize to null.
+		// EIP-7702 userOps use a "0x7702" factory sentinel instead of a real
+		// factory. Mirror the full handleOps simulation: install the sender's
+		// delegation code (0xef0100 ‖ delegatee) as a state override, and treat
+		// non-empty factoryData as the sender initialization call — made by the
+		// SenderCreator to the sender itself, not to a factory.
 		if (isEip7702FactorySentinel(factory)) {
-			factory = null;
-			factoryData = null;
+			const eip7702Auth = (userOperation as UserOperationV8ToSimulate | UserOperationV9ToSimulate)
+				.eip7702Auth;
+			if (eip7702Auth != null && eip7702Auth.address != null) {
+				const delegationCode = `0xef0100${eip7702Auth.address.toLowerCase().replace("0x", "")}`;
+				const senderLower = userOperation.sender.toLowerCase();
+				stateOverrides = stateOverrides ? { ...stateOverrides } : {};
+				stateOverrides[senderLower] = {
+					...(stateOverrides[senderLower] || {}),
+					code: delegationCode,
+				};
+			}
+			if (factoryData != null && factoryData !== "0x") {
+				factory = userOperation.sender;
+			} else {
+				factory = null;
+				factoryData = null;
+			}
 		}
 
 		// IAccountExecute.executeUserOp rewrite: when callData starts with the
@@ -518,13 +548,7 @@ export async function simulateUserOperationCallDataWithTenderly(
 		// sender.call(callData). Replicate here.
 		const EXECUTE_USEROP_SELECTOR = "0x8dd7712f";
 		if (callData.toLowerCase().startsWith(EXECUTE_USEROP_SELECTOR)) {
-			let initCode = "0x";
-			if (userOperation.factory != null) {
-				initCode = userOperation.factory;
-				if (userOperation.factoryData != null) {
-					initCode += userOperation.factoryData.slice(2);
-				}
-			}
+			const initCode = buildWireInitCode(userOperation.factory, userOperation.factoryData);
 
 			const accountGasLimits =
 				"0x" +
