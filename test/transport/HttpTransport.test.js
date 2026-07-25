@@ -95,6 +95,31 @@ describe("HttpTransport", () => {
 		});
 	});
 
+	test("treats a non-object error payload as a malformed response", async () => {
+		const fetch = makeMockFetch(() =>
+			jsonResponse({ jsonrpc: "2.0", id: 1, error: "rate limited" }),
+		);
+		const t = new ak.HttpTransport("https://example.test/rpc", { fetch });
+
+		await expect(t.request({ method: "eth_chainId" })).rejects.toMatchObject({
+			name: "TransportRpcError",
+			code: -32603,
+			data: { error: "rate limited" },
+		});
+	});
+
+	test("preserves the message of an error object without a code", async () => {
+		const fetch = makeMockFetch(() =>
+			jsonResponse({ jsonrpc: "2.0", id: 1, error: { message: "rate limited" } }),
+		);
+		const t = new ak.HttpTransport("https://example.test/rpc", { fetch });
+
+		await expect(t.request({ method: "eth_chainId" })).rejects.toMatchObject({
+			name: "TransportRpcError",
+			message: "rate limited",
+		});
+	});
+
 	test("merges user-supplied headers and pins Content-Type", async () => {
 		const fetch = makeMockFetch(() => jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x" }));
 		const t = new ak.HttpTransport("https://example.test/rpc", {

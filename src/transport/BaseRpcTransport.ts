@@ -101,8 +101,13 @@ export abstract class BaseRpcTransport implements Transport {
 		// null check, not key presence — some servers include "error": null
 		// on successful responses
 		if (response.error != null) {
-			const { code, message, data } = response.error;
-			throw new TransportRpcError(code, message, data);
+			// non-object error payloads (e.g. a bare string) fall through to the
+			// malformed-response error below, which carries the raw response
+			if (typeof response.error === "object") {
+				const { code, message, data } = response.error;
+				throw new TransportRpcError(code, message, data);
+			}
+			throw new TransportRpcError(-32603, "malformed JSON-RPC response", raw);
 		}
 		if ("result" in response) {
 			return response.result as T;
