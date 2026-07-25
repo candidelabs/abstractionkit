@@ -107,8 +107,10 @@ export function createAndSignLegacyRawTransaction(
 		bigintToBytes(value),
 		data,
 		bigintToBytes(BigInt(signature.yParity) + chainId * 2n + 35n),
-		getBytes(signature.r),
-		getBytes(signature.s),
+		// r and s must be minimal big-endian integers — nodes reject RLP
+		// scalars with leading zero bytes as non-canonical
+		bigintToBytes(BigInt(signature.r)),
+		bigintToBytes(BigInt(signature.s)),
 	];
 	const transactionPayload = encodeRlp(payload);
 	return transactionPayload;
@@ -438,11 +440,37 @@ function bigintToBytes(bi: bigint) {
 	return getBytes(toBeArray(bi));
 }
 
+const SECP256K1_N = BigInt(
+	"0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
+);
+const SECP256K1_HALF_N = SECP256K1_N / 2n;
+
 /**
  * Parse a raw ECDSA signature into its components.
  * Supports standard 65-byte (r + s + v) and EIP-2098 64-byte compact formats.
+ *
+ * High-s signatures are normalized to the complementary low-s form
+ * (s' = n - s, flipped yParity) rather than rejected. A high-s value is not
+ * a signer defect: plain ECDSA produces s uniformly across the range, so
+ * generic signers (AWS KMS, HSMs, WebCrypto) return high-s for ~half of all
+ * signatures — the low-s rule is an Ethereum canonicalization convention
+ * (EIP-2), not part of ECDSA. Per the EIP-2 rationale, the complementary
+ * signature is equally valid for the same signer and payload, so the
+ * conversion changes the encoding, not the authorization. Rejecting instead
+ * would fail nondeterministically on ~half of all signatures from such
+ * signers, and EIP-7702 makes the unnormalized failure mode silent: nodes
+ * validate s <= secp256k1n/2 per tuple and skip invalid tuples without
+ * error, so a high-s authorization would "succeed" without ever applying
+ * the delegation.
+ *
+ * @see https://eips.ethereum.org/EIPS/eip-2 - s-value bound and the
+ * malleability rationale (flipping s to secp256k1n - s with the v flip
+ * "would still be valid")
+ * @see https://eips.ethereum.org/EIPS/eip-7702 - Behavior steps: "Verify s
+ * is less than or equal to secp256k1n/2" and "If any step above fails,
+ * immediately stop processing the tuple and continue to the next tuple"
  * @param rawSig - Hex string: 128 chars (EIP-2098 compact), or 130/132 chars (standard with 0x prefix)
- * @returns An object with yParity (0 or 1), r, and s components
+ * @returns An object with yParity (0 or 1), r, and s components (low-s normalized)
  */
 function parseRawSignature(rawSig: string): { yParity: 0 | 1; r: bigint; s: bigint } {
 	const sig = rawSig.startsWith("0x") ? rawSig.slice(2) : rawSig;
@@ -452,22 +480,30 @@ function parseRawSignature(rawSig: string): { yParity: 0 | 1; r: bigint; s: bigi
 		);
 	}
 	const r = BigInt(`0x${sig.slice(0, 64)}`);
+	let yParity: 0 | 1;
+	let s: bigint;
 
 	if (sig.length === 128) {
 		// EIP-2098 compact signature (64 bytes): r (32) + yParity||s (32)
 		const yParityAndS = BigInt(`0x${sig.slice(64, 128)}`);
-		const yParity = Number((yParityAndS >> 255n) & 1n) as 0 | 1;
-		const s = yParityAndS & ((1n << 255n) - 1n);
-		return { yParity, r, s };
+		yParity = Number((yParityAndS >> 255n) & 1n) as 0 | 1;
+		s = yParityAndS & ((1n << 255n) - 1n);
+	} else {
+		// Standard 65-byte signature: r (32) + s (32) + v (1)
+		s = BigInt(`0x${sig.slice(64, 128)}`);
+		const v = parseInt(sig.slice(128, 130), 16);
+		if (v !== 0 && v !== 1 && v !== 27 && v !== 28) {
+			throw new RangeError(`invalid signature v value: ${v}`);
+		}
+		yParity = (v >= 27 ? v - 27 : v) as 0 | 1;
 	}
 
-	// Standard 65-byte signature: r (32) + s (32) + v (1)
-	const s = BigInt(`0x${sig.slice(64, 128)}`);
-	const v = parseInt(sig.slice(128, 130), 16);
-	if (v !== 0 && v !== 1 && v !== 27 && v !== 28) {
-		throw new RangeError(`invalid signature v value: ${v}`);
+	// EIP-7702 requires s <= n/2; nodes silently skip high-s authorization
+	// tuples. Normalize to the complementary low-s signature.
+	if (s > SECP256K1_HALF_N) {
+		s = SECP256K1_N - s;
+		yParity = (1 - yParity) as 0 | 1;
 	}
-	const yParity = (v >= 27 ? v - 27 : v) as 0 | 1;
 	return { yParity, r, s };
 }
 
