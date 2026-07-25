@@ -576,14 +576,17 @@ export function getFunctionSelector(functionSignature: string): string {
  * @param rpc - Ethereum JSON-RPC node URL, {@link Transport}, or {@link JsonRpcNode}
  * @param entryPoint - EntryPoint contract address
  * @param account - Smart account address to query
- * @param key - Nonce key (default 0). Different keys allow parallel nonce channels.
+ * @param key - Nonce key (default 0). Different keys allow parallel nonce
+ *   channels. Prefer a `bigint` — keys can be as large as `uint192`, beyond
+ *   what a JS `number` can represent; `number` is kept for backward
+ *   compatibility.
  * @returns The current nonce as a bigint
  */
 export async function fetchAccountNonce(
 	rpc: string | Transport | JsonRpcNode,
 	entryPoint: string,
 	account: string,
-	key: number = 0,
+	key: number | bigint = 0,
 ): Promise<bigint> {
 	return JsonRpcNode.from(rpc).getEntryPointNonce(entryPoint, account, BigInt(key));
 }

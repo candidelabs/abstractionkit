@@ -1,4 +1,4 @@
-import {decodeAbiParameters, hexlify, signHash} from "src/ethereUtils";
+import {decodeAbiParameters, hexlify, privateKeyToAddress, signHash} from "src/ethereUtils";
 import {Bundler} from "src/Bundler";
 import {BaseUserOperationDummyValues, ENTRYPOINT_V8, ENTRYPOINT_V9} from "src/constants";
 import {AbstractionKitError} from "src/errors";
@@ -208,6 +208,17 @@ export class BaseSimple7702Account extends SmartAccount {
 			chainId?: bigint;
 		} = {},
 	): Promise<string> {
+		// Verify the private key matches this account — otherwise the raw
+		// transaction's sender (recovered from the signature) would be a
+		// different EOA and the revoke would target the signer's delegation
+		const signerAddress = privateKeyToAddress(eoaPrivateKey);
+		if (signerAddress.toLowerCase() !== this.accountAddress.toLowerCase()) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`eoaPrivateKey does not match accountAddress (${this.accountAddress})`,
+			);
+		}
+
 		// Verify delegation state before revoking
 		const delegatedTo = await JsonRpcNode.from(providerRpc).getDelegatedAddress(this.accountAddress);
 		if (delegatedTo === null) {

@@ -536,7 +536,7 @@ export class SocialRecoveryModule extends SafeModule {
 		};
 		const getGuardiansResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
-		this.checkForEmptyResultAndRevert(getGuardiansResult, "threshold");
+		this.checkForEmptyResultAndRevert(getGuardiansResult, "getGuardians");
 		const decodedCalldata = decodeAbiParameters<[string[]]>(["address[]"], getGuardiansResult);
 
 		return decodedCalldata[0];
@@ -562,7 +562,7 @@ export class SocialRecoveryModule extends SafeModule {
 		};
 		const nonceResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
 
-		this.checkForEmptyResultAndRevert(nonceResult, "threshold");
+		this.checkForEmptyResultAndRevert(nonceResult, "nonce");
 		const decodedCalldata = decodeAbiParameters<[bigint]>(["uint256"], nonceResult);
 
 		return BigInt(decodedCalldata[0]);
@@ -579,7 +579,7 @@ export class SocialRecoveryModule extends SafeModule {
 	 * object needed for hashing and signing
 	 */
 	async getRecoveryRequestEip712Data(
-		rpcNode: string,
+		rpcNode: string | Transport | JsonRpcNode,
 		chainId: bigint,
 		accountAddress: string,
 		newOwners: string[],
