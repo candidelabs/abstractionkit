@@ -791,6 +791,22 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		context: Erc7677Context,
 		overrides: GasPaymasterUserOperationOverrides,
 	): Promise<{ userOperation: SameUserOp<T>; tokenQuote?: TokenQuote }> {
+		// Case C: no provider, no exchangeRate — fall through to regular flow.
+		if (this.provider == null && context.exchangeRate == null) {
+			return this.sponsoredFlow(userOp, bundlerRpc, entrypoint, chainIdHex, context, overrides);
+		}
+
+		// The flow below always prepends an approval, so verify the account
+		// supports it before spending a provider round-trip on the quote.
+		if (typeof smartAccount.prependTokenPaymasterApproveToCallData !== "function") {
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				"context.token is set but this smart account does not implement " +
+					"prependTokenPaymasterApproveToCallData, which the token " +
+					"paymaster flow requires to prepend the ERC-20 approval.",
+			);
+		}
+
 		// Step 1 — resolve exchange rate + paymaster address.
 		let exchangeRate: bigint;
 		let paymasterAddress: string | null = null;
@@ -820,17 +836,9 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 				);
 			}
 		} else {
-			// Case C: no provider, no exchangeRate — fall through to regular flow.
+			// Unreachable: the Case C guard above already returned. Kept for
+			// definite assignment of exchangeRate.
 			return this.sponsoredFlow(userOp, bundlerRpc, entrypoint, chainIdHex, context, overrides);
-		}
-
-		if (typeof smartAccount.prependTokenPaymasterApproveToCallData !== "function") {
-			throw new AbstractionKitError(
-				"PAYMASTER_ERROR",
-				"context.token is set but this smart account does not implement " +
-					"prependTokenPaymasterApproveToCallData, which the token " +
-					"paymaster flow requires to prepend the ERC-20 approval.",
-			);
 		}
 
 		// Step 2 — stub paymaster data for gas estimation.
