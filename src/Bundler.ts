@@ -271,7 +271,11 @@ export class Bundler implements Transport {
 			}
 			return {
 				...jsonRpcResult,
-				userOperation: userOperation as unknown as UserOperationV6 | UserOperationV7,
+				userOperation: userOperation as unknown as
+					| UserOperationV6
+					| UserOperationV7
+					| UserOperationV8
+					| UserOperationV9,
 				blockNumber: jsonRpcResult.blockNumber == null ? null : BigInt(jsonRpcResult.blockNumber),
 			};
 		} catch (err) {
