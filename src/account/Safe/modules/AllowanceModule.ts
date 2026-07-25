@@ -41,36 +41,43 @@ export class AllowanceModule extends SafeModule {
 
 	/**
 	 * Creates a MetaTransaction that sets a one-time (non-recurring) token allowance
-	 * for a delegate. The allowance is consumed once and never resets.
+	 * for a delegate. The allowance is consumed once and never resets, and it is
+	 * active as soon as the Safe executes the transaction.
+	 *
+	 * Note: the deployed AllowanceModule cannot delay activation of a one-time
+	 * allowance — `setAllowance` explicitly requires `resetTimeMin > 0` whenever
+	 * `resetBaseMin` is nonzero and reverts otherwise.
 	 * @param delegate - Address of the delegate to grant the allowance to.
 	 * @param token - ERC-20 token contract address (use zero address for native token).
 	 * @param allowanceAmount - Maximum amount the delegate can spend, in the token's smallest unit.
-	 * @param startAfterInMinutes - Delay in minutes before the allowance becomes active.
 	 * @returns A MetaTransaction to be executed by the Safe.
 	 */
 	public createOneTimeAllowanceMetaTransaction(
 		delegate: string,
 		token: string,
 		allowanceAmount: bigint,
-		startAfterInMinutes: bigint,
 	): MetaTransaction {
-		return this.createBaseSetAllowanceMetaTransaction(
-			delegate,
-			token,
-			allowanceAmount,
-			0n,
-			startAfterInMinutes,
-		);
+		return this.createBaseSetAllowanceMetaTransaction(delegate, token, allowanceAmount, 0n, 0n);
 	}
 
 	/**
 	 * Creates a MetaTransaction that sets a recurring token allowance for a delegate.
-	 * The allowance resets to the full amount after each validity period elapses.
+	 * The allowance resets to the full amount after each validity period elapses,
+	 * and is spendable immediately once the Safe executes the transaction.
 	 * @param delegate - Address of the delegate to grant the allowance to.
 	 * @param token - ERC-20 token contract address (use zero address for native token).
 	 * @param allowanceAmount - Maximum amount per period, in the token's smallest unit.
 	 * @param recurringAllowanceValidityPeriodInMinutes - Duration of each allowance period in minutes.
-	 * @param startAfterInMinutes - Delay in minutes before the first allowance period begins.
+	 * @param inThePastPeriodStartBaseTimeStamp - Optional unix
+	 * timestamp **in seconds** that must be in the past (less than the block timestamp).
+	 * It represents the start of the recurring allowance period accounting — it does
+	 * **not** delay activation: the allowance is active and spendable immediately once
+	 * the Safe executes the transaction; this value only sets when each period resets.
+	 * So if you want to start accounting from a Saturday 10am for example, calculate the
+	 * timestamp of any previous Saturday 10am and use it as the value for this param.
+	 * Defaults to 0n, which starts the period accounting at the moment the Safe
+	 * executes the transaction for a new allowance; when updating an existing
+	 * allowance, 0n keeps its current accounting anchor unchanged.
 	 * @returns A MetaTransaction to be executed by the Safe.
 	 */
 	public createRecurringAllowanceMetaTransaction(
@@ -78,14 +85,24 @@ export class AllowanceModule extends SafeModule {
 		token: string,
 		allowanceAmount: bigint,
 		recurringAllowanceValidityPeriodInMinutes: bigint,
-		startAfterInMinutes: bigint,
+		inThePastPeriodStartBaseTimeStamp: bigint = 0n,
 	): MetaTransaction {
+		const baseInMinutes = inThePastPeriodStartBaseTimeStamp / 60n;
+		// resetBaseMin is a uint32 of minutes since the epoch; a millisecond
+		// timestamp (Date.now()) still overflows this bound after conversion
+		if (inThePastPeriodStartBaseTimeStamp < 0n || baseInMinutes >= 2n ** 32n) {
+			throw new RangeError(
+				"inThePastPeriodStartBaseTimeStamp must be a unix timestamp in " +
+					"seconds — its minutes equivalent must fit the contract's " +
+					"uint32 resetBaseMin; a millisecond timestamp does not.",
+			);
+		}
 		return this.createBaseSetAllowanceMetaTransaction(
 			delegate,
 			token,
 			allowanceAmount,
 			recurringAllowanceValidityPeriodInMinutes,
-			startAfterInMinutes,
+			baseInMinutes,
 		);
 	}
 
@@ -378,6 +395,13 @@ export class AllowanceModule extends SafeModule {
 	): Promise<string[]> {
 		let start = overrides.start ?? 0n;
 		if (overrides.maxNumberOfResults != null) {
+			// the module's page-size parameter is a uint8
+			if (overrides.maxNumberOfResults < 0n || overrides.maxNumberOfResults > 255n) {
+				throw new RangeError(
+					"maxNumberOfResults must be between 0 and 255 (the module's page " +
+						"size is a uint8) — omit it to fetch all delegates via pagination.",
+				);
+			}
 			return (
 				await this.baseGetDelegates(nodeRpcUrl, safeAddress, start, overrides.maxNumberOfResults)
 			).results;
