@@ -560,6 +560,21 @@ export async function sendJsonRpcRequest(
 			response,
 		);
 	}
+	if (!fetchResult.ok) {
+		// An HTTP failure status wins over any "result" in the body — a
+		// success payload delivered with a failure status is contradictory
+		// and not trusted. A JSON-RPC error envelope still reports the
+		// server's own error (e.g. a 429 rate limit).
+		const err = response.error as JsonRpcError | undefined;
+		if (err != null && typeof err === "object") {
+			throw new TransportRpcError(err.code, err.message);
+		}
+		throw new TransportRpcError(
+			-32603,
+			`HTTP ${fetchResult.status} ${fetchResult.statusText}`.trim(),
+			response,
+		);
+	}
 	if ("result" in response) {
 		return response.result as JsonRpcResult;
 	}

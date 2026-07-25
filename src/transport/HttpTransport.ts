@@ -80,15 +80,16 @@ export class HttpTransport extends BaseRpcTransport {
 				responseText.slice(0, 1000),
 			);
 		}
-		if (
-			!response.ok &&
-			(typeof parsed !== "object" ||
-				parsed == null ||
-				(!("error" in parsed) && !("result" in parsed)))
-		) {
-			// HTTP failure without a JSON-RPC envelope (e.g. a gateway's own
-			// error object) — keep the status; a proper envelope falls through
-			// to parseResponse which reports the server's JSON-RPC error
+		const hasRpcError =
+			typeof parsed === "object" &&
+			parsed != null &&
+			"error" in parsed &&
+			(parsed as {error: unknown}).error != null;
+		if (!response.ok && !hasRpcError) {
+			// On HTTP failure, only a JSON-RPC *error* envelope falls through
+			// (parseResponse reports the server's error, e.g. a 429 rate
+			// limit). Anything else — including a contradictory "result" — is
+			// not trusted; the status is the real diagnostic.
 			throw new TransportRpcError(
 				-32603,
 				`HTTP ${response.status} ${response.statusText}`.trim(),

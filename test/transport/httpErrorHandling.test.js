@@ -53,6 +53,22 @@ describe("HttpTransport error handling", () => {
 			message: "rate limited",
 		});
 	});
+
+	test("does not trust a result delivered with an HTTP failure status", async () => {
+		const t = transportWith(401, { jsonrpc: "2.0", id: 1, result: "ok" }, "Unauthorized");
+		await expect(t.request({ method: "eth_chainId", params: [] })).rejects.toMatchObject({
+			name: "TransportRpcError",
+			message: expect.stringContaining("401"),
+		});
+	});
+
+	test("surfaces the HTTP status for an error:null envelope on an HTTP failure", async () => {
+		const t = transportWith(401, { jsonrpc: "2.0", id: 1, error: null }, "Unauthorized");
+		await expect(t.request({ method: "eth_chainId", params: [] })).rejects.toMatchObject({
+			name: "TransportRpcError",
+			message: expect.stringContaining("401"),
+		});
+	});
 });
 
 describe("sendJsonRpcRequest error handling", () => {
@@ -78,6 +94,30 @@ describe("sendJsonRpcRequest error handling", () => {
 		).rejects.toMatchObject({
 			name: "TransportRpcError",
 			message: expect.stringContaining("502"),
+		});
+	});
+
+	test("does not trust a result delivered with an HTTP failure status", async () => {
+		globalThis.fetch = mockFetch(401, { jsonrpc: "2.0", id: 1, result: "ok" }, "Unauthorized");
+		await expect(
+			ak.sendJsonRpcRequest("https://example.test/rpc", "eth_chainId", []),
+		).rejects.toMatchObject({
+			name: "TransportRpcError",
+			message: expect.stringContaining("401"),
+		});
+	});
+
+	test("still reports the server's JSON-RPC error from an HTTP failure", async () => {
+		globalThis.fetch = mockFetch(429, {
+			jsonrpc: "2.0",
+			id: 1,
+			error: { code: -32005, message: "rate limited" },
+		});
+		await expect(
+			ak.sendJsonRpcRequest("https://example.test/rpc", "eth_chainId", []),
+		).rejects.toMatchObject({
+			code: -32005,
+			message: "rate limited",
 		});
 	});
 
