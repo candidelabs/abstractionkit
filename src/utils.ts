@@ -538,7 +538,43 @@ export async function sendJsonRpcRequest(
 		body: raw,
 		redirect: "follow",
 	});
-	const response = (await fetchResult.json()) as JsonRpcResponse;
+	const responseText = await fetchResult.text();
+	let response: JsonRpcResponse;
+	try {
+		response = JSON.parse(responseText) as JsonRpcResponse;
+	} catch {
+		// non-JSON body (HTML error page, plain text) — the HTTP status is the
+		// real diagnostic, so surface it instead of a JSON parse error
+		throw new TransportRpcError(
+			-32603,
+			`HTTP ${fetchResult.status} ${fetchResult.statusText}: response body is not JSON`.trim(),
+			responseText.slice(0, 1000),
+		);
+	}
+	if (typeof response !== "object" || response === null) {
+		// scalar or null payload — the `in` checks below would throw a
+		// TypeError; report it as a malformed response with the HTTP status
+		throw new TransportRpcError(
+			-32603,
+			`HTTP ${fetchResult.status} ${fetchResult.statusText}: malformed JSON-RPC response`.trim(),
+			response,
+		);
+	}
+	if (!fetchResult.ok) {
+		// An HTTP failure status wins over any "result" in the body — a
+		// success payload delivered with a failure status is contradictory
+		// and not trusted. A JSON-RPC error envelope still reports the
+		// server's own error (e.g. a 429 rate limit).
+		const err = response.error as JsonRpcError | undefined;
+		if (err != null && typeof err === "object") {
+			throw new TransportRpcError(err.code, err.message);
+		}
+		throw new TransportRpcError(
+			-32603,
+			`HTTP ${fetchResult.status} ${fetchResult.statusText}`.trim(),
+			response,
+		);
+	}
 	if ("result" in response) {
 		return response.result as JsonRpcResult;
 	}
@@ -548,6 +584,15 @@ export async function sendJsonRpcRequest(
 		return response.simulation_results as JsonRpcResult;
 	}
 	const err = response.error as JsonRpcError;
+	if (err == null || typeof err !== "object") {
+		// no result and no error object — report the HTTP status rather than
+		// crashing on err.code
+		throw new TransportRpcError(
+			-32603,
+			`HTTP ${fetchResult.status} ${fetchResult.statusText}: malformed JSON-RPC response`.trim(),
+			response,
+		);
+	}
 	throw new TransportRpcError(err.code, err.message);
 }
 
