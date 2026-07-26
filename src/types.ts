@@ -152,7 +152,7 @@ export type GasEstimationResult = {
 /** Result of eth_getUserOperationByHash. Null if not found. */
 export type UserOperationByHashResult = {
 	/** The UserOperation object */
-	userOperation: UserOperationV6 | UserOperationV7;
+	userOperation: UserOperationV6 | UserOperationV7 | UserOperationV8 | UserOperationV9;
 	/** The EntryPoint address */
 	entryPoint: string;
 	/** Block number (null if pending) */
