@@ -96,10 +96,13 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 			encodeAbiParameters(["uint256"], [nullifierHash]).slice(2) +
 			encodeAbiParameters(["uint256[8]"], [proofArr]).slice(2);
 
-		userOperation.paymaster = this.address;
-		userOperation.paymasterData = paymasterData;
-		userOperation.paymasterPostOpGasLimit = 45_000n;
-		userOperation.paymasterVerificationGasLimit = 350_000n;
+		// work on a shallow copy so the caller's userOperation is not mutated
+		// (and not left corrupted if estimation throws below)
+		const userOp: UserOperationV8 | UserOperationV7 = { ...userOperation };
+		userOp.paymaster = this.address;
+		userOp.paymasterData = paymasterData;
+		userOp.paymasterPostOpGasLimit = 45_000n;
+		userOp.paymasterVerificationGasLimit = 350_000n;
 
 		if (overrides == null) {
 			overrides = {};
@@ -107,23 +110,23 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 		let entrypointAddress = overrides.entrypoint;
 
 		if (entrypointAddress == null) {
-			if ("eip7702Auth" in userOperation) {
+			if ("eip7702Auth" in userOp) {
 				entrypointAddress = ENTRYPOINT_V8;
 			} else {
 				entrypointAddress = ENTRYPOINT_V7;
 			}
 		}
 
-		let preVerificationGas = userOperation.preVerificationGas;
-		let verificationGasLimit = userOperation.verificationGasLimit;
-		let callGasLimit = userOperation.callGasLimit;
+		let preVerificationGas = userOp.preVerificationGas;
+		let verificationGasLimit = userOp.verificationGasLimit;
+		let callGasLimit = userOp.callGasLimit;
 
 		// set preVerificationGas to zero to force re-estimation
-		userOperation.preVerificationGas = 0n;
+		userOp.preVerificationGas = 0n;
 
 		const bundler = Bundler.from(bundlerRpc);
 		const estimation = await bundler.estimateUserOperationGas(
-			userOperation,
+			userOp,
 			entrypointAddress as string,
 			overrides.state_override_set,
 		);
@@ -140,11 +143,11 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 			callGasLimit = estimation.callGasLimit;
 		}
 
-		userOperation.preVerificationGas = preVerificationGas;
-		userOperation.verificationGasLimit = verificationGasLimit;
-		userOperation.callGasLimit = callGasLimit;
+		userOp.preVerificationGas = preVerificationGas;
+		userOp.verificationGasLimit = verificationGasLimit;
+		userOp.callGasLimit = callGasLimit;
 
-		return userOperation;
+		return userOp;
 	}
 }
 
