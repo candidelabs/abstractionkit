@@ -18,6 +18,41 @@ import type {Authorization7702Hex} from "./utils7702";
 export type OverrideType = Record<string, Record<string, string | Record<string, string>>>;
 
 /**
+ * The 20-byte right-padded EIP-7702 marker EntryPoint v0.8+ expects at the
+ * head of `initCode` (any trailing bytes are the sender initialization call).
+ */
+const EIP7702_INITCODE_MARKER = "0x7702000000000000000000000000000000000000";
+
+/**
+ * EIP-7702 userOps mark the factory field with a sentinel instead of a real
+ * factory: either the short form "0x7702" or the 20-byte right-padded form
+ * accepted by EntryPoint v0.8 (initCode starting with bytes 0x7702).
+ */
+function isEip7702FactorySentinel(factory: string | null | undefined): boolean {
+	if (factory == null) {
+		return false;
+	}
+	const factoryLowerCase = factory.toLowerCase();
+	return factoryLowerCase === "0x7702" || factoryLowerCase === EIP7702_INITCODE_MARKER;
+}
+
+/**
+ * Rebuild the packed `initCode` from split factory/factoryData fields,
+ * normalizing the short "0x7702" sentinel to the 20-byte right-padded marker
+ * so non-empty factoryData lands after a well-formed head.
+ */
+function buildWireInitCode(factory: string | null, factoryData: string | null): string {
+	if (factory == null) {
+		return "0x";
+	}
+	let initCode = isEip7702FactorySentinel(factory) ? EIP7702_INITCODE_MARKER : factory;
+	if (factoryData != null) {
+		initCode += factoryData.slice(2);
+	}
+	return initCode;
+}
+
+/**
  * Shares an existing Tenderly simulation so it can be viewed via a public link.
  * @param tenderlyAccountSlug - The Tenderly account slug.
  * @param tenderlyProjectSlug - The Tenderly project slug.
@@ -176,13 +211,7 @@ export async function simulateUserOperationWithTenderly(
 		callData = `0x1fad948c${encodedUserOperation.slice(2)}`;
 	} else {
 		userOperation = userOperation as UserOperationV7 | UserOperationV8 | UserOperationV9;
-		let initCode = "0x";
-		if (userOperation.factory != null) {
-			initCode = userOperation.factory;
-			if (userOperation.factoryData != null) {
-				initCode += userOperation.factoryData.slice(2);
-			}
-		}
+		const initCode = buildWireInitCode(userOperation.factory, userOperation.factoryData);
 
 		const accountGasLimits =
 			"0x" +
@@ -247,7 +276,9 @@ export async function simulateUserOperationWithTenderly(
 	// override so the simulation passes.
 	if (
 		!isV6UserOperation &&
-		(userOperation as UserOperationV7 | UserOperationV8 | UserOperationV9).factory === "0x7702"
+		isEip7702FactorySentinel(
+			(userOperation as UserOperationV7 | UserOperationV8 | UserOperationV9).factory,
+		)
 	) {
 		const eip7702Auth = (userOperation as UserOperationV8 | UserOperationV9).eip7702Auth;
 		if (eip7702Auth != null && eip7702Auth.address != null) {
@@ -478,19 +509,37 @@ export async function simulateUserOperationCallDataWithTenderly(
 	let callData = userOperation.callData;
 	if ("initCode" in userOperation) {
 		if (userOperation.initCode != null && userOperation.initCode.length > 2) {
-			factory = userOperation.initCode.slice(0, 22);
-			factoryData = userOperation.initCode.slice(22);
+			// initCode = 20-byte factory address ("0x" + 40 hex chars) ‖ factoryData
+			factory = userOperation.initCode.slice(0, 42);
+			factoryData = `0x${userOperation.initCode.slice(42)}`;
 		}
 	} else {
 		factory = userOperation.factory;
 		factoryData = userOperation.factoryData;
 
-		// EIP-7702 userOps use factory:"0x7702" as a sentinel with
-		// factoryData:null. This doesn't represent an actual factory
-		// deployment, so normalize to null.
-		if (factory === "0x7702") {
-			factory = null;
-			factoryData = null;
+		// EIP-7702 userOps use a "0x7702" factory sentinel instead of a real
+		// factory. Mirror the full handleOps simulation: install the sender's
+		// delegation code (0xef0100 ‖ delegatee) as a state override, and treat
+		// non-empty factoryData as the sender initialization call — made by the
+		// SenderCreator to the sender itself, not to a factory.
+		if (isEip7702FactorySentinel(factory)) {
+			const eip7702Auth = (userOperation as UserOperationV8ToSimulate | UserOperationV9ToSimulate)
+				.eip7702Auth;
+			if (eip7702Auth != null && eip7702Auth.address != null) {
+				const delegationCode = `0xef0100${eip7702Auth.address.toLowerCase().replace("0x", "")}`;
+				const senderLower = userOperation.sender.toLowerCase();
+				stateOverrides = stateOverrides ? { ...stateOverrides } : {};
+				stateOverrides[senderLower] = {
+					...(stateOverrides[senderLower] || {}),
+					code: delegationCode,
+				};
+			}
+			if (factoryData != null && factoryData !== "0x") {
+				factory = userOperation.sender;
+			} else {
+				factory = null;
+				factoryData = null;
+			}
 		}
 
 		// IAccountExecute.executeUserOp rewrite: when callData starts with the
@@ -499,13 +548,7 @@ export async function simulateUserOperationCallDataWithTenderly(
 		// sender.call(callData). Replicate here.
 		const EXECUTE_USEROP_SELECTOR = "0x8dd7712f";
 		if (callData.toLowerCase().startsWith(EXECUTE_USEROP_SELECTOR)) {
-			let initCode = "0x";
-			if (userOperation.factory != null) {
-				initCode = userOperation.factory;
-				if (userOperation.factoryData != null) {
-					initCode += userOperation.factoryData.slice(2);
-				}
-			}
+			const initCode = buildWireInitCode(userOperation.factory, userOperation.factoryData);
 
 			const accountGasLimits =
 				"0x" +
@@ -763,8 +806,8 @@ export async function callTenderlySimulateBundle(
 		to: string;
 		data: string;
 		gas?: number | null;
-		gasPrice?: number | null;
-		value?: number | null;
+		gasPrice?: bigint | number | null;
+		value?: bigint | number | null;
 		blockNumber?: number | null;
 		simulationType?: "full" | "quick" | "abi";
 		stateOverrides?: OverrideType | null;
@@ -803,27 +846,37 @@ export async function callTenderlySimulateBundle(
 			transactionObject.gas = transaction.gas;
 		}
 		if (transaction.gasPrice != null) {
-			transactionObject.gas_price = transaction.gasPrice;
+			// serialize bigint as a decimal string so wei amounts above 2^53
+			// don't lose precision
+			transactionObject.gas_price =
+				typeof transaction.gasPrice === "bigint"
+					? transaction.gasPrice.toString()
+					: transaction.gasPrice;
 		}
 		if (transaction.value != null) {
-			transactionObject.value = transaction.value;
+			transactionObject.value =
+				typeof transaction.value === "bigint"
+					? transaction.value.toString()
+					: transaction.value;
 		}
 		if (transaction.stateOverrides != null) {
-			const stateOverrides = transaction.stateOverrides;
-			for (const address in stateOverrides) {
-				for (const key in stateOverrides[address]) {
+			// build a copy instead of rewriting the caller-owned object in place
+			const stateOverrides: OverrideType = {};
+			for (const address in transaction.stateOverrides) {
+				const entry = { ...transaction.stateOverrides[address] };
+				for (const key in entry) {
 					if (key !== "balance" && key !== "code" && key !== "storage" && key !== "stateDiff") {
 						throw new RangeError(`Invalid stateOverrides key: ${key}.`);
-					} else if (
-						"storage" in stateOverrides[address] &&
-						"stateDiff" in stateOverrides[address]
-					) {
-						throw new RangeError("can't set both storage and stateDiff for stateOverrides");
-					} else if ("stateDiff" in stateOverrides[address]) {
-						stateOverrides[address].storage = stateOverrides[address].stateDiff;
-						delete stateOverrides[address].stateDiff;
 					}
 				}
+				if ("storage" in entry && "stateDiff" in entry) {
+					throw new RangeError("can't set both storage and stateDiff for stateOverrides");
+				}
+				if ("stateDiff" in entry) {
+					entry.storage = entry.stateDiff;
+					delete entry.stateDiff;
+				}
+				stateOverrides[address] = entry;
 			}
 			transactionObject.state_objects = stateOverrides;
 		}
