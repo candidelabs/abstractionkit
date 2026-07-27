@@ -1,6 +1,6 @@
 import type {Bundler} from "src/Bundler";
 import {ENTRYPOINT_V9} from "src/constants";
-import type {Signer as AkSigner, TypedData} from "src/signer/types";
+import type {ExternalSigner, TypedData} from "src/signer/types";
 import type {JsonRpcNode, Transport} from "src/transport";
 import type {StateOverrideSet, UserOperationV9} from "src/types";
 import type {SendUseroperationResponse} from "../SendUseroperationResponse";
@@ -155,7 +155,7 @@ export class Simple7702AccountV09 extends BaseSimple7702Account {
 	 */
 	public async signUserOperationWithSigner(
 		useroperation: UserOperationV9,
-		signer: AkSigner,
+		signer: ExternalSigner,
 		chainId: bigint,
 	): Promise<string> {
 		return this.baseSignUserOperationWithSigner(useroperation, signer, chainId);

@@ -1,5 +1,5 @@
 import { privateKeyToAddress, signHash, signTypedData } from "../ethereUtils";
-import type { Signer, TypedData } from "./types";
+import type { ExternalSigner, TypedData } from "./types";
 
 // Structural types for well-known signers. NO imports from viem / ethers
 // at the type level (beyond the already-present ethers runtime dep used by
@@ -79,7 +79,7 @@ export interface EthersWalletLike {
 }
 
 /**
- * Build a Signer from a raw private-key hex string. Supports both raw-hash
+ * Build an ExternalSigner from a raw private-key hex string. Supports both raw-hash
  * and typed-data signing, delegated to the internal `ethereUtils` helpers
  * ({@link signHash}, {@link signTypedData}) — no extra packages needed.
  * If you already hold a viem Account or ethers Wallet, use {@link fromViem}
@@ -90,7 +90,7 @@ export interface EthersWalletLike {
  * const signer = fromPrivateKey(process.env.PRIVATE_KEY!);
  * userOp.signature = await safe.signUserOperationWithSigners(userOp, [signer], chainId);
  */
-export function fromPrivateKey(privateKey: string): Signer<unknown> {
+export function fromPrivateKey(privateKey: string): ExternalSigner<unknown> {
 	return {
 		address: privateKeyToAddress(privateKey),
 		signHash: (hash) => signHash(privateKey, hash).serialized,
@@ -99,12 +99,12 @@ export function fromPrivateKey(privateKey: string): Signer<unknown> {
 }
 
 /**
- * Adapt a viem Local Account (e.g. `privateKeyToAccount(pk)`) to a Signer.
+ * Adapt a viem Local Account (e.g. `privateKeyToAccount(pk)`) to an ExternalSigner.
  * Supports both raw-hash and typed-data signing.
  *
  * @remarks Requires viem &gt;= 2.0.
  */
-export function fromViem(account: ViemLocalAccountLike): Signer<unknown> {
+export function fromViem(account: ViemLocalAccountLike): ExternalSigner<unknown> {
 	return {
 		address: account.address,
 		signHash: (hash) => account.sign({ hash }),
@@ -119,7 +119,7 @@ export function fromViem(account: ViemLocalAccountLike): Signer<unknown> {
 }
 
 /**
- * Adapt a viem `WalletClient` to a Signer. Only typed-data signing is
+ * Adapt a viem `WalletClient` to an ExternalSigner. Only typed-data signing is
  * exposed, because `WalletClient` drives browser/JSON-RPC wallets which
  * can't sign raw hashes. Requires the client to have been constructed with
  * an `account`; for local accounts, prefer `fromViem` so you also get
@@ -127,7 +127,7 @@ export function fromViem(account: ViemLocalAccountLike): Signer<unknown> {
  *
  * @remarks Requires viem &gt;= 2.0.
  */
-export function fromViemWalletClient(client: ViemWalletClientLike): Signer<unknown> {
+export function fromViemWalletClient(client: ViemWalletClientLike): ExternalSigner<unknown> {
 	if (!client.account) {
 		throw new Error(
 			"fromViemWalletClient: client has no `account` configured. " +
@@ -153,12 +153,12 @@ export function fromViemWalletClient(client: ViemWalletClientLike): Signer<unkno
 }
 
 /**
- * Adapt an ethers `Wallet` / `HDNodeWallet` to a Signer. Supports both
+ * Adapt an ethers `Wallet` / `HDNodeWallet` to an ExternalSigner. Supports both
  * raw-hash and typed-data signing.
  *
  * @remarks Requires ethers &gt;= 6.0.
  */
-export function fromEthersWallet(wallet: EthersWalletLike): Signer<unknown> {
+export function fromEthersWallet(wallet: EthersWalletLike): ExternalSigner<unknown> {
 	// ethers types `address` as plain `string`; at runtime it's always
 	// checksummed 0x-prefixed hex.
 	return {

@@ -16,7 +16,7 @@ import {
 import {AbstractionKitError} from "src/errors";
 import type {PrependTokenPaymasterApproveAccount} from "src/paymaster/types";
 import {invokeSigner, pickScheme} from "src/signer/negotiate";
-import type {SignContext, Signer as AkSigner, SigningScheme, TypedData} from "src/signer/types";
+import type {SignContext, ExternalSigner, SigningScheme, TypedData} from "src/signer/types";
 import {JsonRpcNode, type Transport} from "src/transport";
 import type {JsonRpcResult, UserOperationV8, UserOperationV9} from "src/types";
 import {
@@ -706,7 +706,7 @@ export class Calibur7702Account
 	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = ["typedData", "hash"];
 
 	/**
-	 * Sign a UserOperation with an {@link AkSigner}. The signer can implement
+	 * Sign a UserOperation with an {@link ExternalSigner}. The signer can implement
 	 * either `signTypedData` (preferred — JSON-RPC wallets, viem `WalletClient`)
 	 * or `signHash` (local keys, hardware wallets). Both schemes produce
 	 * signatures that validate against the same `userOpHash` because the
@@ -718,7 +718,7 @@ export class Calibur7702Account
 	 */
 	public async signUserOperationWithSigner(
 		userOperation: UserOperationV8,
-		signer: AkSigner,
+		signer: ExternalSigner,
 		chainId: bigint,
 		overrides: CaliburSignatureOverrides = {},
 	): Promise<string> {

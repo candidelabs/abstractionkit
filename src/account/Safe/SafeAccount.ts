@@ -17,7 +17,7 @@ import {Bundler} from "src/Bundler";
 import {AbstractionKitError, ensureError} from "src/errors";
 import {SafeAccountFactory} from "src/factory/SafeAccountFactory";
 import {invokeSigner, pickScheme} from "src/signer/negotiate";
-import type {Signer as AkSigner, SigningScheme, TypedData} from "src/signer/types";
+import type {ExternalSigner, SigningScheme, TypedData} from "src/signer/types";
 import {JsonRpcNode, type Transport} from "src/transport";
 import {
 	BaseUserOperationDummyValues,
@@ -1954,7 +1954,7 @@ export class SafeAccount extends SmartAccount {
 		C,
 	>(
 		useroperation: T,
-		signers: ReadonlyArray<AkSigner<C>>,
+		signers: ReadonlyArray<ExternalSigner<C>>,
 		chainId: bigint,
 		params: {
 			entrypointAddress: string;

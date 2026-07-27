@@ -1,5 +1,5 @@
 import { fromUtf8Bytes, getBytes, hexlify, toUtf8Bytes } from "../../ethereUtils";
-import type { Signer } from "src/signer/types";
+import type { ExternalSigner } from "src/signer/types";
 import { SafeAccount } from "./SafeAccount";
 import type { WebauthnPublicKey, WebauthnSignatureData } from "./types";
 
@@ -73,7 +73,7 @@ export interface FromSafeWebauthnParams {
 }
 
 /**
- * Adapt a WebAuthn credential to a Signer for `signUserOperationWithSigners`
+ * Adapt a WebAuthn credential to an ExternalSigner for `signUserOperationWithSigners`
  * on Safe accounts. Safe-specific (uses Safe's WebAuthn shared signer /
  * verifier proxy / signature encoding) — for non-Safe accounts, use the
  * account's own WebAuthn adapter.
@@ -136,7 +136,7 @@ export interface FromSafeWebauthnParams {
  *   userOperation, [signer], chainId,
  * );
  */
-export function fromSafeWebauthn(params: FromSafeWebauthnParams): Signer<unknown> {
+export function fromSafeWebauthn(params: FromSafeWebauthnParams): ExternalSigner<unknown> {
 	const {
 		publicKey,
 		isInit,

@@ -4,7 +4,7 @@ import type { BaseUserOperation } from "../types";
  * Narrow EIP-712 typed data payload. All hex fields are typed as
  * `` `0x${string}` `` so callers don't need casts when handing this straight
  * to viem / ethers. `EIP712Domain` is stripped from `types` before the payload
- * is handed to a Signer, so consumers don't need to filter it out.
+ * is handed to an ExternalSigner, so consumers don't need to filter it out.
  */
 export interface TypedData {
 	domain: {
@@ -26,7 +26,7 @@ export type SigningScheme = "hash" | "typedData";
  * Context the SDK passes to a signer on every account's
  * `signUserOperationWithSigner(s)` (the single-op path — 99% of usage).
  * All fields are required; IDE autocomplete shows them directly without a
- * type guard. Default for {@link Signer}, {@link SignHashFn},
+ * type guard. Default for {@link ExternalSigner}, {@link SignHashFn},
  * {@link SignTypedDataFn}.
  *
  * For the multi-op Merkle path
@@ -48,7 +48,7 @@ export interface SignContext<T extends BaseUserOperation = BaseUserOperation> {
  * Type your multi-op signer as `ExternalSigner<MultiOpSignContext>` for
  * full autocomplete on `userOperations`. Pre-built adapters
  * `fromPrivateKey`, `fromViem`, `fromEthersWallet`, and
- * `fromViemWalletClient` all return a universal `Signer<unknown>` and
+ * `fromViemWalletClient` all return a universal `ExternalSigner<unknown>` and
  * work on either single-op or multi-op paths without retyping — the
  * multi-op Merkle root is wrapped in an EIP-712 `MerkleTreeRoot`
  * message, so `signTypedData`-only signers are accepted.
@@ -61,8 +61,8 @@ export interface MultiOpSignContext<T extends BaseUserOperation = BaseUserOperat
 	readonly entryPoint: string;
 }
 
-/** Common fields every Signer exposes. */
-interface SignerBase {
+/** Common fields every ExternalSigner exposes. */
+interface ExternalSignerBase {
 	/** Address that will recover from signatures this signer produces. */
 	readonly address: `0x${string}`;
 	/**
@@ -71,7 +71,7 @@ interface SignerBase {
 	 * signature blob from a smart-contract owner; it gets encoded as a
 	 * dynamic-length contract-signature segment when the aggregate is built.
 	 *
-	 * Account-agnostic: `Signer` is shared with non-Safe accounts that ignore
+	 * Account-agnostic: `ExternalSigner` is shared with non-Safe accounts that ignore
 	 * this field. For Safe, this drives the per-pair `isContractSignature`
 	 * flag set on the {@link SignerSignaturePair} produced for this signer,
 	 * so different signers in the same batch can mix kinds correctly.
@@ -115,8 +115,10 @@ export type SignTypedDataFn<C = SignContext> = (
  * as a discriminated union so TypeScript rejects `{ address }` with neither
  * method at compile time.
  *
- * Re-exported at the package root as `ExternalSigner` (the unqualified
- * `Signer` name is already a Safe owner-identifier union).
+ * Named `ExternalSigner` (not `Signer`) because the unqualified `Signer`
+ * name is already taken by the legacy Safe owner-identifier union in
+ * `account/Safe/types`; if that union is ever renamed (e.g. to
+ * `SafeOwner`), this type could adopt the plain `Signer` name.
  *
  * `signMessage` (EIP-191) is intentionally omitted: the `v`-byte mismatch
  * between default tooling and Safe's on-chain validator makes it a footgun.
@@ -154,7 +156,7 @@ export type SignTypedDataFn<C = SignContext> = (
  * }
  * ```
  */
-export type Signer<C = SignContext> = SignerBase &
+export type ExternalSigner<C = SignContext> = ExternalSignerBase &
 	(
 		| { signHash: SignHashFn<C>; signTypedData?: SignTypedDataFn<C> }
 		| { signHash?: SignHashFn<C>; signTypedData: SignTypedDataFn<C> }
