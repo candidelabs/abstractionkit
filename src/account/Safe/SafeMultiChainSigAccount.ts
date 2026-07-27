@@ -749,8 +749,8 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * `fromPrivateKey`, `fromViem`, `fromEthersWallet`, and `fromViemWalletClient`
 	 * all work here without retyping (`fromViemWalletClient` will sign the
 	 * typed-data Merkle wrapper). User-defined single-op signers
-	 * (`Signer<SignContext>`) still don't work — they'd receive a context shape
-	 * they didn't declare.
+	 * (`ExternalSigner<SignContext>`) still don't work — they'd receive a
+	 * context shape they didn't declare.
 	 *
 	 * Note the chainId plumbing asymmetry vs the single-op variant:
 	 *   - **Plural** (this method): each `UserOperationToSign` carries its
@@ -762,7 +762,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * element rather than reaching for the singular variant.
 	 *
 	 * @param userOperationsToSign - UserOperations + chain IDs + validity windows
-	 * @param signers - one Signer per owner (any order; sorted by address on-chain)
+	 * @param signers - one ExternalSigner per owner (any order; sorted by address on-chain)
 	 * @returns one signature per input UserOperation, in the same order
 	 */
 	public async signUserOperationsWithSigners(

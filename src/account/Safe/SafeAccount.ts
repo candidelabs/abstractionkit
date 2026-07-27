@@ -1946,7 +1946,7 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * Schemes Safe accepts from a {@link Signer}, in preference order.
+	 * Schemes Safe accepts from an {@link ExternalSigner}, in preference order.
 	 * `typedData` is preferred because wallets can display structured fields
 	 * rather than a hex blob; `hash` is accepted as a fallback for signers
 	 * that only support raw ECDSA.
@@ -1954,17 +1954,17 @@ export class SafeAccount extends SmartAccount {
 	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = ["typedData", "hash"];
 
 	/**
-	 * Sign a UserOperation using one or more {@link Signer}s. This is the
+	 * Sign a UserOperation using one or more {@link ExternalSigner}s. This is the
 	 * capability-oriented signing path: each signer declares what it can do
 	 * (`signHash`, `signTypedData`, both) and the account picks the best
 	 * match per signer. Incompatible signers fail offline with an actionable
 	 * error rather than a silent bundler rejection.
 	 *
 	 * Signers are invoked in parallel. For interactive wallets that share a
-	 * popup session, sequence the prompts inside your Signer implementation.
+	 * popup session, sequence the prompts inside your ExternalSigner implementation.
 	 *
 	 * @param useroperation - UserOperation to sign
-	 * @param signers - Signer instances (`fromViem(account)`, `fromEthersWallet(wallet)`, etc.)
+	 * @param signers - ExternalSigner instances (`fromViem(account)`, `fromEthersWallet(wallet)`, etc.)
 	 * @param chainId - target chain id
 	 * @param params - bag combining required wiring (`entrypointAddress`,
 	 *   `safe4337ModuleAddress`, `context`) with optional `options`
