@@ -1397,6 +1397,26 @@ export class SafeAccount extends SmartAccount {
 		const validAfter = 0xffffffffffffn;
 		const validUntil = 0xffffffffffffn;
 
+		// Derived from the operation's own init fields; the signature encoder
+		// needs the init flag and verifier config whenever a dummy pair
+		// carries a raw WebauthnPublicKey signer.
+		let initCode: string | null;
+		if ("initCode" in userOperation) {
+			initCode = userOperation.initCode;
+		} else {
+			initCode = userOperation.factory;
+		}
+		const isInit = initCode != null && initCode !== "0x";
+		const webAuthnSignatureOverrides = {
+			isInit,
+			webAuthnSharedSigner: overrides.webAuthnSharedSigner,
+			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
+			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
+			webAuthnSignerFactory: overrides.webAuthnSignerFactory,
+			webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
+			webAuthnSignerProxyCreationCode: overrides.webAuthnSignerProxyCreationCode,
+		};
+
 		// Number of dummy signatures this method placed on the estimated
 		// operation. Zero when the caller supplied a ready-made signature,
 		// in which case the signer count is unknown here and per-signer gas
@@ -1419,28 +1439,15 @@ export class SafeAccount extends SmartAccount {
 					validAfter,
 					validUntil,
 					isMultiChainSignature: overrides.isMultiChainSignature,
+					...webAuthnSignatureOverrides,
 				},
 			);
 		} else if (overrides.expectedSigners != null) {
-			let initCode: string | null;
-
-			if ("initCode" in userOperation) {
-				initCode = userOperation.initCode;
-			} else {
-				initCode = userOperation.factory;
-			}
-			const isInit = initCode != null && initCode !== "0x";
-
 			const dummySignerSignaturePairs =
-				SafeAccount.createDummySignerSignaturePairForExpectedSigners(overrides.expectedSigners, {
-					isInit,
-					webAuthnSharedSigner: overrides.webAuthnSharedSigner,
-					eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-					eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-					webAuthnSignerProxyCreationCode: overrides.webAuthnSignerProxyCreationCode,
-				});
+				SafeAccount.createDummySignerSignaturePairForExpectedSigners(
+					overrides.expectedSigners,
+					webAuthnSignatureOverrides,
+				);
 			dummySignersCount = dummySignerSignaturePairs.length;
 			estimationSignature = SafeAccount.formatSignaturesToUseroperationSignature(
 				dummySignerSignaturePairs,
@@ -1448,6 +1455,7 @@ export class SafeAccount extends SmartAccount {
 					validAfter,
 					validUntil,
 					isMultiChainSignature: overrides.isMultiChainSignature,
+					...webAuthnSignatureOverrides,
 				},
 			);
 		} else if (userOperation.signature.length < 3) {
@@ -1706,6 +1714,7 @@ export class SafeAccount extends SmartAccount {
 		const validAfter = 0xffffffffffffn;
 		const validUntil = 0xffffffffffffn;
 
+		const isInit = factoryAddress != null && factoryAddress !== "0x";
 		let dummySignerSignaturePairs: SignerSignaturePair[];
 		if (overrides.dummySignerSignaturePairs != null) {
 			if (overrides.expectedSigners != null) {
@@ -1721,7 +1730,6 @@ export class SafeAccount extends SmartAccount {
 			if (overrides.expectedSigners == null) {
 				dummySignerSignaturePairs = [EOADummySignerSignaturePair];
 			} else {
-				const isInit = factoryAddress != null && factoryAddress !== "0x";
 				dummySignerSignaturePairs = SafeAccount.createDummySignerSignaturePairForExpectedSigners(
 					overrides.expectedSigners,
 					{
@@ -1742,7 +1750,17 @@ export class SafeAccount extends SmartAccount {
 				validAfter,
 				validUntil,
 				isMultiChainSignature: overrides.isMultiChainSignature,
+				// needed when user-supplied dummySignerSignaturePairs contain raw
+				// WebauthnPublicKey signers — the encoder requires the init flag,
+				// and for deployed accounts derives the per-owner verifier
+				// address from the verifier config
+				isInit,
 				webAuthnSharedSigner,
+				eip7212WebAuthnPrecompileVerifier,
+				eip7212WebAuthnContractVerifier,
+				webAuthnSignerFactory,
+				webAuthnSignerSingleton,
+				webAuthnSignerProxyCreationCode,
 			},
 		);
 
@@ -1791,12 +1809,18 @@ export class SafeAccount extends SmartAccount {
 
 					const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
 					if (parallelPaymasterInitValues != null) {
-						if (!parallelPaymasterInitValues.paymasterData.endsWith("22e325a297439656")) {
+						// lowercase like the EIP-712 trimmer and the MultiChain
+						// subclass — uppercase hex is valid input
+						if (
+							!parallelPaymasterInitValues.paymasterData
+								.toLowerCase()
+								.endsWith("22e325a297439656")
+						) {
 							throw new RangeError(
 								"Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'.",
 							);
 						}
-						if (this.entrypointAddress !== ENTRYPOINT_V9) {
+						if (this.entrypointAddress.toLowerCase() !== ENTRYPOINT_V9.toLowerCase()) {
 							throw new RangeError("parallelPaymasterInitValues only works with ep v0.9");
 						}
 						userOperationToEstimate.paymaster = parallelPaymasterInitValues.paymaster;
@@ -2105,7 +2129,7 @@ export class SafeAccount extends SmartAccount {
 			],
 		).slice(-40);
 
-		return `0x${proxyAdd}`;
+		return getAddress(`0x${proxyAdd}`); //to checksummed
 	}
 
 	/**
@@ -2175,10 +2199,23 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * calculate a signer public address lowercase
-	 * @param signer - a signer to compute address for
-	 * @param overrides - overrides for the default values
-	 * @returns signer address
+	 * Resolve a {@link Signer} to the lowercase address the Safe contract
+	 * sees as the owner — not merely a case conversion:
+	 *
+	 * - string signer: returned lowercased as-is.
+	 * - WebAuthn public key with `overrides.isInit` set: resolves to the
+	 *   WebAuthn **shared signer** address, since during account init the
+	 *   shared signer is the enabled owner rather than a per-owner verifier.
+	 * - WebAuthn public key otherwise: **derives** the deterministic CREATE2
+	 *   address of the per-owner WebAuthn verifier proxy from the key's x/y
+	 *   coordinates and the verifier/factory configuration.
+	 *
+	 * Used as the sort key in {@link sortSignatures}, so it must always match
+	 * the owner address that signature encoding will emit for the same
+	 * overrides — pass the same overrides bag to both.
+	 * @param signer - a signer to compute the owner address for
+	 * @param overrides - WebAuthn verifier configuration and the init flag
+	 * @returns the owner address, lowercased
 	 */
 	public static getSignerLowerCaseAddress(
 		signer: Signer,
@@ -2186,6 +2223,12 @@ export class SafeAccount extends SmartAccount {
 	): string {
 		if (typeof signer === "string") {
 			return signer.toLowerCase();
+		} else if (overrides.isInit) {
+			// on init the encoded owner is the WebAuthn shared signer, not the
+			// per-owner verifier proxy — sort by the same address that gets encoded
+			const webAuthnSharedSigner =
+				overrides.webAuthnSharedSigner ?? SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
+			return webAuthnSharedSigner.toLowerCase();
 		} else {
 			const eip7212WebAuthnPrecompileVerifier =
 				overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
@@ -2399,7 +2442,9 @@ export class SafeAccount extends SmartAccount {
 		let prevOwnerT = overrides.prevOwner;
 		if (prevOwnerT == null) {
 			const owners = await this.getOwners(nodeRpcUrl);
-			const oldOwnerIndex = owners.indexOf(oldOwnerT);
+			const oldOwnerIndex = owners.findIndex(
+				(owner) => owner.toLowerCase() === oldOwnerT.toLowerCase(),
+			);
 			if (oldOwnerIndex === -1) {
 				throw new RangeError("oldOwner is not a current owner.");
 			} else if (oldOwnerIndex === 0) {
@@ -2470,7 +2515,9 @@ export class SafeAccount extends SmartAccount {
 		let prevOwnerT = overrides.prevOwner;
 		if (prevOwnerT == null) {
 			const owners = await this.getOwners(nodeRpcUrl);
-			const ownerToDeleteIndex = owners.indexOf(ownerToDeleteT);
+			const ownerToDeleteIndex = owners.findIndex(
+				(owner) => owner.toLowerCase() === ownerToDeleteT.toLowerCase(),
+			);
 			if (ownerToDeleteIndex === -1) {
 				throw new RangeError("ownerToDelete is not a current owner.");
 			} else if (ownerToDeleteIndex === 0) {

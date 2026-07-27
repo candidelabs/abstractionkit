@@ -868,6 +868,17 @@ export class Calibur7702Account
 		const hook = BigInt(settings.hook ?? ZeroAddress);
 		const expiration = BigInt(settings.expiration ?? 0);
 		const isAdmin = settings.isAdmin ? 1n : 0n;
+		if (expiration < 0n || expiration >= 1n << 40n) {
+			// the on-chain field is uint40; an oversized value (e.g. a millisecond
+			// timestamp) would bleed into the isAdmin bit at position 200
+			throw new RangeError(
+				"expiration must be a unix timestamp in seconds that fits in 40 bits, " +
+					`got ${expiration}. Did you pass milliseconds instead of seconds?`,
+			);
+		}
+		if (hook < 0n || hook >= 1n << 160n) {
+			throw new RangeError("hook must be a valid 20-byte address.");
+		}
 		return (isAdmin << 200n) | (expiration << 160n) | hook;
 	}
 

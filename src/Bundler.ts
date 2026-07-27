@@ -4,6 +4,7 @@ import {
 	type BundlerErrorCode,
 	BundlerErrorCodeDict,
 	ensureError,
+	type JsonRpcErrorCode,
 	parseAaCode,
 } from "./errors";
 import {
@@ -250,8 +251,31 @@ export class Bundler implements Transport {
 				params: [useroperationhash],
 			});
 			if (jsonRpcResult == null) return null;
+			// the wire format carries hex strings; convert the numeric fields
+			// to the bigints the declared type promises
+			const wireOp = jsonRpcResult.userOperation as unknown as Record<string, unknown>;
+			const userOperation = { ...wireOp };
+			for (const field of [
+				"nonce",
+				"callGasLimit",
+				"verificationGasLimit",
+				"preVerificationGas",
+				"maxFeePerGas",
+				"maxPriorityFeePerGas",
+				"paymasterVerificationGasLimit",
+				"paymasterPostOpGasLimit",
+			]) {
+				if (wireOp[field] != null) {
+					userOperation[field] = BigInt(wireOp[field] as string | bigint);
+				}
+			}
 			return {
 				...jsonRpcResult,
+				userOperation: userOperation as unknown as
+					| UserOperationV6
+					| UserOperationV7
+					| UserOperationV8
+					| UserOperationV9,
 				blockNumber: jsonRpcResult.blockNumber == null ? null : BigInt(jsonRpcResult.blockNumber),
 			};
 		} catch (err) {
@@ -267,7 +291,9 @@ export class Bundler implements Transport {
  *
  * - `AbstractionKitError` passes through unchanged (already domain-translated).
  * - {@link ProviderRpcError} with a known 4337 code → inner code from
- *   {@link BundlerErrorCodeDict}.
+ *   {@link BundlerErrorCodeDict}; -32601 is the standard JSON-RPC
+ *   METHOD_NOT_FOUND (neither ERC-7769 nor bundler implementations assign
+ *   it any 4337-specific meaning — an invalid hash arrives as -32602).
  * - Anything else → inner `UNKNOWN_ERROR`.
  *
  * @internal
@@ -295,8 +321,14 @@ function translateBundlerError(
 	}
 	const code = (err as ProviderRpcError | undefined)?.code;
 	const codeString = code != null ? String(code) : "";
-	const innerCode: BundlerErrorCode | BasicErrorCode =
+	let innerCode: BundlerErrorCode | BasicErrorCode | JsonRpcErrorCode =
 		codeString in BundlerErrorCodeDict ? BundlerErrorCodeDict[codeString] : "UNKNOWN_ERROR";
+	// Standard JSON-RPC codes without 4337 semantics keep their standard names.
+	if (codeString === "-32601") {
+		innerCode = "METHOD_NOT_FOUND";
+	} else if (codeString === "-32603") {
+		innerCode = "INTERNAL_ERROR";
+	}
 	const error = ensureError(err);
 	// The EntryPoint AAxx code lives only inside the message text. Parse it once
 	// here so callers can branch on a stable code instead of matching the message.

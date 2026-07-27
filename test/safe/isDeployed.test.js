@@ -19,8 +19,13 @@ describe('SafeAccount.isDeployed', () => {
     function mockFetchReturning(code) {
         global.fetch = async (url, options) => {
             lastRequest = { url, body: JSON.parse(options.body) };
+            const body = { jsonrpc: '2.0', id: 1, result: code };
             return {
-                json: async () => ({ jsonrpc: '2.0', id: 1, result: code }),
+                ok: true,
+                status: 200,
+                statusText: 'OK',
+                text: async () => JSON.stringify(body),
+                json: async () => body,
             };
         };
     }

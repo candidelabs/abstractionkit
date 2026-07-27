@@ -538,7 +538,43 @@ export async function sendJsonRpcRequest(
 		body: raw,
 		redirect: "follow",
 	});
-	const response = (await fetchResult.json()) as JsonRpcResponse;
+	const responseText = await fetchResult.text();
+	let response: JsonRpcResponse;
+	try {
+		response = JSON.parse(responseText) as JsonRpcResponse;
+	} catch {
+		// non-JSON body (HTML error page, plain text) — the HTTP status is the
+		// real diagnostic, so surface it instead of a JSON parse error
+		throw new TransportRpcError(
+			-32603,
+			`HTTP ${fetchResult.status} ${fetchResult.statusText}: response body is not JSON`.trim(),
+			responseText.slice(0, 1000),
+		);
+	}
+	if (typeof response !== "object" || response === null) {
+		// scalar or null payload — the `in` checks below would throw a
+		// TypeError; report it as a malformed response with the HTTP status
+		throw new TransportRpcError(
+			-32603,
+			`HTTP ${fetchResult.status} ${fetchResult.statusText}: malformed JSON-RPC response`.trim(),
+			response,
+		);
+	}
+	if (!fetchResult.ok) {
+		// An HTTP failure status wins over any "result" in the body — a
+		// success payload delivered with a failure status is contradictory
+		// and not trusted. A JSON-RPC error envelope still reports the
+		// server's own error (e.g. a 429 rate limit).
+		const err = response.error as JsonRpcError | undefined;
+		if (err != null && typeof err === "object") {
+			throw new TransportRpcError(err.code, err.message);
+		}
+		throw new TransportRpcError(
+			-32603,
+			`HTTP ${fetchResult.status} ${fetchResult.statusText}`.trim(),
+			response,
+		);
+	}
 	if ("result" in response) {
 		return response.result as JsonRpcResult;
 	}
@@ -548,6 +584,15 @@ export async function sendJsonRpcRequest(
 		return response.simulation_results as JsonRpcResult;
 	}
 	const err = response.error as JsonRpcError;
+	if (err == null || typeof err !== "object") {
+		// no result and no error object — report the HTTP status rather than
+		// crashing on err.code
+		throw new TransportRpcError(
+			-32603,
+			`HTTP ${fetchResult.status} ${fetchResult.statusText}: malformed JSON-RPC response`.trim(),
+			response,
+		);
+	}
 	throw new TransportRpcError(err.code, err.message);
 }
 
@@ -576,14 +621,17 @@ export function getFunctionSelector(functionSignature: string): string {
  * @param rpc - Ethereum JSON-RPC node URL, {@link Transport}, or {@link JsonRpcNode}
  * @param entryPoint - EntryPoint contract address
  * @param account - Smart account address to query
- * @param key - Nonce key (default 0). Different keys allow parallel nonce channels.
+ * @param key - Nonce key (default 0). Different keys allow parallel nonce
+ *   channels. Prefer a `bigint` — keys can be as large as `uint192`, beyond
+ *   what a JS `number` can represent; `number` is kept for backward
+ *   compatibility.
  * @returns The current nonce as a bigint
  */
 export async function fetchAccountNonce(
 	rpc: string | Transport | JsonRpcNode,
 	entryPoint: string,
 	account: string,
-	key: number = 0,
+	key: number | bigint = 0,
 ): Promise<bigint> {
 	return JsonRpcNode.from(rpc).getEntryPointNonce(entryPoint, account, BigInt(key));
 }
