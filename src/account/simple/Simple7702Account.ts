@@ -3,7 +3,7 @@ import {Bundler} from "src/Bundler";
 import {BaseUserOperationDummyValues, ENTRYPOINT_V8, ENTRYPOINT_V9} from "src/constants";
 import {AbstractionKitError} from "src/errors";
 import {invokeSigner, pickScheme} from "src/signer/negotiate";
-import type {SignContext, Signer as AkSigner, SigningScheme, TypedData} from "src/signer/types";
+import type {SignContext, ExternalSigner, SigningScheme, TypedData} from "src/signer/types";
 import {JsonRpcNode, type Transport} from "src/transport";
 import type {
 	GasOption,
@@ -795,7 +795,7 @@ export class BaseSimple7702Account extends SmartAccount {
 	 * EntryPoint v0.8 / v0.9 domain. Lower-level escape hatch for integrators
 	 * driving `signTypedData` themselves with their own signing primitive
 	 * (HSM, MPC, custom wallet abstraction). Most callers should pass an
-	 * {@link AkSigner} to {@link signUserOperationWithSigner} instead, which
+	 * {@link ExternalSigner} to {@link signUserOperationWithSigner} instead, which
 	 * builds this internally.
 	 *
 	 * The digest of the returned payload equals the UserOperation hash from
@@ -848,7 +848,7 @@ export class BaseSimple7702Account extends SmartAccount {
 	}
 
 	/**
-	 * Sign a UserOperation with an {@link AkSigner}. The signer can implement
+	 * Sign a UserOperation with an {@link ExternalSigner}. The signer can implement
 	 * either `signTypedData` (preferred — JSON-RPC wallets, viem `WalletClient`)
 	 * or `signHash` (local keys, hardware wallets). Both schemes produce
 	 * signatures that validate against the same `userOpHash` because the
@@ -860,7 +860,7 @@ export class BaseSimple7702Account extends SmartAccount {
 	 */
 	protected async baseSignUserOperationWithSigner<T extends UserOperationV8 | UserOperationV9>(
 		useroperation: T,
-		signer: AkSigner,
+		signer: ExternalSigner,
 		chainId: bigint,
 	): Promise<string> {
 		const scheme = pickScheme(signer, BaseSimple7702Account.ACCEPTED_SIGNING_SCHEMES, {
@@ -1122,7 +1122,7 @@ export class Simple7702Account extends BaseSimple7702Account {
 	 */
 	public async signUserOperationWithSigner(
 		useroperation: UserOperationV8,
-		signer: AkSigner,
+		signer: ExternalSigner,
 		chainId: bigint,
 	): Promise<string> {
 		return this.baseSignUserOperationWithSigner(useroperation, signer, chainId);

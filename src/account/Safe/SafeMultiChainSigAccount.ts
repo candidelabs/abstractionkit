@@ -11,7 +11,7 @@ import {
 	ENTRYPOINT_V9,
 } from "src/constants";
 import {invokeSigner, pickScheme} from "src/signer/negotiate";
-import type {MultiOpSignContext, SignContext, Signer as AkSigner, TypedData} from "src/signer/types";
+import type {MultiOpSignContext, SignContext, ExternalSigner, TypedData} from "src/signer/types";
 import type {JsonRpcNode, Transport} from "src/transport";
 import type {MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet, UserOperationV9} from "../../types";
 import {
@@ -611,7 +611,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 
 	/**
 	 * Sign a single UserOperation for multi-chain using one or more
-	 * {@link AkSigner} instances. See
+	 * {@link ExternalSigner} instances. See
 	 * {@link SafeAccountV0_3_0.signUserOperationWithSigners} for the full
 	 * design rationale. Sets the multi-chain flag automatically.
 	 *
@@ -631,7 +631,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 */
 	public signUserOperationWithSigners(
 		userOperation: UserOperationV9,
-		signers: ReadonlyArray<AkSigner>,
+		signers: ReadonlyArray<ExternalSigner>,
 		chainId: bigint,
 		options: SafeSignatureOptions = {},
 	): Promise<string> {
@@ -749,8 +749,8 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * `fromPrivateKey`, `fromViem`, `fromEthersWallet`, and `fromViemWalletClient`
 	 * all work here without retyping (`fromViemWalletClient` will sign the
 	 * typed-data Merkle wrapper). User-defined single-op signers
-	 * (`Signer<SignContext>`) still don't work — they'd receive a context shape
-	 * they didn't declare.
+	 * (`ExternalSigner<SignContext>`) still don't work — they'd receive a
+	 * context shape they didn't declare.
 	 *
 	 * Note the chainId plumbing asymmetry vs the single-op variant:
 	 *   - **Plural** (this method): each `UserOperationToSign` carries its
@@ -762,12 +762,12 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * element rather than reaching for the singular variant.
 	 *
 	 * @param userOperationsToSign - UserOperations + chain IDs + validity windows
-	 * @param signers - one Signer per owner (any order; sorted by address on-chain)
+	 * @param signers - one ExternalSigner per owner (any order; sorted by address on-chain)
 	 * @returns one signature per input UserOperation, in the same order
 	 */
 	public async signUserOperationsWithSigners(
 		userOperationsToSign: UserOperationToSign[],
-		signers: ReadonlyArray<AkSigner<MultiOpSignContext<UserOperationV9>>>,
+		signers: ReadonlyArray<ExternalSigner<MultiOpSignContext<UserOperationV9>>>,
 	): Promise<string[]> {
 		if (userOperationsToSign.length < 1) {
 			throw new RangeError("There should be at least one userOperationsToSign");

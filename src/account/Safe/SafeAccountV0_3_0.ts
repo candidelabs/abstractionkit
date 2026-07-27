@@ -1,6 +1,6 @@
 import type {Bundler} from "src/Bundler";
 import {ENTRYPOINT_V7} from "src/constants";
-import type {SignContext, Signer as AkSigner} from "src/signer/types";
+import type {SignContext, ExternalSigner} from "src/signer/types";
 import type {JsonRpcNode, Transport} from "src/transport";
 
 import type {MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet, UserOperationV7,} from "../../types";
@@ -408,7 +408,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 	 */
 	public signUserOperationWithSigners(
 		useroperation: UserOperationV7,
-		signers: ReadonlyArray<AkSigner>,
+		signers: ReadonlyArray<ExternalSigner>,
 		chainId: bigint,
 		options: SafeSignatureOptions = {}
 	): Promise<string> {

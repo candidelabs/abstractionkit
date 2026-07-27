@@ -123,13 +123,13 @@ export {
 	fromViemWalletClient,
 } from "./signer/adapters";
 // ─── Signer interface design (capability-oriented) ──────────────────────
-// Exported as `ExternalSigner` because the old package-level `Signer` is
-// already taken by an owner-identifier union in Safe/types. An eventual
-// rename there would promote this to the unqualified `Signer`.
+// Named `ExternalSigner` (declaration and export alike) because the old
+// package-level `Signer` is already taken by an owner-identifier union in
+// Safe/types. An eventual rename there would free the unqualified `Signer`.
 export type {
+	ExternalSigner,
 	MultiOpSignContext,
 	SignContext,
-	Signer as ExternalSigner,
 	SignHashFn,
 	SigningScheme,
 	SignTypedDataFn,

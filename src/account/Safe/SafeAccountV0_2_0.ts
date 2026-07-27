@@ -1,6 +1,6 @@
 import type {Bundler} from "src/Bundler";
 import {ENTRYPOINT_V6} from "src/constants";
-import type {SignContext, Signer as AkSigner} from "src/signer/types";
+import type {SignContext, ExternalSigner} from "src/signer/types";
 import type {JsonRpcNode, Transport} from "src/transport";
 import type {MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet, UserOperationV6,} from "../../types";
 import {SafeAccount} from "./SafeAccount";
@@ -452,7 +452,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	}
 
 	/**
-	 * Sign a UserOperation using one or more {@link AkSigner} instances.
+	 * Sign a UserOperation using one or more {@link ExternalSigner} instances.
 	 * See {@link SafeAccountV0_3_0.signUserOperationWithSigners} for full
 	 * design rationale and examples.
 	 *
@@ -464,7 +464,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 */
 	public signUserOperationWithSigners(
 		useroperation: UserOperationV6,
-		signers: ReadonlyArray<AkSigner>,
+		signers: ReadonlyArray<ExternalSigner>,
 		chainId: bigint,
 		options: SafeSignatureOptions = {},
 	): Promise<string> {
