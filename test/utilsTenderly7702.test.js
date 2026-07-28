@@ -11,6 +11,7 @@ const PADDED_MARKER = "0x7702000000000000000000000000000000000000";
 const SENDER = "0x1f9090aae28b8a3dceadf281b0f12828e676c326";
 const DELEGATEE = "0xe6cae83bde06e4c305530e199d7217f42808555b";
 const DELEGATION_CODE = `0xef0100${DELEGATEE.slice(2)}`;
+const SENDER_MIXED_CASE = `0x${SENDER.slice(2).toUpperCase()}`;
 
 function makeV8UserOperation(overrides = {}) {
 	return {
@@ -97,6 +98,23 @@ describe("Tenderly EIP-7702 simulation handling", () => {
 			const sim = await runFullSimulation(makeV8UserOperation());
 			expect(sim.state_objects[SENDER].code).toBe(DELEGATION_CODE);
 		});
+
+		test("merges a caller override keyed by a checksummed sender address", async () => {
+			await ak.simulateUserOperationWithTenderly(
+				"account",
+				"project",
+				"key",
+				1n,
+				ENTRYPOINT_V8,
+				makeV8UserOperation(),
+				null,
+				{ [SENDER_MIXED_CASE]: { balance: "0x1" } },
+			);
+			const sim = requests[0].body.simulations[0];
+			expect(sim.state_objects).toEqual({
+				[SENDER]: { balance: "0x1", code: DELEGATION_CODE },
+			});
+		});
 	});
 
 	describe("direct call-data simulation (simulateUserOperationCallDataWithTenderly)", () => {
@@ -152,6 +170,50 @@ describe("Tenderly EIP-7702 simulation handling", () => {
 				code: DELEGATION_CODE,
 			});
 			expect(callerOverrides).toEqual({ [SENDER]: { balance: "0x1" } });
+		});
+
+		test("merges a caller override keyed by a checksummed sender address", async () => {
+			const callerOverrides = { [SENDER_MIXED_CASE]: { balance: "0x1" } };
+			const sims = await runCallDataSimulation(makeV8UserOperation(), callerOverrides);
+			expect(sims[0].state_objects).toEqual({
+				[SENDER]: { balance: "0x1", code: DELEGATION_CODE },
+			});
+			expect(callerOverrides).toEqual({ [SENDER_MIXED_CASE]: { balance: "0x1" } });
+		});
+	});
+
+	describe("state override key normalization (callTenderlySimulateBundle)", () => {
+		test("lowercases override addresses in the payload", async () => {
+			await ak.callTenderlySimulateBundle("account", "project", "key", [
+				{
+					chainId: 1n,
+					from: SENDER,
+					to: DELEGATEE,
+					data: "0x",
+					stateOverrides: { [SENDER_MIXED_CASE]: { balance: "0x1" } },
+				},
+			]);
+			expect(requests[0].body.simulations[0].state_objects).toEqual({
+				[SENDER]: { balance: "0x1" },
+			});
+		});
+
+		test("rejects override addresses that differ only in case", async () => {
+			await expect(
+				ak.callTenderlySimulateBundle("account", "project", "key", [
+					{
+						chainId: 1n,
+						from: SENDER,
+						to: DELEGATEE,
+						data: "0x",
+						stateOverrides: {
+							[SENDER]: { balance: "0x1" },
+							[SENDER_MIXED_CASE]: { code: "0x00" },
+						},
+					},
+				]),
+			).rejects.toThrow(/Duplicate stateOverrides address/);
+			expect(requests).toHaveLength(0);
 		});
 	});
 });
