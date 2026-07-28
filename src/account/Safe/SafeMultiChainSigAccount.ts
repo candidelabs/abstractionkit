@@ -56,12 +56,14 @@ import type {
  * Which account this class refers to, however, is not interchangeable with
  * `SafeAccountV0_3_0`:
  *
- * - **New accounts** derive a different address for the same owners, since the
- *   module and EntryPoint addresses feed the counterfactual address.
- * - **Deployed accounts** must be migrated before this class can operate on
- *   them. Attaching this class to a Safe deployed through `SafeAccountV0_3_0`
- *   is not enough — the v0.9 module has to be enabled and installed as the
- *   fallback handler first, and UserOperations sent before that will fail. Use
+ * - **New accounts** derive a different counterfactual address for the same
+ *   owners, since the module and EntryPoint addresses feed that derivation.
+ * - **Deployed accounts** keep the address they have, but must be migrated
+ *   before this class can operate on them. Attaching this class to a Safe
+ *   deployed through `SafeAccountV0_3_0` is not enough: two pieces of Safe
+ *   configuration have to change first — the v0.9 module must be enabled on
+ *   the Safe, and the Safe's fallback handler must be updated to point at it.
+ *   Until both land, UserOperations sent to the account will fail. Use
  *   {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions},
  *   whose batch must be sent as a UserOperation from the v0.7 account itself.
  *
@@ -113,9 +115,10 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	/**
 	 * Create a SafeMultiChainSigAccount instance for an existing or new account.
 	 *
-	 * An existing account must already have the v0.9 module enabled and set as
-	 * its fallback handler. A Safe deployed through {@link SafeAccountV0_3_0}
-	 * has neither until it is migrated — see the class documentation.
+	 * An existing account must already have the v0.9 module enabled, and its
+	 * fallback handler pointing at that module. A Safe deployed through
+	 * {@link SafeAccountV0_3_0} has neither until it is migrated — see the
+	 * class documentation.
 	 *
 	 * @param accountAddress - the Safe account address
 	 * @param overrides - optional overrides for module, entrypoint, and singleton addresses
