@@ -62,6 +62,22 @@ describe("HttpTransport error handling", () => {
 		});
 	});
 
+	test("surfaces the HTTP status for a bare-string error body on an HTTP failure", async () => {
+		const t = transportWith(429, { error: "rate limited" }, "Too Many Requests");
+		await expect(t.request({ method: "eth_chainId", params: [] })).rejects.toMatchObject({
+			name: "TransportRpcError",
+			message: expect.stringContaining("429"),
+		});
+	});
+
+	test("surfaces the HTTP status for a non-RPC-shaped error object on an HTTP failure", async () => {
+		const t = transportWith(503, { error: {} }, "Service Unavailable");
+		await expect(t.request({ method: "eth_chainId", params: [] })).rejects.toMatchObject({
+			name: "TransportRpcError",
+			message: expect.stringContaining("503"),
+		});
+	});
+
 	test("surfaces the HTTP status for an error:null envelope on an HTTP failure", async () => {
 		const t = transportWith(401, { jsonrpc: "2.0", id: 1, error: null }, "Unauthorized");
 		await expect(t.request({ method: "eth_chainId", params: [] })).rejects.toMatchObject({
