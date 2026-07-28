@@ -121,8 +121,12 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 		let verificationGasLimit = userOp.verificationGasLimit;
 		let callGasLimit = userOp.callGasLimit;
 
-		// set preVerificationGas to zero to force re-estimation
+		// zero the gas limits to force clean re-estimation (same pattern as
+		// SafeAccount and Erc7677Paymaster) — caller-supplied limits are still
+		// honored below as minimums
 		userOp.preVerificationGas = 0n;
+		userOp.verificationGasLimit = 0n;
+		userOp.callGasLimit = 0n;
 
 		const bundler = Bundler.from(bundlerRpc);
 		const estimation = await bundler.estimateUserOperationGas(
