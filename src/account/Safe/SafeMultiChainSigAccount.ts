@@ -47,15 +47,23 @@ import type {
  * to sign UserOperations for several chains under one signature.
  *
  * API-compatible with {@link SafeAccountV0_3_0}: same {@link SafeAccount} base,
- * same method signatures, same {@link InitCodeOverrides} shape. Selecting this
- * class instead of `SafeAccountV0_3_0` targets EntryPoint v0.9 — it is not a
- * separate integration. The multi-op methods ({@link signUserOperations},
- * {@link signUserOperationsWithSigners}) and the Merkle-root EIP-712 helpers
- * are additive; ignore them and the account behaves as a single-chain Safe.
+ * same method signatures, same {@link InitCodeOverrides} shape, so building on
+ * EntryPoint v0.9 is not a separate integration. The multi-op methods
+ * ({@link signUserOperations}, {@link signUserOperationsWithSigners}) and the
+ * Merkle-root EIP-712 helpers are additive; ignore them and the account
+ * behaves as a single-chain Safe.
  *
- * Note that the derived account address differs from `SafeAccountV0_3_0` for
- * the same owners, since the module and EntryPoint addresses feed the
- * counterfactual address.
+ * Which account this class refers to, however, is not interchangeable with
+ * `SafeAccountV0_3_0`:
+ *
+ * - **New accounts** derive a different address for the same owners, since the
+ *   module and EntryPoint addresses feed the counterfactual address.
+ * - **Deployed accounts** must be migrated before this class can operate on
+ *   them. Attaching this class to a Safe deployed through `SafeAccountV0_3_0`
+ *   is not enough — the v0.9 module has to be enabled and installed as the
+ *   fallback handler first, and UserOperations sent before that will fail. Use
+ *   {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions},
+ *   whose batch must be sent as a UserOperation from the v0.7 account itself.
  *
  * @example Single-chain use — the common case
  * ```ts
@@ -104,6 +112,11 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 
 	/**
 	 * Create a SafeMultiChainSigAccount instance for an existing or new account.
+	 *
+	 * An existing account must already have the v0.9 module enabled and set as
+	 * its fallback handler. A Safe deployed through {@link SafeAccountV0_3_0}
+	 * has neither until it is migrated — see the class documentation.
+	 *
 	 * @param accountAddress - the Safe account address
 	 * @param overrides - optional overrides for module, entrypoint, and singleton addresses
 	 */
