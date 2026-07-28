@@ -80,11 +80,18 @@ export class HttpTransport extends BaseRpcTransport {
 				responseText.slice(0, 1000),
 			);
 		}
+		// Only a properly shaped JSON-RPC error object counts. A non-RPC JSON
+		// error body (e.g. `{"error": "rate limited"}` from a gateway) must not
+		// mask the HTTP status below.
+		const rpcError =
+			typeof parsed === "object" && parsed != null && "error" in parsed
+				? (parsed as {error: unknown}).error
+				: null;
 		const hasRpcError =
-			typeof parsed === "object" &&
-			parsed != null &&
-			"error" in parsed &&
-			(parsed as {error: unknown}).error != null;
+			typeof rpcError === "object" &&
+			rpcError != null &&
+			typeof (rpcError as {code: unknown}).code === "number" &&
+			typeof (rpcError as {message: unknown}).message === "string";
 		if (!response.ok && !hasRpcError) {
 			// On HTTP failure, only a JSON-RPC *error* envelope falls through
 			// (parseResponse reports the server's error, e.g. a 429 rate

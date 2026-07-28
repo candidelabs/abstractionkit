@@ -87,6 +87,17 @@ export class AllowanceModule extends SafeModule {
 		recurringAllowanceValidityPeriodInMinutes: bigint,
 		inThePastPeriodStartBaseTimeStamp: bigint = 0n,
 	): MetaTransaction {
+		// resetTimeMin is a uint16 on-chain — reject values the ABI encoder
+		// would otherwise refuse with an unhelpful generic error
+		if (
+			recurringAllowanceValidityPeriodInMinutes < 0n ||
+			recurringAllowanceValidityPeriodInMinutes >= 2n ** 16n
+		) {
+			throw new RangeError(
+				"recurringAllowanceValidityPeriodInMinutes must fit the contract's " +
+					"uint16 resetTimeMin (0 to 65535 minutes).",
+			);
+		}
 		const baseInMinutes = inThePastPeriodStartBaseTimeStamp / 60n;
 		// resetBaseMin is a uint32 of minutes since the epoch; a millisecond
 		// timestamp (Date.now()) still overflows this bound after conversion

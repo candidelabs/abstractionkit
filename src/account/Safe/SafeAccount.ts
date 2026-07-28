@@ -59,6 +59,7 @@ import {
 import {
 	type BaseInitOverrides,
 	type CreateBaseUserOperationOverrides,
+	type CreateUserOperationV6Overrides,
 	EOADummySignerSignaturePair,
 	type SafeAccountSingleton,
 	SafeModuleExecutorFunctionSelector,
@@ -1714,7 +1715,28 @@ export class SafeAccount extends SmartAccount {
 		const validAfter = 0xffffffffffffn;
 		const validUntil = 0xffffffffffffn;
 
-		const isInit = factoryAddress != null && factoryAddress !== "0x";
+		// V0.6 callers can override the final initCode (applied by
+		// createUserOperation after this method returns). Resolve it up front
+		// so the dummy-signature encoding and the estimation op below see the
+		// same deployment state as the returned op — e.g. a caller-supplied
+		// "0x" must select the deployed-account WebAuthn owner encoding even
+		// when a factory address is set.
+		let resolvedV06InitCode: string | null = null;
+		if (isV06) {
+			resolvedV06InitCode = (overrides as CreateUserOperationV6Overrides).initCode ?? null;
+			if (resolvedV06InitCode == null) {
+				resolvedV06InitCode = "0x";
+				if (factoryAddress != null) {
+					resolvedV06InitCode = factoryAddress;
+					if (factoryData != null) {
+						resolvedV06InitCode += factoryData.slice(2);
+					}
+				}
+			}
+		}
+		const isInit = isV06
+			? resolvedV06InitCode !== "0x"
+			: factoryAddress != null && factoryAddress !== "0x";
 		let dummySignerSignaturePairs: SignerSignaturePair[];
 		if (overrides.dummySignerSignaturePairs != null) {
 			if (overrides.expectedSigners != null) {
@@ -1783,17 +1805,9 @@ export class SafeAccount extends SmartAccount {
 
 				let userOperationToEstimate: UserOperationV6 | UserOperationV7;
 				if (isV06) {
-					let initCode = "0x";
-					if (factoryAddress != null) {
-						initCode = factoryAddress;
-
-						if (factoryData != null) {
-							initCode += factoryData.slice(2);
-						}
-					}
 					userOperationToEstimate = {
 						...userOperation,
-						initCode: initCode,
+						initCode: resolvedV06InitCode as string,
 						paymasterAndData: "0x",
 					};
 				} else {

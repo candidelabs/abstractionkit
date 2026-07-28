@@ -14,7 +14,9 @@ function newestMtimeMs(entry) {
 	if (!stat.isDirectory()) {
 		return stat.mtimeMs;
 	}
-	let newest = 0;
+	// include the directory's own mtime: deleting a file updates only the
+	// parent directory, so ignoring it would let a deletion skip the rebuild
+	let newest = stat.mtimeMs;
 	for (const name of fs.readdirSync(entry)) {
 		newest = Math.max(newest, newestMtimeMs(path.join(entry, name)));
 	}

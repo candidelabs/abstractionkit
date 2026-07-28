@@ -25,7 +25,10 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 
 	/**
 	 * createPaymasterUserOperation will estimate gas and set the paymaster fields.
-	 * @param userOperation - User operation to be sponsored
+	 * @param userOperation - User operation to be sponsored. Its
+	 * verificationGasLimit and callGasLimit are trusted as prior estimates
+	 * (e.g. from createUserOperation) and reused during re-estimation;
+	 * only preVerificationGas is always re-estimated.
 	 * @param bundlerRpc - Bundler endpoint rpc url
 	 * @param nullifierHash - nullifier hash
 	 * @param root - Worldid Merkle tree root
@@ -121,7 +124,13 @@ export class WorldIdPermissionlessPaymaster extends Paymaster {
 		let verificationGasLimit = userOp.verificationGasLimit;
 		let callGasLimit = userOp.callGasLimit;
 
-		// set preVerificationGas to zero to force re-estimation
+		// Zero only preVerificationGas: the paymaster fields added above grow
+		// the calldata, so pvg must be re-estimated. verificationGasLimit and
+		// callGasLimit are paymaster-independent on v0.7+ (paymaster
+		// validation has its own gas field), so the supplied values are
+		// trusted as prior estimates and passed through — bundlers that skip
+		// estimating supplied fields answer faster. This assumes the caller's
+		// op carries real estimates (e.g. from createUserOperation).
 		userOp.preVerificationGas = 0n;
 
 		const bundler = Bundler.from(bundlerRpc);

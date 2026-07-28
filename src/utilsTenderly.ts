@@ -37,6 +37,37 @@ function isEip7702FactorySentinel(factory: string | null | undefined): boolean {
 }
 
 /**
+ * Return a copy of `stateOverrides` with the sender's EIP-7702 delegation
+ * code merged in. Override keys are EVM addresses, so the sender entry is
+ * matched case-insensitively — a caller entry keyed by a checksummed address
+ * merges into one lowercase entry instead of duplicating the address.
+ * Multiple keys matching the sender (differing only in case) are rejected,
+ * matching callTenderlySimulateBundle's duplicate policy — collapsing them
+ * here would silently pick one entry's fields over the other's.
+ */
+function withSenderCodeOverride(
+	stateOverrides: OverrideType | null | undefined,
+	sender: string,
+	delegationCode: string,
+): OverrideType {
+	const senderLower = sender.toLowerCase();
+	const merged: OverrideType = {};
+	let senderEntry: Record<string, string | Record<string, string>> | null = null;
+	for (const [address, entry] of Object.entries(stateOverrides ?? {})) {
+		if (address.toLowerCase() === senderLower) {
+			if (senderEntry != null) {
+				throw new RangeError(`Duplicate stateOverrides address (case-insensitive): ${address}.`);
+			}
+			senderEntry = entry;
+		} else {
+			merged[address] = entry;
+		}
+	}
+	merged[senderLower] = { ...(senderEntry ?? {}), code: delegationCode };
+	return merged;
+}
+
+/**
  * Rebuild the packed `initCode` from split factory/factoryData fields,
  * normalizing the short "0x7702" sentinel to the 20-byte right-padded marker
  * so non-empty factoryData lands after a well-formed head.
@@ -283,12 +314,7 @@ export async function simulateUserOperationWithTenderly(
 		const eip7702Auth = (userOperation as UserOperationV8 | UserOperationV9).eip7702Auth;
 		if (eip7702Auth != null && eip7702Auth.address != null) {
 			const delegationCode = `0xef0100${eip7702Auth.address.toLowerCase().replace("0x", "")}`;
-			const senderLower = userOperation.sender.toLowerCase();
-			stateOverrides = stateOverrides ? { ...stateOverrides } : {};
-			stateOverrides[senderLower] = {
-				...(stateOverrides[senderLower] || {}),
-				code: delegationCode,
-			};
+			stateOverrides = withSenderCodeOverride(stateOverrides, userOperation.sender, delegationCode);
 		}
 	}
 
@@ -527,12 +553,11 @@ export async function simulateUserOperationCallDataWithTenderly(
 				.eip7702Auth;
 			if (eip7702Auth != null && eip7702Auth.address != null) {
 				const delegationCode = `0xef0100${eip7702Auth.address.toLowerCase().replace("0x", "")}`;
-				const senderLower = userOperation.sender.toLowerCase();
-				stateOverrides = stateOverrides ? { ...stateOverrides } : {};
-				stateOverrides[senderLower] = {
-					...(stateOverrides[senderLower] || {}),
-					code: delegationCode,
-				};
+				stateOverrides = withSenderCodeOverride(
+					stateOverrides,
+					userOperation.sender,
+					delegationCode,
+				);
 			}
 			if (factoryData != null && factoryData !== "0x") {
 				factory = userOperation.sender;
@@ -860,7 +885,10 @@ export async function callTenderlySimulateBundle(
 					: transaction.value;
 		}
 		if (transaction.stateOverrides != null) {
-			// build a copy instead of rewriting the caller-owned object in place
+			// build a copy instead of rewriting the caller-owned object in place.
+			// Keys are EVM addresses: lowercase them so the payload carries one
+			// canonical key per address, and reject same-address keys that differ
+			// only in case rather than silently letting one override the other.
 			const stateOverrides: OverrideType = {};
 			for (const address in transaction.stateOverrides) {
 				const entry = { ...transaction.stateOverrides[address] };
@@ -876,7 +904,13 @@ export async function callTenderlySimulateBundle(
 					entry.storage = entry.stateDiff;
 					delete entry.stateDiff;
 				}
-				stateOverrides[address] = entry;
+				const addressLower = address.toLowerCase();
+				if (addressLower in stateOverrides) {
+					throw new RangeError(
+						`Duplicate stateOverrides address (case-insensitive): ${address}.`,
+					);
+				}
+				stateOverrides[addressLower] = entry;
 			}
 			transactionObject.state_objects = stateOverrides;
 		}
