@@ -47,7 +47,7 @@ describe('WorldIdPermissionlessPaymaster gas estimation', () => {
         });
     });
 
-    test('zeroes all gas limits in the op sent for estimation', async () => {
+    test('zeroes only preVerificationGas for estimation, passing supplied vgl/cgl through', async () => {
         const paymaster = new ak.WorldIdPermissionlessPaymaster(PAYMASTER);
         await paymaster.createPaymasterUserOperation(
             makeV7UserOperation(),
@@ -58,10 +58,13 @@ describe('WorldIdPermissionlessPaymaster gas estimation', () => {
         );
         expect(captured).toHaveLength(1);
         const sentOp = captured[0].params[0];
-        // the op is hex-serialized before hitting the wire
+        // pvg must be re-estimated (paymaster calldata grows it); vgl/cgl are
+        // paymaster-independent prior estimates and are passed through so
+        // bundlers that skip estimating supplied fields answer faster
+        // (the op is hex-serialized before hitting the wire)
         expect(BigInt(sentOp.preVerificationGas)).toBe(0n);
-        expect(BigInt(sentOp.verificationGasLimit)).toBe(0n);
-        expect(BigInt(sentOp.callGasLimit)).toBe(0n);
+        expect(BigInt(sentOp.verificationGasLimit)).toBe(1_000_000n);
+        expect(BigInt(sentOp.callGasLimit)).toBe(50n);
     });
 
     test('keeps caller-supplied limits as minimums over the estimation', async () => {
