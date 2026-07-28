@@ -68,6 +68,15 @@ describe('AllowanceModule setAllowance encoding', () => {
 
     test.each([
         ['negative', -1n],
+        ['uint16 overflow', 2n ** 16n],
+    ])('recurring allowance rejects a validity period outside the uint16 range (%s)', (_label, bad) => {
+        expect(() =>
+            module.createRecurringAllowanceMetaTransaction(DELEGATE, TOKEN, 100n, bad),
+        ).toThrow(RangeError);
+    });
+
+    test.each([
+        ['negative', -1n],
         ['above 255', 256n],
     ])('getDelegates rejects a maxNumberOfResults outside the uint8 range (%s)', async (_label, bad) => {
         await expect(
