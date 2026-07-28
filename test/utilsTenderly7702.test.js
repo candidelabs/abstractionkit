@@ -180,6 +180,17 @@ describe("Tenderly EIP-7702 simulation handling", () => {
 			});
 			expect(callerOverrides).toEqual({ [SENDER_MIXED_CASE]: { balance: "0x1" } });
 		});
+
+		test("rejects duplicate sender override keys differing only in case", async () => {
+			const callerOverrides = {
+				[SENDER]: { balance: "0x1" },
+				[SENDER_MIXED_CASE]: { balance: "0x2" },
+			};
+			await expect(
+				runCallDataSimulation(makeV8UserOperation(), callerOverrides),
+			).rejects.toThrow(/Duplicate stateOverrides address/);
+			expect(requests).toHaveLength(0);
+		});
 	});
 
 	describe("state override key normalization (callTenderlySimulateBundle)", () => {

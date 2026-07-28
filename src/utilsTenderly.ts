@@ -41,6 +41,9 @@ function isEip7702FactorySentinel(factory: string | null | undefined): boolean {
  * code merged in. Override keys are EVM addresses, so the sender entry is
  * matched case-insensitively — a caller entry keyed by a checksummed address
  * merges into one lowercase entry instead of duplicating the address.
+ * Multiple keys matching the sender (differing only in case) are rejected,
+ * matching callTenderlySimulateBundle's duplicate policy — collapsing them
+ * here would silently pick one entry's fields over the other's.
  */
 function withSenderCodeOverride(
 	stateOverrides: OverrideType | null | undefined,
@@ -49,15 +52,18 @@ function withSenderCodeOverride(
 ): OverrideType {
 	const senderLower = sender.toLowerCase();
 	const merged: OverrideType = {};
-	let senderEntry: Record<string, string | Record<string, string>> = {};
+	let senderEntry: Record<string, string | Record<string, string>> | null = null;
 	for (const [address, entry] of Object.entries(stateOverrides ?? {})) {
 		if (address.toLowerCase() === senderLower) {
-			senderEntry = { ...senderEntry, ...entry };
+			if (senderEntry != null) {
+				throw new RangeError(`Duplicate stateOverrides address (case-insensitive): ${address}.`);
+			}
+			senderEntry = entry;
 		} else {
 			merged[address] = entry;
 		}
 	}
-	merged[senderLower] = { ...senderEntry, code: delegationCode };
+	merged[senderLower] = { ...(senderEntry ?? {}), code: delegationCode };
 	return merged;
 }
 
