@@ -1,5 +1,5 @@
 import {BaseRpcTransport, type JsonRpcEnvelope} from "./BaseRpcTransport";
-import type {RequestOptions, Transport} from "./Transport";
+import {type RequestOptions, type Transport, TransportRpcError} from "./Transport";
 
 /**
  * Construction options for {@link HttpTransport}.
@@ -67,7 +67,43 @@ export class HttpTransport extends BaseRpcTransport {
 			redirect: "follow",
 			signal: options?.signal,
 		});
-		return await response.json();
+		const responseText = await response.text();
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(responseText);
+		} catch {
+			// non-JSON body (HTML error page, plain text) — the HTTP status is
+			// the real diagnostic, so surface it instead of a JSON parse error
+			throw new TransportRpcError(
+				-32603,
+				`HTTP ${response.status} ${response.statusText}: response body is not JSON`.trim(),
+				responseText.slice(0, 1000),
+			);
+		}
+		// Only a properly shaped JSON-RPC error object counts. A non-RPC JSON
+		// error body (e.g. `{"error": "rate limited"}` from a gateway) must not
+		// mask the HTTP status below.
+		const rpcError =
+			typeof parsed === "object" && parsed != null && "error" in parsed
+				? (parsed as {error: unknown}).error
+				: null;
+		const hasRpcError =
+			typeof rpcError === "object" &&
+			rpcError != null &&
+			typeof (rpcError as {code: unknown}).code === "number" &&
+			typeof (rpcError as {message: unknown}).message === "string";
+		if (!response.ok && !hasRpcError) {
+			// On HTTP failure, only a JSON-RPC *error* envelope falls through
+			// (parseResponse reports the server's error, e.g. a 429 rate
+			// limit). Anything else — including a contradictory "result" — is
+			// not trusted; the status is the real diagnostic.
+			throw new TransportRpcError(
+				-32603,
+				`HTTP ${response.status} ${response.statusText}`.trim(),
+				parsed,
+			);
+		}
+		return parsed;
 	}
 }
 

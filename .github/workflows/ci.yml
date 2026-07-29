@@ -45,5 +45,8 @@ jobs:
       - name: Build
         run: yarn build
 
-      - name: Signer unit tests
-        run: yarn test:signer
+      # Runs every suite outside test/integration/ (root jest config
+      # excludes it): transport, safe, calibur, paymaster, signer, and
+      # utility tests. All offline — mock transports or loopback servers.
+      - name: Offline unit tests
+        run: yarn test

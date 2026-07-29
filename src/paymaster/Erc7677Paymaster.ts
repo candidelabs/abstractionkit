@@ -65,7 +65,11 @@ function parsePositiveExchangeRate(raw: string | bigint | undefined | null): big
  * (Pimlico, Alchemy, …) have their own conventions. Refer to the
  * paymaster provider's documentation for the exact fields.
  *
- * ## Reserved fields consumed by this class (not forwarded to the RPC)
+ * ## Fields consumed by this class
+ *
+ * The whole context object — including the fields below — is forwarded to the
+ * RPC verbatim; providers ignore keys they don't recognize. The fields listed
+ * here are additionally interpreted by this class:
  *
  * - `exchangeRate` - token-to-ETH exchange rate as a bigint or hex/decimal
  *   string. Represents the count of token smallest-units equivalent to 1 ETH
@@ -74,6 +78,8 @@ function parsePositiveExchangeRate(raw: string | bigint | undefined | null): big
  *   provider is auto-detected (floored to a minimum of 1 token smallest-unit
  *   to handle cheap-gas chains). Not needed when `provider` is `"pimlico"` or
  *   `"candide"`; the class fetches the rate from the provider's RPC.
+ * - `paymasterAddress` - overrides the token-flow paymaster address when it
+ *   cannot be derived from the stub data or a provider RPC.
  */
 export type Erc7677Context = Record<string, unknown>;
 
@@ -133,9 +139,11 @@ export interface Erc7677StubDataResult extends Erc7677PaymasterFields {
  *
  * ## Token paymaster flows
  *
- * When `context.token` is set and the smart account implements
- * `prependTokenPaymasterApproveToCallData`, the class automatically runs the
- * token paymaster pipeline:
+ * When `context.token` is set the class runs the token paymaster pipeline.
+ * Once the pipeline engages (a provider is detected or an exchange rate is
+ * available) the smart account must implement
+ * `prependTokenPaymasterApproveToCallData`, otherwise a PAYMASTER_ERROR is
+ * thrown:
  *
  * - **Provider detected** (Candide, Pimlico): fetches exchange rate and
  *   paymaster address via provider-specific RPC, then handles approval
@@ -568,7 +576,12 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			overrides.callGasLimit ??
 			applyMultiplier(callGasLimit, overrides.callGasLimitPercentageMultiplier ?? 10);
 
-		if (entrypoint.toLowerCase() === ENTRYPOINT_V6.toLowerCase()) {
+		// Skip the buffer when the caller pinned verificationGasLimit
+		// explicitly: the override is documented to be used verbatim.
+		if (
+			overrides.verificationGasLimit == null &&
+			entrypoint.toLowerCase() === ENTRYPOINT_V6.toLowerCase()
+		) {
 			// Align with CandidePaymaster: add paymaster verification overhead for v0.6.
 			// Lowercase compare — overrides.entrypoint is arbitrary user input
 			// and ENTRYPOINT_V6 is checksummed.
@@ -778,6 +791,22 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		context: Erc7677Context,
 		overrides: GasPaymasterUserOperationOverrides,
 	): Promise<{ userOperation: SameUserOp<T>; tokenQuote?: TokenQuote }> {
+		// Case C: no provider, no exchangeRate — fall through to regular flow.
+		if (this.provider == null && context.exchangeRate == null) {
+			return this.sponsoredFlow(userOp, bundlerRpc, entrypoint, chainIdHex, context, overrides);
+		}
+
+		// The flow below always prepends an approval, so verify the account
+		// supports it before spending a provider round-trip on the quote.
+		if (typeof smartAccount.prependTokenPaymasterApproveToCallData !== "function") {
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				"context.token is set but this smart account does not implement " +
+					"prependTokenPaymasterApproveToCallData, which the token " +
+					"paymaster flow requires to prepend the ERC-20 approval.",
+			);
+		}
+
 		// Step 1 — resolve exchange rate + paymaster address.
 		let exchangeRate: bigint;
 		let paymasterAddress: string | null = null;
@@ -807,7 +836,8 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 				);
 			}
 		} else {
-			// Case C: no provider, no exchangeRate — fall through to regular flow.
+			// Unreachable: the Case C guard above already returned. Kept for
+			// definite assignment of exchangeRate.
 			return this.sponsoredFlow(userOp, bundlerRpc, entrypoint, chainIdHex, context, overrides);
 		}
 

@@ -1,5 +1,5 @@
 import { AbstractionKitError } from "../errors";
-import type { Signer, SigningScheme, TypedData } from "./types";
+import type { ExternalSigner, SigningScheme, TypedData } from "./types";
 
 /**
  * Pick the best mutually-supported signing scheme for one signer against an
@@ -11,7 +11,7 @@ import type { Signer, SigningScheme, TypedData } from "./types";
  * signer can do.
  */
 export function pickScheme<C>(
-	signer: Signer<C>,
+	signer: ExternalSigner<C>,
 	accepted: readonly SigningScheme[],
 	context: { accountName: string; signerIndex: number },
 ): SigningScheme {
@@ -51,7 +51,7 @@ function buildMismatchMessage(params: {
 		`No compatible signing scheme for signer[${signerIndex}] ${signerAddress}. ` +
 		`${accountName} accepts: [${accepted.join(", ")}]; signer provides: [${canStr}]. ` +
 		(signerCan.length === 0
-			? "Signer must implement at least one of `signHash` or `signTypedData`. "
+			? "ExternalSigner must implement at least one of `signHash` or `signTypedData`. "
 			: "") +
 		"Hint: `fromViem` / `fromEthersWallet` give both; " +
 		"`fromViemWalletClient` gives only `typedData` (use Safe for JSON-RPC wallets)."
@@ -67,7 +67,7 @@ function buildMismatchMessage(params: {
  * can inspect the userOp.
  */
 export async function invokeSigner<C>(
-	signer: Signer<C>,
+	signer: ExternalSigner<C>,
 	scheme: SigningScheme,
 	payload: {
 		hash: `0x${string}`;

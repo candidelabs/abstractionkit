@@ -1,6 +1,6 @@
 import type {Bundler} from "src/Bundler";
 import {ENTRYPOINT_V7} from "src/constants";
-import type {SignContext, Signer as AkSigner} from "src/signer/types";
+import type {SignContext, ExternalSigner} from "src/signer/types";
 import type {JsonRpcNode, Transport} from "src/transport";
 
 import type {MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet, UserOperationV7,} from "../../types";
@@ -87,17 +87,25 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 	 * The account address is deterministically computed but not yet deployed on-chain.
 	 * The first UserOperation sent will deploy it automatically via factory data.
 	 *
+	 * Instantiates through `new this(...)`, so subclasses calling this
+	 * factory (directly or via `super`) get an instance of the subclass,
+	 * not a plain SafeAccountV0_3_0. A detached call (the method extracted
+	 * into a bare function, where `this` is undefined) falls back to
+	 * constructing a SafeAccountV0_3_0, matching the pre-polymorphic
+	 * behavior.
+	 *
 	 * @param owners - Array of owner signers (at least one required)
 	 * @param overrides - Override default initialization values
-	 * @returns A SafeAccountV0_3_0 instance with factory data set for deployment
+	 * @returns An instance of the calling class with factory data set for deployment
 	 *
 	 * @example
 	 * const smartAccount = SafeAccountV0_3_0.initializeNewAccount(["0xOwnerAddress"]);
 	 */
-	public static initializeNewAccount(
+	public static initializeNewAccount<T extends typeof SafeAccountV0_3_0>(
+		this: T,
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
-	): SafeAccountV0_3_0 {
+	): InstanceType<T> {
 		let isInitWebAuthn = false;
 		let x = 0n;
 		let y = 0n;
@@ -122,7 +130,13 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 				overrides.safeModuleSetupAddress ?? SafeAccountV0_3_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
-		const safe = new SafeAccountV0_3_0(accountAddress, {
+		// Plain-JS callers may invoke this factory detached
+		// (`const init = SafeAccountV0_3_0.initializeNewAccount; init(...)`),
+		// leaving strict-mode `this` undefined; fall back to this class so
+		// such calls keep working instead of throwing on `new this(...)`.
+		// biome-ignore lint/complexity/noThisInStatic: polymorphic factory; subclasses must get their own type back
+		const ctor = (this as T | undefined) ?? SafeAccountV0_3_0;
+		const safe: SafeAccountV0_3_0 = new ctor(accountAddress, {
 			safe4337ModuleAddress: overrides.safe4337ModuleAddress,
 			entrypointAddress: overrides.entrypointAddress,
 			onChainIdentifierParams: overrides.onChainIdentifierParams,
@@ -137,7 +151,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 			safe.y = y;
 		}
 
-		return safe;
+		return safe as InstanceType<T>;
 	}
 
 	/**
@@ -394,7 +408,7 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 	 */
 	public signUserOperationWithSigners(
 		useroperation: UserOperationV7,
-		signers: ReadonlyArray<AkSigner>,
+		signers: ReadonlyArray<ExternalSigner>,
 		chainId: bigint,
 		options: SafeSignatureOptions = {}
 	): Promise<string> {

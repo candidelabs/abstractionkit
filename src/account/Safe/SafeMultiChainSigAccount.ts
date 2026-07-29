@@ -11,7 +11,7 @@ import {
 	ENTRYPOINT_V9,
 } from "src/constants";
 import {invokeSigner, pickScheme} from "src/signer/negotiate";
-import type {MultiOpSignContext, SignContext, Signer as AkSigner, TypedData} from "src/signer/types";
+import type {MultiOpSignContext, SignContext, ExternalSigner, TypedData} from "src/signer/types";
 import type {JsonRpcNode, Transport} from "src/transport";
 import type {MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet, UserOperationV9} from "../../types";
 import {
@@ -42,8 +42,41 @@ import type {
 } from "./types";
 
 /**
- * Safe account variant that supports multi-chain signatures via Merkle trees:
- * sign UserOperations for multiple chains under one signature on EntryPoint v0.9.
+ * Safe account on EntryPoint v0.9. Use it as a regular single-chain Safe
+ * account, and opt into multi-chain signatures via Merkle trees when you want
+ * to sign UserOperations for several chains under one signature.
+ *
+ * API-compatible with {@link SafeAccountV0_3_0}: same {@link SafeAccount} base,
+ * same method signatures, same {@link InitCodeOverrides} shape, so building on
+ * EntryPoint v0.9 is not a separate integration. The multi-op methods
+ * ({@link signUserOperations}, {@link signUserOperationsWithSigners}) and the
+ * Merkle-root EIP-712 helpers are additive; ignore them and the account
+ * behaves as a single-chain Safe.
+ *
+ * Which account this class refers to, however, is not interchangeable with
+ * `SafeAccountV0_3_0`:
+ *
+ * - **New accounts** derive a different counterfactual address for the same
+ *   owners, since the module and EntryPoint addresses feed that derivation.
+ * - **Deployed accounts** keep the address they have, but must be migrated
+ *   before this class can operate on them. Attaching this class to a Safe
+ *   deployed through `SafeAccountV0_3_0` is not enough: two pieces of Safe
+ *   configuration have to change first — the v0.9 module must be enabled on
+ *   the Safe, and the Safe's fallback handler must be updated to point at it.
+ *   Until both land, UserOperations sent to the account will fail. Use
+ *   {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions},
+ *   whose batch must be sent as a UserOperation from the v0.7 account itself.
+ *
+ * @example Single-chain use — the common case
+ * ```ts
+ * const account = SafeMultiChainSigAccountV1.initializeNewAccount([owner]);
+ * const userOp = await account.createUserOperation([tx], nodeRpc, bundlerRpc);
+ * userOp.signature = await account.signUserOperationWithSigners(
+ *   userOp,
+ *   [signer],
+ *   chainId,
+ * );
+ * ```
  *
  * Uses Safe Passkey module v0.2.1 WebAuthn verifiers by default (Daimo P256
  * verifier instead of the base class's FCL P256).
@@ -81,6 +114,12 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 
 	/**
 	 * Create a SafeMultiChainSigAccount instance for an existing or new account.
+	 *
+	 * An existing account must already have the v0.9 module enabled, and its
+	 * fallback handler pointing at that module. A Safe deployed through
+	 * {@link SafeAccountV0_3_0} has neither until it is migrated — see the
+	 * class documentation.
+	 *
 	 * @param accountAddress - the Safe account address
 	 * @param overrides - optional overrides for module, entrypoint, and singleton addresses
 	 */
@@ -575,7 +614,16 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	}
 
 	/**
-	 * create a useroperation signature
+	 * Create a signature for a single UserOperation. This is the regular
+	 * signing path — use it for ordinary single-chain transactions. To sign
+	 * several UserOperations under one signature, use
+	 * {@link signUserOperations}.
+	 *
+	 * The multi-chain flag is set automatically, which only affects how the
+	 * signature is encoded: this account's module validates single-chain
+	 * UserOperations through the same scheme, signing the leaf SafeOp hash
+	 * directly rather than a Merkle root.
+	 *
 	 * @param useroperation - useroperation to sign
 	 * @param privateKeys - for the signers
 	 * @param chainId - target chain id
@@ -610,10 +658,18 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	}
 
 	/**
-	 * Sign a single UserOperation for multi-chain using one or more
-	 * {@link AkSigner} instances. See
+	 * Sign a single UserOperation using one or more {@link ExternalSigner}
+	 * instances. This is the regular signing path — use it for ordinary
+	 * single-chain transactions. See
 	 * {@link SafeAccountV0_3_0.signUserOperationWithSigners} for the full
-	 * design rationale. Sets the multi-chain flag automatically.
+	 * design rationale.
+	 *
+	 * The multi-chain flag is set automatically, which only affects how the
+	 * signature is encoded: this account's module validates single-chain
+	 * UserOperations through the same scheme, signing the leaf SafeOp hash
+	 * directly rather than a Merkle root. Signing several UserOperations under
+	 * one signature is a separate method,
+	 * {@link signUserOperationsWithSigners}.
 	 *
 	 * Note the chainId plumbing asymmetry vs the multi-op variant:
 	 *   - **Singular** (this method): `chainId` is a positional argument.
@@ -631,7 +687,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 */
 	public signUserOperationWithSigners(
 		userOperation: UserOperationV9,
-		signers: ReadonlyArray<AkSigner>,
+		signers: ReadonlyArray<ExternalSigner>,
 		chainId: bigint,
 		options: SafeSignatureOptions = {},
 	): Promise<string> {
@@ -749,8 +805,8 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * `fromPrivateKey`, `fromViem`, `fromEthersWallet`, and `fromViemWalletClient`
 	 * all work here without retyping (`fromViemWalletClient` will sign the
 	 * typed-data Merkle wrapper). User-defined single-op signers
-	 * (`Signer<SignContext>`) still don't work — they'd receive a context shape
-	 * they didn't declare.
+	 * (`ExternalSigner<SignContext>`) still don't work — they'd receive a
+	 * context shape they didn't declare.
 	 *
 	 * Note the chainId plumbing asymmetry vs the single-op variant:
 	 *   - **Plural** (this method): each `UserOperationToSign` carries its
@@ -762,12 +818,12 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * element rather than reaching for the singular variant.
 	 *
 	 * @param userOperationsToSign - UserOperations + chain IDs + validity windows
-	 * @param signers - one Signer per owner (any order; sorted by address on-chain)
+	 * @param signers - one ExternalSigner per owner (any order; sorted by address on-chain)
 	 * @returns one signature per input UserOperation, in the same order
 	 */
 	public async signUserOperationsWithSigners(
 		userOperationsToSign: UserOperationToSign[],
-		signers: ReadonlyArray<AkSigner<MultiOpSignContext<UserOperationV9>>>,
+		signers: ReadonlyArray<ExternalSigner<MultiOpSignContext<UserOperationV9>>>,
 	): Promise<string[]> {
 		if (userOperationsToSign.length < 1) {
 			throw new RangeError("There should be at least one userOperationsToSign");

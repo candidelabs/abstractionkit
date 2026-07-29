@@ -16,7 +16,7 @@ import {
 import {AbstractionKitError} from "src/errors";
 import type {PrependTokenPaymasterApproveAccount} from "src/paymaster/types";
 import {invokeSigner, pickScheme} from "src/signer/negotiate";
-import type {SignContext, Signer as AkSigner, SigningScheme, TypedData} from "src/signer/types";
+import type {SignContext, ExternalSigner, SigningScheme, TypedData} from "src/signer/types";
 import {JsonRpcNode, type Transport} from "src/transport";
 import type {JsonRpcResult, UserOperationV8, UserOperationV9} from "src/types";
 import {
@@ -706,7 +706,7 @@ export class Calibur7702Account
 	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = ["typedData", "hash"];
 
 	/**
-	 * Sign a UserOperation with an {@link AkSigner}. The signer can implement
+	 * Sign a UserOperation with an {@link ExternalSigner}. The signer can implement
 	 * either `signTypedData` (preferred — JSON-RPC wallets, viem `WalletClient`)
 	 * or `signHash` (local keys, hardware wallets). Both schemes produce
 	 * signatures that validate against the same `userOpHash` because the
@@ -718,7 +718,7 @@ export class Calibur7702Account
 	 */
 	public async signUserOperationWithSigner(
 		userOperation: UserOperationV8,
-		signer: AkSigner,
+		signer: ExternalSigner,
 		chainId: bigint,
 		overrides: CaliburSignatureOverrides = {},
 	): Promise<string> {
@@ -868,6 +868,17 @@ export class Calibur7702Account
 		const hook = BigInt(settings.hook ?? ZeroAddress);
 		const expiration = BigInt(settings.expiration ?? 0);
 		const isAdmin = settings.isAdmin ? 1n : 0n;
+		if (expiration < 0n || expiration >= 1n << 40n) {
+			// the on-chain field is uint40; an oversized value (e.g. a millisecond
+			// timestamp) would bleed into the isAdmin bit at position 200
+			throw new RangeError(
+				"expiration must be a unix timestamp in seconds that fits in 40 bits, " +
+					`got ${expiration}. Did you pass milliseconds instead of seconds?`,
+			);
+		}
+		if (hook < 0n || hook >= 1n << 160n) {
+			throw new RangeError("hook must be a valid 20-byte address.");
+		}
 		return (isAdmin << 200n) | (expiration << 160n) | hook;
 	}
 

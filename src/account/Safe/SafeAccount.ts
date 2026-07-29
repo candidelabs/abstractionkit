@@ -17,7 +17,7 @@ import {Bundler} from "src/Bundler";
 import {AbstractionKitError, ensureError} from "src/errors";
 import {SafeAccountFactory} from "src/factory/SafeAccountFactory";
 import {invokeSigner, pickScheme} from "src/signer/negotiate";
-import type {Signer as AkSigner, SigningScheme, TypedData} from "src/signer/types";
+import type {ExternalSigner, SigningScheme, TypedData} from "src/signer/types";
 import {JsonRpcNode, type Transport} from "src/transport";
 import {
 	BaseUserOperationDummyValues,
@@ -59,6 +59,7 @@ import {
 import {
 	type BaseInitOverrides,
 	type CreateBaseUserOperationOverrides,
+	type CreateUserOperationV6Overrides,
 	EOADummySignerSignaturePair,
 	type SafeAccountSingleton,
 	SafeModuleExecutorFunctionSelector,
@@ -1360,6 +1361,16 @@ export class SafeAccount extends SmartAccount {
 
 	/**
 	 * estimate gas limits for a useroperation
+	 *
+	 * The returned verificationGasLimit includes ~55k gas per dummy signer
+	 * used for estimation (from dummySignerSignaturePairs, expectedSigners,
+	 * or the single-EOA default), compensating for the per-signature
+	 * verification cost bundler simulation skips. If the operation already
+	 * carries a signature, no compensation is added and the caller is
+	 * responsible for it.
+	 *
+	 * The passed userOperation is not mutated; estimation runs on an
+	 * internal copy carrying the dummy signature and zeroed gas fees.
 	 * @param userOperation - useroperation to estimate gas for
 	 * @param bundlerRpc - bundler rpc for gas estimation
 	 * @param overrides - overrides for the default values
@@ -1387,6 +1398,32 @@ export class SafeAccount extends SmartAccount {
 		const validAfter = 0xffffffffffffn;
 		const validUntil = 0xffffffffffffn;
 
+		// Derived from the operation's own init fields; the signature encoder
+		// needs the init flag and verifier config whenever a dummy pair
+		// carries a raw WebauthnPublicKey signer.
+		let initCode: string | null;
+		if ("initCode" in userOperation) {
+			initCode = userOperation.initCode;
+		} else {
+			initCode = userOperation.factory;
+		}
+		const isInit = initCode != null && initCode !== "0x";
+		const webAuthnSignatureOverrides = {
+			isInit,
+			webAuthnSharedSigner: overrides.webAuthnSharedSigner,
+			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
+			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
+			webAuthnSignerFactory: overrides.webAuthnSignerFactory,
+			webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
+			webAuthnSignerProxyCreationCode: overrides.webAuthnSignerProxyCreationCode,
+		};
+
+		// Number of dummy signatures this method placed on the estimated
+		// operation. Zero when the caller supplied a ready-made signature,
+		// in which case the signer count is unknown here and per-signer gas
+		// compensation is left to the caller.
+		let dummySignersCount = 0;
+		let estimationSignature = userOperation.signature;
 		if (overrides.dummySignerSignaturePairs != null) {
 			if (overrides.expectedSigners != null) {
 				throw new RangeError(
@@ -1396,44 +1433,35 @@ export class SafeAccount extends SmartAccount {
 			if (overrides.dummySignerSignaturePairs.length < 1) {
 				throw new RangeError("Number of dummy signers signature pairs can't be less than 1");
 			}
-			userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
+			dummySignersCount = overrides.dummySignerSignaturePairs.length;
+			estimationSignature = SafeAccount.formatSignaturesToUseroperationSignature(
 				overrides.dummySignerSignaturePairs,
 				{
 					validAfter,
 					validUntil,
 					isMultiChainSignature: overrides.isMultiChainSignature,
+					...webAuthnSignatureOverrides,
 				},
 			);
 		} else if (overrides.expectedSigners != null) {
-			let initCode: string | null;
-
-			if ("initCode" in userOperation) {
-				initCode = userOperation.initCode;
-			} else {
-				initCode = userOperation.factory;
-			}
-			const isInit = initCode != null && initCode !== "0x";
-
 			const dummySignerSignaturePairs =
-				SafeAccount.createDummySignerSignaturePairForExpectedSigners(overrides.expectedSigners, {
-					isInit,
-					webAuthnSharedSigner: overrides.webAuthnSharedSigner,
-					eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-					eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-					webAuthnSignerProxyCreationCode: overrides.webAuthnSignerProxyCreationCode,
-				});
-			userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
+				SafeAccount.createDummySignerSignaturePairForExpectedSigners(
+					overrides.expectedSigners,
+					webAuthnSignatureOverrides,
+				);
+			dummySignersCount = dummySignerSignaturePairs.length;
+			estimationSignature = SafeAccount.formatSignaturesToUseroperationSignature(
 				dummySignerSignaturePairs,
 				{
 					validAfter,
 					validUntil,
 					isMultiChainSignature: overrides.isMultiChainSignature,
+					...webAuthnSignatureOverrides,
 				},
 			);
 		} else if (userOperation.signature.length < 3) {
-			userOperation.signature = SafeAccount.formatSignaturesToUseroperationSignature(
+			dummySignersCount = 1;
+			estimationSignature = SafeAccount.formatSignaturesToUseroperationSignature(
 				[EOADummySignerSignaturePair],
 				{
 					validAfter,
@@ -1445,28 +1473,29 @@ export class SafeAccount extends SmartAccount {
 
 		const bundler = Bundler.from(bundlerRpc);
 
-		const inputMaxFeePerGas = userOperation.maxFeePerGas;
-		const inputMaxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
-		userOperation.maxFeePerGas = 0n;
-		userOperation.maxPriorityFeePerGas = 0n;
+		// Estimate on a shallow copy so the caller's operation is never
+		// mutated, even when estimation throws.
+		const userOperationToEstimate = {
+			...userOperation,
+			signature: estimationSignature,
+			maxFeePerGas: 0n,
+			maxPriorityFeePerGas: 0n,
+		};
 		const estimation = await bundler.estimateUserOperationGas(
-			userOperation,
+			userOperationToEstimate,
 			this.entrypointAddress,
 			overrides.stateOverrideSet,
 		);
-		userOperation.maxFeePerGas = inputMaxFeePerGas;
-		userOperation.maxPriorityFeePerGas = inputMaxPriorityFeePerGas;
 
 		const preVerificationGas = BigInt(estimation.preVerificationGas);
 
-		let verificationGasLimit: bigint;
-		if (overrides.dummySignerSignaturePairs != null) {
-			verificationGasLimit =
-				BigInt(estimation.verificationGasLimit) +
-				BigInt(overrides.dummySignerSignaturePairs.length) * 55_000n;
-		} else {
-			verificationGasLimit = BigInt(estimation.verificationGasLimit);
-		}
+		// Compensate for per-signer signature verification cost the bundler
+		// skips during estimation: dummy signatures short-circuit validation,
+		// but Safe iterates owner signatures inside `validateUserOp`, so each
+		// real signature pays ~55k gas at inclusion that simulation never
+		// paid for.
+		const verificationGasLimit =
+			BigInt(estimation.verificationGasLimit) + BigInt(dummySignersCount) * 55_000n;
 
 		const callGasLimit = BigInt(estimation.callGasLimit);
 
@@ -1686,6 +1715,28 @@ export class SafeAccount extends SmartAccount {
 		const validAfter = 0xffffffffffffn;
 		const validUntil = 0xffffffffffffn;
 
+		// V0.6 callers can override the final initCode (applied by
+		// createUserOperation after this method returns). Resolve it up front
+		// so the dummy-signature encoding and the estimation op below see the
+		// same deployment state as the returned op — e.g. a caller-supplied
+		// "0x" must select the deployed-account WebAuthn owner encoding even
+		// when a factory address is set.
+		let resolvedV06InitCode: string | null = null;
+		if (isV06) {
+			resolvedV06InitCode = (overrides as CreateUserOperationV6Overrides).initCode ?? null;
+			if (resolvedV06InitCode == null) {
+				resolvedV06InitCode = "0x";
+				if (factoryAddress != null) {
+					resolvedV06InitCode = factoryAddress;
+					if (factoryData != null) {
+						resolvedV06InitCode += factoryData.slice(2);
+					}
+				}
+			}
+		}
+		const isInit = isV06
+			? resolvedV06InitCode !== "0x"
+			: factoryAddress != null && factoryAddress !== "0x";
 		let dummySignerSignaturePairs: SignerSignaturePair[];
 		if (overrides.dummySignerSignaturePairs != null) {
 			if (overrides.expectedSigners != null) {
@@ -1701,7 +1752,6 @@ export class SafeAccount extends SmartAccount {
 			if (overrides.expectedSigners == null) {
 				dummySignerSignaturePairs = [EOADummySignerSignaturePair];
 			} else {
-				const isInit = factoryAddress != null && factoryAddress !== "0x";
 				dummySignerSignaturePairs = SafeAccount.createDummySignerSignaturePairForExpectedSigners(
 					overrides.expectedSigners,
 					{
@@ -1722,7 +1772,17 @@ export class SafeAccount extends SmartAccount {
 				validAfter,
 				validUntil,
 				isMultiChainSignature: overrides.isMultiChainSignature,
+				// needed when user-supplied dummySignerSignaturePairs contain raw
+				// WebauthnPublicKey signers — the encoder requires the init flag,
+				// and for deployed accounts derives the per-owner verifier
+				// address from the verifier config
+				isInit,
 				webAuthnSharedSigner,
+				eip7212WebAuthnPrecompileVerifier,
+				eip7212WebAuthnContractVerifier,
+				webAuthnSignerFactory,
+				webAuthnSignerSingleton,
+				webAuthnSignerProxyCreationCode,
 			},
 		);
 
@@ -1745,17 +1805,9 @@ export class SafeAccount extends SmartAccount {
 
 				let userOperationToEstimate: UserOperationV6 | UserOperationV7;
 				if (isV06) {
-					let initCode = "0x";
-					if (factoryAddress != null) {
-						initCode = factoryAddress;
-
-						if (factoryData != null) {
-							initCode += factoryData.slice(2);
-						}
-					}
 					userOperationToEstimate = {
 						...userOperation,
-						initCode: initCode,
+						initCode: resolvedV06InitCode as string,
 						paymasterAndData: "0x",
 					};
 				} else {
@@ -1771,12 +1823,18 @@ export class SafeAccount extends SmartAccount {
 
 					const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
 					if (parallelPaymasterInitValues != null) {
-						if (!parallelPaymasterInitValues.paymasterData.endsWith("22e325a297439656")) {
+						// lowercase like the EIP-712 trimmer and the MultiChain
+						// subclass — uppercase hex is valid input
+						if (
+							!parallelPaymasterInitValues.paymasterData
+								.toLowerCase()
+								.endsWith("22e325a297439656")
+						) {
 							throw new RangeError(
 								"Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'.",
 							);
 						}
-						if (this.entrypointAddress !== ENTRYPOINT_V9) {
+						if (this.entrypointAddress.toLowerCase() !== ENTRYPOINT_V9.toLowerCase()) {
 							throw new RangeError("parallelPaymasterInitValues only works with ep v0.9");
 						}
 						userOperationToEstimate.paymaster = parallelPaymasterInitValues.paymaster;
@@ -1902,7 +1960,7 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * Schemes Safe accepts from a {@link Signer}, in preference order.
+	 * Schemes Safe accepts from an {@link ExternalSigner}, in preference order.
 	 * `typedData` is preferred because wallets can display structured fields
 	 * rather than a hex blob; `hash` is accepted as a fallback for signers
 	 * that only support raw ECDSA.
@@ -1910,17 +1968,17 @@ export class SafeAccount extends SmartAccount {
 	public static readonly ACCEPTED_SIGNING_SCHEMES: readonly SigningScheme[] = ["typedData", "hash"];
 
 	/**
-	 * Sign a UserOperation using one or more {@link Signer}s. This is the
+	 * Sign a UserOperation using one or more {@link ExternalSigner}s. This is the
 	 * capability-oriented signing path: each signer declares what it can do
 	 * (`signHash`, `signTypedData`, both) and the account picks the best
 	 * match per signer. Incompatible signers fail offline with an actionable
 	 * error rather than a silent bundler rejection.
 	 *
 	 * Signers are invoked in parallel. For interactive wallets that share a
-	 * popup session, sequence the prompts inside your Signer implementation.
+	 * popup session, sequence the prompts inside your ExternalSigner implementation.
 	 *
 	 * @param useroperation - UserOperation to sign
-	 * @param signers - Signer instances (`fromViem(account)`, `fromEthersWallet(wallet)`, etc.)
+	 * @param signers - ExternalSigner instances (`fromViem(account)`, `fromEthersWallet(wallet)`, etc.)
 	 * @param chainId - target chain id
 	 * @param params - bag combining required wiring (`entrypointAddress`,
 	 *   `safe4337ModuleAddress`, `context`) with optional `options`
@@ -1934,7 +1992,7 @@ export class SafeAccount extends SmartAccount {
 		C,
 	>(
 		useroperation: T,
-		signers: ReadonlyArray<AkSigner<C>>,
+		signers: ReadonlyArray<ExternalSigner<C>>,
 		chainId: bigint,
 		params: {
 			entrypointAddress: string;
@@ -2085,7 +2143,7 @@ export class SafeAccount extends SmartAccount {
 			],
 		).slice(-40);
 
-		return `0x${proxyAdd}`;
+		return getAddress(`0x${proxyAdd}`); //to checksummed
 	}
 
 	/**
@@ -2155,10 +2213,23 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * calculate a signer public address lowercase
-	 * @param signer - a signer to compute address for
-	 * @param overrides - overrides for the default values
-	 * @returns signer address
+	 * Resolve a {@link Signer} to the lowercase address the Safe contract
+	 * sees as the owner — not merely a case conversion:
+	 *
+	 * - string signer: returned lowercased as-is.
+	 * - WebAuthn public key with `overrides.isInit` set: resolves to the
+	 *   WebAuthn **shared signer** address, since during account init the
+	 *   shared signer is the enabled owner rather than a per-owner verifier.
+	 * - WebAuthn public key otherwise: **derives** the deterministic CREATE2
+	 *   address of the per-owner WebAuthn verifier proxy from the key's x/y
+	 *   coordinates and the verifier/factory configuration.
+	 *
+	 * Used as the sort key in {@link sortSignatures}, so it must always match
+	 * the owner address that signature encoding will emit for the same
+	 * overrides — pass the same overrides bag to both.
+	 * @param signer - a signer to compute the owner address for
+	 * @param overrides - WebAuthn verifier configuration and the init flag
+	 * @returns the owner address, lowercased
 	 */
 	public static getSignerLowerCaseAddress(
 		signer: Signer,
@@ -2166,6 +2237,12 @@ export class SafeAccount extends SmartAccount {
 	): string {
 		if (typeof signer === "string") {
 			return signer.toLowerCase();
+		} else if (overrides.isInit) {
+			// on init the encoded owner is the WebAuthn shared signer, not the
+			// per-owner verifier proxy — sort by the same address that gets encoded
+			const webAuthnSharedSigner =
+				overrides.webAuthnSharedSigner ?? SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
+			return webAuthnSharedSigner.toLowerCase();
 		} else {
 			const eip7212WebAuthnPrecompileVerifier =
 				overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
@@ -2379,7 +2456,9 @@ export class SafeAccount extends SmartAccount {
 		let prevOwnerT = overrides.prevOwner;
 		if (prevOwnerT == null) {
 			const owners = await this.getOwners(nodeRpcUrl);
-			const oldOwnerIndex = owners.indexOf(oldOwnerT);
+			const oldOwnerIndex = owners.findIndex(
+				(owner) => owner.toLowerCase() === oldOwnerT.toLowerCase(),
+			);
 			if (oldOwnerIndex === -1) {
 				throw new RangeError("oldOwner is not a current owner.");
 			} else if (oldOwnerIndex === 0) {
@@ -2450,7 +2529,9 @@ export class SafeAccount extends SmartAccount {
 		let prevOwnerT = overrides.prevOwner;
 		if (prevOwnerT == null) {
 			const owners = await this.getOwners(nodeRpcUrl);
-			const ownerToDeleteIndex = owners.indexOf(ownerToDeleteT);
+			const ownerToDeleteIndex = owners.findIndex(
+				(owner) => owner.toLowerCase() === ownerToDeleteT.toLowerCase(),
+			);
 			if (ownerToDeleteIndex === -1) {
 				throw new RangeError("ownerToDelete is not a current owner.");
 			} else if (ownerToDeleteIndex === 0) {
@@ -3459,7 +3540,7 @@ function generateOnChainIdentifier(
 	project: string,
 	platform: "Web" | "Mobile" | "Safe App" | "Widget" = "Web",
 	tool: string = "abstractionkit",
-	toolVersion: string = "0.4.0",
+	toolVersion: string = "0.4.1",
 ): string {
 	const identifierPrefix = "5afe"; // Safe identifier prefix
 	const identifierVersion = "00"; // First version
