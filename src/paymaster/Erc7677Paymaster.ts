@@ -23,8 +23,6 @@ import type {
 
 /** Max value for uint256 */
 const UINT256_MAX = 115792089237316195423570985008687907853269984665640564039457584007913129639935n;
-/** Multiplier for token approve amount to cover paymasterAndData cost variance */
-const TOKEN_APPROVE_AMOUNT_MULTIPLIER = 2n;
 /**
  * ERC-20 tokens that require resetting their allowance to 0 before setting a
  * new approval amount (e.g. USDT on mainnet).
@@ -895,7 +893,6 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		const maxGasCostWei = calculateUserOperationMaxGasCost(userOp);
 		let tokenCost = (exchangeRate * maxGasCostWei) / 10n ** 18n;
 		if (tokenCost === 0n) tokenCost = 1n;
-		const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
 		const tokenQuote: TokenQuote = { token: tokenAddress, exchangeRate, tokenCost };
 
 		// Step 6 — replace dummy approval with calculated amount on original callData.
@@ -903,7 +900,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			originalCallData,
 			tokenAddress,
 			paymasterAddress,
-			approveAmount,
+			tokenCost,
 		);
 		if (requiresAllowanceReset) {
 			callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
@@ -920,6 +917,16 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		// would be over a different UserOp hash.
 		const final = await this.getPaymasterData(userOp, entrypoint, chainIdHex, context);
 		this.applyPaymasterFields(userOp, final);
+
+		let finalTokenCost =
+			(exchangeRate * calculateUserOperationMaxGasCost(userOp)) / 10n ** 18n;
+		if (finalTokenCost === 0n) finalTokenCost = 1n;
+		if (finalTokenCost > tokenCost) {
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				`Final paymaster token cost ${finalTokenCost} exceeds approved token cost ${tokenCost}`,
+			);
+		}
 
 		return { userOperation: userOp as unknown as SameUserOp<T>, tokenQuote };
 	}

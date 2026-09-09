@@ -777,6 +777,7 @@ describe('Erc7677Paymaster', () => {
       expect(tokenQuote.token.toLowerCase()).toBe(TOKEN_ADDR.toLowerCase());
       expect(tokenQuote.exchangeRate).toBe(0xde0b6b3a7640000n);
       expect(tokenQuote.tokenCost > 0n).toBe(true);
+      expect(smartAccount.calls.at(-1).approveAmount).toBe(tokenQuote.tokenCost);
     } finally {
       await server.close();
     }
@@ -989,10 +990,52 @@ describe('Erc7677Paymaster', () => {
       // Clamp fired: tokenCost is exactly 1n (not 0n, not "> 0n").
       expect(tokenQuote.tokenCost).toBe(1n);
 
-      // approveAmount on the second prepend call = tokenCost * MULTIPLIER (= 2n).
+      // The real approval is capped at the quoted maximum token cost.
       // First call is approve(MAX) for gas estimation; second is the real one.
       const realApproveCall = smartAccount.calls[smartAccount.calls.length - 1];
-      expect(realApproveCall.approveAmount).toBe(2n);
+      expect(realApproveCall.approveAmount).toBe(1n);
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('rejects final paymaster gas above the approved token cost', async () => {
+    const PAYMASTER_ADDR = '0x' + 'ee'.repeat(20);
+    const TOKEN_ADDR = '0x' + 'ff'.repeat(20);
+
+    const server = await makeMockRpcServer({
+      pm_getPaymasterStubData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xstub',
+        paymasterVerificationGasLimit: '0x1',
+        paymasterPostOpGasLimit: '0x1',
+      }),
+      eth_estimateUserOperationGas: () => ({
+        callGasLimit: '0x1',
+        verificationGasLimit: '0x1',
+        preVerificationGas: '0x1',
+        paymasterVerificationGasLimit: '0x1',
+        paymasterPostOpGasLimit: '0x1',
+      }),
+      pm_getPaymasterData: () => ({
+        paymaster: PAYMASTER_ADDR,
+        paymasterData: '0xfinal',
+        paymasterVerificationGasLimit: '0x1',
+        paymasterPostOpGasLimit: '0xffff',
+      }),
+    });
+
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: null });
+
+      await expect(
+        paymaster.createPaymasterUserOperation(
+          makeTokenAccount(ENTRYPOINT_V7),
+          v7UserOp(),
+          server.url,
+          { token: TOKEN_ADDR, exchangeRate: 1_000000000000000000n },
+        ),
+      ).rejects.toThrow(/Final paymaster token cost .* exceeds approved token cost/);
     } finally {
       await server.close();
     }
