@@ -10,7 +10,7 @@ import {
 } from "../transport";
 import type {StateOverrideSet, TokenQuote} from "../types";
 import {calculateUserOperationMaxGasCost} from "../utils";
-import {assertPaymasterMatchesApproveSpender, Paymaster} from "./Paymaster";
+import {assertPaymasterMatchesApproveSpender, extractPaymasterAddress, Paymaster} from "./Paymaster";
 import type {
 	AnyUserOperation,
 	Erc7677PaymasterConstructorOptions,
@@ -948,12 +948,17 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		// callData was mutated after the stub, so any stub `isFinal` signature
 		// would be over a different UserOp hash.
 		const final = await this.getPaymasterData(userOp, entrypoint, chainIdHex, context);
-		this.applyPaymasterFields(userOp, final);
 
 		// Step 8 — the approval above was built for `paymasterAddress`, but the
-		// paymaster on the operation comes from a separate RPC response. Refuse
-		// to hand back an operation where the two disagree.
-		assertPaymasterMatchesApproveSpender(userOp, paymasterAddress);
+		// paymaster comes from this separate RPC response. Validate the raw
+		// payload rather than the operation: `applyPaymasterFields` keeps the
+		// stub value when the response omits the field, which would let a
+		// response with no paymaster pass on the strength of the stub.
+		assertPaymasterMatchesApproveSpender(
+			extractPaymasterAddress(final, "initCode" in userOp),
+			paymasterAddress,
+		);
+		this.applyPaymasterFields(userOp, final);
 
 		return { userOperation: userOp as unknown as SameUserOp<T>, tokenQuote };
 	}

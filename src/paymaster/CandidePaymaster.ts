@@ -22,7 +22,7 @@ import type {
 	TokenQuote,
 } from "../types";
 import {calculateUserOperationMaxGasCost} from "../utils";
-import {assertPaymasterMatchesApproveSpender, Paymaster} from "./Paymaster";
+import {assertPaymasterMatchesApproveSpender, getUserOperationPaymaster, Paymaster} from "./Paymaster";
 import type {
 	AnyUserOperation,
 	CandidePaymasterContext,
@@ -702,12 +702,17 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				_overrides,
 			);
 			// The approval was built for the metadata address; the paymaster on
-			// the operation comes from pm_getPaymasterData. They must agree.
+			// the operation comes from pm_getPaymasterData (applyPaymasterResult
+			// assigns the response fields unconditionally, so the operation
+			// reflects the raw payload). They must agree.
 			const epMetadata = this.getEntrypointData(entrypoint);
 			if (epMetadata == null) {
 				throw new RangeError(`UserOperation for entrypoint ${entrypoint} is not supported`);
 			}
-			assertPaymasterMatchesApproveSpender(resultUserOp, epMetadata.paymasterMetadata.address);
+			assertPaymasterMatchesApproveSpender(
+				getUserOperationPaymaster(resultUserOp),
+				epMetadata.paymasterMetadata.address,
+			);
 			return { userOperation: resultUserOp, tokenQuote };
 		} catch (err) {
 			const error = ensureError(err);

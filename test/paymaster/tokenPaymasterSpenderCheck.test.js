@@ -199,6 +199,54 @@ describe('Erc7677Paymaster token flow: approve spender must match the final paym
     }
   });
 
+  test('candide: final response omits the paymaster even though the stub carried one', async () => {
+    // The stub already set userOp.paymaster to the quoted spender. A final
+    // response that omits the field must not pass on the strength of that
+    // retained stub value: the final payload itself has to name the paymaster.
+    const server = await makeMockRpcServer({
+      pm_supportedERC20Tokens: () => candideSupported(),
+      eth_estimateUserOperationGas: () => ESTIMATE,
+      pm_getPaymasterData: () => ({}),
+    });
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'candide' });
+      await expectPaymasterError(
+        paymaster.createPaymasterUserOperation(makeTokenAccount(ENTRYPOINT_V7), v7UserOp(), server.url, { token: TOKEN }),
+        PAYMASTER,
+        'missing',
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('candide v0.6: final response omits paymasterAndData even though the stub carried it', async () => {
+    const server = await makeMockRpcServer({
+      pm_supportedERC20Tokens: () => ({
+        tokens: [{ name: 'Test', symbol: 'TST', decimals: 6, address: TOKEN, exchangeRate: ONE_ETH }],
+        paymasterMetadata: { name: 'Candide', address: PAYMASTER, dummyPaymasterAndData: PAYMASTER + '00'.repeat(64) },
+      }),
+      eth_estimateUserOperationGas: () => ESTIMATE,
+      pm_getPaymasterData: () => ({}),
+    });
+    try {
+      const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'candide' });
+      await expectPaymasterError(
+        paymaster.createPaymasterUserOperation(
+          makeTokenAccount(ENTRYPOINT_V6),
+          v6UserOp(),
+          server.url,
+          { token: TOKEN },
+          { entrypoint: ENTRYPOINT_V6 },
+        ),
+        PAYMASTER,
+        'missing',
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
   test('candide v0.6: paymasterAndData prefix differs from the quoted spender', async () => {
     const server = await makeMockRpcServer({
       pm_supportedERC20Tokens: () => ({

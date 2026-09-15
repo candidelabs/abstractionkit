@@ -8,17 +8,26 @@ import type { AnyUserOperation } from "./types";
 export abstract class Paymaster {}
 
 /**
- * Paymaster address carried by a UserOperation: the `paymaster` field on
- * v0.7+ operations, or the first 20 bytes of `paymasterAndData` on v0.6.
- * Returns `null` when the operation carries no paymaster.
+ * Paymaster address carried by a set of paymaster fields: `paymaster` for
+ * v0.7+ shapes, or the first 20 bytes of `paymasterAndData` for v0.6.
+ * Works on a UserOperation as well as on a raw paymaster RPC response.
+ * Returns `null` when no paymaster is present.
  */
-export function getUserOperationPaymaster(userOp: AnyUserOperation): string | null {
-	if ("initCode" in userOp) {
-		const packed = userOp.paymasterAndData;
+export function extractPaymasterAddress(
+	fields: { paymaster?: string | null; paymasterAndData?: string | null },
+	isV6: boolean,
+): string | null {
+	if (isV6) {
+		const packed = fields.paymasterAndData;
 		if (typeof packed !== "string" || packed.length < 42) return null;
 		return packed.slice(0, 42);
 	}
-	return userOp.paymaster ?? null;
+	return fields.paymaster ?? null;
+}
+
+/** Paymaster address carried by a UserOperation, or `null` when it has none. */
+export function getUserOperationPaymaster(userOp: AnyUserOperation): string | null {
+	return extractPaymasterAddress(userOp, "initCode" in userOp);
 }
 
 /**
@@ -27,19 +36,22 @@ export function getUserOperationPaymaster(userOp: AnyUserOperation): string | nu
  * so nothing else ties the two together: a response that finalizes with a
  * different paymaster, or with none at all, would leave the caller signing an
  * approval to an address the operation never pays. Throws in both cases.
+ *
+ * @param finalPaymaster - Paymaster named by the final response (or carried
+ *   by the finished operation), `null` when absent.
+ * @param spender - Address the approval was built for.
  */
 export function assertPaymasterMatchesApproveSpender(
-	userOp: AnyUserOperation,
+	finalPaymaster: string | null,
 	spender: string,
 ): void {
-	const final = getUserOperationPaymaster(userOp);
-	if (final == null || final.toLowerCase() !== spender.toLowerCase()) {
+	if (finalPaymaster == null || finalPaymaster.toLowerCase() !== spender.toLowerCase()) {
 		throw new AbstractionKitError(
 			"PAYMASTER_ERROR",
 			`token paymaster mismatch: the ERC-20 approval was built for ${spender} ` +
-				`but the final UserOperation paymaster is ${final ?? "missing"}. ` +
+				`but the final paymaster is ${finalPaymaster ?? "missing"}. ` +
 				"Refusing to return an operation whose approval and paymaster disagree.",
-			{ context: { approveSpender: spender, finalPaymaster: final } },
+			{ context: { approveSpender: spender, finalPaymaster } },
 		);
 	}
 }
