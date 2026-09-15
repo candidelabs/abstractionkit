@@ -176,8 +176,9 @@ const userOp = await smartAccount.createUserOperation(
 // Automatically prepends token approval + sets paymaster fields.
 // For tokens like USDT that require resetting allowance to 0 first, pass
 // { resetApproval: true } in the overrides.
-// `tokenQuote` carries the exchange rate, the max token cost, and the paymaster
-// the approval was granted to (verified to match the returned op's paymaster).
+// `tokenQuote` carries the exchange rate, the max token cost, the paymaster the
+// approval was granted to (verified to match the returned op's paymaster), and
+// the allowance amount that approval sets (`approveAmount`).
 const { userOperation: tokenOp, tokenQuote } = await paymaster.createTokenPaymasterUserOperation(
   smartAccount,
   userOp,
