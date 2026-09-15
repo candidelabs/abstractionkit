@@ -263,6 +263,18 @@ export type TokenQuote = {
 	 * floored to a minimum of `1n` so cheap-gas chains never quote `0n`.
 	 */
 	tokenCost: bigint;
+	/**
+	 * Address the prepended ERC-20 `approve` was granted to. The paymaster
+	 * classes verify it equals the paymaster set on the returned UserOperation,
+	 * so callers can compare it against their configured paymaster without
+	 * decoding `callData`.
+	 */
+	paymaster: string;
+	/**
+	 * Allowance granted to `paymaster` by the prepended `approve`, in the
+	 * token's smallest unit (`tokenCost` with a safety multiplier applied).
+	 */
+	approveAmount: bigint;
 };
 
 /**
