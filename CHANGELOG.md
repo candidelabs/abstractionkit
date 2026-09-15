@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.2
+
+### API Changes
+
+- **`TokenQuote` gains `paymaster` and `approveAmount`.** Both token paymaster flows (`CandidePaymaster.createTokenPaymasterUserOperation` and the `Erc7677Paymaster` token path) now report the address the prepended ERC-20 `approve` was granted to and the allowance it set, so integrators can compare the spender against their configured paymaster without decoding `callData`. Additive; existing fields are unchanged. (#233)
+- **`Erc7677Paymaster` treats `context.paymasterAddress` as a requirement, not a hint.** When a detected provider's token quote names a different paymaster than the caller supplied, the flow throws a `PAYMASTER_ERROR` before building any approval. Previously the context value was only consulted when no provider was detected. Callers passing the paymaster they actually expect are unaffected. (#233)
+
+### Bug Fixes
+
+- **Token paymaster flows could return an operation whose ERC-20 approval and paymaster disagreed.** The flows prepend `approve(spender)` from the token quote, then set the operation's paymaster from a separate `pm_getPaymasterData` response, and nothing tied the two together: an RPC could quote one spender and finalize with a different paymaster, or none at all, leaving the caller to sign an approval for an address the operation never pays. Both `Erc7677Paymaster` and `CandidePaymaster` now throw a `PAYMASTER_ERROR` when the final paymaster is missing or differs from the approve spender. `Erc7677Paymaster` validates the raw final response rather than the operation's retained fields, since `applyPaymasterFields` keeps the stub paymaster when the final response omits it. (#233)
+
 ## 0.4.1
 
 ### API Changes
