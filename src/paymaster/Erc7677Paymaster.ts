@@ -10,7 +10,7 @@ import {
 } from "../transport";
 import type {StateOverrideSet, TokenQuote} from "../types";
 import {calculateUserOperationMaxGasCost} from "../utils";
-import {Paymaster} from "./Paymaster";
+import {assertPaymasterMatchesApproveSpender, extractPaymasterAddress, Paymaster} from "./Paymaster";
 import type {
 	AnyUserOperation,
 	Erc7677PaymasterConstructorOptions,
@@ -78,8 +78,12 @@ function parsePositiveExchangeRate(raw: string | bigint | undefined | null): big
  *   provider is auto-detected (floored to a minimum of 1 token smallest-unit
  *   to handle cheap-gas chains). Not needed when `provider` is `"pimlico"` or
  *   `"candide"`; the class fetches the rate from the provider's RPC.
- * - `paymasterAddress` - overrides the token-flow paymaster address when it
- *   cannot be derived from the stub data or a provider RPC.
+ * - `paymasterAddress` - the paymaster the caller expects the token flow to
+ *   grant the ERC-20 approval to. When a provider quote names a different
+ *   paymaster the flow throws before building any approval; when no provider
+ *   is detected it supplies the address the stub data could not. The flow
+ *   always verifies, before returning, that the final `pm_getPaymasterData`
+ *   response set the same paymaster the approval was built for.
  */
 export type Erc7677Context = Record<string, unknown>;
 
@@ -817,6 +821,25 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			// Case A: provider detected.
 			exchangeRate = providerQuote.exchangeRate;
 			paymasterAddress = providerQuote.paymasterAddress;
+			// A caller-supplied paymasterAddress is a requirement, not a hint:
+			// refuse a quote that would approve a different spender.
+			if (
+				typeof context.paymasterAddress === "string" &&
+				context.paymasterAddress.toLowerCase() !== paymasterAddress.toLowerCase()
+			) {
+				throw new AbstractionKitError(
+					"PAYMASTER_ERROR",
+					`token paymaster mismatch: context.paymasterAddress is ${context.paymasterAddress} ` +
+						`but the provider quote names ${paymasterAddress} as the paymaster. ` +
+						"Refusing to build an ERC-20 approval for an unexpected spender.",
+					{
+						context: {
+							expectedPaymaster: context.paymasterAddress,
+							quotedPaymaster: paymasterAddress,
+						},
+					},
+				);
+			}
 		} else if (context.exchangeRate != null) {
 			// Case B: no provider, but exchangeRate in context.
 			// paymasterAddress is resolved from the stub response below.
@@ -896,7 +919,13 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		let tokenCost = (exchangeRate * maxGasCostWei) / 10n ** 18n;
 		if (tokenCost === 0n) tokenCost = 1n;
 		const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
-		const tokenQuote: TokenQuote = { token: tokenAddress, exchangeRate, tokenCost };
+		const tokenQuote: TokenQuote = {
+			token: tokenAddress,
+			exchangeRate,
+			tokenCost,
+			paymaster: paymasterAddress,
+			approveAmount,
+		};
 
 		// Step 6 — replace dummy approval with calculated amount on original callData.
 		callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
@@ -919,6 +948,16 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		// callData was mutated after the stub, so any stub `isFinal` signature
 		// would be over a different UserOp hash.
 		const final = await this.getPaymasterData(userOp, entrypoint, chainIdHex, context);
+
+		// Step 8 — the approval above was built for `paymasterAddress`, but the
+		// paymaster comes from this separate RPC response. Validate the raw
+		// payload rather than the operation: `applyPaymasterFields` keeps the
+		// stub value when the response omits the field, which would let a
+		// response with no paymaster pass on the strength of the stub.
+		assertPaymasterMatchesApproveSpender(
+			extractPaymasterAddress(final, "initCode" in userOp),
+			paymasterAddress,
+		);
 		this.applyPaymasterFields(userOp, final);
 
 		return { userOperation: userOp as unknown as SameUserOp<T>, tokenQuote };

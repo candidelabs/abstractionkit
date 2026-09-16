@@ -22,7 +22,7 @@ import type {
 	TokenQuote,
 } from "../types";
 import {calculateUserOperationMaxGasCost} from "../utils";
-import {Paymaster} from "./Paymaster";
+import {assertPaymasterMatchesApproveSpender, getUserOperationPaymaster, Paymaster} from "./Paymaster";
 import type {
 	AnyUserOperation,
 	CandidePaymasterContext,
@@ -670,8 +670,14 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				const gasCostWei = calculateUserOperationMaxGasCost(userOp);
 				let tokenCost = (exchangeRate * gasCostWei) / 10n ** 18n;
 				if (tokenCost === 0n) tokenCost = 1n;
-				tokenQuote = { token: context.token, exchangeRate, tokenCost };
 				const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
+				tokenQuote = {
+					token: context.token,
+					exchangeRate,
+					tokenCost,
+					paymaster: epData.paymasterMetadata.address,
+					approveAmount,
+				};
 				callDataWithApprove = smartAccount.prependTokenPaymasterApproveToCallData(
 					oldCallData,
 					context.token,
@@ -694,6 +700,18 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				userOp,
 				context,
 				_overrides,
+			);
+			// The approval was built for the metadata address; the paymaster on
+			// the operation comes from pm_getPaymasterData (applyPaymasterResult
+			// assigns the response fields unconditionally, so the operation
+			// reflects the raw payload). They must agree.
+			const epMetadata = this.getEntrypointData(entrypoint);
+			if (epMetadata == null) {
+				throw new RangeError(`UserOperation for entrypoint ${entrypoint} is not supported`);
+			}
+			assertPaymasterMatchesApproveSpender(
+				getUserOperationPaymaster(resultUserOp),
+				epMetadata.paymasterMetadata.address,
 			);
 			return { userOperation: resultUserOp, tokenQuote };
 		} catch (err) {
