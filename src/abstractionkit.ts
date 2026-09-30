@@ -148,6 +148,7 @@ export type {
 	SponsorInfo,
 	SponsorMetadata,
 	StateOverrideSet,
+	TokenPaymasterApproval,
 	TokenQuote,
 	UserOperationByHashResult,
 	UserOperationReceipt,

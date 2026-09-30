@@ -39,6 +39,7 @@ import {
 	Operation,
 	type StateOverrideSet,
 	type TenderlySimulationResult,
+	type TokenPaymasterApproval,
 	type UserOperationV6,
 	type UserOperationV7,
 	type UserOperationV9,
@@ -50,7 +51,9 @@ import {
 } from "../../utilsTenderly";
 import {SendUseroperationResponse} from "../SendUseroperationResponse";
 import {SmartAccount} from "../SmartAccount";
-import {decodeMultiSendCallData, encodeMultiSendCallData} from "./multisend";
+import {decodeMultiSendCallData, decodeMultiSendTransactions, encodeMultiSendCallData} from "./multisend";
+import {getUserOperationPaymaster} from "../../paymaster/Paymaster";
+import type {AnyUserOperation} from "../../paymaster/types";
 import {
 	getSafeMessageEip712Data,
 	type SafeMessageTypedDataDomain,
@@ -436,6 +439,64 @@ export class SafeAccount extends SmartAccount {
 				},
 			);
 		}
+	}
+
+	/**
+	 * Find the ERC-20 approvals a UserOperation grants to its own paymaster.
+	 *
+	 * Token paymaster flows prepend `approve(paymaster, amount)` to the
+	 * account's MultiSend batch. That amount is the most the paymaster can
+	 * charge, so it is what the owners sign, even when the `TokenQuote` from
+	 * building the operation is no longer at hand. Only `approve` calls whose
+	 * spender is the paymaster set on this operation are returned, so a
+	 * dapp's own `approve` in a sponsored operation is not mistaken for one.
+	 *
+	 * The whole batch is scanned, in execution order. `approve` sets rather
+	 * than adds, so the paymaster's allowance for a token after execution is
+	 * the last entry for that token. Token-flow operations for tokens that
+	 * need an allowance reset (e.g. USDT) carry an `approve(0)` entry first.
+	 *
+	 * Only direct `approve` calls in the batch are recognized. Allowance
+	 * granted any other way (`increaseAllowance`, `permit`, a delegatecall)
+	 * is not reported.
+	 *
+	 * @param userOperation - The UserOperation to inspect
+	 * @returns Approvals to the paymaster, in execution order. Empty when the
+	 *   operation has no paymaster or grants it no approval.
+	 * @throws AbstractionKitError with code "BAD_DATA" if `callData` is not a
+	 *   Safe module executor call or the MultiSend payload is malformed
+	 */
+	public static decodeTokenPaymasterApprovals(
+		userOperation: AnyUserOperation,
+	): TokenPaymasterApproval[] {
+		const paymaster = getUserOperationPaymaster(userOperation);
+		if (paymaster == null) return [];
+
+		const [metaTransaction] = SafeAccount.decodeAccountCallData(userOperation.callData);
+		const multisendSelector = "0x8d80ff0a";
+		const transactions =
+			metaTransaction.operation === Operation.Delegate &&
+			metaTransaction.data.startsWith(multisendSelector)
+				? decodeMultiSendTransactions(decodeMultiSendCallData(metaTransaction.data))
+				: [metaTransaction];
+
+		const approveSelector = getFunctionSelector("approve(address,uint256)");
+		const approvals: TokenPaymasterApproval[] = [];
+		for (const transaction of transactions) {
+			if (
+				(transaction.operation ?? Operation.Call) !== Operation.Call ||
+				!transaction.data.toLowerCase().startsWith(approveSelector)
+			) {
+				continue;
+			}
+			const [spender, amount] = decodeAbiParameters<[string, bigint]>(
+				["address", "uint256"],
+				`0x${transaction.data.slice(10)}`,
+			);
+			if (spender.toLowerCase() !== paymaster.toLowerCase()) continue;
+			approvals.push({ token: getAddress(transaction.to), spender, amount: BigInt(amount) });
+		}
+		return approvals;
 	}
 
 	/**

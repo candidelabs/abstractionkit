@@ -278,6 +278,20 @@ export type TokenQuote = {
 };
 
 /**
+ * An ERC-20 `approve` call found in a UserOperation's `callData` whose
+ * spender is the operation's paymaster. See
+ * {@link SafeAccount.decodeTokenPaymasterApprovals}.
+ */
+export type TokenPaymasterApproval = {
+	/** ERC-20 token contract the `approve` is called on */
+	token: string;
+	/** Spender, equal to the UserOperation's paymaster */
+	spender: string;
+	/** Allowance the call sets, in the token's smallest unit */
+	amount: bigint;
+};
+
+/**
  * Raw sponsor info shape returned by `pm_getPaymasterData` per ERC-7677
  * (singular `icon`). Normalized into {@link SponsorMetadata} by
  * `applyPaymasterResult`.
