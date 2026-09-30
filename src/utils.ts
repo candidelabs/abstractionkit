@@ -721,12 +721,13 @@ export function calculateUserOperationMaxGasCost(
  * {@link CandidePaymaster.fetchTokenPaymasterExchangeRate} reproduces their
  * `tokenCost` without duplicating the formula.
  *
- * @param useroperation - The UserOperation to price
+ * @param useroperation - The UserOperation to price. v0.8 and v0.9 share the
+ *   v0.7 gas fields and prefund formula.
  * @param exchangeRate - Token smallest-units equivalent to 1 ETH (10^18 wei)
  * @returns Maximum token cost in the token's smallest unit
  */
 export function calculateUserOperationErc20TokenCost(
-	useroperation: UserOperationV6 | UserOperationV7,
+	useroperation: UserOperationV6 | UserOperationV7 | UserOperationV8 | UserOperationV9,
 	exchangeRate: bigint,
 ): bigint {
 	const tokenCost = (exchangeRate * calculateUserOperationMaxGasCost(useroperation)) / 10n ** 18n;

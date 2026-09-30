@@ -54,6 +54,15 @@ describe('calculateUserOperationErc20TokenCost', () => {
     expect(calculateUserOperationErc20TokenCost(op, 10n ** 18n)).toBe(750_000n * 1_000_000_000n);
   });
 
+  test('v0.8 / v0.9: same prefund formula as v0.7, eip7702Auth ignored', () => {
+    const v7 = v7UserOp();
+    const v8 = { ...v7, eip7702Auth: { chainId: '0x1', address: '0x' + '2'.repeat(40), nonce: '0x0', yParity: '0x0', r: '0x0', s: '0x0' } };
+    const v9 = { ...v7, eip7702Auth: null };
+    const expected = calculateUserOperationErc20TokenCost(v7, 3_000_000_000n);
+    expect(calculateUserOperationErc20TokenCost(v8, 3_000_000_000n)).toBe(expected);
+    expect(calculateUserOperationErc20TokenCost(v9, 3_000_000_000n)).toBe(expected);
+  });
+
   test('floors to 1 token smallest-unit when the cost rounds to zero', () => {
     const op = v7UserOp({ maxFeePerGas: 1n });
     expect((1n * calculateUserOperationMaxGasCost(op)) / 10n ** 18n).toBe(0n);
