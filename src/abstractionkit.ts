@@ -179,6 +179,7 @@ export type {
 export { GasOption, Operation, PolygonChain } from "./types";
 export type { DepositInfo } from "./utils";
 export {
+	calculateUserOperationErc20TokenCost,
 	calculateUserOperationMaxGasCost,
 	createCallData,
 	createUserOperationHash,

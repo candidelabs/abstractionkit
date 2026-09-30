@@ -9,7 +9,7 @@ import {
 	type Transport,
 } from "../transport";
 import type {StateOverrideSet, TokenQuote} from "../types";
-import {calculateUserOperationMaxGasCost} from "../utils";
+import {calculateUserOperationErc20TokenCost} from "../utils";
 import {assertPaymasterMatchesApproveSpender, extractPaymasterAddress, Paymaster} from "./Paymaster";
 import type {
 	AnyUserOperation,
@@ -401,6 +401,60 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 				cause: ensureError(err),
 			});
 		}
+	}
+
+	/**
+	 * Fetch the current token exchange rate and paymaster address from the
+	 * detected provider (Candide `pm_supportedERC20Tokens` or Pimlico
+	 * `pimlico_getTokenQuotes`). This is the same quote the token flow in
+	 * {@link createPaymasterUserOperation} uses.
+	 *
+	 * The rate is live, so it can differ from the one a previously built
+	 * UserOperation was priced at. The amount signers actually approved is the
+	 * prepended ERC-20 `approve` in that operation's `callData`.
+	 *
+	 * Pair with {@link calculateUserOperationErc20TokenCost} to price a
+	 * UserOperation in the token.
+	 *
+	 * Pimlico's quote RPC takes the chain id. It comes from `options.chainId`
+	 * when passed to the constructor, otherwise from a one-time `eth_chainId`
+	 * call to the paymaster endpoint (cached on the instance). Candide does not
+	 * need it.
+	 *
+	 * @param tokenAddress - The ERC-20 token contract address
+	 * @param entrypoint - Target EntryPoint address
+	 * @returns `exchangeRate`: token smallest-units equivalent to 1 ETH
+	 *   (10^18 wei). `paymasterAddress`: the spender the token flow approves.
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if no provider is
+	 *   configured, the chain id cannot be resolved for Pimlico, or the
+	 *   provider does not quote the token.
+	 */
+	async fetchTokenQuote(
+		tokenAddress: string,
+		entrypoint: string,
+	): Promise<{ exchangeRate: bigint; paymasterAddress: string }> {
+		if (this.provider == null) {
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				"fetchTokenQuote requires a paymaster provider (candide or pimlico). " +
+					"None was detected from the RPC URL; pass options.provider to the constructor.",
+			);
+		}
+		if (this.provider === "candide") {
+			return this.fetchCandideTokenQuote(tokenAddress, entrypoint);
+		}
+		let chainId: string;
+		try {
+			chainId = await this.getChainId(this.transport);
+		} catch (err) {
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				"fetchTokenQuote could not resolve the chain id from the paymaster endpoint. " +
+					"Pass options.chainId to the constructor.",
+				{ cause: ensureError(err) },
+			);
+		}
+		return this.fetchPimlicoTokenQuote(tokenAddress, entrypoint, chainId);
 	}
 
 	/**
@@ -915,9 +969,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		await this.estimateAndApplyGasLimits(userOp, bundlerRpc, entrypoint, overrides);
 
 		// Step 5 — calculate real token cost.
-		const maxGasCostWei = calculateUserOperationMaxGasCost(userOp);
-		let tokenCost = (exchangeRate * maxGasCostWei) / 10n ** 18n;
-		if (tokenCost === 0n) tokenCost = 1n;
+		const tokenCost = calculateUserOperationErc20TokenCost(userOp, exchangeRate);
 		const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
 		const tokenQuote: TokenQuote = {
 			token: tokenAddress,

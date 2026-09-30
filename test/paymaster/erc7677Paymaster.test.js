@@ -1,5 +1,5 @@
 const http = require('node:http');
-const { Erc7677Paymaster } = require('../../dist/index.cjs');
+const { Erc7677Paymaster, calculateUserOperationErc20TokenCost } = require('../../dist/index.cjs');
 
 jest.setTimeout(30000);
 
@@ -1217,5 +1217,138 @@ describe('Erc7677Paymaster', () => {
     } finally {
       await server.close();
     }
+  });
+
+  // ── fetchTokenQuote (public) ────────────────────────────────────────
+
+  describe('fetchTokenQuote', () => {
+    const PAYMASTER_ADDR = '0x' + 'aa'.repeat(20);
+    const TOKEN_ADDR = '0x' + 'bb'.repeat(20);
+
+    test('candide: returns exchange rate and paymaster from pm_supportedERC20Tokens', async () => {
+      const server = await makeMockRpcServer({
+        pm_supportedERC20Tokens: () => ({
+          tokens: [{ address: TOKEN_ADDR.toUpperCase().replace('0X', '0x'), exchangeRate: '0x3b9aca00' }],
+          paymasterMetadata: { address: PAYMASTER_ADDR, dummyPaymasterAndData: '0x' },
+        }),
+      });
+      try {
+        const paymaster = new Erc7677Paymaster(server.url, { provider: 'candide' });
+        const quote = await paymaster.fetchTokenQuote(TOKEN_ADDR, ENTRYPOINT_V7);
+        expect(quote).toEqual({ exchangeRate: 1_000_000_000n, paymasterAddress: PAYMASTER_ADDR });
+        expect(server.calls).toEqual([{ method: 'pm_supportedERC20Tokens', params: [ENTRYPOINT_V7] }]);
+      } finally {
+        await server.close();
+      }
+    });
+
+    test('pimlico: uses the constructor chainId without an eth_chainId call', async () => {
+      const server = await makeMockRpcServer({
+        pimlico_getTokenQuotes: () => ({
+          quotes: [{ paymaster: PAYMASTER_ADDR, token: TOKEN_ADDR, exchangeRate: '0xde0b6b3a7640000' }],
+        }),
+      });
+      try {
+        const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'pimlico' });
+        const quote = await paymaster.fetchTokenQuote(TOKEN_ADDR, ENTRYPOINT_V7);
+        expect(quote).toEqual({ exchangeRate: 10n ** 18n, paymasterAddress: PAYMASTER_ADDR });
+        expect(server.calls).toEqual([{
+          method: 'pimlico_getTokenQuotes',
+          params: [{ tokens: [TOKEN_ADDR] }, ENTRYPOINT_V7, CHAIN_ID_HEX],
+        }]);
+      } finally {
+        await server.close();
+      }
+    });
+
+    test('pimlico: resolves the chain id from the paymaster endpoint once and caches it', async () => {
+      const server = await makeMockRpcServer({
+        eth_chainId: () => '0xaa36a7',
+        pimlico_getTokenQuotes: () => ({
+          quotes: [{ paymaster: PAYMASTER_ADDR, token: TOKEN_ADDR, exchangeRate: '0x1' }],
+        }),
+      });
+      try {
+        const paymaster = new Erc7677Paymaster(server.url, { provider: 'pimlico' });
+        await paymaster.fetchTokenQuote(TOKEN_ADDR, ENTRYPOINT_V7);
+        await paymaster.fetchTokenQuote(TOKEN_ADDR, ENTRYPOINT_V7);
+        expect(server.calls.map((c) => c.method)).toEqual([
+          'eth_chainId', 'pimlico_getTokenQuotes', 'pimlico_getTokenQuotes',
+        ]);
+        expect(server.calls[1].params[2]).toBe('0xaa36a7');
+      } finally {
+        await server.close();
+      }
+    });
+
+    test('pimlico: throws a clear error when the endpoint cannot report its chain id', async () => {
+      const server = await makeMockRpcServer({});
+      try {
+        const paymaster = new Erc7677Paymaster(server.url, { provider: 'pimlico' });
+        await expect(paymaster.fetchTokenQuote(TOKEN_ADDR, ENTRYPOINT_V7))
+          .rejects.toMatchObject({ code: 'PAYMASTER_ERROR', message: expect.stringContaining('options.chainId') });
+        expect(server.calls.map((c) => c.method)).toEqual(['eth_chainId']);
+      } finally {
+        await server.close();
+      }
+    });
+
+    test('throws when no provider is configured', async () => {
+      const paymaster = new Erc7677Paymaster('https://custom-proxy.example.com', { provider: null });
+      await expect(paymaster.fetchTokenQuote(TOKEN_ADDR, ENTRYPOINT_V7))
+        .rejects.toMatchObject({ code: 'PAYMASTER_ERROR', message: expect.stringContaining('provider') });
+    });
+
+    test('throws when the provider does not quote the token', async () => {
+      const server = await makeMockRpcServer({
+        pm_supportedERC20Tokens: () => ({
+          tokens: [],
+          paymasterMetadata: { address: PAYMASTER_ADDR, dummyPaymasterAndData: '0x' },
+        }),
+      });
+      try {
+        const paymaster = new Erc7677Paymaster(server.url, { provider: 'candide' });
+        await expect(paymaster.fetchTokenQuote(TOKEN_ADDR, ENTRYPOINT_V7))
+          .rejects.toMatchObject({ code: 'PAYMASTER_ERROR' });
+      } finally {
+        await server.close();
+      }
+    });
+
+    test('quote + calculateUserOperationErc20TokenCost reproduces the token flow tokenCost', async () => {
+      const server = await makeMockRpcServer({
+        pm_supportedERC20Tokens: () => ({
+          tokens: [{ address: TOKEN_ADDR, exchangeRate: '0xb2d05e00' }], // 3e9
+          paymasterMetadata: {
+            address: PAYMASTER_ADDR,
+            dummyPaymasterAndData: {
+              paymaster: PAYMASTER_ADDR,
+              paymasterVerificationGasLimit: '0x8000',
+              paymasterPostOpGasLimit: '0xa000',
+              paymasterData: '0xdummy',
+            },
+          },
+        }),
+        eth_estimateUserOperationGas: () => ({
+          callGasLimit: '0x1000',
+          verificationGasLimit: '0x2000',
+          preVerificationGas: '0x3000',
+        }),
+        pm_getPaymasterData: () => ({ paymaster: PAYMASTER_ADDR, paymasterData: '0xfinal' }),
+      });
+      try {
+        const paymaster = new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'candide' });
+        const account = makeTokenAccount(ENTRYPOINT_V7);
+        const { userOperation, tokenQuote } = await paymaster.createPaymasterUserOperation(
+          account, v7UserOp(), server.url, { token: TOKEN_ADDR },
+        );
+        const quote = await paymaster.fetchTokenQuote(TOKEN_ADDR, ENTRYPOINT_V7);
+        expect(quote.paymasterAddress).toBe(tokenQuote.paymaster);
+        expect(calculateUserOperationErc20TokenCost(userOperation, quote.exchangeRate))
+          .toBe(tokenQuote.tokenCost);
+      } finally {
+        await server.close();
+      }
+    });
   });
 });

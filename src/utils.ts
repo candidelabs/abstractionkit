@@ -711,6 +711,29 @@ export function calculateUserOperationMaxGasCost(
 }
 
 /**
+ * Calculate the maximum ERC-20 token cost of a UserOperation's gas at a given
+ * exchange rate: `(exchangeRate * maxGasCostWei) / 10^18`, floored to a
+ * minimum of 1 token smallest-unit so cheap-gas chains never round to zero.
+ *
+ * This is the same math the token paymaster flows use to size the prepended
+ * approval, so pairing it with a quote from
+ * {@link Erc7677Paymaster.fetchTokenQuote} or
+ * {@link CandidePaymaster.fetchTokenPaymasterExchangeRate} reproduces their
+ * `tokenCost` without duplicating the formula.
+ *
+ * @param useroperation - The UserOperation to price
+ * @param exchangeRate - Token smallest-units equivalent to 1 ETH (10^18 wei)
+ * @returns Maximum token cost in the token's smallest unit
+ */
+export function calculateUserOperationErc20TokenCost(
+	useroperation: UserOperationV6 | UserOperationV7,
+	exchangeRate: bigint,
+): bigint {
+	const tokenCost = (exchangeRate * calculateUserOperationMaxGasCost(useroperation)) / 10n ** 18n;
+	return tokenCost === 0n ? 1n : tokenCost;
+}
+
+/**
  * Deposit information for an address in the EntryPoint contract.
  */
 export type DepositInfo = {
