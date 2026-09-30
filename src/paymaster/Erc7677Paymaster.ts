@@ -440,21 +440,29 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 					"None was detected from the RPC URL; pass options.provider to the constructor.",
 			);
 		}
-		if (this.provider === "candide") {
-			return this.fetchCandideTokenQuote(tokenAddress, entrypoint);
-		}
-		let chainId: string;
 		try {
-			chainId = await this.getChainId(this.transport);
+			if (this.provider === "candide") {
+				return await this.fetchCandideTokenQuote(tokenAddress, entrypoint);
+			}
+			let chainId: string;
+			try {
+				chainId = await this.getChainId(this.transport);
+			} catch (err) {
+				throw new AbstractionKitError(
+					"PAYMASTER_ERROR",
+					"fetchTokenQuote could not resolve the chain id from the paymaster endpoint. " +
+						"Pass options.chainId to the constructor.",
+					{ cause: ensureError(err) },
+				);
+			}
+			return await this.fetchPimlicoTokenQuote(tokenAddress, entrypoint, chainId);
 		} catch (err) {
-			throw new AbstractionKitError(
-				"PAYMASTER_ERROR",
-				"fetchTokenQuote could not resolve the chain id from the paymaster endpoint. " +
-					"Pass options.chainId to the constructor.",
-				{ cause: ensureError(err) },
-			);
+			const error = ensureError(err);
+			if (error instanceof AbstractionKitError) throw error;
+			throw new AbstractionKitError("PAYMASTER_ERROR", "fetchTokenQuote failed", {
+				cause: error,
+			});
 		}
-		return this.fetchPimlicoTokenQuote(tokenAddress, entrypoint, chainId);
 	}
 
 	/**

@@ -1299,6 +1299,27 @@ describe('Erc7677Paymaster', () => {
         .rejects.toMatchObject({ code: 'PAYMASTER_ERROR', message: expect.stringContaining('provider') });
     });
 
+    test('wraps a provider JSON-RPC error as PAYMASTER_ERROR', async () => {
+      // No handler, so the mock answers with a JSON-RPC error.
+      const server = await makeMockRpcServer({});
+      try {
+        for (const options of [{ provider: 'candide' }, { provider: 'pimlico', chainId: CHAIN_ID }]) {
+          const paymaster = new Erc7677Paymaster(server.url, options);
+          const err = await paymaster.fetchTokenQuote(TOKEN_ADDR, ENTRYPOINT_V7).catch((e) => e);
+          expect(err).toMatchObject({ code: 'PAYMASTER_ERROR', message: 'fetchTokenQuote failed' });
+          expect(err.cause).toBeDefined();
+        }
+      } finally {
+        await server.close();
+      }
+    });
+
+    test('wraps a transport failure as PAYMASTER_ERROR', async () => {
+      const paymaster = new Erc7677Paymaster('http://127.0.0.1:1', { provider: 'candide' });
+      await expect(paymaster.fetchTokenQuote(TOKEN_ADDR, ENTRYPOINT_V7))
+        .rejects.toMatchObject({ code: 'PAYMASTER_ERROR', message: 'fetchTokenQuote failed' });
+    });
+
     test('throws when the provider does not quote the token', async () => {
       const server = await makeMockRpcServer({
         pm_supportedERC20Tokens: () => ({
