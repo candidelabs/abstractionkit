@@ -129,6 +129,37 @@ describe('SafeAccount.decodeTokenPaymasterApprovals', () => {
     expect(SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData))).toEqual([]);
   });
 
+  test('throws when the batch is delegatecalled to a contract other than MultiSend', () => {
+    // Same MultiSend-shaped payload, but the Safe would delegatecall an
+    // arbitrary contract, which can run anything instead of these approvals.
+    const EVIL = '0x' + '66'.repeat(20);
+    const legit = batchCallData(SafeAccountV0_2_0, [
+      { to: TOKEN, value: 0n, data: approveData(PAYMASTER, 1n) },
+    ]);
+    const [inner] = SafeAccountV0_2_0.decodeAccountCallData(legit);
+    const callData = SafeAccountV0_2_0.createAccountCallData(EVIL, 0n, inner.data, 1);
+    expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData)))
+      .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
+  });
+
+  test('accepts a custom MultiSend deployment via overrides', () => {
+    const CUSTOM = '0x' + '77'.repeat(20);
+    const legit = batchCallData(SafeAccountV0_2_0, [
+      { to: TOKEN, value: 0n, data: approveData(PAYMASTER, 3n) },
+    ]);
+    const [inner] = SafeAccountV0_2_0.decodeAccountCallData(legit);
+    const callData = SafeAccountV0_2_0.createAccountCallData(CUSTOM, 0n, inner.data, 1);
+    expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData))).toThrow();
+    expect(SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData), { multisendContractAddress: CUSTOM })
+      .map((a) => a.amount)).toEqual([3n]);
+  });
+
+  test('throws on a single delegatecall that is not a MultiSend batch', () => {
+    const callData = SafeAccountV0_2_0.createAccountCallData('0x' + '66'.repeat(20), 0n, approveData(PAYMASTER, 1n), 1);
+    expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData)))
+      .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
+  });
+
   test('throws BAD_DATA on callData that is not a Safe executor call', () => {
     expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op('0xdeadbeef')))
       .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
