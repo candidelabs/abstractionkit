@@ -457,28 +457,54 @@ export class SafeAccount extends SmartAccount {
 	 * need an allowance reset (e.g. USDT) carry an `approve(0)` entry first.
 	 *
 	 * Only direct `approve` calls in the batch are recognized. Allowance
-	 * granted any other way (`increaseAllowance`, `permit`, a delegatecall)
-	 * is not reported.
+	 * granted any other way (`increaseAllowance`, `permit`, a delegatecall
+	 * inside the batch) is not reported.
+	 *
+	 * A delegatecall runs the target's code in the Safe's context, so the
+	 * batch is only decoded when the Safe delegatecalls the expected MultiSend
+	 * contract. A delegatecall to any other address throws rather than
+	 * reporting approvals that code may never execute.
 	 *
 	 * @param userOperation - The UserOperation to inspect
+	 * @param overrides - overrides for the default values
+	 * @param overrides.multisendContractAddress - MultiSend contract the batch
+	 *   must be delegatecalled to. Defaults to
+	 *   SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS
 	 * @returns Approvals to the paymaster, in execution order. Empty when the
 	 *   operation has no paymaster or grants it no approval.
 	 * @throws AbstractionKitError with code "BAD_DATA" if `callData` is not a
-	 *   Safe module executor call or the MultiSend payload is malformed
+	 *   Safe module executor call, delegatecalls anything other than the
+	 *   expected MultiSend contract, or the MultiSend payload is malformed
 	 */
 	public static decodeTokenPaymasterApprovals(
 		userOperation: AnyUserOperation,
+		overrides: {
+			multisendContractAddress?: string;
+		} = {},
 	): TokenPaymasterApproval[] {
 		const paymaster = getUserOperationPaymaster(userOperation);
 		if (paymaster == null) return [];
 
+		const multisendContractAddress =
+			overrides.multisendContractAddress ?? SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS;
 		const [metaTransaction] = SafeAccount.decodeAccountCallData(userOperation.callData);
-		const multisendSelector = "0x8d80ff0a";
-		const transactions =
-			metaTransaction.operation === Operation.Delegate &&
-			metaTransaction.data.startsWith(multisendSelector)
-				? decodeMultiSendTransactions(decodeMultiSendCallData(metaTransaction.data))
-				: [metaTransaction];
+		let transactions: MetaTransaction[] = [metaTransaction];
+		if (metaTransaction.operation === Operation.Delegate) {
+			const multisendSelector = "0x8d80ff0a";
+			if (
+				metaTransaction.to.toLowerCase() !== multisendContractAddress.toLowerCase() ||
+				!metaTransaction.data.startsWith(multisendSelector)
+			) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					`UserOperation delegatecalls ${metaTransaction.to}, not the MultiSend contract ` +
+						`${multisendContractAddress}; its token approvals cannot be determined. ` +
+						"Pass overrides.multisendContractAddress for a custom MultiSend deployment.",
+					{ context: { to: metaTransaction.to, multisendContractAddress } },
+				);
+			}
+			transactions = decodeMultiSendTransactions(decodeMultiSendCallData(metaTransaction.data));
+		}
 
 		const approveSelector = getFunctionSelector("approve(address,uint256)");
 		const approvals: TokenPaymasterApproval[] = [];
