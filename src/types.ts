@@ -280,7 +280,7 @@ export type TokenQuote = {
 /**
  * An ERC-20 `approve` call found in a UserOperation's `callData` whose
  * spender is the operation's paymaster. See
- * {@link SafeAccount.decodeTokenPaymasterApprovals}.
+ * {@link SafeAccount.decodeTokenPaymasterApprovalsStatic}.
  */
 export type TokenPaymasterApproval = {
 	/** ERC-20 token contract the `approve` is called on */

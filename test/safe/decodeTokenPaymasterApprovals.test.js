@@ -56,13 +56,13 @@ function v7Op(callData, paymaster = PAYMASTER) {
 const lower = (approvals) =>
   approvals.map((a) => ({ token: a.token.toLowerCase(), spender: a.spender.toLowerCase(), amount: a.amount }));
 
-describe('SafeAccount.decodeTokenPaymasterApprovals', () => {
+describe('SafeAccount.decodeTokenPaymasterApprovalsStatic', () => {
   test('v0.6: finds the approval prepended to a single call', () => {
     const original = accountCallData(SafeAccountV0_2_0, RECIPIENT, 1n, '0x');
     const callData = SafeAccountV0_2_0.prependTokenPaymasterApproveToCallDataStatic(
       original, TOKEN, PAYMASTER, 12345n,
     );
-    expect(lower(SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData))))
+    expect(lower(SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op(callData))))
       .toEqual([{ token: TOKEN, spender: PAYMASTER, amount: 12345n }]);
   });
 
@@ -75,7 +75,7 @@ describe('SafeAccount.decodeTokenPaymasterApprovals', () => {
       original, TOKEN, PAYMASTER, 777n,
     );
     // The dapp's approve to another spender is not reported.
-    expect(lower(SafeAccountV0_3_0.decodeTokenPaymasterApprovals(v7Op(callData))))
+    expect(lower(SafeAccountV0_3_0.decodeTokenPaymasterApprovalsStatic(v7Op(callData))))
       .toEqual([{ token: TOKEN, spender: PAYMASTER, amount: 777n }]);
   });
 
@@ -90,7 +90,7 @@ describe('SafeAccount.decodeTokenPaymasterApprovals', () => {
       // v0.9 parallel-signing layout: paymaster signature slot + magic suffix.
       paymasterData: '0x' + '11'.repeat(20) + '0000' + '22e325a297439656',
     };
-    expect(lower(SafeMultiChainSigAccountV1.decodeTokenPaymasterApprovals(op)))
+    expect(lower(SafeMultiChainSigAccountV1.decodeTokenPaymasterApprovalsStatic(op)))
       .toEqual([{ token: TOKEN, spender: PAYMASTER, amount: 4242n }]);
   });
 
@@ -98,7 +98,7 @@ describe('SafeAccount.decodeTokenPaymasterApprovals', () => {
     const original = accountCallData(SafeAccountV0_2_0, RECIPIENT, 0n, '0x');
     let callData = SafeAccountV0_2_0.prependTokenPaymasterApproveToCallDataStatic(original, TOKEN, PAYMASTER, 500n);
     callData = SafeAccountV0_2_0.prependTokenPaymasterApproveToCallDataStatic(callData, TOKEN, PAYMASTER, 0n);
-    expect(SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData)).map((a) => a.amount))
+    expect(SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op(callData)).map((a) => a.amount))
       .toEqual([0n, 500n]);
   });
 
@@ -108,25 +108,25 @@ describe('SafeAccount.decodeTokenPaymasterApprovals', () => {
       { to: TOKEN, value: 0n, data: approveData(PAYMASTER, 2n ** 256n - 1n) },
     ]);
     const callData = SafeAccountV0_2_0.prependTokenPaymasterApproveToCallDataStatic(original, TOKEN, PAYMASTER, 10n);
-    expect(SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData)).map((a) => a.amount))
+    expect(SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op(callData)).map((a) => a.amount))
       .toEqual([10n, 2n ** 256n - 1n]);
   });
 
   test('a single non-MultiSend approve call to the paymaster is reported', () => {
     const callData = accountCallData(SafeAccountV0_3_0, TOKEN, 0n, approveData(PAYMASTER, 9n));
-    expect(lower(SafeAccountV0_3_0.decodeTokenPaymasterApprovals(v7Op(callData))))
+    expect(lower(SafeAccountV0_3_0.decodeTokenPaymasterApprovalsStatic(v7Op(callData))))
       .toEqual([{ token: TOKEN, spender: PAYMASTER, amount: 9n }]);
   });
 
   test('sponsored operation without a paymaster: returns [] even with a dapp approve', () => {
     const callData = accountCallData(SafeAccountV0_2_0, TOKEN, 0n, approveData(DAPP, 5n));
-    expect(SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData, '0x'))).toEqual([]);
-    expect(SafeAccountV0_3_0.decodeTokenPaymasterApprovals(v7Op(callData, null))).toEqual([]);
+    expect(SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op(callData, '0x'))).toEqual([]);
+    expect(SafeAccountV0_3_0.decodeTokenPaymasterApprovalsStatic(v7Op(callData, null))).toEqual([]);
   });
 
   test('paymaster set but no approval to it: returns []', () => {
     const callData = accountCallData(SafeAccountV0_2_0, TOKEN, 0n, approveData(DAPP, 5n));
-    expect(SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData))).toEqual([]);
+    expect(SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op(callData))).toEqual([]);
   });
 
   test('throws when the batch is delegatecalled to a contract other than MultiSend', () => {
@@ -138,7 +138,7 @@ describe('SafeAccount.decodeTokenPaymasterApprovals', () => {
     ]);
     const [inner] = SafeAccountV0_2_0.decodeAccountCallData(legit);
     const callData = SafeAccountV0_2_0.createAccountCallData(EVIL, 0n, inner.data, 1);
-    expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData)))
+    expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op(callData)))
       .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
   });
 
@@ -149,19 +149,19 @@ describe('SafeAccount.decodeTokenPaymasterApprovals', () => {
     ]);
     const [inner] = SafeAccountV0_2_0.decodeAccountCallData(legit);
     const callData = SafeAccountV0_2_0.createAccountCallData(CUSTOM, 0n, inner.data, 1);
-    expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData))).toThrow();
-    expect(SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData), { multisendContractAddress: CUSTOM })
+    expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op(callData))).toThrow();
+    expect(SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op(callData), { multisendContractAddress: CUSTOM })
       .map((a) => a.amount)).toEqual([3n]);
   });
 
   test('throws on a single delegatecall that is not a MultiSend batch', () => {
     const callData = SafeAccountV0_2_0.createAccountCallData('0x' + '66'.repeat(20), 0n, approveData(PAYMASTER, 1n), 1);
-    expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData)))
+    expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op(callData)))
       .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
   });
 
   test('throws BAD_DATA on callData that is not a Safe executor call', () => {
-    expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op('0xdeadbeef')))
+    expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op('0xdeadbeef')))
       .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
   });
 
@@ -170,7 +170,25 @@ describe('SafeAccount.decodeTokenPaymasterApprovals', () => {
     const callData = SafeAccountV0_2_0.createAccountCallData(
       SafeAccountV0_2_0.DEFAULT_MULTISEND_CONTRACT_ADDRESS, 0n, multiSend, 1,
     );
-    expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovals(v6Op(callData)))
+    expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op(callData)))
       .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
+  });
+});
+
+describe('SafeAccount#decodeTokenPaymasterApprovals (account hook)', () => {
+  test('instance method matches the static, including overrides', () => {
+    const owner = '0x' + '12'.repeat(20);
+    const account = SafeAccountV0_2_0.initializeNewAccount([owner]);
+    const original = accountCallData(SafeAccountV0_2_0, RECIPIENT, 0n, '0x');
+    const callData = SafeAccountV0_2_0.prependTokenPaymasterApproveToCallDataStatic(original, TOKEN, PAYMASTER, 99n);
+    const op = v6Op(callData);
+    expect(account.decodeTokenPaymasterApprovals(op)).toEqual(SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(op));
+    expect(account.decodeTokenPaymasterApprovals(op).map((a) => a.amount)).toEqual([99n]);
+  });
+
+  test('inherited by every Safe account class', () => {
+    for (const Cls of [SafeAccountV0_2_0, SafeAccountV0_3_0, SafeMultiChainSigAccountV1]) {
+      expect(typeof Cls.prototype.decodeTokenPaymasterApprovals).toBe('function');
+    }
   });
 });
