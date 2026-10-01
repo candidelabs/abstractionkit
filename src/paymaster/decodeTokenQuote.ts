@@ -27,9 +27,11 @@ export type DecodedTokenQuote = {
 	/** Paymaster address set on the operation */
 	paymaster: string;
 	/**
-	 * ERC-20 token paying for gas. `null` only for a Candide operation that
-	 * carries no approval to the paymaster, since Candide's paymaster data
-	 * names the token by an on-chain slot, not by address.
+	 * ERC-20 token paying for gas. For Pimlico it comes from the signed
+	 * paymaster data. Candide's data names the token by an on-chain slot, so
+	 * for Candide it is taken from the approval to the paymaster and is not
+	 * verified offline; compare it with the token you expect. `null` for a
+	 * Candide operation that carries no such approval.
 	 */
 	token: string | null;
 	/**
