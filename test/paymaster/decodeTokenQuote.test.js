@@ -162,6 +162,27 @@ describe('decodeTokenQuote: Candide paymaster data', () => {
     const quote = decodeTokenQuote(account, v7Op(CANDIDE_V7, candideData()));
     expect(quote).toMatchObject({ token: TOKEN, approveAmount: 900n });
   });
+  test('approvals of two different tokens are rejected as ambiguous', () => {
+    const account = {
+      entrypointAddress: '0x',
+      decodeTokenPaymasterApprovals: () => [
+        { token: TOKEN, spender: CANDIDE_V7, amount: 1n },
+        { token: '0x' + 'dd'.repeat(20), spender: CANDIDE_V7, amount: 2n },
+      ],
+    };
+    expect(() => decodeTokenQuote(account, v7Op(CANDIDE_V7, candideData())))
+      .toThrow(expect.objectContaining({ code: 'PAYMASTER_ERROR' }));
+  });
+
+  test('the MultiSend override reaches the account hook', () => {
+    let received;
+    const account = {
+      entrypointAddress: '0x',
+      decodeTokenPaymasterApprovals: (_op, overrides) => { received = overrides; return []; },
+    };
+    decodeTokenQuote(account, v7Op(CANDIDE_V7, candideData()), { multisendContractAddress: '0x' + '77'.repeat(20) });
+    expect(received).toEqual({ multisendContractAddress: '0x' + '77'.repeat(20) });
+  });
 });
 
 describe('decodeTokenQuote: Pimlico paymaster data', () => {

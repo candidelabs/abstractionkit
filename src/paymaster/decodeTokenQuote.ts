@@ -220,10 +220,13 @@ function parsePimlico(
  * @param overrides - overrides for the default values
  * @param overrides.paymasterAddresses - Additional paymaster deployments to
  *   accept, keyed by address, for custom deployments that keep a known layout
+ * @param overrides.multisendContractAddress - An additional MultiSend
+ *   contract to accept when decoding the approvals, for custom deployments
  * @returns The decoded quote, or `null` when the operation has no paymaster
  *   or its paymaster sponsors it (no token payment)
  * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the paymaster is
- *   not a known deployment, or the account cannot decode its approvals
+ *   not a known deployment, the account cannot decode its approvals, or a
+ *   Candide operation approves the paymaster for more than one token
  * @throws AbstractionKitError with code "BAD_DATA" if the paymaster data is in
  *   an unsupported mode or truncated, or the approvals cannot be decoded
  */
@@ -232,6 +235,7 @@ export function decodeTokenQuote(
 	userOperation: AnyUserOperation,
 	overrides: {
 		paymasterAddresses?: Record<string, KnownTokenPaymaster>;
+		multisendContractAddress?: string;
 	} = {},
 ): DecodedTokenQuote | null {
 	const paymaster = getUserOperationPaymaster(userOperation);
@@ -272,8 +276,21 @@ export function decodeTokenQuote(
 	// Only approvals of the paid token count; for Candide the data names the
 	// token by slot, so the approval is the source of the token address.
 	const approvals: TokenPaymasterApproval[] = smartAccount
-		.decodeTokenPaymasterApprovals(userOperation)
+		.decodeTokenPaymasterApprovals(userOperation, {
+			multisendContractAddress: overrides.multisendContractAddress,
+		})
 		.filter((a) => parsed.token == null || a.token.toLowerCase() === parsed.token.toLowerCase());
+	// Without a token address in the paymaster data, approvals of more than one
+	// token leave it ambiguous which one the paymaster's token slot charges.
+	const approvedTokens = new Set(approvals.map((a) => a.token.toLowerCase()));
+	if (approvedTokens.size > 1) {
+		throw new AbstractionKitError(
+			"PAYMASTER_ERROR",
+			"UserOperation approves the paymaster for more than one token; " +
+				"the token it pays with cannot be determined offline.",
+			{ context: { tokens: [...approvedTokens] } },
+		);
+	}
 	const lastApproval = approvals.length > 0 ? approvals[approvals.length - 1] : null;
 
 	const quote: DecodedTokenQuote = {
