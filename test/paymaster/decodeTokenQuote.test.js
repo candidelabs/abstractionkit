@@ -1,6 +1,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { decodeTokenQuote, SafeAccountV0_2_0 } = require('../../dist/index.cjs');
+const ak = require('../../dist/index.cjs');
+const { Erc7677Paymaster, CandidePaymaster, SafeAccountV0_2_0 } = ak;
+
+// Static: no `this`, so it can be called detached.
+const decodeTokenQuote = Erc7677Paymaster.decodeTokenQuote;
 
 /**
  * Real token-paid UserOperations taken from mainnet and Sepolia blocks, with
@@ -234,5 +238,24 @@ describe('decodeTokenQuote: paymaster and account checks', () => {
   test('an account without the approvals hook throws PAYMASTER_ERROR', () => {
     expect(() => decodeTokenQuote({ entrypointAddress: '0x' }, v7Op(CANDIDE_V7, candideData())))
       .toThrow(expect.objectContaining({ code: 'PAYMASTER_ERROR' }));
+  });
+});
+
+describe('decodeTokenQuote: placement', () => {
+  test('is a static on both paymaster classes, with identical results', () => {
+    for (const fx of fixtures) {
+      const account = fx.isSafe ? new SafeAccountV0_2_0(fx.userOperation.sender) : noApprovalsAccount;
+      expect(CandidePaymaster.decodeTokenQuote(account, fx.userOperation))
+        .toEqual(Erc7677Paymaster.decodeTokenQuote(account, fx.userOperation));
+    }
+  });
+
+  test('needs no paymaster instance or URL', () => {
+    expect(Erc7677Paymaster.prototype.decodeTokenQuote).toBeUndefined();
+    expect(CandidePaymaster.prototype.decodeTokenQuote).toBeUndefined();
+  });
+
+  test('is not exported from the package root', () => {
+    expect(ak.decodeTokenQuote).toBeUndefined();
   });
 });

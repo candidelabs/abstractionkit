@@ -1334,8 +1334,8 @@ export class SafeAccount extends SmartAccount {
 
 	/**
 	 * Find the ERC-20 approvals a UserOperation grants to its own paymaster.
-	 * Low-level account hook behind {@link decodeTokenQuote}, which most
-	 * callers want instead.
+	 * Low-level account hook behind `Erc7677Paymaster.decodeTokenQuote` and
+	 * `CandidePaymaster.decodeTokenQuote`, which most callers want instead.
 	 *
 	 * Token paymaster flows prepend `approve(paymaster, amount)` to the
 	 * account's MultiSend batch. That amount is the most the paymaster can

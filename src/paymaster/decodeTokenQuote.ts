@@ -19,7 +19,7 @@ export type KnownTokenPaymaster = {
 
 /**
  * The token payment a finished UserOperation commits to, read from the
- * operation itself. See {@link decodeTokenQuote}.
+ * operation itself. See {@link Erc7677Paymaster.decodeTokenQuote}.
  */
 export type DecodedTokenQuote = {
 	/** Provider operating the paymaster */
@@ -206,6 +206,9 @@ function parsePimlico(
 }
 
 /**
+ * Implementation behind the public statics {@link Erc7677Paymaster.decodeTokenQuote}
+ * and {@link CandidePaymaster.decodeTokenQuote}.
+ *
  * Read the token payment a finished UserOperation commits to, entirely
  * offline: the paymaster's signed exchange rate and validity window from its
  * paymaster data, and the allowance from the ERC-20 approval in `callData`.

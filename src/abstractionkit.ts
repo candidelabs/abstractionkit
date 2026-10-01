@@ -98,7 +98,6 @@ export type {
 	KnownTokenPaymaster,
 	TokenPaymasterProvider,
 } from "./paymaster/decodeTokenQuote";
-export { decodeTokenQuote } from "./paymaster/decodeTokenQuote";
 export type {
 	AnyUserOperation,
 	CandidePaymasterContext,

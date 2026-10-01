@@ -22,10 +22,16 @@ import type {
 	TokenQuote,
 } from "../types";
 import {calculateUserOperationErc20TokenCost} from "../utils";
+import {
+	type DecodedTokenQuote,
+	decodeTokenQuote as decodeTokenQuoteImpl,
+	type KnownTokenPaymaster,
+} from "./decodeTokenQuote";
 import {assertPaymasterMatchesApproveSpender, getUserOperationPaymaster, Paymaster} from "./Paymaster";
 import type {
 	AnyUserOperation,
 	CandidePaymasterContext,
+	DecodeTokenPaymasterApprovalsAccount,
 	GasPaymasterUserOperationOverrides,
 	PrependTokenPaymasterApproveAccount,
 	SameUserOp,
@@ -105,6 +111,23 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 */
 	static from(input: string | Transport | CandidePaymaster): CandidePaymaster {
 		return input instanceof CandidePaymaster ? input : new CandidePaymaster(input);
+	}
+
+	/**
+	 * Read the token payment a finished UserOperation commits to, entirely
+	 * offline, for co-signers who never saw its `TokenQuote`. Static: needs no
+	 * paymaster URL. Same as {@link Erc7677Paymaster.decodeTokenQuote}, which
+	 * documents the parameters, result and errors.
+	 */
+	static decodeTokenQuote(
+		smartAccount: DecodeTokenPaymasterApprovalsAccount,
+		userOperation: AnyUserOperation,
+		overrides: {
+			paymasterAddresses?: Record<string, KnownTokenPaymaster>;
+			multisendContractAddress?: string;
+		} = {},
+	): DecodedTokenQuote | null {
+		return decodeTokenQuoteImpl(smartAccount, userOperation, overrides);
 	}
 
 	/**
