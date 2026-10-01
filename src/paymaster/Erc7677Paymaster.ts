@@ -404,67 +404,6 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	}
 
 	/**
-	 * Fetch the current token exchange rate and paymaster address from the
-	 * detected provider (Candide `pm_supportedERC20Tokens` or Pimlico
-	 * `pimlico_getTokenQuotes`). This is the same quote the token flow in
-	 * {@link createPaymasterUserOperation} uses.
-	 *
-	 * The rate is live, so it can differ from the one a previously built
-	 * UserOperation was priced at. The amount signers actually approved is the
-	 * prepended ERC-20 `approve` in that operation's `callData`.
-	 *
-	 * Useful to preview the token price before building an operation.
-	 *
-	 * Pimlico's quote RPC takes the chain id. It comes from `options.chainId`
-	 * when passed to the constructor, otherwise from a one-time `eth_chainId`
-	 * call to the paymaster endpoint (cached on the instance). Candide does not
-	 * need it.
-	 *
-	 * @param tokenAddress - The ERC-20 token contract address
-	 * @param entrypoint - Target EntryPoint address
-	 * @returns `exchangeRate`: token smallest-units equivalent to 1 ETH
-	 *   (10^18 wei). `paymasterAddress`: the spender the token flow approves.
-	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if no provider is
-	 *   configured, the chain id cannot be resolved for Pimlico, or the
-	 *   provider does not quote the token.
-	 */
-	async fetchTokenQuote(
-		tokenAddress: string,
-		entrypoint: string,
-	): Promise<{ exchangeRate: bigint; paymasterAddress: string }> {
-		if (this.provider == null) {
-			throw new AbstractionKitError(
-				"PAYMASTER_ERROR",
-				"fetchTokenQuote requires a paymaster provider (candide or pimlico). " +
-					"None was detected from the RPC URL; pass options.provider to the constructor.",
-			);
-		}
-		try {
-			if (this.provider === "candide") {
-				return await this.fetchCandideTokenQuote(tokenAddress, entrypoint);
-			}
-			let chainId: string;
-			try {
-				chainId = await this.getChainId(this.transport);
-			} catch (err) {
-				throw new AbstractionKitError(
-					"PAYMASTER_ERROR",
-					"fetchTokenQuote could not resolve the chain id from the paymaster endpoint. " +
-						"Pass options.chainId to the constructor.",
-					{ cause: ensureError(err) },
-				);
-			}
-			return await this.fetchPimlicoTokenQuote(tokenAddress, entrypoint, chainId);
-		} catch (err) {
-			const error = ensureError(err);
-			if (error instanceof AbstractionKitError && error.code === "PAYMASTER_ERROR") throw error;
-			throw new AbstractionKitError("PAYMASTER_ERROR", "fetchTokenQuote failed", {
-				cause: error,
-			});
-		}
-	}
-
-	/**
 	 * Runs the full ERC-7677 pipeline and returns a UserOperation with paymaster
 	 * fields populated. The caller is responsible for signing and sending.
 	 *
