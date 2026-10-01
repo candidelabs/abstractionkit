@@ -457,7 +457,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			return await this.fetchPimlicoTokenQuote(tokenAddress, entrypoint, chainId);
 		} catch (err) {
 			const error = ensureError(err);
-			if (error instanceof AbstractionKitError) throw error;
+			if (error instanceof AbstractionKitError && error.code === "PAYMASTER_ERROR") throw error;
 			throw new AbstractionKitError("PAYMASTER_ERROR", "fetchTokenQuote failed", {
 				cause: error,
 			});

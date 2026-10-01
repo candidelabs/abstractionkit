@@ -1,5 +1,5 @@
 const http = require('node:http');
-const { Erc7677Paymaster, calculateUserOperationMaxGasCost } = require('../../dist/index.cjs');
+const { Erc7677Paymaster, calculateUserOperationMaxGasCost, AbstractionKitError } = require('../../dist/index.cjs');
 
 jest.setTimeout(30000);
 
@@ -1312,6 +1312,14 @@ describe('Erc7677Paymaster', () => {
       } finally {
         await server.close();
       }
+    });
+
+    test('wraps an AbstractionKitError with another code from a custom transport', async () => {
+      const transport = { request: async () => { throw new AbstractionKitError('BAD_DATA', 'custom transport failure'); } };
+      const paymaster = new Erc7677Paymaster(transport, { provider: 'candide' });
+      const err = await paymaster.fetchTokenQuote(TOKEN_ADDR, ENTRYPOINT_V7).catch((e) => e);
+      expect(err).toMatchObject({ code: 'PAYMASTER_ERROR', message: 'fetchTokenQuote failed' });
+      expect(err.cause).toMatchObject({ code: 'BAD_DATA' });
     });
 
     test('wraps a transport failure as PAYMASTER_ERROR', async () => {
