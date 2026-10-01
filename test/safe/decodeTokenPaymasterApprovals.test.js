@@ -142,6 +142,21 @@ describe('SafeAccount.decodeTokenPaymasterApprovalsStatic', () => {
       .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
   });
 
+  test('accepts official Safe MultiSend and MultiSendCallOnly deployments', () => {
+    for (const target of [
+      '0x9641d764fc13c8B624c04430C7356C1C7C8102e2', // MultiSendCallOnly v1.4.1
+      '0x40A2aCCbd92BCA938b02010E17A5b8929b49130D', // MultiSendCallOnly v1.3.0
+      '0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761', // MultiSend v1.3.0
+      '0x218543288004CD07832472D464648173c77D7eB7', // MultiSend v1.5.0
+      '0xA83c336B20401Af773B6219BA5027174338D1836', // MultiSendCallOnly v1.5.0
+    ]) {
+      const legit = batchCallData(SafeAccountV0_2_0, [{ to: TOKEN, value: 0n, data: approveData(PAYMASTER, 5n) }]);
+      const [inner] = SafeAccountV0_2_0.decodeAccountCallData(legit);
+      const callData = SafeAccountV0_2_0.createAccountCallData(target, 0n, inner.data, 1);
+      expect(SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op(callData)).map((a) => a.amount)).toEqual([5n]);
+    }
+  });
+
   test('accepts a custom MultiSend deployment via overrides', () => {
     const CUSTOM = '0x' + '77'.repeat(20);
     const legit = batchCallData(SafeAccountV0_2_0, [

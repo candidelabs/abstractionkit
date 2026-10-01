@@ -51,7 +51,12 @@ import {
 } from "../../utilsTenderly";
 import {SendUseroperationResponse} from "../SendUseroperationResponse";
 import {SmartAccount} from "../SmartAccount";
-import {decodeMultiSendCallData, decodeMultiSendTransactions, encodeMultiSendCallData} from "./multisend";
+import {
+	decodeMultiSendCallData,
+	decodeMultiSendTransactions,
+	encodeMultiSendCallData,
+	SAFE_MULTISEND_DEPLOYMENTS,
+} from "./multisend";
 import {getUserOperationPaymaster} from "../../paymaster/Paymaster";
 import type {AnyUserOperation} from "../../paymaster/types";
 import {
@@ -461,15 +466,15 @@ export class SafeAccount extends SmartAccount {
 	 * inside the batch) is not reported.
 	 *
 	 * A delegatecall runs the target's code in the Safe's context, so the
-	 * batch is only decoded when the Safe delegatecalls the expected MultiSend
-	 * contract. A delegatecall to any other address throws rather than
-	 * reporting approvals that code may never execute.
+	 * batch is only decoded when the Safe delegatecalls an official Safe
+	 * MultiSend or MultiSendCallOnly deployment (v1.3.0, v1.4.1, v1.5.0). A
+	 * delegatecall to any other address throws rather than reporting
+	 * approvals that code may never execute.
 	 *
 	 * @param userOperation - The UserOperation to inspect
 	 * @param overrides - overrides for the default values
-	 * @param overrides.multisendContractAddress - MultiSend contract the batch
-	 *   must be delegatecalled to. Defaults to
-	 *   SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS
+	 * @param overrides.multisendContractAddress - An additional MultiSend
+	 *   contract to accept, for custom deployments
 	 * @returns Approvals to the paymaster, in execution order. Empty when the
 	 *   operation has no paymaster or grants it no approval.
 	 * @throws AbstractionKitError with code "BAD_DATA" if `callData` is not a
@@ -485,22 +490,21 @@ export class SafeAccount extends SmartAccount {
 		const paymaster = getUserOperationPaymaster(userOperation);
 		if (paymaster == null) return [];
 
-		const multisendContractAddress =
-			overrides.multisendContractAddress ?? SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS;
 		const [metaTransaction] = SafeAccount.decodeAccountCallData(userOperation.callData);
 		let transactions: MetaTransaction[] = [metaTransaction];
 		if (metaTransaction.operation === Operation.Delegate) {
 			const multisendSelector = "0x8d80ff0a";
-			if (
-				metaTransaction.to.toLowerCase() !== multisendContractAddress.toLowerCase() ||
-				!metaTransaction.data.startsWith(multisendSelector)
-			) {
+			const target = metaTransaction.to.toLowerCase();
+			const isKnownMultiSend =
+				SAFE_MULTISEND_DEPLOYMENTS.includes(target) ||
+				target === overrides.multisendContractAddress?.toLowerCase();
+			if (!isKnownMultiSend || !metaTransaction.data.startsWith(multisendSelector)) {
 				throw new AbstractionKitError(
 					"BAD_DATA",
-					`UserOperation delegatecalls ${metaTransaction.to}, not the MultiSend contract ` +
-						`${multisendContractAddress}; its token approvals cannot be determined. ` +
+					`UserOperation delegatecalls ${metaTransaction.to}, which is not a known Safe ` +
+						"MultiSend contract; its token approvals cannot be determined. " +
 						"Pass overrides.multisendContractAddress for a custom MultiSend deployment.",
-					{ context: { to: metaTransaction.to, multisendContractAddress } },
+					{ context: { to: metaTransaction.to } },
 				);
 			}
 			transactions = decodeMultiSendTransactions(decodeMultiSendCallData(metaTransaction.data));
@@ -1417,9 +1421,8 @@ export class SafeAccount extends SmartAccount {
 	 * execution order. See the static method for the full contract.
 	 * @param userOperation - The UserOperation to inspect
 	 * @param overrides - overrides for the default values
-	 * @param overrides.multisendContractAddress - MultiSend contract the batch
-	 *   must be delegatecalled to. Defaults to
-	 *   SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS
+	 * @param overrides.multisendContractAddress - An additional MultiSend
+	 *   contract to accept, for custom deployments
 	 * @returns Approvals to the paymaster, in execution order
 	 */
 	public decodeTokenPaymasterApprovals(
