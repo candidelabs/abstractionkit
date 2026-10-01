@@ -145,10 +145,16 @@ export interface DecodeTokenPaymasterApprovalsAccount extends SmartAccountWithEn
 	 * Returns every ERC-20 `approve` in the operation's callData whose spender
 	 * is the operation's paymaster, in execution order.
 	 * @param userOperation - The UserOperation to inspect
+	 * @param overrides - overrides for the default values
+	 * @param overrides.multisendContractAddress - An additional batching
+	 *   contract to accept, for accounts that batch through one
 	 * @returns The approvals; empty when the operation has no paymaster or
 	 *   grants it none
 	 */
-	decodeTokenPaymasterApprovals(userOperation: AnyUserOperation): TokenPaymasterApproval[];
+	decodeTokenPaymasterApprovals(
+		userOperation: AnyUserOperation,
+		overrides?: { multisendContractAddress?: string },
+	): TokenPaymasterApproval[];
 }
 
 /** Known paymaster provider identifiers for provider-specific features (token quotes, etc.). */

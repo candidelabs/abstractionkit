@@ -470,9 +470,10 @@ export class SafeAccount extends SmartAccount {
 	 *
 	 * A delegatecall runs the target's code in the Safe's context, so the
 	 * batch is only decoded when the Safe delegatecalls an official Safe
-	 * MultiSend or MultiSendCallOnly deployment (v1.3.0, v1.4.1, v1.5.0). A
-	 * delegatecall to any other address throws rather than reporting
-	 * approvals that code may never execute.
+	 * MultiSend or MultiSendCallOnly deployment (v1.3.0, v1.4.1, v1.5.0), and
+	 * the batch itself contains no delegatecall. Any other delegatecall throws
+	 * rather than reporting approvals that code may never execute or may
+	 * overwrite.
 	 *
 	 * @param userOperation - The UserOperation to inspect
 	 * @param overrides - overrides for the default values
@@ -511,6 +512,16 @@ export class SafeAccount extends SmartAccount {
 				);
 			}
 			transactions = decodeMultiSendTransactions(decodeMultiSendCallData(metaTransaction.data));
+			// An inner delegatecall runs arbitrary code in the Safe's context and
+			// could change the paymaster allowance after any approve we report.
+			const innerDelegate = transactions.find((tx) => tx.operation === Operation.Delegate);
+			if (innerDelegate != null) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					`UserOperation batch delegatecalls ${innerDelegate.to}; its token approvals cannot be determined.`,
+					{ context: { to: innerDelegate.to } },
+				);
+			}
 		}
 
 		const approveSelector = getFunctionSelector("approve(address,uint256)");
