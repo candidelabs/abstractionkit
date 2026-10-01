@@ -413,8 +413,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 * UserOperation was priced at. The amount signers actually approved is the
 	 * prepended ERC-20 `approve` in that operation's `callData`.
 	 *
-	 * Pair with {@link calculateUserOperationErc20TokenCost} to price a
-	 * UserOperation in the token.
+	 * Useful to preview the token price before building an operation.
 	 *
 	 * Pimlico's quote RPC takes the chain id. It comes from `options.chainId`
 	 * when passed to the constructor, otherwise from a one-time `eth_chainId`

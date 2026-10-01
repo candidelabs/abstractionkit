@@ -1,5 +1,5 @@
 const http = require('node:http');
-const { Erc7677Paymaster, calculateUserOperationErc20TokenCost } = require('../../dist/index.cjs');
+const { Erc7677Paymaster, calculateUserOperationMaxGasCost } = require('../../dist/index.cjs');
 
 jest.setTimeout(30000);
 
@@ -1336,7 +1336,7 @@ describe('Erc7677Paymaster', () => {
       }
     });
 
-    test('quote + calculateUserOperationErc20TokenCost reproduces the token flow tokenCost', async () => {
+    test('fetchTokenQuote returns the rate and paymaster the token flow priced with', async () => {
       const server = await makeMockRpcServer({
         pm_supportedERC20Tokens: () => ({
           tokens: [{ address: TOKEN_ADDR, exchangeRate: '0xb2d05e00' }], // 3e9
@@ -1365,7 +1365,8 @@ describe('Erc7677Paymaster', () => {
         );
         const quote = await paymaster.fetchTokenQuote(TOKEN_ADDR, ENTRYPOINT_V7);
         expect(quote.paymasterAddress).toBe(tokenQuote.paymaster);
-        expect(calculateUserOperationErc20TokenCost(userOperation, quote.exchangeRate))
+        expect(quote.exchangeRate).toBe(tokenQuote.exchangeRate);
+        expect((quote.exchangeRate * calculateUserOperationMaxGasCost(userOperation)) / 10n ** 18n)
           .toBe(tokenQuote.tokenCost);
       } finally {
         await server.close();

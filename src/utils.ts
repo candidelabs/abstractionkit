@@ -715,11 +715,8 @@ export function calculateUserOperationMaxGasCost(
  * exchange rate: `(exchangeRate * maxGasCostWei) / 10^18`, floored to a
  * minimum of 1 token smallest-unit so cheap-gas chains never round to zero.
  *
- * This is the same math the token paymaster flows use to size the prepended
- * approval, so pairing it with a quote from
- * {@link Erc7677Paymaster.fetchTokenQuote} or
- * {@link CandidePaymaster.fetchTokenPaymasterExchangeRate} reproduces their
- * `tokenCost` without duplicating the formula.
+ * Shared by the token paymaster flows to compute `TokenQuote.tokenCost` and
+ * size the prepended approval, so the formula lives in one place.
  *
  * @param useroperation - The UserOperation to price. v0.8 and v0.9 share the
  *   v0.7 gas fields and prefund formula.
