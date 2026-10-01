@@ -25,7 +25,7 @@ function batchCallData(Account, transactions) {
   // operation(1) | to(20) | value(32) | dataLength(32) | data
   const packed = '0x' + transactions.map((tx) => {
     const data = tx.data.slice(2);
-    return '00'
+    return (tx.operation === 1 ? '01' : '00')
       + tx.to.slice(2).toLowerCase()
       + tx.value.toString(16).padStart(64, '0')
       + (data.length / 2).toString(16).padStart(64, '0')
@@ -155,6 +155,15 @@ describe('SafeAccount.decodeTokenPaymasterApprovalsStatic', () => {
       const callData = SafeAccountV0_2_0.createAccountCallData(target, 0n, inner.data, 1);
       expect(SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op(callData)).map((a) => a.amount)).toEqual([5n]);
     }
+  });
+
+  test('throws when the batch contains a delegatecall', () => {
+    const callData = batchCallData(SafeAccountV0_2_0, [
+      { to: TOKEN, value: 0n, data: approveData(PAYMASTER, 5n) },
+      { to: '0x' + '66'.repeat(20), value: 0n, data: '0x12345678', operation: 1 },
+    ]);
+    expect(() => SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op(callData)))
+      .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
   });
 
   test('accepts a custom MultiSend deployment via overrides', () => {
