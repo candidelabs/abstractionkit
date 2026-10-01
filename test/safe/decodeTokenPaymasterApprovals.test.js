@@ -189,6 +189,15 @@ describe('SafeAccount.decodeTokenPaymasterApprovalsStatic', () => {
       .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
   });
 
+  test('throws BAD_DATA with the cause on truncated approve calldata', () => {
+    const callData = accountCallData(SafeAccountV0_2_0, TOKEN, 0n, approveSelector + '00'.repeat(10));
+    let err;
+    try { SafeAccountV0_2_0.decodeTokenPaymasterApprovalsStatic(v6Op(callData)); } catch (e) { err = e; }
+    expect(err.code).toBe('BAD_DATA');
+    expect(err.context.to.toLowerCase()).toBe(TOKEN);
+    expect(err.cause).toBeInstanceOf(Error);
+  });
+
   test('throws BAD_DATA on a truncated MultiSend payload', () => {
     const multiSend = createCallData('0x8d80ff0a', ['bytes'], ['0x00' + 'bb'.repeat(20)]);
     const callData = SafeAccountV0_2_0.createAccountCallData(

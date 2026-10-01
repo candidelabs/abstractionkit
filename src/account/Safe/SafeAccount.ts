@@ -533,10 +533,20 @@ export class SafeAccount extends SmartAccount {
 			) {
 				continue;
 			}
-			const [spender, amount] = decodeAbiParameters<[string, bigint]>(
-				["address", "uint256"],
-				`0x${transaction.data.slice(10)}`,
-			);
+			let spender: string;
+			let amount: bigint;
+			try {
+				[spender, amount] = decodeAbiParameters<[string, bigint]>(
+					["address", "uint256"],
+					`0x${transaction.data.slice(10)}`,
+				);
+			} catch (err) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					`malformed approve calldata in call to ${transaction.to}`,
+					{ cause: ensureError(err), context: { to: transaction.to } },
+				);
+			}
 			if (spender.toLowerCase() !== paymaster.toLowerCase()) continue;
 			approvals.push({ token: getAddress(transaction.to), spender, amount: BigInt(amount) });
 		}
