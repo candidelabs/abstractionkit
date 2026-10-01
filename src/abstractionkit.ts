@@ -99,6 +99,7 @@ export type {
 	Erc7677PaymasterConstructorOptions,
 	Erc7677Provider,
 	GasPaymasterUserOperationOverrides,
+	DecodeTokenPaymasterApprovalsAccount,
 	PrependTokenPaymasterApproveAccount,
 	SameUserOp,
 } from "./paymaster/types";

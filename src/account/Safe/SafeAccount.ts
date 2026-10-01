@@ -476,7 +476,7 @@ export class SafeAccount extends SmartAccount {
 	 *   Safe module executor call, delegatecalls anything other than the
 	 *   expected MultiSend contract, or the MultiSend payload is malformed
 	 */
-	public static decodeTokenPaymasterApprovals(
+	public static decodeTokenPaymasterApprovalsStatic(
 		userOperation: AnyUserOperation,
 		overrides: {
 			multisendContractAddress?: string;
@@ -1409,6 +1409,26 @@ export class SafeAccount extends SmartAccount {
 		);
 
 		return [safeAccountFactory.address, factoryGeneratorFunctionCallData];
+	}
+
+	/**
+	 * A non static wrapper for {@link SafeAccount.decodeTokenPaymasterApprovalsStatic}:
+	 * the ERC-20 approvals a UserOperation grants to its own paymaster, in
+	 * execution order. See the static method for the full contract.
+	 * @param userOperation - The UserOperation to inspect
+	 * @param overrides - overrides for the default values
+	 * @param overrides.multisendContractAddress - MultiSend contract the batch
+	 *   must be delegatecalled to. Defaults to
+	 *   SafeAccount.DEFAULT_MULTISEND_CONTRACT_ADDRESS
+	 * @returns Approvals to the paymaster, in execution order
+	 */
+	public decodeTokenPaymasterApprovals(
+		userOperation: AnyUserOperation,
+		overrides: {
+			multisendContractAddress?: string;
+		} = {},
+	): TokenPaymasterApproval[] {
+		return SafeAccount.decodeTokenPaymasterApprovalsStatic(userOperation, overrides);
 	}
 
 	/**

@@ -1,5 +1,6 @@
 import type {
 	StateOverrideSet,
+	TokenPaymasterApproval,
 	UserOperationV6,
 	UserOperationV7,
 	UserOperationV8,
@@ -132,6 +133,22 @@ export interface PrependTokenPaymasterApproveAccount extends SmartAccountWithEnt
 		paymasterAddress: string,
 		approveAmount: bigint,
 	): string;
+}
+
+/**
+ * Interface for smart accounts that can read back the ERC-20 approvals a
+ * UserOperation grants to its paymaster. The inverse of
+ * {@link PrependTokenPaymasterApproveAccount}.
+ */
+export interface DecodeTokenPaymasterApprovalsAccount extends SmartAccountWithEntrypoint {
+	/**
+	 * Returns every ERC-20 `approve` in the operation's callData whose spender
+	 * is the operation's paymaster, in execution order.
+	 * @param userOperation - The UserOperation to inspect
+	 * @returns The approvals; empty when the operation has no paymaster or
+	 *   grants it none
+	 */
+	decodeTokenPaymasterApprovals(userOperation: AnyUserOperation): TokenPaymasterApproval[];
 }
 
 /** Known paymaster provider identifiers for provider-specific features (token quotes, etc.). */
