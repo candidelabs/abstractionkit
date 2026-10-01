@@ -447,113 +447,6 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * Find the ERC-20 approvals a UserOperation grants to its own paymaster.
-	 *
-	 * Token paymaster flows prepend `approve(paymaster, amount)` to the
-	 * account's MultiSend batch. That amount is the most the paymaster can
-	 * charge, so it is what the owners sign, even when the `TokenQuote` from
-	 * building the operation is no longer at hand. Only `approve` calls whose
-	 * spender is the paymaster set on this operation are returned, so a
-	 * dapp's own `approve` in a sponsored operation is not mistaken for one.
-	 *
-	 * The whole batch is scanned, in execution order. `approve` sets rather
-	 * than adds, so the paymaster's allowance for a token after execution is
-	 * the last entry for that token. Token-flow operations for tokens that
-	 * need an allowance reset (e.g. USDT) carry an `approve(0)` entry first.
-	 *
-	 * Only direct `approve` calls in the batch are recognized. Allowance
-	 * granted any other way (`increaseAllowance`, `permit`, a delegatecall
-	 * inside the batch) is not reported. Calls are matched by the
-	 * `approve(address,uint256)` selector, which ERC-721 shares, so the target
-	 * is not verified to be an ERC-20: compare `token` with the token you
-	 * expect the paymaster to charge before treating `amount` as its cap.
-	 *
-	 * A delegatecall runs the target's code in the Safe's context, so the
-	 * batch is only decoded when the Safe delegatecalls an official Safe
-	 * MultiSend or MultiSendCallOnly deployment (v1.3.0, v1.4.1, v1.5.0), and
-	 * the batch itself contains no delegatecall. Any other delegatecall throws
-	 * rather than reporting approvals that code may never execute or may
-	 * overwrite.
-	 *
-	 * @param userOperation - The UserOperation to inspect
-	 * @param overrides - overrides for the default values
-	 * @param overrides.multisendContractAddress - An additional MultiSend
-	 *   contract to accept, for custom deployments
-	 * @returns Approvals to the paymaster, in execution order. Empty when the
-	 *   operation has no paymaster or grants it no approval.
-	 * @throws AbstractionKitError with code "BAD_DATA" if `callData` is not a
-	 *   Safe module executor call, delegatecalls anything other than the
-	 *   expected MultiSend contract, or the MultiSend payload is malformed
-	 */
-	public static decodeTokenPaymasterApprovalsStatic(
-		userOperation: AnyUserOperation,
-		overrides: {
-			multisendContractAddress?: string;
-		} = {},
-	): TokenPaymasterApproval[] {
-		const paymaster = getUserOperationPaymaster(userOperation);
-		if (paymaster == null) return [];
-
-		const [metaTransaction] = SafeAccount.decodeAccountCallData(userOperation.callData);
-		let transactions: MetaTransaction[] = [metaTransaction];
-		if (metaTransaction.operation === Operation.Delegate) {
-			const multisendSelector = "0x8d80ff0a";
-			const target = metaTransaction.to.toLowerCase();
-			const isKnownMultiSend =
-				SAFE_MULTISEND_DEPLOYMENTS.includes(target) ||
-				target === overrides.multisendContractAddress?.toLowerCase();
-			if (!isKnownMultiSend || !metaTransaction.data.startsWith(multisendSelector)) {
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					`UserOperation delegatecalls ${metaTransaction.to}, which is not a known Safe ` +
-						"MultiSend contract; its token approvals cannot be determined. " +
-						"Pass overrides.multisendContractAddress for a custom MultiSend deployment.",
-					{ context: { to: metaTransaction.to } },
-				);
-			}
-			transactions = decodeMultiSendTransactions(decodeMultiSendCallData(metaTransaction.data));
-			// An inner delegatecall runs arbitrary code in the Safe's context and
-			// could change the paymaster allowance after any approve we report.
-			const innerDelegate = transactions.find((tx) => tx.operation === Operation.Delegate);
-			if (innerDelegate != null) {
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					`UserOperation batch delegatecalls ${innerDelegate.to}; its token approvals cannot be determined.`,
-					{ context: { to: innerDelegate.to } },
-				);
-			}
-		}
-
-		const approveSelector = getFunctionSelector("approve(address,uint256)");
-		const approvals: TokenPaymasterApproval[] = [];
-		for (const transaction of transactions) {
-			if (
-				(transaction.operation ?? Operation.Call) !== Operation.Call ||
-				!transaction.data.toLowerCase().startsWith(approveSelector)
-			) {
-				continue;
-			}
-			let spender: string;
-			let amount: bigint;
-			try {
-				[spender, amount] = decodeAbiParameters<[string, bigint]>(
-					["address", "uint256"],
-					`0x${transaction.data.slice(10)}`,
-				);
-			} catch (err) {
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					`malformed approve calldata in call to ${transaction.to}`,
-					{ cause: ensureError(err), context: { to: transaction.to } },
-				);
-			}
-			if (spender.toLowerCase() !== paymaster.toLowerCase()) continue;
-			approvals.push({ token: getAddress(transaction.to), spender, amount: BigInt(amount) });
-		}
-		return approvals;
-	}
-
-	/**
 	 * adds a token approve call to the call data for a token paymaster
 	 * @param callData - calldata to be added to, if after decoding it is not
 	 * a multisend transaction, it will be encoded as a multisend transaction
@@ -1440,14 +1333,45 @@ export class SafeAccount extends SmartAccount {
 	}
 
 	/**
-	 * A non static wrapper for {@link SafeAccount.decodeTokenPaymasterApprovalsStatic}:
-	 * the ERC-20 approvals a UserOperation grants to its own paymaster, in
-	 * execution order. See the static method for the full contract.
+	 * Find the ERC-20 approvals a UserOperation grants to its own paymaster.
+	 * Low-level account hook behind {@link decodeTokenQuote}, which most
+	 * callers want instead.
+	 *
+	 * Token paymaster flows prepend `approve(paymaster, amount)` to the
+	 * account's MultiSend batch. That amount is the most the paymaster can
+	 * charge, so it is what the owners sign, even when the `TokenQuote` from
+	 * building the operation is no longer at hand. Only `approve` calls whose
+	 * spender is the paymaster set on this operation are returned, so a
+	 * dapp's own `approve` in a sponsored operation is not mistaken for one.
+	 *
+	 * The whole batch is scanned, in execution order. `approve` sets rather
+	 * than adds, so the paymaster's allowance for a token after execution is
+	 * the last entry for that token. Token-flow operations for tokens that
+	 * need an allowance reset (e.g. USDT) carry an `approve(0)` entry first.
+	 *
+	 * Only direct `approve` calls in the batch are recognized. Allowance
+	 * granted any other way (`increaseAllowance`, `permit`, a delegatecall
+	 * inside the batch) is not reported. Calls are matched by the
+	 * `approve(address,uint256)` selector, which ERC-721 shares, so the target
+	 * is not verified to be an ERC-20: compare `token` with the token you
+	 * expect the paymaster to charge before treating `amount` as its cap.
+	 *
+	 * A delegatecall runs the target's code in the Safe's context, so the
+	 * batch is only decoded when the Safe delegatecalls an official Safe
+	 * MultiSend or MultiSendCallOnly deployment (v1.3.0, v1.4.1, v1.5.0), and
+	 * the batch itself contains no delegatecall. Any other delegatecall throws
+	 * rather than reporting approvals that code may never execute or may
+	 * overwrite.
+	 *
 	 * @param userOperation - The UserOperation to inspect
 	 * @param overrides - overrides for the default values
 	 * @param overrides.multisendContractAddress - An additional MultiSend
 	 *   contract to accept, for custom deployments
-	 * @returns Approvals to the paymaster, in execution order
+	 * @returns Approvals to the paymaster, in execution order. Empty when the
+	 *   operation has no paymaster or grants it no approval.
+	 * @throws AbstractionKitError with code "BAD_DATA" if `callData` is not a
+	 *   Safe module executor call, delegatecalls anything other than the
+	 *   expected MultiSend contract, or the MultiSend payload is malformed
 	 */
 	public decodeTokenPaymasterApprovals(
 		userOperation: AnyUserOperation,
@@ -1455,7 +1379,66 @@ export class SafeAccount extends SmartAccount {
 			multisendContractAddress?: string;
 		} = {},
 	): TokenPaymasterApproval[] {
-		return SafeAccount.decodeTokenPaymasterApprovalsStatic(userOperation, overrides);
+		const paymaster = getUserOperationPaymaster(userOperation);
+		if (paymaster == null) return [];
+
+		const [metaTransaction] = SafeAccount.decodeAccountCallData(userOperation.callData);
+		let transactions: MetaTransaction[] = [metaTransaction];
+		if (metaTransaction.operation === Operation.Delegate) {
+			const multisendSelector = "0x8d80ff0a";
+			const target = metaTransaction.to.toLowerCase();
+			const isKnownMultiSend =
+				SAFE_MULTISEND_DEPLOYMENTS.includes(target) ||
+				target === overrides.multisendContractAddress?.toLowerCase();
+			if (!isKnownMultiSend || !metaTransaction.data.startsWith(multisendSelector)) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					`UserOperation delegatecalls ${metaTransaction.to}, which is not a known Safe ` +
+						"MultiSend contract; its token approvals cannot be determined. " +
+						"Pass overrides.multisendContractAddress for a custom MultiSend deployment.",
+					{ context: { to: metaTransaction.to } },
+				);
+			}
+			transactions = decodeMultiSendTransactions(decodeMultiSendCallData(metaTransaction.data));
+			// An inner delegatecall runs arbitrary code in the Safe's context and
+			// could change the paymaster allowance after any approve we report.
+			const innerDelegate = transactions.find((tx) => tx.operation === Operation.Delegate);
+			if (innerDelegate != null) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					`UserOperation batch delegatecalls ${innerDelegate.to}; its token approvals cannot be determined.`,
+					{ context: { to: innerDelegate.to } },
+				);
+			}
+		}
+
+		const approveSelector = getFunctionSelector("approve(address,uint256)");
+		const approvals: TokenPaymasterApproval[] = [];
+		for (const transaction of transactions) {
+			if (
+				(transaction.operation ?? Operation.Call) !== Operation.Call ||
+				!transaction.data.toLowerCase().startsWith(approveSelector)
+			) {
+				continue;
+			}
+			let spender: string;
+			let amount: bigint;
+			try {
+				[spender, amount] = decodeAbiParameters<[string, bigint]>(
+					["address", "uint256"],
+					`0x${transaction.data.slice(10)}`,
+				);
+			} catch (err) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					`malformed approve calldata in call to ${transaction.to}`,
+					{ cause: ensureError(err), context: { to: transaction.to } },
+				);
+			}
+			if (spender.toLowerCase() !== paymaster.toLowerCase()) continue;
+			approvals.push({ token: getAddress(transaction.to), spender, amount: BigInt(amount) });
+		}
+		return approvals;
 	}
 
 	/**

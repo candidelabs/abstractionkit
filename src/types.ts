@@ -280,7 +280,7 @@ export type TokenQuote = {
 /**
  * An `approve(address,uint256)` call found in a UserOperation's `callData`
  * whose spender is the operation's paymaster. See
- * {@link SafeAccount.decodeTokenPaymasterApprovalsStatic}.
+ * {@link SafeAccount.decodeTokenPaymasterApprovals}.
  *
  * Matched by function selector only: the target is not verified to be an
  * ERC-20 (ERC-721's `approve(address,uint256)` shares the selector). Treat
