@@ -278,16 +278,21 @@ export type TokenQuote = {
 };
 
 /**
- * An ERC-20 `approve` call found in a UserOperation's `callData` whose
- * spender is the operation's paymaster. See
+ * An `approve(address,uint256)` call found in a UserOperation's `callData`
+ * whose spender is the operation's paymaster. See
  * {@link SafeAccount.decodeTokenPaymasterApprovalsStatic}.
+ *
+ * Matched by function selector only: the target is not verified to be an
+ * ERC-20 (ERC-721's `approve(address,uint256)` shares the selector). Treat
+ * `amount` as a token allowance only when `token` is the ERC-20 you expect
+ * the paymaster to charge.
  */
 export type TokenPaymasterApproval = {
-	/** ERC-20 token contract the `approve` is called on */
+	/** Contract the `approve` is called on; expected to be the ERC-20 paying for gas */
 	token: string;
 	/** Spender, equal to the UserOperation's paymaster */
 	spender: string;
-	/** Allowance the call sets, in the token's smallest unit */
+	/** Value passed to `approve`: the allowance, in smallest units, when `token` is an ERC-20 */
 	amount: bigint;
 };
 

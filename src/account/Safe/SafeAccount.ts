@@ -463,7 +463,10 @@ export class SafeAccount extends SmartAccount {
 	 *
 	 * Only direct `approve` calls in the batch are recognized. Allowance
 	 * granted any other way (`increaseAllowance`, `permit`, a delegatecall
-	 * inside the batch) is not reported.
+	 * inside the batch) is not reported. Calls are matched by the
+	 * `approve(address,uint256)` selector, which ERC-721 shares, so the target
+	 * is not verified to be an ERC-20: compare `token` with the token you
+	 * expect the paymaster to charge before treating `amount` as its cap.
 	 *
 	 * A delegatecall runs the target's code in the Safe's context, so the
 	 * batch is only decoded when the Safe delegatecalls an official Safe
