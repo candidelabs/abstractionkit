@@ -984,7 +984,7 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @param overrides.entrypoint - target entrypoint
 	 * defaults to ENTRYPOINT_V9
-	 * @param overrides.safe4337ModuleAddress - defaults to "0xee8005d7e79f9a6829ea61A81Fc2A85055fB2a42"
+	 * @param overrides.safe4337ModuleAddress - defaults to "0x22939E839e3c0F479B713eAF95e0df128554AEAd"
 	 * @returns an object containing the typed data domain, type and typed data vales
 	 * object needed for hashing and signing
 	 */
@@ -1003,7 +1003,7 @@ export class SafeAccount extends SmartAccount {
 		messageValue: SafeUserOperationV9TypedMessageValue;
 	} {
 		const safe4337ModuleAddress =
-			overrides.safe4337ModuleAddress ?? "0xee8005d7e79f9a6829ea61A81Fc2A85055fB2a42";
+			overrides.safe4337ModuleAddress ?? "0x22939E839e3c0F479B713eAF95e0df128554AEAd";
 
 		return SafeAccount.baseGetUserOperationEip712DataV7V8V9(
 			useroperation,
@@ -1026,7 +1026,7 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @param overrides.entrypoint - target entrypoint
 	 * defaults to ENTRYPOINT_V9
-	 * @param overrides.safe4337ModuleAddress - defaults to "0xE0049883864b20728b76B5cf265765B45162516D"
+	 * @param overrides.safe4337ModuleAddress - defaults to "0x22939E839e3c0F479B713eAF95e0df128554AEAd"
 	 * @returns useroperation hash
 	 */
 	public static getUserOperationEip712Hash_V9(
