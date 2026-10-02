@@ -283,8 +283,10 @@ export function decodeTokenQuote(
 			multisendContractAddress: overrides.multisendContractAddress,
 		})
 		.filter((a) => parsed.token == null || a.token.toLowerCase() === parsed.token.toLowerCase());
-	// Without a token address in the paymaster data, approvals of more than one
-	// token leave it ambiguous which one the paymaster's token slot charges.
+	// Candide's paymaster data identifies the token by slot, not by address, so if
+	// the op approves the paymaster for two different tokens we can't tell which one
+	// it pays with. For Pimlico the filter above already leaves a single token, but
+	// we run the check for both providers in case that filter changes.
 	const approvedTokens = new Set(approvals.map((a) => a.token.toLowerCase()));
 	if (approvedTokens.size > 1) {
 		throw new AbstractionKitError(
