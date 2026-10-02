@@ -67,7 +67,6 @@ export { Simple7702AccountV09 } from "./account/simple/Simple7702AccountV09";
 export { Bundler } from "./Bundler";
 export {
 	BaseUserOperationDummyValues,
-	CALIBUR_CANDIDE_V0_1_0_SINGLETON_ADDRESS,
 	CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS,
 	DEFAULT_SECP256R1_PRECOMPILE_ADDRESS,
 	EIP712_MULTI_CHAIN_OPERATIONS_PRIMARY_TYPE,
@@ -94,11 +93,17 @@ export type {
 } from "./paymaster/Erc7677Paymaster";
 export { Erc7677Paymaster } from "./paymaster/Erc7677Paymaster";
 export type {
+	DecodedTokenQuote,
+	KnownTokenPaymaster,
+	TokenPaymasterProvider,
+} from "./paymaster/decodeTokenQuote";
+export type {
 	AnyUserOperation,
 	CandidePaymasterContext,
 	Erc7677PaymasterConstructorOptions,
 	Erc7677Provider,
 	GasPaymasterUserOperationOverrides,
+	DecodeTokenPaymasterApprovalsAccount,
 	PrependTokenPaymasterApproveAccount,
 	SameUserOp,
 } from "./paymaster/types";
@@ -148,6 +153,7 @@ export type {
 	SponsorInfo,
 	SponsorMetadata,
 	StateOverrideSet,
+	TokenPaymasterApproval,
 	TokenQuote,
 	UserOperationByHashResult,
 	UserOperationReceipt,

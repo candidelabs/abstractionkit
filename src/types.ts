@@ -278,6 +278,25 @@ export type TokenQuote = {
 };
 
 /**
+ * An `approve(address,uint256)` call found in a UserOperation's `callData`
+ * whose spender is the operation's paymaster. See
+ * {@link SafeAccount.decodeTokenPaymasterApprovals}.
+ *
+ * Matched by function selector only: the target is not verified to be an
+ * ERC-20 (ERC-721's `approve(address,uint256)` shares the selector). Treat
+ * `amount` as a token allowance only when `token` is the ERC-20 you expect
+ * the paymaster to charge.
+ */
+export type TokenPaymasterApproval = {
+	/** Contract the `approve` is called on; expected to be the ERC-20 paying for gas */
+	token: string;
+	/** Spender, equal to the UserOperation's paymaster */
+	spender: string;
+	/** Value passed to `approve`: the allowance, in smallest units, when `token` is an ERC-20 */
+	amount: bigint;
+};
+
+/**
  * Raw sponsor info shape returned by `pm_getPaymasterData` per ERC-7677
  * (singular `icon`). Normalized into {@link SponsorMetadata} by
  * `applyPaymasterResult`.
@@ -407,13 +426,6 @@ export interface PaymasterMetadata {
 		| string;
 }
 
-/** @deprecated Use PaymasterMetadata instead */
-export type PaymasterMetadataV7 = PaymasterMetadata;
-/** @deprecated Use PaymasterMetadata instead */
-export type PaymasterMetadataV8 = PaymasterMetadata;
-/** @deprecated Use PaymasterMetadata instead */
-export type PaymasterMetadataV6 = PaymasterMetadata;
-
 /**
  * Paymaster metadata and supported erc20 tokens
  */
@@ -422,13 +434,6 @@ export interface SupportedERC20TokensAndMetadata {
 	tokens: ERC20Token[];
 }
 
-/** @deprecated Use SupportedERC20TokensAndMetadata instead */
-export type SupportedERC20TokensAndMetadataV7 = SupportedERC20TokensAndMetadata;
-/** @deprecated Use SupportedERC20TokensAndMetadata instead */
-export type SupportedERC20TokensAndMetadataV8 = SupportedERC20TokensAndMetadata;
-/** @deprecated Use SupportedERC20TokensAndMetadata instead */
-export type SupportedERC20TokensAndMetadataV6 = SupportedERC20TokensAndMetadata;
-
 /**
  * Paymaster metadata and supported erc20 tokens with exchange rates
  */
@@ -436,16 +441,6 @@ export interface SupportedERC20TokensAndMetadataWithExchangeRate {
 	paymasterMetadata: PaymasterMetadata;
 	tokens: ERC20TokenWithExchangeRate[];
 }
-
-/** @deprecated Use SupportedERC20TokensAndMetadataWithExchangeRate instead */
-export type SupportedERC20TokensAndMetadataV7WithExchangeRate =
-	SupportedERC20TokensAndMetadataWithExchangeRate;
-/** @deprecated Use SupportedERC20TokensAndMetadataWithExchangeRate instead */
-export type SupportedERC20TokensAndMetadataV8WithExchangeRate =
-	SupportedERC20TokensAndMetadataWithExchangeRate;
-/** @deprecated Use SupportedERC20TokensAndMetadataWithExchangeRate instead */
-export type SupportedERC20TokensAndMetadataV6WithExchangeRate =
-	SupportedERC20TokensAndMetadataWithExchangeRate;
 
 /**
  * Wrapper for a dictionary type

@@ -130,7 +130,7 @@ export interface CaliburCreateUserOperationOverrides {
 	/**
 	 * Paymaster init values for gas estimation. Set these to include
 	 * paymaster data during gas estimation so preVerificationGas is accurate.
-	 * Use {@link ExperimentalAllowAllPaymaster.getPaymasterFieldsInitValues} or similar
+	 * Use {@link ExperimentalAllowAllParallelPaymaster.getPaymasterFieldsInitValues} or similar
 	 * to obtain these values.
 	 */
 	paymasterFields?: ParallelPaymasterInitValues;

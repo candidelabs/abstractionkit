@@ -709,6 +709,17 @@ describe('SafeMultiChainSigAccountV1 signUserOperationWithSigners', () => {
         expect(hash).toBe(refHash);
     });
 
+    test('static V9 helpers default to the multichain module address', () => {
+        const moduleAddress = ak.SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS;
+        const typedData = ak.SafeAccountV0_3_0.getUserOperationEip712Data_V9(op, CHAIN_ID);
+        expect(typedData.domain.verifyingContract).toBe(moduleAddress);
+
+        const refHash = ak.SafeAccountV0_3_0.getUserOperationEip712Hash_V9(op, CHAIN_ID, {
+            safe4337ModuleAddress: moduleAddress,
+        });
+        expect(ak.SafeAccountV0_3_0.getUserOperationEip712Hash_V9(op, CHAIN_ID)).toBe(refHash);
+    });
+
     test('instance manual helpers inherit multichain account context', () => {
         const customModule = '0x3333333333333333333333333333333333333333';
         const customSafe = new ak.SafeMultiChainSigAccountV1(safe.accountAddress, {

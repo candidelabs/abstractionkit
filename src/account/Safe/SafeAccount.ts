@@ -39,6 +39,7 @@ import {
 	Operation,
 	type StateOverrideSet,
 	type TenderlySimulationResult,
+	type TokenPaymasterApproval,
 	type UserOperationV6,
 	type UserOperationV7,
 	type UserOperationV9,
@@ -50,7 +51,14 @@ import {
 } from "../../utilsTenderly";
 import {SendUseroperationResponse} from "../SendUseroperationResponse";
 import {SmartAccount} from "../SmartAccount";
-import {decodeMultiSendCallData, encodeMultiSendCallData} from "./multisend";
+import {
+	decodeMultiSendCallData,
+	decodeMultiSendTransactions,
+	encodeMultiSendCallData,
+	SAFE_MULTISEND_DEPLOYMENTS,
+} from "./multisend";
+import {getUserOperationPaymaster} from "../../paymaster/Paymaster";
+import type {AnyUserOperation} from "../../paymaster/types";
 import {
 	getSafeMessageEip712Data,
 	type SafeMessageTypedDataDomain,
@@ -976,7 +984,7 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @param overrides.entrypoint - target entrypoint
 	 * defaults to ENTRYPOINT_V9
-	 * @param overrides.safe4337ModuleAddress - defaults to "0xee8005d7e79f9a6829ea61A81Fc2A85055fB2a42"
+	 * @param overrides.safe4337ModuleAddress - defaults to "0x22939E839e3c0F479B713eAF95e0df128554AEAd"
 	 * @returns an object containing the typed data domain, type and typed data vales
 	 * object needed for hashing and signing
 	 */
@@ -995,7 +1003,7 @@ export class SafeAccount extends SmartAccount {
 		messageValue: SafeUserOperationV9TypedMessageValue;
 	} {
 		const safe4337ModuleAddress =
-			overrides.safe4337ModuleAddress ?? "0xee8005d7e79f9a6829ea61A81Fc2A85055fB2a42";
+			overrides.safe4337ModuleAddress ?? "0x22939E839e3c0F479B713eAF95e0df128554AEAd";
 
 		return SafeAccount.baseGetUserOperationEip712DataV7V8V9(
 			useroperation,
@@ -1018,7 +1026,7 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @param overrides.entrypoint - target entrypoint
 	 * defaults to ENTRYPOINT_V9
-	 * @param overrides.safe4337ModuleAddress - defaults to "0xE0049883864b20728b76B5cf265765B45162516D"
+	 * @param overrides.safe4337ModuleAddress - defaults to "0x22939E839e3c0F479B713eAF95e0df128554AEAd"
 	 * @returns useroperation hash
 	 */
 	public static getUserOperationEip712Hash_V9(
@@ -1322,6 +1330,125 @@ export class SafeAccount extends SmartAccount {
 		);
 
 		return [safeAccountFactory.address, factoryGeneratorFunctionCallData];
+	}
+
+	/**
+	 * Find the ERC-20 approvals a UserOperation grants to its own paymaster.
+	 * Low-level account hook behind `Erc7677Paymaster.decodeTokenQuote` and
+	 * `CandidePaymaster.decodeTokenQuote`, which most callers want instead.
+	 *
+	 * Token paymaster flows prepend `approve(paymaster, amount)` to the
+	 * account's MultiSend batch. That amount is the most the paymaster can
+	 * charge, so it is what the owners sign, even when the `TokenQuote` from
+	 * building the operation is no longer at hand. Only `approve` calls whose
+	 * spender is the paymaster set on this operation are returned, so a
+	 * dapp's own `approve` in a sponsored operation is not mistaken for one.
+	 *
+	 * The whole batch is scanned, in execution order. `approve` sets rather
+	 * than adds, so the paymaster's allowance for a token after execution is
+	 * the last entry for that token. Token-flow operations for tokens that
+	 * need an allowance reset (e.g. USDT) carry an `approve(0)` entry first.
+	 *
+	 * Only direct `approve` calls in the batch are recognized. Allowance
+	 * granted any other way (`increaseAllowance`, `permit`, a delegatecall
+	 * inside the batch) is not reported. Calls are matched by the
+	 * `approve(address,uint256)` selector, which ERC-721 shares, so the target
+	 * is not verified to be an ERC-20: compare `token` with the token you
+	 * expect the paymaster to charge before treating `amount` as its cap.
+	 *
+	 * A delegatecall runs the target's code in the Safe's context, so the
+	 * batch is only decoded when the Safe delegatecalls an official Safe
+	 * MultiSend or MultiSendCallOnly deployment (v1.3.0, v1.4.1, v1.5.0), and
+	 * the batch itself contains no delegatecall. Any other delegatecall throws
+	 * rather than reporting approvals that code may never execute or may
+	 * overwrite.
+	 *
+	 * @param userOperation - The UserOperation to inspect
+	 * @param overrides - overrides for the default values
+	 * @param overrides.multisendContractAddress - An additional MultiSend
+	 *   contract to accept, for custom deployments
+	 * @returns Approvals to the paymaster, in execution order. Empty when the
+	 *   operation has no paymaster or grants it no approval.
+	 * @throws AbstractionKitError with code "BAD_DATA" if `callData` is not a
+	 *   Safe module executor call, delegatecalls anything other than the
+	 *   expected MultiSend contract, or the MultiSend payload is malformed
+	 */
+	public decodeTokenPaymasterApprovals(
+		userOperation: AnyUserOperation,
+		overrides: {
+			multisendContractAddress?: string;
+		} = {},
+	): TokenPaymasterApproval[] {
+		const paymaster = getUserOperationPaymaster(userOperation);
+		if (paymaster == null) return [];
+
+		const [metaTransaction] = SafeAccount.decodeAccountCallData(userOperation.callData);
+		let transactions: MetaTransaction[] = [metaTransaction];
+		if (metaTransaction.operation === Operation.Delegate) {
+			const multisendSelector = "0x8d80ff0a";
+			const target = metaTransaction.to.toLowerCase();
+			const isKnownMultiSend =
+				SAFE_MULTISEND_DEPLOYMENTS.includes(target) ||
+				target === overrides.multisendContractAddress?.toLowerCase();
+			if (!isKnownMultiSend || !metaTransaction.data.startsWith(multisendSelector)) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					`UserOperation delegatecalls ${metaTransaction.to}, which is not a known Safe ` +
+						"MultiSend contract; its token approvals cannot be determined. " +
+						"Pass overrides.multisendContractAddress for a custom MultiSend deployment.",
+					{ context: { to: metaTransaction.to } },
+				);
+			}
+			let packedTransactions: string;
+			try {
+				packedTransactions = decodeMultiSendCallData(metaTransaction.data);
+			} catch (err) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					`malformed MultiSend calldata in delegatecall to ${metaTransaction.to}`,
+					{ cause: ensureError(err), context: { to: metaTransaction.to } },
+				);
+			}
+			transactions = decodeMultiSendTransactions(packedTransactions);
+			// An inner delegatecall runs arbitrary code in the Safe's context and
+			// could change the paymaster allowance after any approve we report.
+			const innerDelegate = transactions.find((tx) => tx.operation === Operation.Delegate);
+			if (innerDelegate != null) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					`UserOperation batch delegatecalls ${innerDelegate.to}; its token approvals cannot be determined.`,
+					{ context: { to: innerDelegate.to } },
+				);
+			}
+		}
+
+		const approveSelector = getFunctionSelector("approve(address,uint256)");
+		const approvals: TokenPaymasterApproval[] = [];
+		for (const transaction of transactions) {
+			if (
+				(transaction.operation ?? Operation.Call) !== Operation.Call ||
+				!transaction.data.toLowerCase().startsWith(approveSelector)
+			) {
+				continue;
+			}
+			let spender: string;
+			let amount: bigint;
+			try {
+				[spender, amount] = decodeAbiParameters<[string, bigint]>(
+					["address", "uint256"],
+					`0x${transaction.data.slice(10)}`,
+				);
+			} catch (err) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					`malformed approve calldata in call to ${transaction.to}`,
+					{ cause: ensureError(err), context: { to: transaction.to } },
+				);
+			}
+			if (spender.toLowerCase() !== paymaster.toLowerCase()) continue;
+			approvals.push({ token: getAddress(transaction.to), spender, amount: BigInt(amount) });
+		}
+		return approvals;
 	}
 
 	/**
@@ -3540,7 +3667,7 @@ function generateOnChainIdentifier(
 	project: string,
 	platform: "Web" | "Mobile" | "Safe App" | "Widget" = "Web",
 	tool: string = "abstractionkit",
-	toolVersion: string = "0.4.2",
+	toolVersion: string = "0.4.3",
 ): string {
 	const identifierPrefix = "5afe"; // Safe identifier prefix
 	const identifierVersion = "00"; // First version
