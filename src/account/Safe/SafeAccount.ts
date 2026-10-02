@@ -1399,7 +1399,17 @@ export class SafeAccount extends SmartAccount {
 					{ context: { to: metaTransaction.to } },
 				);
 			}
-			transactions = decodeMultiSendTransactions(decodeMultiSendCallData(metaTransaction.data));
+			let packedTransactions: string;
+			try {
+				packedTransactions = decodeMultiSendCallData(metaTransaction.data);
+			} catch (err) {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					`malformed MultiSend calldata in delegatecall to ${metaTransaction.to}`,
+					{ cause: ensureError(err), context: { to: metaTransaction.to } },
+				);
+			}
+			transactions = decodeMultiSendTransactions(packedTransactions);
 			// An inner delegatecall runs arbitrary code in the Safe's context and
 			// could change the paymaster allowance after any approve we report.
 			const innerDelegate = transactions.find((tx) => tx.operation === Operation.Delegate);

@@ -199,6 +199,21 @@ describe('SafeAccount#decodeTokenPaymasterApprovals', () => {
     expect(err.cause).toBeInstanceOf(Error);
   });
 
+  test.each([
+    ['selector only', '0x8d80ff0a'],
+    ['invalid bytes offset', '0x8d80ff0a' + 'ff'.repeat(32)],
+    ['bytes length past the data', '0x8d80ff0a' + '00'.repeat(31) + '20' + '00'.repeat(31) + 'ff'],
+  ])('throws BAD_DATA with the cause on malformed MultiSend calldata (%s)', (_, data) => {
+    const callData = SafeAccountV0_2_0.createAccountCallData(
+      SafeAccountV0_2_0.DEFAULT_MULTISEND_CONTRACT_ADDRESS, 0n, data, 1,
+    );
+    let err;
+    try { new SafeAccountV0_2_0(SENDER).decodeTokenPaymasterApprovals(v6Op(callData)); } catch (e) { err = e; }
+    expect(err.code).toBe('BAD_DATA');
+    expect(err.context.to.toLowerCase()).toBe(SafeAccountV0_2_0.DEFAULT_MULTISEND_CONTRACT_ADDRESS.toLowerCase());
+    expect(err.cause).toBeInstanceOf(Error);
+  });
+
   test('throws BAD_DATA on a truncated MultiSend payload', () => {
     const multiSend = createCallData('0x8d80ff0a', ['bytes'], ['0x00' + 'bb'.repeat(20)]);
     const callData = SafeAccountV0_2_0.createAccountCallData(
