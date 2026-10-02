@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.3
+
+### New Features
+
+- **Decode the token payment of a UserOperation you didn't build.** If you're a co-signer, you usually never see the `TokenQuote` that came back when the operation was created. `CandidePaymaster.decodeTokenQuote(smartAccount, userOperation)` (also on `Erc7677Paymaster`) reads it back from the operation itself, offline: which paymaster and token, how much the approval allows, the exchange rate the paymaster signed, how long it's valid, and `maxTokenCost`, the most you can actually be charged. It works with Candide's token paymasters on EntryPoint v0.6 to v0.9 and Pimlico's on v0.6 to v0.8. Sponsored operations, or ones with no paymaster, return `null`.
+
+  The token is read from the paymaster data for Pimlico and from the batch's `approve` call for Candide. It throws on anything it can't read safely: an unknown paymaster, a batch that delegatecalls something other than an official Safe MultiSend, or a batch that approves the paymaster for more than one token. (#240)
+
+### API Changes
+
+- Removed `CALIBUR_CANDIDE_V0_1_0_SINGLETON_ADDRESS`. It pointed at an unofficial, unaudited Calibur deployment, and `Calibur7702Account` never used it. (#242)
+- Removed `BundlerErrorCode.INVALID_USEROPERATION_HASH`, deprecated since 0.4.1. Nothing has returned it since then. (#243)
+- Removed the old `PaymasterMetadataV6/V7/V8` and `SupportedERC20TokensAndMetadata*` aliases. They were never exported, so this shouldn't affect anyone. (#243)
+
+### Bug Fixes
+
+- `getUserOperationEip712Data_V9` and `getUserOperationEip712Hash_V9` used an old module address by default, one that only exists on Sepolia. If you relied on the default, your signatures failed with `AA24`. They now use the same module as `SafeMultiChainSigAccountV1`. (#241)
+
+### Internal
+
+- `CandidePaymaster` and `Erc7677Paymaster` now share the token cost calculation. (#237)
+
 ## 0.4.2
 
 ### API Changes
