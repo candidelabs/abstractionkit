@@ -9,7 +9,7 @@ import {
 	type Transport,
 } from "../transport";
 import type {StateOverrideSet, TokenQuote} from "../types";
-import {calculateUserOperationMaxGasCost} from "../utils";
+import {calculateUserOperationErc20TokenCost} from "../utils";
 import {assertPaymasterMatchesApproveSpender, extractPaymasterAddress, Paymaster} from "./Paymaster";
 import type {
 	AnyUserOperation,
@@ -915,9 +915,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		await this.estimateAndApplyGasLimits(userOp, bundlerRpc, entrypoint, overrides);
 
 		// Step 5 — calculate real token cost.
-		const maxGasCostWei = calculateUserOperationMaxGasCost(userOp);
-		let tokenCost = (exchangeRate * maxGasCostWei) / 10n ** 18n;
-		if (tokenCost === 0n) tokenCost = 1n;
+		const tokenCost = calculateUserOperationErc20TokenCost(userOp, exchangeRate);
 		const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
 		const tokenQuote: TokenQuote = {
 			token: tokenAddress,
