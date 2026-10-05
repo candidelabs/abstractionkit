@@ -31,7 +31,6 @@ import {assertPaymasterMatchesApproveSpender, getUserOperationPaymaster, Paymast
 import type {
 	AnyUserOperation,
 	CandidePaymasterContext,
-	DecodeTokenPaymasterApprovalsAccount,
 	GasPaymasterUserOperationOverrides,
 	PrependTokenPaymasterApproveAccount,
 	SameUserOp,
@@ -120,11 +119,10 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 * documents the parameters, result and errors.
 	 */
 	static decodeTokenQuote(
-		smartAccount: DecodeTokenPaymasterApprovalsAccount,
 		userOperation: AnyUserOperation,
 		overrides: DecodeTokenQuoteOverrides = {},
 	): DecodedTokenQuote | null {
-		return decodeTokenQuoteImpl(smartAccount, userOperation, overrides);
+		return decodeTokenQuoteImpl(userOperation, overrides);
 	}
 
 	/**

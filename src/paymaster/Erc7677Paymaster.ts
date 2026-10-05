@@ -18,7 +18,6 @@ import {
 import {assertPaymasterMatchesApproveSpender, extractPaymasterAddress, Paymaster} from "./Paymaster";
 import type {
 	AnyUserOperation,
-	DecodeTokenPaymasterApprovalsAccount,
 	Erc7677PaymasterConstructorOptions,
 	Erc7677Provider,
 	GasPaymasterUserOperationOverrides,
@@ -309,37 +308,33 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 
 	/**
 	 * Read the token payment a finished UserOperation commits to, entirely
-	 * offline: the paymaster's signed exchange rate and validity window from its
-	 * paymaster data, and the allowance from the ERC-20 approval in `callData`.
+	 * offline, from the paymaster data the paymaster signed: the exchange rate,
+	 * `maxTokenCost` (the most it can charge), the validity window, and the
+	 * token (Pimlico) or token slot (Candide).
 	 *
 	 * Meant for co-signers who did not build the operation and so never saw its
 	 * `TokenQuote`. Supports Candide's (EntryPoint v0.6 to v0.9) and Pimlico's
 	 * (v0.6 to v0.8) token paymasters, identified by the paymaster address on
-	 * the operation, whichever paymaster class built it. Static: needs no
-	 * paymaster URL. Same as {@link CandidePaymaster.decodeTokenQuote}.
+	 * the operation, whichever paymaster class built it. It reads nothing from
+	 * `callData`, so it works for any account. Static: needs no paymaster URL.
+	 * Same as {@link CandidePaymaster.decodeTokenQuote}.
 	 *
-	 * @param smartAccount - Account that can decode its own approvals
-	 *   (currently the Safe accounts)
 	 * @param userOperation - The finished UserOperation
 	 * @param overrides - overrides for the default values
 	 * @param overrides.paymasterAddresses - Additional paymaster deployments to
 	 *   accept, keyed by address, for custom deployments that keep a known layout
-	 * @param overrides.multisendContractAddress - An additional MultiSend
-	 *   contract to accept when decoding the approvals, for custom deployments
 	 * @returns The decoded quote, or `null` when the operation has no paymaster
 	 *   or its paymaster sponsors it (no token payment)
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the paymaster is
-	 *   not a known deployment, the account cannot decode its approvals, or a
-	 *   Candide operation approves the paymaster for more than one token
+	 *   not a known deployment
 	 * @throws AbstractionKitError with code "BAD_DATA" if the paymaster data is in
-	 *   an unsupported mode or truncated, or the approvals cannot be decoded
+	 *   an unsupported mode, truncated, or not valid hex
 	 */
 	static decodeTokenQuote(
-		smartAccount: DecodeTokenPaymasterApprovalsAccount,
 		userOperation: AnyUserOperation,
 		overrides: DecodeTokenQuoteOverrides = {},
 	): DecodedTokenQuote | null {
-		return decodeTokenQuoteImpl(smartAccount, userOperation, overrides);
+		return decodeTokenQuoteImpl(userOperation, overrides);
 	}
 
 	/**

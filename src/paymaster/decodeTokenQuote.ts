@@ -1,9 +1,8 @@
 import {AbstractionKitError} from "../errors";
 import {getAddress} from "../ethereUtils";
-import type {TokenPaymasterApproval} from "../types";
 import {calculateUserOperationMaxGasCost} from "../utils";
 import {getUserOperationPaymaster} from "./Paymaster";
-import type {AnyUserOperation, DecodeTokenPaymasterApprovalsAccount} from "./types";
+import type {AnyUserOperation} from "./types";
 
 /** Token paymaster providers whose signed paymaster data can be decoded. */
 export type TokenPaymasterProvider = "candide" | "pimlico";
@@ -20,7 +19,7 @@ export type KnownTokenPaymaster = {
 
 /**
  * The token payment a finished UserOperation commits to, read from the
- * operation itself. See {@link Erc7677Paymaster.decodeTokenQuote}.
+ * paymaster data the paymaster signed. See {@link Erc7677Paymaster.decodeTokenQuote}.
  */
 export type DecodedTokenQuote = {
 	/** Provider operating the paymaster */
@@ -28,40 +27,28 @@ export type DecodedTokenQuote = {
 	/** Paymaster address set on the operation, checksummed */
 	paymaster: string;
 	/**
-	 * ERC-20 token paying for gas. For Pimlico it comes from the signed
-	 * paymaster data. Candide's data names the token by an on-chain slot, so
-	 * for Candide it is taken from the approval to the paymaster and is not
-	 * verified offline; compare it with the token you expect, or check it
-	 * on-chain with `gasTokenSlot`. `null` for a Candide operation that carries
-	 * no such approval. Checksummed.
+	 * ERC-20 token paying for gas, checksummed. Pimlico only: its paymaster
+	 * data carries the token address. `null` for Candide, whose data names the
+	 * token by slot (see `gasTokenSlot`).
 	 */
 	token: string | null;
 	/**
 	 * Candide only: the token slot the paymaster signed, which decides the
 	 * token it charges. Calling `getTokens([gasTokenSlot])` on the paymaster
-	 * contract returns that token, so you can check `token` against it.
+	 * contract returns that token.
 	 */
 	gasTokenSlot?: number;
-	/**
-	 * Allowance set for the paymaster by the last `approve` call in this
-	 * operation. `null` when the operation carries no approval and the
-	 * paymaster spends an allowance granted earlier, whose size (possibly
-	 * unlimited) cannot be known offline. Allowance granted outside this
-	 * operation is not included. For this operation the paymaster can never
-	 * charge more than `maxTokenCost`.
-	 */
-	approveAmount: bigint | null;
 	/**
 	 * Exchange rate the paymaster signed: token smallest-units per 1 ETH
 	 * (10^18 wei). Before any price markup.
 	 */
 	exchangeRate: bigint;
 	/**
-	 * Upper bound on what this paymaster's contract can charge for the
-	 * operation, in the token's smallest unit, including its post-operation
-	 * overhead (and markup or constant fee when present). Usually higher than
-	 * the builder's `TokenQuote.tokenCost`, which leaves the overhead out.
-	 * `null` when it depends on on-chain state (Candide's on-chain markup mode).
+	 * The most this paymaster's contract can charge for the operation, in the
+	 * token's smallest unit, including its post-operation overhead (and markup
+	 * or constant fee when present). Usually a bit higher than the builder's
+	 * `TokenQuote.tokenCost`, which leaves the overhead out. `null` when it
+	 * depends on on-chain state (Candide's on-chain markup mode).
 	 */
 	maxTokenCost: bigint | null;
 	/** Unix timestamp (seconds) after which the paymaster data is rejected. 0 means no expiry. */
@@ -77,8 +64,6 @@ export type DecodeTokenQuoteOverrides = {
 	 * deployments that keep a known layout
 	 */
 	paymasterAddresses?: Record<string, KnownTokenPaymaster>;
-	/** An additional MultiSend contract to accept when decoding the approvals */
-	multisendContractAddress?: string;
 };
 
 /** Known token paymaster deployments; the same address on every chain. */
@@ -138,8 +123,16 @@ type ParsedPaymasterData = {
  * packed paymaster gas limits), as the paymaster contract parses it.
  */
 function paymasterDataHex(userOperation: AnyUserOperation): string {
-	if ("initCode" in userOperation) return userOperation.paymasterAndData.slice(42);
-	return (userOperation.paymasterData ?? "0x").replace(/^0x/, "");
+	const hex =
+		"initCode" in userOperation
+			? userOperation.paymasterAndData.slice(42)
+			: (userOperation.paymasterData ?? "0x").replace(/^0x/, "");
+	if (!/^([0-9a-fA-F]{2})*$/.test(hex)) {
+		throw new AbstractionKitError("BAD_DATA", "paymaster data is not valid hex", {
+			context: { paymasterData: `0x${hex}` },
+		});
+	}
+	return hex.toLowerCase();
 }
 
 /**
@@ -232,31 +225,27 @@ function parsePimlico(
  * and {@link CandidePaymaster.decodeTokenQuote}.
  *
  * Read the token payment a finished UserOperation commits to, entirely
- * offline: the paymaster's signed exchange rate and validity window from its
- * paymaster data, and the allowance from the ERC-20 approval in `callData`.
+ * offline, from the paymaster data the paymaster signed: the exchange rate,
+ * the most it can charge, the validity window, and the token (Pimlico) or
+ * token slot (Candide). It reads nothing from `callData`, so it works for any
+ * account.
  *
  * Meant for co-signers who did not build the operation and so never saw its
  * `TokenQuote`. Supports Candide's (EntryPoint v0.6 to v0.9) and Pimlico's
  * (v0.6 to v0.8) token paymasters, identified by address.
  *
- * @param smartAccount - Account that can decode its own approvals
- *   (currently the Safe accounts)
  * @param userOperation - The finished UserOperation
  * @param overrides - overrides for the default values
  * @param overrides.paymasterAddresses - Additional paymaster deployments to
  *   accept, keyed by address, for custom deployments that keep a known layout
- * @param overrides.multisendContractAddress - An additional MultiSend
- *   contract to accept when decoding the approvals, for custom deployments
  * @returns The decoded quote, or `null` when the operation has no paymaster
  *   or its paymaster sponsors it (no token payment)
  * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the paymaster is
- *   not a known deployment, the account cannot decode its approvals, or a
- *   Candide operation approves the paymaster for more than one token
+ *   not a known deployment
  * @throws AbstractionKitError with code "BAD_DATA" if the paymaster data is in
- *   an unsupported mode or truncated, or the approvals cannot be decoded
+ *   an unsupported mode, truncated, or not valid hex
  */
 export function decodeTokenQuote(
-	smartAccount: DecodeTokenPaymasterApprovalsAccount,
 	userOperation: AnyUserOperation,
 	overrides: DecodeTokenQuoteOverrides = {},
 ): DecodedTokenQuote | null {
@@ -273,7 +262,9 @@ export function decodeTokenQuote(
 	const known = !/^0x[0-9a-f]{40}$/.test(key)
 		? undefined
 		: (customPaymasters.get(key) ??
-			(Object.hasOwn(KNOWN_TOKEN_PAYMASTERS, key) ? KNOWN_TOKEN_PAYMASTERS[key] : undefined));
+			(Object.prototype.hasOwnProperty.call(KNOWN_TOKEN_PAYMASTERS, key)
+				? KNOWN_TOKEN_PAYMASTERS[key]
+				: undefined));
 	if (known == null) {
 		throw new AbstractionKitError(
 			"PAYMASTER_ERROR",
@@ -283,50 +274,18 @@ export function decodeTokenQuote(
 		);
 	}
 	const maxGasCost = calculateUserOperationMaxGasCost(userOperation);
-	const hex = paymasterDataHex(userOperation).toLowerCase();
+	const hex = paymasterDataHex(userOperation);
 	const parsed =
 		known.provider === "candide"
 			? parseCandide(hex, known, maxGasCost, userOperation.maxFeePerGas)
 			: parsePimlico(hex, maxGasCost, userOperation.maxFeePerGas);
 	if (parsed == null) return null;
 
-	if (typeof smartAccount.decodeTokenPaymasterApprovals !== "function") {
-		throw new AbstractionKitError(
-			"PAYMASTER_ERROR",
-			"this smart account does not implement decodeTokenPaymasterApprovals, " +
-				"which decodeTokenQuote needs to read the token approval.",
-		);
-	}
-
-	// Only approvals of the paid token count; for Candide the data names the
-	// token by slot, so the approval is the source of the token address.
-	const approvals: TokenPaymasterApproval[] = smartAccount
-		.decodeTokenPaymasterApprovals(userOperation, {
-			multisendContractAddress: overrides.multisendContractAddress,
-		})
-		.filter((a) => parsed.token == null || a.token.toLowerCase() === parsed.token.toLowerCase());
-	// Candide's paymaster data identifies the token by slot, not by address, so if
-	// the op approves the paymaster for two different tokens we can't tell which one
-	// it pays with. For Pimlico the filter above already leaves a single token, but
-	// we run the check for both providers in case that filter changes.
-	const approvedTokens = new Set(approvals.map((a) => a.token.toLowerCase()));
-	if (approvedTokens.size > 1) {
-		throw new AbstractionKitError(
-			"PAYMASTER_ERROR",
-			"UserOperation approves the paymaster for more than one token; " +
-				"the token it pays with cannot be determined offline.",
-			{ context: { tokens: [...approvedTokens] } },
-		);
-	}
-	const lastApproval = approvals.length > 0 ? approvals[approvals.length - 1] : null;
-
-	const token = parsed.token ?? lastApproval?.token ?? null;
 	const quote: DecodedTokenQuote = {
 		provider: known.provider,
 		// Lowercase first: getAddress rejects mixed case with a wrong checksum.
-		paymaster: getAddress(paymaster.toLowerCase()),
-		token: token == null ? null : getAddress(token.toLowerCase()),
-		approveAmount: lastApproval?.amount ?? null,
+		paymaster: getAddress(key),
+		token: parsed.token == null ? null : getAddress(parsed.token.toLowerCase()),
 		exchangeRate: parsed.exchangeRate,
 		maxTokenCost: parsed.maxTokenCost,
 		validUntil: parsed.validUntil,
