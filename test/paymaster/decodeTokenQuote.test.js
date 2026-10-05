@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const ak = require('../../dist/index.cjs');
+const { getAddress } = require('../_loadEthereUtils.cjs');
 const { Erc7677Paymaster, CandidePaymaster, SafeAccountV0_2_0 } = ak;
 
 // Static: no `this`, so it can be called detached.
@@ -42,7 +43,9 @@ describe('decodeTokenQuote: real on-chain operations', () => {
       expect(quote.maxTokenCost).not.toBeNull();
       expect(fx.charged <= quote.maxTokenCost).toBe(true);
 
+      if (fx.provider === 'candide') expect(typeof quote.gasTokenSlot).toBe('number');
       if (fx.provider === 'pimlico') {
+        expect(quote.gasTokenSlot).toBeUndefined();
         expect(quote.exchangeRate).toBe(fx.eventExchangeRate);
         expect(quote.token.toLowerCase()).toBe(fx.token.toLowerCase());
         expect(typeof quote.validAfter).toBe('number');
@@ -70,10 +73,10 @@ const TOKEN = '0x' + 'bb'.repeat(20);
 const SIG = '11'.repeat(65);
 const hex = (value, bytes) => BigInt(value).toString(16).padStart(bytes * 2, '0');
 
-function candideData({ mode = 0, markupMode = 0, trusted = false, validUntil = 1_800_000_000, rate = 10n ** 18n, markup } = {}) {
+function candideData({ mode = 0, markupMode = 0, trusted = false, slot = 0, validUntil = 1_800_000_000, rate = 10n ** 18n, markup } = {}) {
   let data = hex(mode, 1) + hex(markupMode, 1) + (trusted ? '00' : '');
   if (mode === 2) return data + hex(validUntil, 6) + SIG;
-  data += '00' + hex(validUntil, 6) + hex(rate, 32);
+  data += hex(slot, 1) + hex(validUntil, 6) + hex(rate, 32);
   if (markup != null) data += hex(markup, 32);
   return data + SIG;
 }
@@ -164,8 +167,13 @@ describe('decodeTokenQuote: Candide paymaster data', () => {
       ],
     };
     const quote = decodeTokenQuote(account, v7Op(CANDIDE_V7, candideData()));
-    expect(quote).toMatchObject({ token: TOKEN, approveAmount: 900n });
+    expect(quote).toMatchObject({ token: getAddress(TOKEN), approveAmount: 900n });
   });
+  test('returns the signed gas token slot', () => {
+    const quote = decodeTokenQuote(noApprovalsAccount, v7Op(CANDIDE_V7, candideData({ slot: 7 })));
+    expect(quote.gasTokenSlot).toBe(7);
+  });
+
   test('approvals of two different tokens are rejected as ambiguous', () => {
     const account = {
       entrypointAddress: '0x',
@@ -193,7 +201,7 @@ describe('decodeTokenQuote: Pimlico paymaster data', () => {
   test('ERC-20 mode: token, window and the post-op bound', () => {
     const quote = decodeTokenQuote(noApprovalsAccount, v7Op(PIMLICO_V7, pimlicoData()));
     expect(quote).toMatchObject({
-      provider: 'pimlico', token: TOKEN, exchangeRate: 3_000_000_000n,
+      provider: 'pimlico', token: getAddress(TOKEN), exchangeRate: 3_000_000_000n,
       validUntil: 1_800_000_000, validAfter: 1_700_000_000, approveAmount: null,
     });
     expect(quote.maxTokenCost).toBe(((MAX_GAS_COST + 50_000n * 1_000_000_000n) * 3_000_000_000n) / 10n ** 18n);
@@ -233,6 +241,22 @@ describe('decodeTokenQuote: paymaster and account checks', () => {
       paymasterAddresses: { [custom]: { provider: 'candide' } },
     });
     expect(quote.exchangeRate).toBe(9n);
+  });
+
+  test('sponsored operations return null even for an account without the approvals hook', () => {
+    expect(decodeTokenQuote({ entrypointAddress: '0x' }, v7Op(CANDIDE_V7, candideData({ mode: 2 })))).toBeNull();
+    expect(decodeTokenQuote({ entrypointAddress: '0x' }, v7Op(PIMLICO_V7, pimlicoData({ mode: 0 })))).toBeNull();
+  });
+
+  test('returns paymaster and token checksummed, whatever the input casing', () => {
+    const quote = decodeTokenQuote(noApprovalsAccount, v7Op(PIMLICO_V7.toLowerCase(), pimlicoData()));
+    expect(quote.paymaster).toBe(getAddress(PIMLICO_V7));
+    expect(quote.token).toBe(getAddress(TOKEN));
+  });
+
+  test.each(['constructor', '__proto__', 'hasOwnProperty'])('paymaster %s is rejected as unknown', (key) => {
+    expect(() => decodeTokenQuote(noApprovalsAccount, v7Op(key, pimlicoData())))
+      .toThrow(expect.objectContaining({ code: 'PAYMASTER_ERROR' }));
   });
 
   test('an account without the approvals hook throws PAYMASTER_ERROR', () => {

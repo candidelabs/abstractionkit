@@ -94,6 +94,7 @@ export type {
 export { Erc7677Paymaster } from "./paymaster/Erc7677Paymaster";
 export type {
 	DecodedTokenQuote,
+	DecodeTokenQuoteOverrides,
 	KnownTokenPaymaster,
 	TokenPaymasterProvider,
 } from "./paymaster/decodeTokenQuote";
