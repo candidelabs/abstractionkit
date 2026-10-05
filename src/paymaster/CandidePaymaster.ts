@@ -24,8 +24,8 @@ import type {
 import {calculateUserOperationErc20TokenCost} from "../utils";
 import {
 	type DecodedTokenQuote,
+	type DecodeTokenQuoteOverrides,
 	decodeTokenQuote as decodeTokenQuoteImpl,
-	type KnownTokenPaymaster,
 } from "./decodeTokenQuote";
 import {assertPaymasterMatchesApproveSpender, getUserOperationPaymaster, Paymaster} from "./Paymaster";
 import type {
@@ -122,10 +122,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	static decodeTokenQuote(
 		smartAccount: DecodeTokenPaymasterApprovalsAccount,
 		userOperation: AnyUserOperation,
-		overrides: {
-			paymasterAddresses?: Record<string, KnownTokenPaymaster>;
-			multisendContractAddress?: string;
-		} = {},
+		overrides: DecodeTokenQuoteOverrides = {},
 	): DecodedTokenQuote | null {
 		return decodeTokenQuoteImpl(smartAccount, userOperation, overrides);
 	}

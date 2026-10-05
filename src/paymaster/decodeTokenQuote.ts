@@ -1,4 +1,5 @@
 import {AbstractionKitError} from "../errors";
+import {getAddress} from "../ethereUtils";
 import type {TokenPaymasterApproval} from "../types";
 import {calculateUserOperationMaxGasCost} from "../utils";
 import {getUserOperationPaymaster} from "./Paymaster";
@@ -24,21 +25,30 @@ export type KnownTokenPaymaster = {
 export type DecodedTokenQuote = {
 	/** Provider operating the paymaster */
 	provider: TokenPaymasterProvider;
-	/** Paymaster address set on the operation */
+	/** Paymaster address set on the operation, checksummed */
 	paymaster: string;
 	/**
 	 * ERC-20 token paying for gas. For Pimlico it comes from the signed
 	 * paymaster data. Candide's data names the token by an on-chain slot, so
 	 * for Candide it is taken from the approval to the paymaster and is not
-	 * verified offline; compare it with the token you expect. `null` for a
-	 * Candide operation that carries no such approval.
+	 * verified offline; compare it with the token you expect, or check it
+	 * on-chain with `gasTokenSlot`. `null` for a Candide operation that carries
+	 * no such approval. Checksummed.
 	 */
 	token: string | null;
 	/**
-	 * Allowance the operation grants the paymaster: the most it can take.
-	 * `null` when the operation carries no approval and the paymaster spends
-	 * an allowance granted earlier, whose size (possibly unlimited) cannot be
-	 * known offline.
+	 * Candide only: the token slot the paymaster signed, which decides the
+	 * token it charges. Calling `getTokens([gasTokenSlot])` on the paymaster
+	 * contract returns that token, so you can check `token` against it.
+	 */
+	gasTokenSlot?: number;
+	/**
+	 * Allowance set for the paymaster by the last `approve` call in this
+	 * operation. `null` when the operation carries no approval and the
+	 * paymaster spends an allowance granted earlier, whose size (possibly
+	 * unlimited) cannot be known offline. Allowance granted outside this
+	 * operation is not included. For this operation the paymaster can never
+	 * charge more than `maxTokenCost`.
 	 */
 	approveAmount: bigint | null;
 	/**
@@ -58,6 +68,17 @@ export type DecodedTokenQuote = {
 	validUntil: number;
 	/** Unix timestamp (seconds) before which the paymaster data is rejected. Pimlico only. */
 	validAfter?: number;
+};
+
+/** Options for {@link Erc7677Paymaster.decodeTokenQuote}. */
+export type DecodeTokenQuoteOverrides = {
+	/**
+	 * Additional paymaster deployments to accept, keyed by address, for custom
+	 * deployments that keep a known layout
+	 */
+	paymasterAddresses?: Record<string, KnownTokenPaymaster>;
+	/** An additional MultiSend contract to accept when decoding the approvals */
+	multisendContractAddress?: string;
 };
 
 /** Known token paymaster deployments; the same address on every chain. */
@@ -105,6 +126,7 @@ class ByteReader {
 
 type ParsedPaymasterData = {
 	token: string | null;
+	gasTokenSlot?: number;
 	exchangeRate: bigint;
 	maxTokenCost: bigint | null;
 	validUntil: number;
@@ -141,7 +163,7 @@ function parseCandide(
 			context: { mode },
 		});
 	}
-	reader.read(1); // gas token slot
+	const gasTokenSlot = Number(reader.uint(1));
 	const validUntil = Number(reader.uint(6));
 	const exchangeRate = reader.uint(32);
 
@@ -167,7 +189,7 @@ function parseCandide(
 			((maxGasCost + CANDIDE_COST_OF_POST * maxFeePerGas) * effectiveRate) / 10n ** 18n;
 		if (maxTokenCost === 0n) maxTokenCost = 1n;
 	}
-	return { token: null, exchangeRate, maxTokenCost, validUntil };
+	return { token: null, gasTokenSlot, exchangeRate, maxTokenCost, validUntil };
 }
 
 /**
@@ -236,22 +258,22 @@ function parsePimlico(
 export function decodeTokenQuote(
 	smartAccount: DecodeTokenPaymasterApprovalsAccount,
 	userOperation: AnyUserOperation,
-	overrides: {
-		paymasterAddresses?: Record<string, KnownTokenPaymaster>;
-		multisendContractAddress?: string;
-	} = {},
+	overrides: DecodeTokenQuoteOverrides = {},
 ): DecodedTokenQuote | null {
 	const paymaster = getUserOperationPaymaster(userOperation);
 	if (paymaster == null || /^0x0*$/.test(paymaster)) return null;
 
-	const customPaymasters = Object.fromEntries(
+	const customPaymasters = new Map(
 		Object.entries(overrides.paymasterAddresses ?? {}).map(([address, known]) => [
 			address.toLowerCase(),
 			known,
 		]),
 	);
-	const known =
-		customPaymasters[paymaster.toLowerCase()] ?? KNOWN_TOKEN_PAYMASTERS[paymaster.toLowerCase()];
+	const key = paymaster.toLowerCase();
+	const known = !/^0x[0-9a-f]{40}$/.test(key)
+		? undefined
+		: (customPaymasters.get(key) ??
+			(Object.hasOwn(KNOWN_TOKEN_PAYMASTERS, key) ? KNOWN_TOKEN_PAYMASTERS[key] : undefined));
 	if (known == null) {
 		throw new AbstractionKitError(
 			"PAYMASTER_ERROR",
@@ -260,14 +282,6 @@ export function decodeTokenQuote(
 			{ context: { paymaster } },
 		);
 	}
-	if (typeof smartAccount.decodeTokenPaymasterApprovals !== "function") {
-		throw new AbstractionKitError(
-			"PAYMASTER_ERROR",
-			"this smart account does not implement decodeTokenPaymasterApprovals, " +
-				"which decodeTokenQuote needs to read the token approval.",
-		);
-	}
-
 	const maxGasCost = calculateUserOperationMaxGasCost(userOperation);
 	const hex = paymasterDataHex(userOperation).toLowerCase();
 	const parsed =
@@ -275,6 +289,14 @@ export function decodeTokenQuote(
 			? parseCandide(hex, known, maxGasCost, userOperation.maxFeePerGas)
 			: parsePimlico(hex, maxGasCost, userOperation.maxFeePerGas);
 	if (parsed == null) return null;
+
+	if (typeof smartAccount.decodeTokenPaymasterApprovals !== "function") {
+		throw new AbstractionKitError(
+			"PAYMASTER_ERROR",
+			"this smart account does not implement decodeTokenPaymasterApprovals, " +
+				"which decodeTokenQuote needs to read the token approval.",
+		);
+	}
 
 	// Only approvals of the paid token count; for Candide the data names the
 	// token by slot, so the approval is the source of the token address.
@@ -298,15 +320,18 @@ export function decodeTokenQuote(
 	}
 	const lastApproval = approvals.length > 0 ? approvals[approvals.length - 1] : null;
 
+	const token = parsed.token ?? lastApproval?.token ?? null;
 	const quote: DecodedTokenQuote = {
 		provider: known.provider,
-		paymaster,
-		token: parsed.token ?? lastApproval?.token ?? null,
+		// Lowercase first: getAddress rejects mixed case with a wrong checksum.
+		paymaster: getAddress(paymaster.toLowerCase()),
+		token: token == null ? null : getAddress(token.toLowerCase()),
 		approveAmount: lastApproval?.amount ?? null,
 		exchangeRate: parsed.exchangeRate,
 		maxTokenCost: parsed.maxTokenCost,
 		validUntil: parsed.validUntil,
 	};
+	if (parsed.gasTokenSlot != null) quote.gasTokenSlot = parsed.gasTokenSlot;
 	if (parsed.validAfter != null) quote.validAfter = parsed.validAfter;
 	return quote;
 }

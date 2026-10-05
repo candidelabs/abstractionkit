@@ -1349,9 +1349,13 @@ export class SafeAccount extends SmartAccount {
 	 * the last entry for that token. Token-flow operations for tokens that
 	 * need an allowance reset (e.g. USDT) carry an `approve(0)` entry first.
 	 *
-	 * Only direct `approve` calls in the batch are recognized. Allowance
-	 * granted any other way (`increaseAllowance`, `permit`, a delegatecall
-	 * inside the batch) is not reported. Calls are matched by the
+	 * Only direct `approve` calls in the batch are reported. An
+	 * `increaseAllowance` or `decreaseAllowance` call for the paymaster, or a
+	 * `permit` for the paymaster on this Safe's allowance, makes it throw, since
+	 * the allowance can then no longer be read from the approvals; malformed
+	 * calldata for any of them, and a delegatecall inside the batch, are
+	 * rejected too.
+	 * Allowance granted outside this operation is not seen. Calls are matched by the
 	 * `approve(address,uint256)` selector, which ERC-721 shares, so the target
 	 * is not verified to be an ERC-20: compare `token` with the token you
 	 * expect the paymaster to charge before treating `amount` as its cap.
@@ -1371,7 +1375,8 @@ export class SafeAccount extends SmartAccount {
 	 *   operation has no paymaster or grants it no approval.
 	 * @throws AbstractionKitError with code "BAD_DATA" if `callData` is not a
 	 *   Safe module executor call, delegatecalls anything other than the
-	 *   expected MultiSend contract, or the MultiSend payload is malformed
+	 *   expected MultiSend contract, changes the paymaster allowance other than
+	 *   with `approve`, or the MultiSend payload is malformed
 	 */
 	public decodeTokenPaymasterApprovals(
 		userOperation: AnyUserOperation,
@@ -1423,14 +1428,68 @@ export class SafeAccount extends SmartAccount {
 		}
 
 		const approveSelector = getFunctionSelector("approve(address,uint256)");
+		// Other ways to change an allowance, with the position of their spender
+		// and, for permit, of the owner whose allowance changes (increase and
+		// decrease always act on the caller, the Safe). Any of them giving the
+		// paymaster an allowance on this Safe makes it unknowable from the
+		// approve calls alone.
+		const allowanceChangers = (
+			[
+				["increaseAllowance", ["address", "uint256"], 0, null],
+				["decreaseAllowance", ["address", "uint256"], 0, null],
+				[
+					"permit",
+					["address", "address", "uint256", "uint256", "uint8", "bytes32", "bytes32"],
+					1,
+					0,
+				],
+				[
+					"permit",
+					["address", "address", "uint256", "uint256", "bool", "uint8", "bytes32", "bytes32"],
+					1,
+					0,
+				],
+			] as const
+		).map(([name, types, spenderIndex, ownerIndex]) => ({
+			name,
+			types: [...types],
+			selector: getFunctionSelector(`${name}(${types.join(",")})`),
+			spenderIndex,
+			ownerIndex,
+		}));
 		const approvals: TokenPaymasterApproval[] = [];
 		for (const transaction of transactions) {
-			if (
-				(transaction.operation ?? Operation.Call) !== Operation.Call ||
-				!transaction.data.toLowerCase().startsWith(approveSelector)
-			) {
+			if ((transaction.operation ?? Operation.Call) !== Operation.Call) continue;
+			const data = transaction.data.toLowerCase();
+			const changer = allowanceChangers.find((c) => data.startsWith(c.selector));
+			if (changer != null) {
+				// Decode every argument so malformed calldata is reported, not skipped.
+				let args: unknown[];
+				try {
+					args = decodeAbiParameters<unknown[]>(changer.types, `0x${data.slice(10)}`);
+				} catch (err) {
+					throw new AbstractionKitError(
+						"BAD_DATA",
+						`malformed ${changer.name} calldata in call to ${transaction.to}`,
+						{ cause: ensureError(err), context: { to: transaction.to } },
+					);
+				}
+				const owner = changer.ownerIndex == null ? null : String(args[changer.ownerIndex]);
+				if (owner != null && owner.toLowerCase() !== userOperation.sender.toLowerCase()) {
+					continue; // a permit for someone else's allowance
+				}
+				const changedSpender = String(args[changer.spenderIndex]);
+				if (changedSpender.toLowerCase() === paymaster.toLowerCase()) {
+					throw new AbstractionKitError(
+						"BAD_DATA",
+						`UserOperation changes the paymaster allowance with ${changer.name} ` +
+							`on ${transaction.to}; the allowance cannot be determined.`,
+						{ context: { to: transaction.to } },
+					);
+				}
 				continue;
 			}
+			if (!data.startsWith(approveSelector)) continue;
 			let spender: string;
 			let amount: bigint;
 			try {

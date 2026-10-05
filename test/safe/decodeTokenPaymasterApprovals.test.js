@@ -185,6 +185,71 @@ describe('SafeAccount#decodeTokenPaymasterApprovals', () => {
       .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
   });
 
+  const allowanceCall = (signature, args) => {
+    const types = signature.slice(signature.indexOf('(') + 1, -1).split(',');
+    return createCallData(getFunctionSelector(signature), types, args);
+  };
+  const SIGN = ['0x' + '00'.repeat(32), '0x' + '00'.repeat(32)];
+  const changers = [
+    ['increaseAllowance', (sp) => allowanceCall('increaseAllowance(address,uint256)', [sp, 2n ** 200n])],
+    ['decreaseAllowance', (sp) => allowanceCall('decreaseAllowance(address,uint256)', [sp, 1n])],
+    ['permit (EIP-2612)', (sp) => allowanceCall('permit(address,address,uint256,uint256,uint8,bytes32,bytes32)', [SENDER, sp, 5n, 9n, 27, ...SIGN])],
+    ['permit (DAI)', (sp) => allowanceCall('permit(address,address,uint256,uint256,bool,uint8,bytes32,bytes32)', [SENDER, sp, 0n, 9n, true, 27, ...SIGN])],
+  ];
+
+  test.each(changers)('throws BAD_DATA when the batch changes the paymaster allowance with %s', (_, call) => {
+    const callData = batchCallData(SafeAccountV0_2_0, [
+      { to: TOKEN, value: 0n, data: approveData(PAYMASTER, 1000n) },
+      { to: TOKEN, value: 0n, data: call(PAYMASTER) },
+    ]);
+    expect(() => new SafeAccountV0_2_0(SENDER).decodeTokenPaymasterApprovals(v6Op(callData)))
+      .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
+  });
+
+  test.each(changers)('ignores %s for another spender', (_, call) => {
+    const callData = batchCallData(SafeAccountV0_2_0, [
+      { to: TOKEN, value: 0n, data: approveData(PAYMASTER, 1000n) },
+      { to: TOKEN, value: 0n, data: call(DAPP) },
+    ]);
+    expect(new SafeAccountV0_2_0(SENDER).decodeTokenPaymasterApprovals(v6Op(callData)).map((a) => a.amount))
+      .toEqual([1000n]);
+  });
+
+  test('throws BAD_DATA on truncated increaseAllowance calldata', () => {
+    const callData = accountCallData(SafeAccountV0_2_0, TOKEN, 0n, getFunctionSelector('increaseAllowance(address,uint256)') + '00');
+    expect(() => new SafeAccountV0_2_0(SENDER).decodeTokenPaymasterApprovals(v6Op(callData)))
+      .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
+  });
+
+  // Only the spender (and permit's owner) is valid here; the remaining
+  // arguments are missing, so the calldata is malformed even for another spender.
+  const word = (address) => address.slice(2).toLowerCase().padStart(64, '0');
+  test.each([
+    ['increaseAllowance', getFunctionSelector('increaseAllowance(address,uint256)') + word(DAPP)],
+    ['decreaseAllowance', getFunctionSelector('decreaseAllowance(address,uint256)') + word(DAPP)],
+    ['permit (EIP-2612)', getFunctionSelector('permit(address,address,uint256,uint256,uint8,bytes32,bytes32)') + word(SENDER) + word(DAPP)],
+    ['permit (DAI)', getFunctionSelector('permit(address,address,uint256,uint256,bool,uint8,bytes32,bytes32)') + word(SENDER) + word(DAPP)],
+  ])('throws BAD_DATA on %s calldata missing arguments, whatever the spender', (_, data) => {
+    const callData = batchCallData(SafeAccountV0_2_0, [
+      { to: TOKEN, value: 0n, data: approveData(PAYMASTER, 1000n) },
+      { to: TOKEN, value: 0n, data },
+    ]);
+    expect(() => new SafeAccountV0_2_0(SENDER).decodeTokenPaymasterApprovals(v6Op(callData)))
+      .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
+  });
+
+  test.each([
+    ['permit (EIP-2612)', allowanceCall('permit(address,address,uint256,uint256,uint8,bytes32,bytes32)', [DAPP, PAYMASTER, 5n, 9n, 27, ...SIGN])],
+    ['permit (DAI)', allowanceCall('permit(address,address,uint256,uint256,bool,uint8,bytes32,bytes32)', [DAPP, PAYMASTER, 0n, 9n, true, 27, ...SIGN])],
+  ])('ignores a %s for the paymaster on another owner\'s allowance', (_, data) => {
+    const callData = batchCallData(SafeAccountV0_2_0, [
+      { to: TOKEN, value: 0n, data: approveData(PAYMASTER, 1000n) },
+      { to: TOKEN, value: 0n, data },
+    ]);
+    expect(new SafeAccountV0_2_0(SENDER).decodeTokenPaymasterApprovals(v6Op(callData)).map((a) => a.amount))
+      .toEqual([1000n]);
+  });
+
   test('throws BAD_DATA on callData that is not a Safe executor call', () => {
     expect(() => new SafeAccountV0_2_0(SENDER).decodeTokenPaymasterApprovals(v6Op('0xdeadbeef')))
       .toThrow(expect.objectContaining({ code: 'BAD_DATA' }));
