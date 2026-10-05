@@ -1350,9 +1350,11 @@ export class SafeAccount extends SmartAccount {
 	 * need an allowance reset (e.g. USDT) carry an `approve(0)` entry first.
 	 *
 	 * Only direct `approve` calls in the batch are reported. An
-	 * `increaseAllowance`, `decreaseAllowance` or `permit` call for the
-	 * paymaster makes it throw, since the allowance can then no longer be read
-	 * from the approvals; a delegatecall inside the batch is rejected too.
+	 * `increaseAllowance` or `decreaseAllowance` call for the paymaster, or a
+	 * `permit` for the paymaster on this Safe's allowance, makes it throw, since
+	 * the allowance can then no longer be read from the approvals; malformed
+	 * calldata for any of them, and a delegatecall inside the batch, are
+	 * rejected too.
 	 * Allowance granted outside this operation is not seen. Calls are matched by the
 	 * `approve(address,uint256)` selector, which ERC-721 shares, so the target
 	 * is not verified to be an ERC-20: compare `token` with the token you
@@ -1427,19 +1429,33 @@ export class SafeAccount extends SmartAccount {
 
 		const approveSelector = getFunctionSelector("approve(address,uint256)");
 		// Other ways to change an allowance, with the position of their spender
-		// argument. Any of them aimed at the paymaster makes the allowance
-		// unknowable from the approve calls alone.
+		// and, for permit, of the owner whose allowance changes (increase and
+		// decrease always act on the caller, the Safe). Any of them giving the
+		// paymaster an allowance on this Safe makes it unknowable from the
+		// approve calls alone.
 		const allowanceChangers = (
 			[
-				["increaseAllowance", "increaseAllowance(address,uint256)", 0],
-				["decreaseAllowance", "decreaseAllowance(address,uint256)", 0],
-				["permit", "permit(address,address,uint256,uint256,uint8,bytes32,bytes32)", 1],
-				["permit", "permit(address,address,uint256,uint256,bool,uint8,bytes32,bytes32)", 1],
+				["increaseAllowance", ["address", "uint256"], 0, null],
+				["decreaseAllowance", ["address", "uint256"], 0, null],
+				[
+					"permit",
+					["address", "address", "uint256", "uint256", "uint8", "bytes32", "bytes32"],
+					1,
+					0,
+				],
+				[
+					"permit",
+					["address", "address", "uint256", "uint256", "bool", "uint8", "bytes32", "bytes32"],
+					1,
+					0,
+				],
 			] as const
-		).map(([name, signature, spenderIndex]) => ({
+		).map(([name, types, spenderIndex, ownerIndex]) => ({
 			name,
-			selector: getFunctionSelector(signature),
+			types: [...types],
+			selector: getFunctionSelector(`${name}(${types.join(",")})`),
 			spenderIndex,
+			ownerIndex,
 		}));
 		const approvals: TokenPaymasterApproval[] = [];
 		for (const transaction of transactions) {
@@ -1447,12 +1463,10 @@ export class SafeAccount extends SmartAccount {
 			const data = transaction.data.toLowerCase();
 			const changer = allowanceChangers.find((c) => data.startsWith(c.selector));
 			if (changer != null) {
-				let changedSpender: string;
+				// Decode every argument so malformed calldata is reported, not skipped.
+				let args: unknown[];
 				try {
-					changedSpender = decodeAbiParameters<string[]>(
-						Array(changer.spenderIndex + 1).fill("address"),
-						`0x${data.slice(10)}`,
-					)[changer.spenderIndex];
+					args = decodeAbiParameters<unknown[]>(changer.types, `0x${data.slice(10)}`);
 				} catch (err) {
 					throw new AbstractionKitError(
 						"BAD_DATA",
@@ -1460,6 +1474,11 @@ export class SafeAccount extends SmartAccount {
 						{ cause: ensureError(err), context: { to: transaction.to } },
 					);
 				}
+				const owner = changer.ownerIndex == null ? null : String(args[changer.ownerIndex]);
+				if (owner != null && owner.toLowerCase() !== userOperation.sender.toLowerCase()) {
+					continue; // a permit for someone else's allowance
+				}
+				const changedSpender = String(args[changer.spenderIndex]);
 				if (changedSpender.toLowerCase() === paymaster.toLowerCase()) {
 					throw new AbstractionKitError(
 						"BAD_DATA",
