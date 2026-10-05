@@ -307,10 +307,11 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	}
 
 	/**
-	 * Read the token payment a finished UserOperation commits to, entirely
-	 * offline, from the paymaster data the paymaster signed: the exchange rate,
-	 * `maxTokenCost` (the most it can charge), the validity window, and the
-	 * token (Pimlico) or token slot (Candide).
+	 * Read the token payment a finished UserOperation commits to from the
+	 * paymaster data the paymaster signed: the exchange rate, `maxTokenCost`
+	 * (the most it can charge), the validity window and the token. Offline,
+	 * except for one `eth_call` to resolve Candide's token when
+	 * `overrides.nodeRpcUrl` is passed.
 	 *
 	 * Meant for co-signers who did not build the operation and so never saw its
 	 * `TokenQuote`. Supports Candide's (EntryPoint v0.6 to v0.9) and Pimlico's
@@ -323,6 +324,8 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 * @param overrides - overrides for the default values
 	 * @param overrides.paymasterAddresses - Additional paymaster deployments to
 	 *   accept, keyed by address, for custom deployments that keep a known layout
+	 * @param overrides.nodeRpcUrl - Node RPC used to resolve Candide's token;
+	 *   without it, `token` is `null` for Candide
 	 * @returns The decoded quote, or `null` when the operation has no paymaster
 	 *   or its paymaster sponsors it (no token payment)
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the paymaster is
@@ -333,7 +336,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	static decodeTokenQuote(
 		userOperation: AnyUserOperation,
 		overrides: DecodeTokenQuoteOverrides = {},
-	): DecodedTokenQuote | null {
+	): Promise<DecodedTokenQuote | null> {
 		return decodeTokenQuoteImpl(userOperation, overrides);
 	}
 

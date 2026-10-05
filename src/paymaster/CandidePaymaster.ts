@@ -121,7 +121,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	static decodeTokenQuote(
 		userOperation: AnyUserOperation,
 		overrides: DecodeTokenQuoteOverrides = {},
-	): DecodedTokenQuote | null {
+	): Promise<DecodedTokenQuote | null> {
 		return decodeTokenQuoteImpl(userOperation, overrides);
 	}
 

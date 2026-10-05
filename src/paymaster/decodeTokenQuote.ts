@@ -1,6 +1,7 @@
-import {AbstractionKitError} from "../errors";
-import {getAddress} from "../ethereUtils";
-import {calculateUserOperationMaxGasCost} from "../utils";
+import {AbstractionKitError, ensureError} from "../errors";
+import {decodeAbiParameters, getAddress} from "../ethereUtils";
+import {JsonRpcNode, type Transport} from "../transport";
+import {calculateUserOperationMaxGasCost, createCallData, getFunctionSelector} from "../utils";
 import {getUserOperationPaymaster} from "./Paymaster";
 import type {AnyUserOperation} from "./types";
 
@@ -27,17 +28,12 @@ export type DecodedTokenQuote = {
 	/** Paymaster address set on the operation, checksummed */
 	paymaster: string;
 	/**
-	 * ERC-20 token paying for gas, checksummed. Pimlico only: its paymaster
-	 * data carries the token address. `null` for Candide, whose data names the
-	 * token by slot (see `gasTokenSlot`).
+	 * ERC-20 token paying for gas, checksummed. Pimlico's paymaster data
+	 * carries it directly. Candide's names the token by an on-chain slot, read
+	 * from the paymaster contract when `nodeRpcUrl` is passed; without it, or
+	 * for a slot the contract does not know, `null` for Candide.
 	 */
 	token: string | null;
-	/**
-	 * Candide only: the token slot the paymaster signed, which decides the
-	 * token it charges. Calling `getTokens([gasTokenSlot])` on the paymaster
-	 * contract returns that token.
-	 */
-	gasTokenSlot?: number;
 	/**
 	 * Exchange rate the paymaster signed: token smallest-units per 1 ETH
 	 * (10^18 wei). Before any price markup.
@@ -64,6 +60,11 @@ export type DecodeTokenQuoteOverrides = {
 	 * deployments that keep a known layout
 	 */
 	paymasterAddresses?: Record<string, KnownTokenPaymaster>;
+	/**
+	 * Node RPC used to resolve Candide's token: one `eth_call` to the
+	 * paymaster contract. Not used for Pimlico, whose data carries the token.
+	 */
+	nodeRpcUrl?: string | Transport | JsonRpcNode;
 };
 
 /** Known token paymaster deployments; the same address on every chain. */
@@ -220,15 +221,47 @@ function parsePimlico(
 	return { token, exchangeRate, maxTokenCost, validUntil, validAfter };
 }
 
+/** `getTokens(uint8[])` on Candide's paymaster contracts. */
+const CANDIDE_GET_TOKENS_SELECTOR = getFunctionSelector("getTokens(uint8[])");
+
+/**
+ * Read the token in a Candide paymaster's on-chain token table: the token the
+ * paymaster charges for this slot. `null` for an empty slot.
+ */
+async function resolveCandideToken(
+	nodeRpcUrl: string | Transport | JsonRpcNode,
+	paymaster: string,
+	gasTokenSlot: number,
+): Promise<string | null> {
+	const result = await JsonRpcNode.from(nodeRpcUrl).call({
+		to: paymaster,
+		data: createCallData(CANDIDE_GET_TOKENS_SELECTOR, ["uint8[]"], [[gasTokenSlot]]),
+	});
+	let token: string;
+	try {
+		const [gasTokens] = decodeAbiParameters<[[string, ...unknown[]][]]>(
+			["(address,uint8,bytes,uint256,uint256)[]"],
+			result,
+		);
+		token = gasTokens[0][0];
+	} catch (err) {
+		throw new AbstractionKitError("BAD_DATA", "paymaster getTokens returned ill formed data", {
+			cause: ensureError(err),
+			context: { paymaster, gasTokenSlot, result },
+		});
+	}
+	return /^0x0{40}$/i.test(token) ? null : getAddress(token.toLowerCase());
+}
+
 /**
  * Implementation behind the public statics {@link Erc7677Paymaster.decodeTokenQuote}
  * and {@link CandidePaymaster.decodeTokenQuote}.
  *
- * Read the token payment a finished UserOperation commits to, entirely
- * offline, from the paymaster data the paymaster signed: the exchange rate,
- * the most it can charge, the validity window, and the token (Pimlico) or
- * token slot (Candide). It reads nothing from `callData`, so it works for any
- * account.
+ * Read the token payment a finished UserOperation commits to from the
+ * paymaster data the paymaster signed: the exchange rate, the most it can
+ * charge, the validity window and the token. Offline, except for one
+ * `eth_call` to resolve Candide's token when `nodeRpcUrl` is passed. It reads
+ * nothing from `callData`, so it works for any account.
  *
  * Meant for co-signers who did not build the operation and so never saw its
  * `TokenQuote`. Supports Candide's (EntryPoint v0.6 to v0.9) and Pimlico's
@@ -238,6 +271,7 @@ function parsePimlico(
  * @param overrides - overrides for the default values
  * @param overrides.paymasterAddresses - Additional paymaster deployments to
  *   accept, keyed by address, for custom deployments that keep a known layout
+ * @param overrides.nodeRpcUrl - Node RPC used to resolve Candide's token
  * @returns The decoded quote, or `null` when the operation has no paymaster
  *   or its paymaster sponsors it (no token payment)
  * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the paymaster is
@@ -245,10 +279,10 @@ function parsePimlico(
  * @throws AbstractionKitError with code "BAD_DATA" if the paymaster data is in
  *   an unsupported mode, truncated, or not valid hex
  */
-export function decodeTokenQuote(
+export async function decodeTokenQuote(
 	userOperation: AnyUserOperation,
 	overrides: DecodeTokenQuoteOverrides = {},
-): DecodedTokenQuote | null {
+): Promise<DecodedTokenQuote | null> {
 	const paymaster = getUserOperationPaymaster(userOperation);
 	if (paymaster == null || /^0x0*$/.test(paymaster)) return null;
 
@@ -281,16 +315,21 @@ export function decodeTokenQuote(
 			: parsePimlico(hex, maxGasCost, userOperation.maxFeePerGas);
 	if (parsed == null) return null;
 
+	let token: string | null =
+		parsed.token == null ? null : getAddress(parsed.token.toLowerCase());
+	if (token == null && parsed.gasTokenSlot != null && overrides.nodeRpcUrl != null) {
+		token = await resolveCandideToken(overrides.nodeRpcUrl, key, parsed.gasTokenSlot);
+	}
+
 	const quote: DecodedTokenQuote = {
 		provider: known.provider,
 		// Lowercase first: getAddress rejects mixed case with a wrong checksum.
 		paymaster: getAddress(key),
-		token: parsed.token == null ? null : getAddress(parsed.token.toLowerCase()),
+		token,
 		exchangeRate: parsed.exchangeRate,
 		maxTokenCost: parsed.maxTokenCost,
 		validUntil: parsed.validUntil,
 	};
-	if (parsed.gasTokenSlot != null) quote.gasTokenSlot = parsed.gasTokenSlot;
 	if (parsed.validAfter != null) quote.validAfter = parsed.validAfter;
 	return quote;
 }
