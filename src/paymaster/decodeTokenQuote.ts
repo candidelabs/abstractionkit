@@ -323,8 +323,9 @@ export function decodeTokenQuote(
 	const token = parsed.token ?? lastApproval?.token ?? null;
 	const quote: DecodedTokenQuote = {
 		provider: known.provider,
-		paymaster: getAddress(paymaster),
-		token: token == null ? null : getAddress(token),
+		// Lowercase first: getAddress rejects mixed case with a wrong checksum.
+		paymaster: getAddress(paymaster.toLowerCase()),
+		token: token == null ? null : getAddress(token.toLowerCase()),
 		approveAmount: lastApproval?.amount ?? null,
 		exchangeRate: parsed.exchangeRate,
 		maxTokenCost: parsed.maxTokenCost,

@@ -70,6 +70,7 @@ const CANDIDE_V9 = '0xca944fb73fa5191969014ded9bb075381d59c7de';
 const CANDIDE_V6 = '0x36f4aa64673568782461bf03c75462f8ef0a1b76';
 const PIMLICO_V7 = '0x777777777777AeC03fd955926DbF81597e66834C';
 const TOKEN = '0x' + 'bb'.repeat(20);
+const TOKEN_C = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'; // a mixed-case checksum
 const SIG = '11'.repeat(65);
 const hex = (value, bytes) => BigInt(value).toString(16).padStart(bytes * 2, '0');
 
@@ -252,6 +253,24 @@ describe('decodeTokenQuote: paymaster and account checks', () => {
     const quote = decodeTokenQuote(noApprovalsAccount, v7Op(PIMLICO_V7.toLowerCase(), pimlicoData()));
     expect(quote.paymaster).toBe(getAddress(PIMLICO_V7));
     expect(quote.token).toBe(getAddress(TOKEN));
+  });
+
+  // Mixed case with a wrong EIP-55 checksum: accepted, then returned checksummed.
+  const badCase = (address) => '0x' + [...address.slice(2).toLowerCase()]
+    .map((c, i) => (i % 2 === 0 ? c.toUpperCase() : c)).join('');
+
+  test('checksums a known paymaster given in wrong mixed case', () => {
+    const quote = decodeTokenQuote(noApprovalsAccount, v7Op(badCase(PIMLICO_V7), pimlicoData()));
+    expect(quote.paymaster).toBe(getAddress(PIMLICO_V7));
+  });
+
+  test('checksums a token from a custom hook given in wrong mixed case', () => {
+    const account = {
+      entrypointAddress: '0x',
+      decodeTokenPaymasterApprovals: () => [{ token: badCase(TOKEN_C), spender: CANDIDE_V7, amount: 5n }],
+    };
+    const quote = decodeTokenQuote(account, v7Op(CANDIDE_V7, candideData()));
+    expect(quote.token).toBe(getAddress(TOKEN_C));
   });
 
   test.each(['constructor', '__proto__', 'hasOwnProperty'])('paymaster %s is rejected as unknown', (key) => {
