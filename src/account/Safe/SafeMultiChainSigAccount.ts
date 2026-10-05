@@ -15,6 +15,7 @@ import type {MultiOpSignContext, SignContext, ExternalSigner, TypedData} from "s
 import type {JsonRpcNode, Transport} from "src/transport";
 import type {MetaTransaction, OnChainIdentifierParamsType, StateOverrideSet, UserOperationV9} from "../../types";
 import {
+	DEFAULT_SAFE_4337_MULTI_CHAIN_SIG_MODULE_V1,
 	DEFAULT_WEB_AUTHN_DAIMO_VERIFIER_V_0_2_1,
 	DEFAULT_WEB_AUTHN_PRECOMPILE_RIP_7951,
 	DEFAULT_WEB_AUTHN_SHARED_SIGNER_V_0_2_1,
@@ -92,7 +93,7 @@ import type {
  */
 export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	static readonly DEFAULT_ENTRYPOINT_ADDRESS = ENTRYPOINT_V9;
-	static readonly DEFAULT_SAFE_4337_MODULE_ADDRESS = "0x22939E839e3c0F479B713eAF95e0df128554AEAd";
+	static readonly DEFAULT_SAFE_4337_MODULE_ADDRESS = DEFAULT_SAFE_4337_MULTI_CHAIN_SIG_MODULE_V1;
 	static readonly DEFAULT_SAFE_MODULE_SETUP_ADDRESS = "0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47";
 
 	// Safe Passkey module v0.2.1 WebAuthn verifier defaults
@@ -981,9 +982,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * against the per-op SafeOp digest, not a Merkle wrapper, so signing the
 	 * wrapper for length=1 produces bytes the contract rejects with AA24. The
 	 * parent `SafeAccount.getUserOperationEip712Data_V9` /
-	 * `getUserOperationEip712Hash_V9` helpers default to a different module and
-	 * would hash against the wrong verifying contract unless
-	 * `overrides.safe4337ModuleAddress` is supplied explicitly.
+	 * `getUserOperationEip712Hash_V9` helpers default to the same module.
 	 *
 	 * @param userOperationsToSignsToSign - list of UserOperations with their target chain IDs (length ≥ 2)
 	 * @param overrides - optional overrides for the Safe 4337 module address
@@ -1006,11 +1005,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 					"For a single UserOperation, use SafeMultiChainSigAccountV1.getUserOperationEip712Data " +
 					"or SafeMultiChainSigAccountV1.getUserOperationEip712Hash (these multichain-class overrides " +
 					"default safe4337ModuleAddress to DEFAULT_SAFE_4337_MODULE_ADDRESS, the multi-chain module). " +
-					"The on-chain depth=0 path verifies against the per-op SafeOp digest, not a Merkle wrapper. " +
-					"If calling the parent SafeAccount.getUserOperationEip712Data_V9 / getUserOperationEip712Hash_V9 " +
-					"helpers directly, you must pass overrides.safe4337ModuleAddress = " +
-					"SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS explicitly so signatures hash " +
-					"the correct verifying contract.",
+					"The on-chain depth=0 path verifies against the per-op SafeOp digest, not a Merkle wrapper.",
 			);
 		}
 		const safe4337ModuleAddress =

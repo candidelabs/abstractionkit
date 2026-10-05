@@ -2,6 +2,9 @@ import { decodeAbiParameters, getBytes, solidityPacked } from "../../ethereUtils
 import { AbstractionKitError } from "src/errors";
 import { type MetaTransaction, Operation } from "src/types";
 
+/** Function selector of `multiSend(bytes)`. */
+export const MULTISEND_SELECTOR = "0x8d80ff0a";
+
 /**
  * Official Safe MultiSend and MultiSendCallOnly deployments (v1.3.0 canonical,
  * eip155 and zkSync, v1.4.1 canonical and zkSync, v1.5.0 canonical), from
