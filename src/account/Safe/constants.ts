@@ -17,3 +17,9 @@ export const DEFAULT_WEB_AUTHN_PRECOMPILE_RIP_7951 = "0x000000000000000000000000
 /** Daimo P-256 verifier contract (fallback when the RIP-7951 precompile isn't available). */
 export const DEFAULT_WEB_AUTHN_DAIMO_VERIFIER_V_0_2_1 =
 	"0xc2b78104907F722DABAc4C69f826a522B2754De4";
+
+/**
+ * Safe 4337 multi-chain signature module (EntryPoint v0.9): the module of
+ * SafeMultiChainSigAccountV1 and the default for SafeAccount's `_V9` EIP-712 helpers.
+ */
+export const DEFAULT_SAFE_4337_MULTI_CHAIN_SIG_MODULE_V1 = "0x22939E839e3c0F479B713eAF95e0df128554AEAd";
