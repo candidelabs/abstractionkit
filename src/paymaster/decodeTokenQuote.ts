@@ -168,7 +168,9 @@ function parseCandide(
 		effectiveRate = null; // INCLUDE: markup lives in on-chain token config
 	} else if (markupMode === 2) {
 		const priceMarkup = reader.uint(32); // INCLUDE_CUSTOM
-		effectiveRate = (exchangeRate * priceMarkup) / CANDIDE_PRICE_DENOMINATOR;
+		// The contract only applies a markup above zero; zero keeps the signed rate.
+		effectiveRate =
+			priceMarkup > 0n ? (exchangeRate * priceMarkup) / CANDIDE_PRICE_DENOMINATOR : exchangeRate;
 	} else {
 		throw new AbstractionKitError(
 			"BAD_DATA",

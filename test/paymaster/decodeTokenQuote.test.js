@@ -141,6 +141,11 @@ describe('decodeTokenQuote: Candide paymaster data', () => {
     expect(quote.maxTokenCost).toBe(((MAX_GAS_COST + 35_000n * 1_000_000_000n) * 11n) / 10n);
   });
 
+  test('a custom markup of zero keeps the signed rate, as the contract does', async () => {
+    const quote = await decodeTokenQuote(v7Op(CANDIDE_V7, candideData({ markupMode: 2, rate: 3n * 10n ** 9n, markup: 0n })));
+    expect(quote.maxTokenCost).toBe(((MAX_GAS_COST + 35_000n * 1_000_000_000n) * 3n * 10n ** 9n) / 10n ** 18n);
+  });
+
   test('on-chain markup mode returns the rate with an unknown bound', async () => {
     const quote = await decodeTokenQuote(v7Op(CANDIDE_V7, candideData({ markupMode: 1 })));
     expect(quote.exchangeRate).toBe(10n ** 18n);
