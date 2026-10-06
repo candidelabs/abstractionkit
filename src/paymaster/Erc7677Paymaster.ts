@@ -311,8 +311,9 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 * Read the token payment a finished UserOperation commits to from the
 	 * paymaster data the paymaster signed: the exchange rate, `maxTokenCost`
 	 * (the most it can charge), the validity window and the token. The only
-	 * network use is one `eth_call` to read Candide's token from its paymaster
-	 * contract; for Pimlico `nodeRpcUrl` is not used.
+	 * network use is one `eth_call` reading Candide's token (and, in on-chain
+	 * markup mode, its markup) from its paymaster contract; for Pimlico
+	 * `nodeRpcUrl` is not used.
 	 *
 	 * Meant for co-signers who did not build the operation and so never saw its
 	 * `TokenQuote`. Supports Candide's (EntryPoint v0.6 to v0.9) and Pimlico's

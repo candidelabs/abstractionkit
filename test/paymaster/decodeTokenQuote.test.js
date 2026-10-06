@@ -23,17 +23,17 @@ const fixtures = fs.readdirSync(FIXTURE_DIR).sort().flatMap((file) =>
     BIGINT_FIELDS.has(key) && typeof value === 'string' ? BigInt(value) : value));
 
 /**
- * Node RPC stand-in answering Candide's getTokens(uint8[]) with `token` for
- * the requested slot, recording each eth_call.
+ * Node RPC stand-in answering Candide's getTokens(uint8[]) with `token` (and
+ * its on-chain `priceMarkup`) for the requested slot, recording each eth_call.
  */
-function fakeNode(token) {
+function fakeNode(token, priceMarkup = 0n) {
   const calls = [];
   return {
     calls,
     request: async ({ method, params }) => {
       calls.push({ method, params });
       if (method !== 'eth_call') throw new Error(`unexpected ${method}`);
-      return encodeAbiParameters(['(address,uint8,bytes,uint256,uint256)[]'], [[[token, 0, '0x', 0n, 0n]]]);
+      return encodeAbiParameters(['(address,uint8,bytes,uint256,uint256)[]'], [[[token, 0, '0x', 0n, priceMarkup]]]);
     },
   };
 }
@@ -151,10 +151,22 @@ describe('decodeTokenQuote: Candide paymaster data', () => {
     expect(quote.maxTokenCost).toBe(((MAX_GAS_COST + 35_000n * 1_000_000_000n) * 3n * 10n ** 9n) / 10n ** 18n);
   });
 
-  test('on-chain markup mode returns the rate with an unknown bound', async () => {
-    const quote = await decodeTokenQuote(v7Op(CANDIDE_V7, candideData({ markupMode: 1 })), fakeNode(USDC));
+  test('on-chain markup mode applies the markup read from the paymaster contract', async () => {
+    const node = fakeNode(USDC, 11n * 10n ** 25n); // 1.1x in the token table
+    const quote = await decodeTokenQuote(v7Op(CANDIDE_V7, candideData({ markupMode: 1, rate: 10n ** 18n })), node);
     expect(quote.exchangeRate).toBe(10n ** 18n);
-    expect(quote.maxTokenCost).toBeNull();
+    expect(quote.maxTokenCost).toBe(((MAX_GAS_COST + 35_000n * 1_000_000_000n) * 11n) / 10n);
+    expect(node.calls).toHaveLength(1); // the same getTokens call that reads the token
+  });
+
+  test('on-chain markup of zero keeps the signed rate, as the contract does', async () => {
+    const quote = await decodeTokenQuote(v7Op(CANDIDE_V7, candideData({ markupMode: 1, rate: 3n * 10n ** 9n })), fakeNode(USDC, 0n));
+    expect(quote.maxTokenCost).toBe(((MAX_GAS_COST + 35_000n * 1_000_000_000n) * 3n * 10n ** 9n) / 10n ** 18n);
+  });
+
+  test('the on-chain markup is ignored outside on-chain markup mode', async () => {
+    const quote = await decodeTokenQuote(v7Op(CANDIDE_V7, candideData({ rate: 3n * 10n ** 9n })), fakeNode(USDC, 11n * 10n ** 25n));
+    expect(quote.maxTokenCost).toBe(((MAX_GAS_COST + 35_000n * 1_000_000_000n) * 3n * 10n ** 9n) / 10n ** 18n);
   });
 
   test.each([1, 3])('unsupported mode %i throws BAD_DATA', async (mode) => {

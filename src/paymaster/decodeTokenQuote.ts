@@ -42,10 +42,10 @@ export type DecodedTokenQuote = {
 	 * The most this paymaster's contract can charge for the operation, in the
 	 * token's smallest unit, including its post-operation overhead (and markup
 	 * or constant fee when present). Usually a bit higher than the builder's
-	 * `TokenQuote.tokenCost`, which leaves the overhead out. `null` when it
-	 * depends on on-chain state (Candide's on-chain markup mode).
+	 * `TokenQuote.tokenCost`, which leaves the overhead out. In Candide's
+	 * on-chain markup mode the markup is the paymaster's current one.
 	 */
-	maxTokenCost: bigint | null;
+	maxTokenCost: bigint;
 	/** Unix timestamp (seconds) after which the paymaster data is rejected. 0 means no expiry. */
 	validUntil: number;
 	/** Unix timestamp (seconds) before which the paymaster data is rejected. Pimlico only. */
@@ -104,13 +104,27 @@ class ByteReader {
 	}
 }
 
-type ParsedPaymasterData = {
-	token: string | null;
-	gasTokenSlot?: number;
+/** Pimlico paymaster data: everything the contract charges with is signed. */
+type ParsedPimlicoData = {
+	token: string;
 	exchangeRate: bigint;
-	maxTokenCost: bigint | null;
+	maxTokenCost: bigint;
 	validUntil: number;
-	validAfter?: number;
+	validAfter: number;
+};
+
+/**
+ * Candide paymaster data. The token, and in on-chain markup mode the markup,
+ * live in the paymaster contract's token table and are read separately.
+ */
+type ParsedCandideData = {
+	gasTokenSlot: number;
+	exchangeRate: bigint;
+	/** Markup from the paymaster data, or `null` when it is the on-chain one */
+	priceMarkup: bigint | null;
+	/** Maximum gas cost in wei, including the paymaster's post-operation overhead */
+	maxCostWei: bigint;
+	validUntil: number;
 };
 
 /**
@@ -139,7 +153,7 @@ function parseCandide(
 	known: KnownTokenPaymaster,
 	maxGasCost: bigint,
 	maxFeePerGas: bigint,
-): ParsedPaymasterData | null {
+): ParsedCandideData | null {
 	const reader = new ByteReader(hex, "candide");
 	const mode = Number(reader.uint(1));
 	const markupMode = Number(reader.uint(1));
@@ -155,16 +169,13 @@ function parseCandide(
 	const validUntil = Number(reader.uint(6));
 	const exchangeRate = reader.uint(32);
 
-	let effectiveRate: bigint | null;
+	let priceMarkup: bigint | null;
 	if (markupMode === 0) {
-		effectiveRate = exchangeRate;
+		priceMarkup = 0n; // NO_MARKUP
 	} else if (markupMode === 1) {
-		effectiveRate = null; // INCLUDE: markup lives in on-chain token config
+		priceMarkup = null; // INCLUDE: the markup in the on-chain token table
 	} else if (markupMode === 2) {
-		const priceMarkup = reader.uint(32); // INCLUDE_CUSTOM
-		// The contract only applies a markup above zero; zero keeps the signed rate.
-		effectiveRate =
-			priceMarkup > 0n ? (exchangeRate * priceMarkup) / CANDIDE_PRICE_DENOMINATOR : exchangeRate;
+		priceMarkup = reader.uint(32); // INCLUDE_CUSTOM
 	} else {
 		throw new AbstractionKitError(
 			"BAD_DATA",
@@ -172,14 +183,21 @@ function parseCandide(
 			{ context: { markupMode } },
 		);
 	}
+	const maxCostWei = maxGasCost + CANDIDE_COST_OF_POST * maxFeePerGas;
+	return { gasTokenSlot, exchangeRate, priceMarkup, maxCostWei, validUntil };
+}
 
-	let maxTokenCost: bigint | null = null;
-	if (effectiveRate != null) {
-		maxTokenCost =
-			((maxGasCost + CANDIDE_COST_OF_POST * maxFeePerGas) * effectiveRate) / 10n ** 18n;
-		if (maxTokenCost === 0n) maxTokenCost = 1n;
-	}
-	return { token: null, gasTokenSlot, exchangeRate, maxTokenCost, validUntil };
+/**
+ * The most a Candide paymaster can charge, in token units. Like the
+ * contract, the markup applies only above zero; zero keeps the signed rate.
+ */
+function candideMaxTokenCost(parsed: ParsedCandideData, priceMarkup: bigint): bigint {
+	const rate =
+		priceMarkup > 0n
+			? (parsed.exchangeRate * priceMarkup) / CANDIDE_PRICE_DENOMINATOR
+			: parsed.exchangeRate;
+	const maxTokenCost = (parsed.maxCostWei * rate) / 10n ** 18n;
+	return maxTokenCost === 0n ? 1n : maxTokenCost;
 }
 
 /**
@@ -190,7 +208,7 @@ function parsePimlico(
 	hex: string,
 	maxGasCost: bigint,
 	maxFeePerGas: bigint,
-): ParsedPaymasterData | null {
+): ParsedPimlicoData | null {
 	const reader = new ByteReader(hex, "pimlico");
 	const mode = Number(reader.uint(1)) >> 1; // lowest bit is allowAllBundlers
 	if (mode === 0) return null; // VERIFYING: sponsored, no token payment
@@ -221,25 +239,28 @@ function parsePimlico(
 const CANDIDE_GET_TOKENS_SELECTOR = getFunctionSelector("getTokens(uint8[])");
 
 /**
- * Read the token in a Candide paymaster's on-chain token table: the token the
- * paymaster charges for this slot.
+ * Read a slot of a Candide paymaster's on-chain token table: the token the
+ * paymaster charges, and the markup it applies in on-chain markup mode.
  */
-async function resolveCandideToken(
+async function readCandideGasToken(
 	nodeRpcUrl: string | Transport | JsonRpcNode,
 	paymaster: string,
 	gasTokenSlot: number,
-): Promise<string> {
+): Promise<{ token: string; priceMarkup: bigint }> {
 	const result = await JsonRpcNode.from(nodeRpcUrl).call({
 		to: paymaster,
 		data: createCallData(CANDIDE_GET_TOKENS_SELECTOR, ["uint8[]"], [[gasTokenSlot]]),
 	});
 	let token: string;
+	let priceMarkup: bigint;
 	try {
-		const [gasTokens] = decodeAbiParameters<[[string, ...unknown[]][]]>(
+		// GasToken: (token, oracleType, oracle, cachedExchangeRate, priceMarkup)
+		const [gasTokens] = decodeAbiParameters<[[string, bigint, string, bigint, bigint][]]>(
 			["(address,uint8,bytes,uint256,uint256)[]"],
 			result,
 		);
 		token = gasTokens[0][0];
+		priceMarkup = BigInt(gasTokens[0][4]);
 	} catch (err) {
 		throw new AbstractionKitError("BAD_DATA", "paymaster getTokens returned ill formed data", {
 			cause: ensureError(err),
@@ -254,7 +275,7 @@ async function resolveCandideToken(
 			{ context: { paymaster, gasTokenSlot } },
 		);
 	}
-	return getAddress(token.toLowerCase());
+	return { token: getAddress(token.toLowerCase()), priceMarkup };
 }
 
 /**
@@ -264,7 +285,8 @@ async function resolveCandideToken(
  * Read the token payment a finished UserOperation commits to from the
  * paymaster data the paymaster signed: the exchange rate, the most it can
  * charge, the validity window and the token. The only network use is one
- * `eth_call` to resolve Candide's token; for Pimlico `nodeRpcUrl` is not used.
+ * `eth_call` reading Candide's token (and, in on-chain markup mode, its
+ * markup) from the paymaster contract; for Pimlico `nodeRpcUrl` is not used.
  * It reads nothing from `callData`, so it works for any account.
  *
  * Meant for co-signers who did not build the operation and so never saw its
@@ -316,26 +338,32 @@ export async function decodeTokenQuote(
 	}
 	const maxGasCost = calculateUserOperationMaxGasCost(userOperation);
 	const hex = paymasterDataHex(userOperation);
-	const parsed =
-		known.provider === "candide"
-			? parseCandide(hex, known, maxGasCost, userOperation.maxFeePerGas)
-			: parsePimlico(hex, maxGasCost, userOperation.maxFeePerGas);
+	// Lowercase first: getAddress rejects mixed case with a wrong checksum.
+	const checksummedPaymaster = getAddress(key);
+
+	if (known.provider === "pimlico") {
+		const parsed = parsePimlico(hex, maxGasCost, userOperation.maxFeePerGas);
+		if (parsed == null) return null;
+		return {
+			provider: known.provider,
+			paymaster: checksummedPaymaster,
+			token: getAddress(parsed.token.toLowerCase()),
+			exchangeRate: parsed.exchangeRate,
+			maxTokenCost: parsed.maxTokenCost,
+			validUntil: parsed.validUntil,
+			validAfter: parsed.validAfter,
+		};
+	}
+
+	const parsed = parseCandide(hex, known, maxGasCost, userOperation.maxFeePerGas);
 	if (parsed == null) return null;
-
-	const token =
-		parsed.token != null
-			? getAddress(parsed.token.toLowerCase())
-			: await resolveCandideToken(nodeRpcUrl, key, parsed.gasTokenSlot as number);
-
-	const quote: DecodedTokenQuote = {
+	const gasToken = await readCandideGasToken(nodeRpcUrl, key, parsed.gasTokenSlot);
+	return {
 		provider: known.provider,
-		// Lowercase first: getAddress rejects mixed case with a wrong checksum.
-		paymaster: getAddress(key),
-		token,
+		paymaster: checksummedPaymaster,
+		token: gasToken.token,
 		exchangeRate: parsed.exchangeRate,
-		maxTokenCost: parsed.maxTokenCost,
+		maxTokenCost: candideMaxTokenCost(parsed, parsed.priceMarkup ?? gasToken.priceMarkup),
 		validUntil: parsed.validUntil,
 	};
-	if (parsed.validAfter != null) quote.validAfter = parsed.validAfter;
-	return quote;
 }

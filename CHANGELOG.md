@@ -6,7 +6,7 @@
 
 - **Decode the token payment of a UserOperation you didn't build.** If you're a co-signer, you usually never see the `TokenQuote` that came back when the operation was created. `await CandidePaymaster.decodeTokenQuote(userOperation, nodeRpcUrl)` (also on `Erc7677Paymaster`) reads it back from the paymaster data the paymaster signed: which paymaster and token, the exchange rate, how long it's valid, and `maxTokenCost`, the most you can actually be charged. It works with Candide's token paymasters on EntryPoint v0.6 to v0.9 and Pimlico's on v0.6 to v0.8, for any account. Sponsored operations, or ones with no paymaster, return `null`.
 
-  The only network use is for Candide's token: Candide's paymaster data names the token by an on-chain slot, so it reads the token from the paymaster contract with one `eth_call` through `nodeRpcUrl`. For Pimlico, whose paymaster data carries the token, `nodeRpcUrl` is not used. It throws on an unknown paymaster or paymaster data it can't read. (#240)
+  The only network use is for Candide's token: Candide's paymaster data names the token by an on-chain slot, so it reads the token (and, when the paymaster uses its on-chain markup, that markup) from the paymaster contract with one `eth_call` through `nodeRpcUrl`. For Pimlico, whose paymaster data carries the token, `nodeRpcUrl` is not used. It throws on an unknown paymaster or paymaster data it can't read. (#240)
 
 ### API Changes
 
