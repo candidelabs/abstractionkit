@@ -4,6 +4,7 @@ import {ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8} from "src/constants";
 import {AbstractionKitError, ensureError} from "src/errors";
 import {
 	HttpTransport,
+	type JsonRpcNode,
 	normalizingTransport,
 	type RequestArgs,
 	type RequestOptions,
@@ -120,9 +121,10 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 */
 	static decodeTokenQuote(
 		userOperation: AnyUserOperation,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		overrides: DecodeTokenQuoteOverrides = {},
 	): Promise<DecodedTokenQuote | null> {
-		return decodeTokenQuoteImpl(userOperation, overrides);
+		return decodeTokenQuoteImpl(userOperation, nodeRpcUrl, overrides);
 	}
 
 	/**

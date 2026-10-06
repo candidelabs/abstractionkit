@@ -30,10 +30,9 @@ export type DecodedTokenQuote = {
 	/**
 	 * ERC-20 token paying for gas, checksummed. Pimlico's paymaster data
 	 * carries it directly. Candide's names the token by an on-chain slot, read
-	 * from the paymaster contract when `nodeRpcUrl` is passed; without it, or
-	 * for a slot the contract does not know, `null` for Candide.
+	 * from the paymaster contract with `nodeRpcUrl`.
 	 */
-	token: string | null;
+	token: string;
 	/**
 	 * Exchange rate the paymaster signed: token smallest-units per 1 ETH
 	 * (10^18 wei). Before any price markup.
@@ -60,11 +59,6 @@ export type DecodeTokenQuoteOverrides = {
 	 * deployments that keep a known layout
 	 */
 	paymasterAddresses?: Record<string, KnownTokenPaymaster>;
-	/**
-	 * Node RPC used to resolve Candide's token: one `eth_call` to the
-	 * paymaster contract. Not used for Pimlico, whose data carries the token.
-	 */
-	nodeRpcUrl?: string | Transport | JsonRpcNode;
 };
 
 /** Known token paymaster deployments; the same address on every chain. */
@@ -228,13 +222,13 @@ const CANDIDE_GET_TOKENS_SELECTOR = getFunctionSelector("getTokens(uint8[])");
 
 /**
  * Read the token in a Candide paymaster's on-chain token table: the token the
- * paymaster charges for this slot. `null` for an empty slot.
+ * paymaster charges for this slot.
  */
 async function resolveCandideToken(
 	nodeRpcUrl: string | Transport | JsonRpcNode,
 	paymaster: string,
 	gasTokenSlot: number,
-): Promise<string | null> {
+): Promise<string> {
 	const result = await JsonRpcNode.from(nodeRpcUrl).call({
 		to: paymaster,
 		data: createCallData(CANDIDE_GET_TOKENS_SELECTOR, ["uint8[]"], [[gasTokenSlot]]),
@@ -252,7 +246,15 @@ async function resolveCandideToken(
 			context: { paymaster, gasTokenSlot, result },
 		});
 	}
-	return /^0x0{40}$/i.test(token) ? null : getAddress(token.toLowerCase());
+	if (/^0x0{40}$/i.test(token)) {
+		// An empty slot: the paymaster has no token to charge, so the operation would fail.
+		throw new AbstractionKitError(
+			"BAD_DATA",
+			`Candide paymaster token slot ${gasTokenSlot} holds no token; the operation cannot be charged`,
+			{ context: { paymaster, gasTokenSlot } },
+		);
+	}
+	return getAddress(token.toLowerCase());
 }
 
 /**
@@ -261,28 +263,31 @@ async function resolveCandideToken(
  *
  * Read the token payment a finished UserOperation commits to from the
  * paymaster data the paymaster signed: the exchange rate, the most it can
- * charge, the validity window and the token. Offline, except for one
- * `eth_call` to resolve Candide's token when `nodeRpcUrl` is passed. It reads
- * nothing from `callData`, so it works for any account.
+ * charge, the validity window and the token. The only network use is one
+ * `eth_call` to resolve Candide's token; for Pimlico `nodeRpcUrl` is not used.
+ * It reads nothing from `callData`, so it works for any account.
  *
  * Meant for co-signers who did not build the operation and so never saw its
  * `TokenQuote`. Supports Candide's (EntryPoint v0.6 to v0.9) and Pimlico's
  * (v0.6 to v0.8) token paymasters, identified by address.
  *
  * @param userOperation - The finished UserOperation
+ * @param nodeRpcUrl - Node RPC used to read Candide's token from its paymaster
+ *   contract (one `eth_call`); not used for Pimlico
  * @param overrides - overrides for the default values
  * @param overrides.paymasterAddresses - Additional paymaster deployments to
  *   accept, keyed by address, for custom deployments that keep a known layout
- * @param overrides.nodeRpcUrl - Node RPC used to resolve Candide's token
  * @returns The decoded quote, or `null` when the operation has no paymaster
  *   or its paymaster sponsors it (no token payment)
  * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the paymaster is
  *   not a known deployment
  * @throws AbstractionKitError with code "BAD_DATA" if the paymaster data is in
- *   an unsupported mode, truncated, or not valid hex
+ *   an unsupported mode, truncated, or not valid hex, or Candide's token slot
+ *   is empty
  */
 export async function decodeTokenQuote(
 	userOperation: AnyUserOperation,
+	nodeRpcUrl: string | Transport | JsonRpcNode,
 	overrides: DecodeTokenQuoteOverrides = {},
 ): Promise<DecodedTokenQuote | null> {
 	const paymaster = getUserOperationPaymaster(userOperation);
@@ -317,11 +322,10 @@ export async function decodeTokenQuote(
 			: parsePimlico(hex, maxGasCost, userOperation.maxFeePerGas);
 	if (parsed == null) return null;
 
-	let token: string | null =
-		parsed.token == null ? null : getAddress(parsed.token.toLowerCase());
-	if (token == null && parsed.gasTokenSlot != null && overrides.nodeRpcUrl != null) {
-		token = await resolveCandideToken(overrides.nodeRpcUrl, key, parsed.gasTokenSlot);
-	}
+	const token =
+		parsed.token != null
+			? getAddress(parsed.token.toLowerCase())
+			: await resolveCandideToken(nodeRpcUrl, key, parsed.gasTokenSlot as number);
 
 	const quote: DecodedTokenQuote = {
 		provider: known.provider,

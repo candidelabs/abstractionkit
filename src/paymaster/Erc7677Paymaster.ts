@@ -3,6 +3,7 @@ import {ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8, ENTRYPOINT_V9} from "../con
 import {AbstractionKitError, ensureError} from "../errors";
 import {
 	HttpTransport,
+	type JsonRpcNode,
 	normalizingTransport,
 	type RequestArgs,
 	type RequestOptions,
@@ -309,9 +310,9 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	/**
 	 * Read the token payment a finished UserOperation commits to from the
 	 * paymaster data the paymaster signed: the exchange rate, `maxTokenCost`
-	 * (the most it can charge), the validity window and the token. Offline,
-	 * except for one `eth_call` to resolve Candide's token when
-	 * `overrides.nodeRpcUrl` is passed.
+	 * (the most it can charge), the validity window and the token. The only
+	 * network use is one `eth_call` to read Candide's token from its paymaster
+	 * contract; for Pimlico `nodeRpcUrl` is not used.
 	 *
 	 * Meant for co-signers who did not build the operation and so never saw its
 	 * `TokenQuote`. Supports Candide's (EntryPoint v0.6 to v0.9) and Pimlico's
@@ -321,23 +322,26 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 * Same as {@link CandidePaymaster.decodeTokenQuote}.
 	 *
 	 * @param userOperation - The finished UserOperation
+	 * @param nodeRpcUrl - Node RPC used to read Candide's token from its
+	 *   paymaster contract (one `eth_call`); not used for Pimlico, whose
+	 *   paymaster data carries the token
 	 * @param overrides - overrides for the default values
 	 * @param overrides.paymasterAddresses - Additional paymaster deployments to
 	 *   accept, keyed by address, for custom deployments that keep a known layout
-	 * @param overrides.nodeRpcUrl - Node RPC used to resolve Candide's token;
-	 *   without it, `token` is `null` for Candide
 	 * @returns The decoded quote, or `null` when the operation has no paymaster
 	 *   or its paymaster sponsors it (no token payment)
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the paymaster is
 	 *   not a known deployment
 	 * @throws AbstractionKitError with code "BAD_DATA" if the paymaster data is in
-	 *   an unsupported mode, truncated, or not valid hex
+	 *   an unsupported mode, truncated, or not valid hex, or Candide's token slot
+	 *   is empty
 	 */
 	static decodeTokenQuote(
 		userOperation: AnyUserOperation,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		overrides: DecodeTokenQuoteOverrides = {},
 	): Promise<DecodedTokenQuote | null> {
-		return decodeTokenQuoteImpl(userOperation, overrides);
+		return decodeTokenQuoteImpl(userOperation, nodeRpcUrl, overrides);
 	}
 
 	/**
