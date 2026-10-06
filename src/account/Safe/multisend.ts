@@ -1,6 +1,9 @@
 import { decodeAbiParameters, getBytes, solidityPacked } from "../../ethereUtils";
 import { type MetaTransaction, Operation } from "src/types";
 
+/** Function selector of `multiSend(bytes)`. */
+export const MULTISEND_SELECTOR = "0x8d80ff0a";
+
 /**
  * Pack a single MetaTransaction into the MultiSend byte layout
  * (operation, to, value, dataLength, data).

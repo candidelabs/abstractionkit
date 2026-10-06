@@ -31,6 +31,7 @@ import {
 	Safe_L2_V1_4_1,
 	ZeroAddress,
 } from "../../constants";
+import {DEFAULT_SAFE_4337_MULTI_CHAIN_SIG_MODULE_V1} from "./constants";
 import {
 	type AbiInputValue,
 	type BaseUserOperation,
@@ -50,7 +51,11 @@ import {
 } from "../../utilsTenderly";
 import {SendUseroperationResponse} from "../SendUseroperationResponse";
 import {SmartAccount} from "../SmartAccount";
-import {decodeMultiSendCallData, encodeMultiSendCallData} from "./multisend";
+import {
+	decodeMultiSendCallData,
+	encodeMultiSendCallData,
+	MULTISEND_SELECTOR,
+} from "./multisend";
 import {
 	getSafeMessageEip712Data,
 	type SafeMessageTypedDataDomain,
@@ -331,8 +336,7 @@ export class SafeAccount extends SmartAccount {
 
 		const multiData = encodeMultiSendCallData(metaTransactions);
 
-		const mutisendSelector = "0x8d80ff0a";
-		const multiSendCallData = createCallData(mutisendSelector, ["bytes"], [multiData]);
+		const multiSendCallData = createCallData(MULTISEND_SELECTOR, ["bytes"], [multiData]);
 
 		const executorFunctionCallData = SafeAccount.createAccountCallData(
 			multisendContractAddress,
@@ -480,8 +484,7 @@ export class SafeAccount extends SmartAccount {
 		const encodedApproveMetatransaction = encodeMultiSendCallData([approveMetatransaction]);
 
 		let multiSendCallDataParams = "";
-		const mutisendSelector = "0x8d80ff0a";
-		if (metaTransaction.data.startsWith(mutisendSelector)) {
+		if (metaTransaction.data.startsWith(MULTISEND_SELECTOR)) {
 			//multisend
 			const decodedCalldata = decodeMultiSendCallData(metaTransaction.data);
 			multiSendCallDataParams = encodedApproveMetatransaction + decodedCalldata.slice(2);
@@ -491,7 +494,7 @@ export class SafeAccount extends SmartAccount {
 				encodedApproveMetatransaction + encodedCallDataMetaTransaction.slice(2);
 		}
 		const multiSendCallData = createCallData(
-			mutisendSelector,
+			MULTISEND_SELECTOR,
 			["bytes"],
 			[multiSendCallDataParams],
 		);
@@ -976,7 +979,8 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @param overrides.entrypoint - target entrypoint
 	 * defaults to ENTRYPOINT_V9
-	 * @param overrides.safe4337ModuleAddress - defaults to "0xee8005d7e79f9a6829ea61A81Fc2A85055fB2a42"
+	 * @param overrides.safe4337ModuleAddress - defaults to the multi-chain signature module,
+	 * SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS
 	 * @returns an object containing the typed data domain, type and typed data vales
 	 * object needed for hashing and signing
 	 */
@@ -995,7 +999,7 @@ export class SafeAccount extends SmartAccount {
 		messageValue: SafeUserOperationV9TypedMessageValue;
 	} {
 		const safe4337ModuleAddress =
-			overrides.safe4337ModuleAddress ?? "0xee8005d7e79f9a6829ea61A81Fc2A85055fB2a42";
+			overrides.safe4337ModuleAddress ?? DEFAULT_SAFE_4337_MULTI_CHAIN_SIG_MODULE_V1;
 
 		return SafeAccount.baseGetUserOperationEip712DataV7V8V9(
 			useroperation,
@@ -1018,7 +1022,8 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.validUntil - timestamp the signature will be valid until
 	 * @param overrides.entrypoint - target entrypoint
 	 * defaults to ENTRYPOINT_V9
-	 * @param overrides.safe4337ModuleAddress - defaults to "0xE0049883864b20728b76B5cf265765B45162516D"
+	 * @param overrides.safe4337ModuleAddress - defaults to the multi-chain signature module,
+	 * SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS
 	 * @returns useroperation hash
 	 */
 	public static getUserOperationEip712Hash_V9(
@@ -1227,8 +1232,7 @@ export class SafeAccount extends SmartAccount {
 
 			const encodedInit = encodeMultiSendCallData(txs);
 
-			const mutisendSelector = "0x8d80ff0a";
-			const multiSendCallData = createCallData(mutisendSelector, ["bytes"], [encodedInit]);
+			const multiSendCallData = createCallData(MULTISEND_SELECTOR, ["bytes"], [encodedInit]);
 
 			initializerFunctionInputParameters = [
 				modOwners,
@@ -3540,7 +3544,7 @@ function generateOnChainIdentifier(
 	project: string,
 	platform: "Web" | "Mobile" | "Safe App" | "Widget" = "Web",
 	tool: string = "abstractionkit",
-	toolVersion: string = "0.4.2",
+	toolVersion: string = "0.4.3",
 ): string {
 	const identifierPrefix = "5afe"; // Safe identifier prefix
 	const identifierVersion = "00"; // First version

@@ -4,6 +4,7 @@ import {ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8} from "src/constants";
 import {AbstractionKitError, ensureError} from "src/errors";
 import {
 	HttpTransport,
+	type JsonRpcNode,
 	normalizingTransport,
 	type RequestArgs,
 	type RequestOptions,
@@ -21,7 +22,12 @@ import type {
 	SupportedERC20TokensAndMetadataWithExchangeRate,
 	TokenQuote,
 } from "../types";
-import {calculateUserOperationMaxGasCost} from "../utils";
+import {calculateUserOperationErc20TokenCost} from "../utils";
+import {
+	type DecodedTokenQuote,
+	type DecodeTokenQuoteOverrides,
+	decodeTokenQuote as decodeTokenQuoteImpl,
+} from "./decodeTokenQuote";
 import {assertPaymasterMatchesApproveSpender, getUserOperationPaymaster, Paymaster} from "./Paymaster";
 import type {
 	AnyUserOperation,
@@ -105,6 +111,20 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 */
 	static from(input: string | Transport | CandidePaymaster): CandidePaymaster {
 		return input instanceof CandidePaymaster ? input : new CandidePaymaster(input);
+	}
+
+	/**
+	 * Read the token payment a finished UserOperation commits to, entirely
+	 * offline, for co-signers who never saw its `TokenQuote`. Static: needs no
+	 * paymaster URL. Same as {@link Erc7677Paymaster.decodeTokenQuote}, which
+	 * documents the parameters, result and errors.
+	 */
+	static decodeTokenQuote(
+		userOperation: AnyUserOperation,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		overrides: DecodeTokenQuoteOverrides = {},
+	): Promise<DecodedTokenQuote | null> {
+		return decodeTokenQuoteImpl(userOperation, nodeRpcUrl, overrides);
 	}
 
 	/**
@@ -667,9 +687,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				await this.estimateAndApplyGasLimits(userOp, bundlerRpc, entrypoint, overrides ?? {});
 
 				const exchangeRate = await this.fetchTokenPaymasterExchangeRate(context.token, entrypoint);
-				const gasCostWei = calculateUserOperationMaxGasCost(userOp);
-				let tokenCost = (exchangeRate * gasCostWei) / 10n ** 18n;
-				if (tokenCost === 0n) tokenCost = 1n;
+				const tokenCost = calculateUserOperationErc20TokenCost(userOp, exchangeRate);
 				const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
 				tokenQuote = {
 					token: context.token,
@@ -748,9 +766,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				erc20TokenAddress,
 				entrypoint,
 			);
-			const cost = calculateUserOperationMaxGasCost(userOperation);
-			const tokenCost = (exchangeRate * cost) / 10n ** 18n;
-			return tokenCost === 0n ? 1n : tokenCost;
+			return calculateUserOperationErc20TokenCost(userOperation, exchangeRate);
 		} catch (err) {
 			const error = ensureError(err);
 

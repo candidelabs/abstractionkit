@@ -3,13 +3,19 @@ import {ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8, ENTRYPOINT_V9} from "../con
 import {AbstractionKitError, ensureError} from "../errors";
 import {
 	HttpTransport,
+	type JsonRpcNode,
 	normalizingTransport,
 	type RequestArgs,
 	type RequestOptions,
 	type Transport,
 } from "../transport";
 import type {StateOverrideSet, TokenQuote} from "../types";
-import {calculateUserOperationMaxGasCost} from "../utils";
+import {calculateUserOperationErc20TokenCost} from "../utils";
+import {
+	type DecodedTokenQuote,
+	type DecodeTokenQuoteOverrides,
+	decodeTokenQuote as decodeTokenQuoteImpl,
+} from "./decodeTokenQuote";
 import {assertPaymasterMatchesApproveSpender, extractPaymasterAddress, Paymaster} from "./Paymaster";
 import type {
 	AnyUserOperation,
@@ -299,6 +305,44 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		options?: Erc7677PaymasterConstructorOptions,
 	): Erc7677Paymaster {
 		return input instanceof Erc7677Paymaster ? input : new Erc7677Paymaster(input, options);
+	}
+
+	/**
+	 * Read the token payment a finished UserOperation commits to from the
+	 * paymaster data the paymaster signed: the exchange rate, `maxTokenCost`
+	 * (the most it can charge), the validity window and the token. The only
+	 * network use is one `eth_call` reading Candide's token (and, in on-chain
+	 * markup mode, its markup) from its paymaster contract; for Pimlico
+	 * `nodeRpcUrl` is not used.
+	 *
+	 * Meant for co-signers who did not build the operation and so never saw its
+	 * `TokenQuote`. Supports Candide's (EntryPoint v0.6 to v0.9) and Pimlico's
+	 * (v0.6 to v0.8) token paymasters, identified by the paymaster address on
+	 * the operation, whichever paymaster class built it. It reads nothing from
+	 * `callData`, so it works for any account. Static: needs no paymaster URL.
+	 * Same as {@link CandidePaymaster.decodeTokenQuote}.
+	 *
+	 * @param userOperation - The finished UserOperation
+	 * @param nodeRpcUrl - Node RPC used to read Candide's token from its
+	 *   paymaster contract (one `eth_call`); not used for Pimlico, whose
+	 *   paymaster data carries the token
+	 * @param overrides - overrides for the default values
+	 * @param overrides.paymasterAddresses - Additional paymaster deployments to
+	 *   accept, keyed by address, for custom deployments that keep a known layout
+	 * @returns The decoded quote, or `null` when the operation has no paymaster
+	 *   or its paymaster sponsors it (no token payment)
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the paymaster is
+	 *   not a known deployment
+	 * @throws AbstractionKitError with code "BAD_DATA" if the paymaster data is in
+	 *   an unsupported mode, truncated, or not valid hex, or Candide's token slot
+	 *   is empty
+	 */
+	static decodeTokenQuote(
+		userOperation: AnyUserOperation,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		overrides: DecodeTokenQuoteOverrides = {},
+	): Promise<DecodedTokenQuote | null> {
+		return decodeTokenQuoteImpl(userOperation, nodeRpcUrl, overrides);
 	}
 
 	/**
@@ -915,9 +959,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		await this.estimateAndApplyGasLimits(userOp, bundlerRpc, entrypoint, overrides);
 
 		// Step 5 — calculate real token cost.
-		const maxGasCostWei = calculateUserOperationMaxGasCost(userOp);
-		let tokenCost = (exchangeRate * maxGasCostWei) / 10n ** 18n;
-		if (tokenCost === 0n) tokenCost = 1n;
+		const tokenCost = calculateUserOperationErc20TokenCost(userOp, exchangeRate);
 		const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
 		const tokenQuote: TokenQuote = {
 			token: tokenAddress,
