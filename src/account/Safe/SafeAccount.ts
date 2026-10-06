@@ -40,7 +40,6 @@ import {
 	Operation,
 	type StateOverrideSet,
 	type TenderlySimulationResult,
-	type TokenPaymasterApproval,
 	type UserOperationV6,
 	type UserOperationV7,
 	type UserOperationV9,
@@ -54,13 +53,9 @@ import {SendUseroperationResponse} from "../SendUseroperationResponse";
 import {SmartAccount} from "../SmartAccount";
 import {
 	decodeMultiSendCallData,
-	decodeMultiSendTransactions,
 	encodeMultiSendCallData,
 	MULTISEND_SELECTOR,
-	SAFE_MULTISEND_DEPLOYMENTS,
 } from "./multisend";
-import {getUserOperationPaymaster} from "../../paymaster/Paymaster";
-import type {AnyUserOperation} from "../../paymaster/types";
 import {
 	getSafeMessageEip712Data,
 	type SafeMessageTypedDataDomain,
@@ -1331,183 +1326,6 @@ export class SafeAccount extends SmartAccount {
 		);
 
 		return [safeAccountFactory.address, factoryGeneratorFunctionCallData];
-	}
-
-	/**
-	 * Find the ERC-20 approvals a UserOperation grants to its own paymaster.
-	 * Low-level account hook behind `Erc7677Paymaster.decodeTokenQuote` and
-	 * `CandidePaymaster.decodeTokenQuote`, which most callers want instead.
-	 *
-	 * Token paymaster flows prepend `approve(paymaster, amount)` to the
-	 * account's MultiSend batch. That amount is the most the paymaster can
-	 * charge, so it is what the owners sign, even when the `TokenQuote` from
-	 * building the operation is no longer at hand. Only `approve` calls whose
-	 * spender is the paymaster set on this operation are returned, so a
-	 * dapp's own `approve` in a sponsored operation is not mistaken for one.
-	 *
-	 * The whole batch is scanned, in execution order. `approve` sets rather
-	 * than adds, so the paymaster's allowance for a token after execution is
-	 * the last entry for that token. Token-flow operations for tokens that
-	 * need an allowance reset (e.g. USDT) carry an `approve(0)` entry first.
-	 *
-	 * Only direct `approve` calls in the batch are reported. An
-	 * `increaseAllowance` or `decreaseAllowance` call for the paymaster, or a
-	 * `permit` for the paymaster on this Safe's allowance, makes it throw, since
-	 * the allowance can then no longer be read from the approvals; malformed
-	 * calldata for any of them, and a delegatecall inside the batch, are
-	 * rejected too.
-	 * Allowance granted outside this operation is not seen. Calls are matched by the
-	 * `approve(address,uint256)` selector, which ERC-721 shares, so the target
-	 * is not verified to be an ERC-20: compare `token` with the token you
-	 * expect the paymaster to charge before treating `amount` as its cap.
-	 *
-	 * A delegatecall runs the target's code in the Safe's context, so the
-	 * batch is only decoded when the Safe delegatecalls an official Safe
-	 * MultiSend or MultiSendCallOnly deployment (v1.3.0, v1.4.1, v1.5.0), and
-	 * the batch itself contains no delegatecall. Any other delegatecall throws
-	 * rather than reporting approvals that code may never execute or may
-	 * overwrite.
-	 *
-	 * @param userOperation - The UserOperation to inspect
-	 * @param overrides - overrides for the default values
-	 * @param overrides.multisendContractAddress - An additional MultiSend
-	 *   contract to accept, for custom deployments
-	 * @returns Approvals to the paymaster, in execution order. Empty when the
-	 *   operation has no paymaster or grants it no approval.
-	 * @throws AbstractionKitError with code "BAD_DATA" if `callData` is not a
-	 *   Safe module executor call, delegatecalls anything other than the
-	 *   expected MultiSend contract, changes the paymaster allowance other than
-	 *   with `approve`, or the MultiSend payload is malformed
-	 */
-	public decodeTokenPaymasterApprovals(
-		userOperation: AnyUserOperation,
-		overrides: {
-			multisendContractAddress?: string;
-		} = {},
-	): TokenPaymasterApproval[] {
-		const paymaster = getUserOperationPaymaster(userOperation);
-		if (paymaster == null) return [];
-
-		const [metaTransaction] = SafeAccount.decodeAccountCallData(userOperation.callData);
-		let transactions: MetaTransaction[] = [metaTransaction];
-		if (metaTransaction.operation === Operation.Delegate) {
-			const target = metaTransaction.to.toLowerCase();
-			const isKnownMultiSend =
-				SAFE_MULTISEND_DEPLOYMENTS.includes(target) ||
-				target === overrides.multisendContractAddress?.toLowerCase();
-			if (!isKnownMultiSend || !metaTransaction.data.startsWith(MULTISEND_SELECTOR)) {
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					`UserOperation delegatecalls ${metaTransaction.to}, which is not a known Safe ` +
-						"MultiSend contract; its token approvals cannot be determined. " +
-						"Pass overrides.multisendContractAddress for a custom MultiSend deployment.",
-					{ context: { to: metaTransaction.to } },
-				);
-			}
-			let packedTransactions: string;
-			try {
-				packedTransactions = decodeMultiSendCallData(metaTransaction.data);
-			} catch (err) {
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					`malformed MultiSend calldata in delegatecall to ${metaTransaction.to}`,
-					{ cause: ensureError(err), context: { to: metaTransaction.to } },
-				);
-			}
-			transactions = decodeMultiSendTransactions(packedTransactions);
-			// An inner delegatecall runs arbitrary code in the Safe's context and
-			// could change the paymaster allowance after any approve we report.
-			const innerDelegate = transactions.find((tx) => tx.operation === Operation.Delegate);
-			if (innerDelegate != null) {
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					`UserOperation batch delegatecalls ${innerDelegate.to}; its token approvals cannot be determined.`,
-					{ context: { to: innerDelegate.to } },
-				);
-			}
-		}
-
-		const approveSelector = getFunctionSelector("approve(address,uint256)");
-		// Other ways to change an allowance, with the position of their spender
-		// and, for permit, of the owner whose allowance changes (increase and
-		// decrease always act on the caller, the Safe). Any of them giving the
-		// paymaster an allowance on this Safe makes it unknowable from the
-		// approve calls alone.
-		const allowanceChangers = (
-			[
-				["increaseAllowance", ["address", "uint256"], 0, null],
-				["decreaseAllowance", ["address", "uint256"], 0, null],
-				[
-					"permit",
-					["address", "address", "uint256", "uint256", "uint8", "bytes32", "bytes32"],
-					1,
-					0,
-				],
-				[
-					"permit",
-					["address", "address", "uint256", "uint256", "bool", "uint8", "bytes32", "bytes32"],
-					1,
-					0,
-				],
-			] as const
-		).map(([name, types, spenderIndex, ownerIndex]) => ({
-			name,
-			types: [...types],
-			selector: getFunctionSelector(`${name}(${types.join(",")})`),
-			spenderIndex,
-			ownerIndex,
-		}));
-		const approvals: TokenPaymasterApproval[] = [];
-		for (const transaction of transactions) {
-			if ((transaction.operation ?? Operation.Call) !== Operation.Call) continue;
-			const data = transaction.data.toLowerCase();
-			const changer = allowanceChangers.find((c) => data.startsWith(c.selector));
-			if (changer != null) {
-				// Decode every argument so malformed calldata is reported, not skipped.
-				let args: unknown[];
-				try {
-					args = decodeAbiParameters<unknown[]>(changer.types, `0x${data.slice(10)}`);
-				} catch (err) {
-					throw new AbstractionKitError(
-						"BAD_DATA",
-						`malformed ${changer.name} calldata in call to ${transaction.to}`,
-						{ cause: ensureError(err), context: { to: transaction.to } },
-					);
-				}
-				const owner = changer.ownerIndex == null ? null : String(args[changer.ownerIndex]);
-				if (owner != null && owner.toLowerCase() !== userOperation.sender.toLowerCase()) {
-					continue; // a permit for someone else's allowance
-				}
-				const changedSpender = String(args[changer.spenderIndex]);
-				if (changedSpender.toLowerCase() === paymaster.toLowerCase()) {
-					throw new AbstractionKitError(
-						"BAD_DATA",
-						`UserOperation changes the paymaster allowance with ${changer.name} ` +
-							`on ${transaction.to}; the allowance cannot be determined.`,
-						{ context: { to: transaction.to } },
-					);
-				}
-				continue;
-			}
-			if (!data.startsWith(approveSelector)) continue;
-			let spender: string;
-			let amount: bigint;
-			try {
-				[spender, amount] = decodeAbiParameters<[string, bigint]>(
-					["address", "uint256"],
-					`0x${transaction.data.slice(10)}`,
-				);
-			} catch (err) {
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					`malformed approve calldata in call to ${transaction.to}`,
-					{ cause: ensureError(err), context: { to: transaction.to } },
-				);
-			}
-			if (spender.toLowerCase() !== paymaster.toLowerCase()) continue;
-			approvals.push({ token: getAddress(transaction.to), spender, amount: BigInt(amount) });
-		}
-		return approvals;
 	}
 
 	/**

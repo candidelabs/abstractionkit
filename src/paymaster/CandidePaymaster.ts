@@ -4,6 +4,7 @@ import {ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8} from "src/constants";
 import {AbstractionKitError, ensureError} from "src/errors";
 import {
 	HttpTransport,
+	type JsonRpcNode,
 	normalizingTransport,
 	type RequestArgs,
 	type RequestOptions,
@@ -31,7 +32,6 @@ import {assertPaymasterMatchesApproveSpender, getUserOperationPaymaster, Paymast
 import type {
 	AnyUserOperation,
 	CandidePaymasterContext,
-	DecodeTokenPaymasterApprovalsAccount,
 	GasPaymasterUserOperationOverrides,
 	PrependTokenPaymasterApproveAccount,
 	SameUserOp,
@@ -120,11 +120,11 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 * documents the parameters, result and errors.
 	 */
 	static decodeTokenQuote(
-		smartAccount: DecodeTokenPaymasterApprovalsAccount,
 		userOperation: AnyUserOperation,
+		nodeRpcUrl: string | Transport | JsonRpcNode,
 		overrides: DecodeTokenQuoteOverrides = {},
-	): DecodedTokenQuote | null {
-		return decodeTokenQuoteImpl(smartAccount, userOperation, overrides);
+	): Promise<DecodedTokenQuote | null> {
+		return decodeTokenQuoteImpl(userOperation, nodeRpcUrl, overrides);
 	}
 
 	/**
