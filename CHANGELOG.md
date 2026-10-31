@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Breaking Changes
+
+- **`SocialRecoveryModule` and `SocialRecoveryModuleGracePeriodSelector` are replaced by versioned names.** Social Recovery Module v0.2.0 fixes the findings of Certora's audit and is a new deployment with new addresses ([release](https://github.com/candidelabs/candide-contracts/releases/tag/recovery%2Fv0.2.0)). v0.1.0 stays deployed. Pick the class that matches the module your accounts enabled:
+  - `SocialRecoveryModuleV1` with `SocialRecoveryModuleGracePeriodSelectorV1` for v0.1.0. These are what `SocialRecoveryModule` and `SocialRecoveryModuleGracePeriodSelector` used to be, with the same addresses.
+  - `SocialRecoveryModuleV2` with `SocialRecoveryModuleGracePeriodSelectorV2` for v0.2.0.
+
+  **If your users enabled the v0.1.0 module, use `SocialRecoveryModuleV1` and `SocialRecoveryModuleGracePeriodSelectorV1`.** Pointed at a v0.2.0 address, an account that enabled v0.1.0 has no guardians, and its recovery calls fail.
+
+  The `RecoveryRequest` type is likewise replaced by `RecoveryRequestV1` and `RecoveryRequestV2`.
+
+  What changes with v0.2.0:
+  - `createConfirmRecoveryMetaTransaction` and `createMultiConfirmRecoveryMetaTransaction` take the recovery `nonce` before `execute` and before the signatures, respectively. Use the nonce the guardians signed (`messageValue.nonce` from `getRecoveryRequestEip712Data`). The module reverts if the nonce changed before the transaction is included.
+  - Guardian signatures use EIP-712 domain version `"0.2.0"`. Signatures made for v0.1.0 are not valid on v0.2.0.
+  - `getRecoveryRequest` returns the request's `nonce`, and `executeAfter` is renamed `executableAt` (`RecoveryRequestV2`).
+  - Adding or revoking a guardian, changing the threshold, and `cancelRecovery` all cancel the recovery in progress and invalidate the guardian confirmations collected so far. `cancelRecovery` also works when no recovery is in progress.
+
+### New Features
+
+- `SocialRecoveryModuleBase` holds the methods both versions share, for code that accepts either version.
+
 ## 0.4.3
 
 ### New Features
