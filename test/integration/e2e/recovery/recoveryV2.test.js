@@ -1,8 +1,10 @@
 // Behaviour that changed in Social Recovery Module v0.2.0 after Certora's
 // audit, exercised through the SDK. The happy path (confirm, execute,
 // finalize) for both versions lives in recovery.test.js.
-const { JsonRpcProvider, Wallet } = require('ethers');
+const { Interface, JsonRpcProvider, Wallet } = require('ethers');
 const {
+    Operation,
+    SAFE_MESSAGE_MODULE_TYPE,
     SafeAccountV0_3_0,
     SocialRecoveryModuleV2,
     sendJsonRpcRequest,
@@ -12,12 +14,59 @@ const { runnable, unrunnable, nodeUrl, bundlerUrl } = require('../../_runnable.c
 jest.setTimeout(300000);
 
 const TEN_ETH_HEX = '0x8AC7230489E80000';
+// Safe v1.4.1 SignMessageLib. Delegatecalled by a Safe, it marks a message
+// as signed so the Safe accepts it with an empty EIP-1271 signature.
+const SIGN_MESSAGE_LIB = '0xd53cd0aB83D845Ac265BE939c57F53AD838012c9';
+const signMessageLib = new Interface(['function signMessage(bytes _data)']);
 
-describe.each(runnable)('Social Recovery Module v0.2.0 audit fixes e2e: $name (chainId $chainId)', (chain) => {
+// Shared RPC helpers for one chain.
+function harness(chain) {
     const node = nodeUrl(chain);
     const bundler = bundlerUrl(chain);
     const chainId = BigInt(chain.chainId);
     const provider = new JsonRpcProvider(node, Number(chainId), { staticNetwork: true });
+
+    async function fund(...addresses) {
+        for (const address of addresses) {
+            await sendJsonRpcRequest(node, 'anvil_setBalance', [address, TEN_ETH_HEX]);
+        }
+    }
+
+    async function sendUserOp(account, signer, transactions) {
+        const userOp = await account.createUserOperation(transactions, node, bundler, {
+            verificationGasLimitPercentageMultiplier: 200,
+        });
+        userOp.signature = account.signUserOperation(userOp, [signer.privateKey], chainId);
+        return (await account.sendUserOperation(userOp, bundler)).included();
+    }
+
+    async function sendTx(wallet, metaTransaction) {
+        const tx = await wallet.sendTransaction({ to: metaTransaction.to, data: metaTransaction.data });
+        const receipt = await tx.wait();
+        expect(receipt.status).toBe(1);
+    }
+
+    async function expectRevert(from, metaTransaction, reason) {
+        await expect(
+            provider.call({ from, to: metaTransaction.to, data: metaTransaction.data }),
+        ).rejects.toMatchObject({ reason });
+    }
+
+    // Deploys a fresh single-owner Safe and returns it as a deployed account.
+    async function deploySafe(owner) {
+        const account = SafeAccountV0_3_0.initializeNewAccount([owner.address]);
+        await fund(account.accountAddress);
+        const receipt = await sendUserOp(account, owner, [{ to: owner.address, value: 0n, data: '0x' }]);
+        expect(receipt?.success).toBe(true);
+        return new SafeAccountV0_3_0(account.accountAddress);
+    }
+
+    return { node, chainId, provider, fund, sendUserOp, sendTx, expectRevert, deploySafe };
+}
+
+describe.each(runnable)('Social Recovery Module v0.2.0 audit fixes e2e: $name (chainId $chainId)', (chain) => {
+    const { node, chainId, provider, fund, sendUserOp, sendTx, expectRevert, deploySafe } =
+        harness(chain);
 
     const owner = Wallet.createRandom();
     const newOwner = Wallet.createRandom();
@@ -35,32 +84,11 @@ describe.each(runnable)('Social Recovery Module v0.2.0 audit fixes e2e: $name (c
     let executedNonce;
 
     beforeAll(async () => {
-        smartAccount = SafeAccountV0_3_0.initializeNewAccount([owner.address]);
-        accountAddress = smartAccount.accountAddress;
-        for (const address of [accountAddress, guardian1.address, guardian2.address]) {
-            await sendJsonRpcRequest(node, 'anvil_setBalance', [address, TEN_ETH_HEX]);
-        }
+        await fund(guardian1.address, guardian2.address);
     });
 
-    async function sendUserOpFromOwner(account, transactions) {
-        const userOp = await account.createUserOperation(transactions, node, bundler, {
-            verificationGasLimitPercentageMultiplier: 200,
-        });
-        userOp.signature = account.signUserOperation(userOp, [owner.privateKey], chainId);
-        return (await account.sendUserOperation(userOp, bundler)).included();
-    }
-
-    async function sendFromGuardian(guardian, metaTransaction) {
-        const tx = await guardian.sendTransaction({ to: metaTransaction.to, data: metaTransaction.data });
-        const receipt = await tx.wait();
-        expect(receipt.status).toBe(1);
-    }
-
-    async function expectRevert(from, metaTransaction, reason) {
-        await expect(
-            provider.call({ from, to: metaTransaction.to, data: metaTransaction.data }),
-        ).rejects.toMatchObject({ reason });
-    }
+    const sendUserOpFromOwner = (account, transactions) => sendUserOp(account, owner, transactions);
+    const sendFromGuardian = sendTx;
 
     async function signRecovery(newOwners, nonce) {
         const { domain, types, messageValue } = await srm.getRecoveryRequestEip712Data(
@@ -80,14 +108,11 @@ describe.each(runnable)('Social Recovery Module v0.2.0 audit fixes e2e: $name (c
     }
 
     test('set up an account with two guardians (threshold 2)', async () => {
-        const deploy = await sendUserOpFromOwner(smartAccount, [
-            { to: owner.address, value: 0n, data: '0x' },
-        ]);
-        expect(deploy?.success).toBe(true);
+        smartAccount = await deploySafe(owner);
+        accountAddress = smartAccount.accountAddress;
 
         // The guardian calls go through MultiSend; v0.2.0 rejects them unless
         // their calldata has the exact canonical length (Certora L-05).
-        smartAccount = new SafeAccountV0_3_0(accountAddress);
         const receipt = await sendUserOpFromOwner(smartAccount, [
             srm.createEnableModuleMetaTransaction(accountAddress),
             srm.createAddGuardianWithThresholdMetaTransaction(guardian1.address, 1n),
@@ -213,8 +238,145 @@ describe.each(runnable)('Social Recovery Module v0.2.0 audit fixes e2e: $name (c
     });
 });
 
+// A Safe as guardian signs through EIP-1271: either with its owners'
+// signatures, or by pre-approving the recovery hash on-chain and leaving the
+// signature empty. Before v0.2.0 (Certora L-01) an empty signature only
+// counted when the signer itself sent the transaction, so a relayer could not
+// submit a pre-approved Safe guardian.
+describe.each(runnable)('Social Recovery Module v0.2.0 Safe guardian e2e: $name (chainId $chainId)', (chain) => {
+    const { node, chainId, provider, fund, sendUserOp, sendTx, expectRevert, deploySafe } =
+        harness(chain);
+
+    const owner = Wallet.createRandom();
+    const guardianSafeOwner = Wallet.createRandom();
+    const guardian1 = Wallet.createRandom();
+    const relayer = Wallet.createRandom().connect(provider);
+    const newOwnerA = Wallet.createRandom();
+    const newOwnerB = Wallet.createRandom();
+
+    const srm = new SocialRecoveryModuleV2();
+
+    let smartAccount;
+    let accountAddress;
+    let guardianSafe;
+
+    beforeAll(async () => {
+        await fund(relayer.address);
+    });
+
+    async function signAsGuardian1(newOwners, nonce) {
+        const { domain, types, messageValue } = await srm.getRecoveryRequestEip712Data(
+            node,
+            chainId,
+            accountAddress,
+            newOwners,
+            1n,
+            { recoveryNonce: nonce },
+        );
+        return { signer: guardian1.address, signature: await guardian1.signTypedData(domain, types, messageValue) };
+    }
+
+    // EIP-1271 signature of the guardian Safe: its owner signs the recovery
+    // hash as a SafeMessage for that Safe.
+    async function signAsGuardianSafe(newOwners, nonce) {
+        const recoveryHash = await srm.getRecoveryHash(node, accountAddress, newOwners, 1, nonce);
+        const domain = { chainId: Number(chainId), verifyingContract: guardianSafe.accountAddress };
+        const signature = await guardianSafeOwner.signTypedData(domain, SAFE_MESSAGE_MODULE_TYPE, {
+            message: recoveryHash,
+        });
+        return { signer: guardianSafe.accountAddress, signature };
+    }
+
+    test('set up an account guarded by a Safe and an EOA (threshold 2)', async () => {
+        guardianSafe = await deploySafe(guardianSafeOwner);
+        smartAccount = await deploySafe(owner);
+        accountAddress = smartAccount.accountAddress;
+
+        const receipt = await sendUserOp(smartAccount, owner, [
+            srm.createEnableModuleMetaTransaction(accountAddress),
+            srm.createAddGuardianWithThresholdMetaTransaction(guardianSafe.accountAddress, 1n),
+            srm.createAddGuardianWithThresholdMetaTransaction(guardian1.address, 2n),
+        ]);
+        expect(receipt?.success).toBe(true);
+        expect(await srm.isGuardian(node, accountAddress, guardianSafe.accountAddress)).toBe(true);
+    });
+
+    test('an empty signature counts only once the Safe guardian approved the hash', async () => {
+        const nonce = await srm.nonce(node, accountAddress);
+        await expectRevert(
+            relayer.address,
+            srm.createMultiConfirmRecoveryMetaTransaction(
+                accountAddress,
+                [newOwnerB.address],
+                1,
+                nonce,
+                [{ signer: guardianSafe.accountAddress, signature: '0x' }, await signAsGuardian1([newOwnerB.address], nonce)],
+                true,
+            ),
+            'SM: Invalid guardian signature',
+        );
+    });
+
+    test('a relayer submits a Safe guardian confirmation signed by its owner', async () => {
+        const nonce = await srm.nonce(node, accountAddress);
+        await sendTx(
+            relayer,
+            srm.createMultiConfirmRecoveryMetaTransaction(
+                accountAddress,
+                [newOwnerA.address],
+                1,
+                nonce,
+                [await signAsGuardianSafe([newOwnerA.address], nonce)],
+                false,
+            ),
+        );
+        expect(
+            await srm.hasGuardianApproved(
+                node,
+                accountAddress,
+                guardianSafe.accountAddress,
+                [newOwnerA.address],
+                1,
+            ),
+        ).toBe(true);
+    });
+
+    test('a relayer submits an empty signature for a Safe guardian that pre-approved the hash (L-01)', async () => {
+        const nonce = await srm.nonce(node, accountAddress);
+        const recoveryHash = await srm.getRecoveryHash(node, accountAddress, [newOwnerB.address], 1, nonce);
+
+        const approve = await sendUserOp(guardianSafe, guardianSafeOwner, [
+            {
+                to: SIGN_MESSAGE_LIB,
+                value: 0n,
+                data: signMessageLib.encodeFunctionData('signMessage', [recoveryHash]),
+                operation: Operation.Delegate,
+            },
+        ]);
+        expect(approve?.success).toBe(true);
+
+        await sendTx(
+            relayer,
+            srm.createMultiConfirmRecoveryMetaTransaction(
+                accountAddress,
+                [newOwnerB.address],
+                1,
+                nonce,
+                [{ signer: guardianSafe.accountAddress, signature: '0x' }, await signAsGuardian1([newOwnerB.address], nonce)],
+                true,
+            ),
+        );
+
+        const request = await srm.getRecoveryRequest(node, accountAddress);
+        expect(request.guardiansApprovalCount).toBe(2n);
+        expect(request.newOwners).toEqual([newOwnerB.address]);
+        expect(request.nonce).toBe(nonce);
+        expect(request.executableAt).toBeGreaterThan(0n);
+    });
+});
+
 if (unrunnable.length > 0) {
-    describe.skip.each(unrunnable)('Social Recovery Module v0.2.0 audit fixes e2e: $name (setup failed)', () => {
+    describe.skip.each(unrunnable)('Social Recovery Module v0.2.0 e2e: $name (setup failed)', () => {
         test('skipped', () => {});
     });
 }
