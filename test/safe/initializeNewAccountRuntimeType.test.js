@@ -1,5 +1,5 @@
-// Unit tests for issue #116: SafeAccountV1_5_0_M_0_3_0.initializeNewAccount
-// must return a SafeAccountV1_5_0_M_0_3_0 instance at runtime, not a plain
+// Unit tests for issue #116: SafeAccountV0_4_0.initializeNewAccount
+// must return a SafeAccountV0_4_0 instance at runtime, not a plain
 // SafeAccountV0_3_0. No network required.
 
 const ak = require("../../dist/index.cjs");
@@ -7,20 +7,20 @@ const ak = require("../../dist/index.cjs");
 const OWNER = "0x2222222222222222222222222222222222222222";
 
 describe("initializeNewAccount runtime type (#116)", () => {
-	test("SafeAccountV1_5_0_M_0_3_0.initializeNewAccount returns a SafeAccountV1_5_0_M_0_3_0", () => {
-		const account = ak.SafeAccountV1_5_0_M_0_3_0.initializeNewAccount([OWNER]);
-		expect(account).toBeInstanceOf(ak.SafeAccountV1_5_0_M_0_3_0);
+	test("SafeAccountV0_4_0.initializeNewAccount returns a SafeAccountV0_4_0", () => {
+		const account = ak.SafeAccountV0_4_0.initializeNewAccount([OWNER]);
+		expect(account).toBeInstanceOf(ak.SafeAccountV0_4_0);
 	});
 
 	test("instance address matches the class's createAccountAddress (v1.5.0 singleton)", () => {
-		const account = ak.SafeAccountV1_5_0_M_0_3_0.initializeNewAccount([OWNER]);
-		expect(account.accountAddress).toBe(ak.SafeAccountV1_5_0_M_0_3_0.createAccountAddress([OWNER]));
+		const account = ak.SafeAccountV0_4_0.initializeNewAccount([OWNER]);
+		expect(account.accountAddress).toBe(ak.SafeAccountV0_4_0.createAccountAddress([OWNER]));
 	});
 
 	test("SafeAccountV0_3_0.initializeNewAccount still returns a plain SafeAccountV0_3_0", () => {
 		const account = ak.SafeAccountV0_3_0.initializeNewAccount([OWNER]);
 		expect(account).toBeInstanceOf(ak.SafeAccountV0_3_0);
-		expect(account).not.toBeInstanceOf(ak.SafeAccountV1_5_0_M_0_3_0);
+		expect(account).not.toBeInstanceOf(ak.SafeAccountV0_4_0);
 		expect(account.accountAddress).toBe(ak.SafeAccountV0_3_0.createAccountAddress([OWNER]));
 	});
 
@@ -42,11 +42,11 @@ describe("initializeNewAccount runtime type (#116)", () => {
 	});
 
 	test("detached subclass factory call still works with v1.5.0 defaults applied", () => {
-		const init = ak.SafeAccountV1_5_0_M_0_3_0.initializeNewAccount;
+		const init = ak.SafeAccountV0_4_0.initializeNewAccount;
 		const account = init([OWNER]);
 		// Pre-polymorphic behavior: the wrapper class degrades to the base,
 		// but the v1.5.0 singleton/verifier overrides still apply.
 		expect(account).toBeInstanceOf(ak.SafeAccountV0_3_0);
-		expect(account.accountAddress).toBe(ak.SafeAccountV1_5_0_M_0_3_0.createAccountAddress([OWNER]));
+		expect(account.accountAddress).toBe(ak.SafeAccountV0_4_0.createAccountAddress([OWNER]));
 	});
 });

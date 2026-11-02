@@ -12,7 +12,7 @@ const okByName = Object.fromEntries(
 const {
     SafeAccountV0_2_0,
     SafeAccountV0_3_0,
-    SafeAccountV1_5_0_M_0_3_0,
+    SafeAccountV0_4_0,
     SafeMultiChainSigAccountV1,
     Calibur7702Account,
     Simple7702Account,
@@ -36,7 +36,7 @@ const { SUPPORTED_ENTRYPOINTS } = require('./_entrypoints.cjs');
 const accountVersions = [
     { name: 'V0_2_0', accountClass: SafeAccountV0_2_0, entrypoint: 'v6', isSafeMultiSig: true },
     { name: 'V0_3_0', accountClass: SafeAccountV0_3_0, entrypoint: 'v7', isSafeMultiSig: true },
-    { name: 'V1_5_0_M_0_3_0', accountClass: SafeAccountV1_5_0_M_0_3_0, entrypoint: 'v7', isSafeMultiSig: true },
+    { name: 'V1_5_0_M_0_3_0', accountClass: SafeAccountV0_4_0, entrypoint: 'v7', isSafeMultiSig: true },
     { name: 'MultiChainSigV1', accountClass: SafeMultiChainSigAccountV1, entrypoint: 'v9', isSafeMultiSig: true },
     { name: 'Calibur', accountClass: Calibur7702Account, entrypoint: 'v8' },
     { name: 'SimpleAccount', accountClass: Simple7702Account, entrypoint: 'v8' },

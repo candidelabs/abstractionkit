@@ -89,7 +89,7 @@ import {
  * multi-signer aggregation (ECDSA + WebAuthn), module enable/disable helpers,
  * and UserOperation construction. Versioned subclasses
  * ({@link SafeAccountV0_2_0}, {@link SafeAccountV0_3_0},
- * {@link SafeAccountV1_5_0_M_0_3_0}) bind this class to a specific EntryPoint
+ * {@link SafeAccountV0_4_0}) bind this class to a specific EntryPoint
  * and Safe singleton, and expose version-typed wrappers.
  *
  * Instantiate directly only for an already-deployed account; use a subclass's

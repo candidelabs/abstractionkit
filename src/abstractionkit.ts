@@ -35,7 +35,7 @@ export {
 } from "./account/Safe/modules/SocialRecoveryModule";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
 export { SafeAccountV0_3_0 } from "./account/Safe/SafeAccountV0_3_0";
-export { SafeAccountV1_5_0_M_0_3_0 } from "./account/Safe/SafeAccountV1_5_0_M_0_3_0";
+export { SafeAccountV0_4_0 } from "./account/Safe/SafeAccountV0_4_0";
 export { SafeMultiChainSigAccountV1 } from "./account/Safe/SafeMultiChainSigAccount";
 export type {
 	SafeMessageTypedDataDomain,
