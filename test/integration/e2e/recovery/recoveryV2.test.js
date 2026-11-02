@@ -3,6 +3,7 @@
 // finalize) for both versions lives in recovery.test.js.
 const { Interface, JsonRpcProvider, Wallet } = require('ethers');
 const {
+    HttpTransport,
     Operation,
     SAFE_MESSAGE_MODULE_TYPE,
     SafeAccountV0_3_0,
@@ -25,6 +26,7 @@ function harness(chain) {
     const bundler = bundlerUrl(chain);
     const chainId = BigInt(chain.chainId);
     const provider = new JsonRpcProvider(node, Number(chainId), { staticNetwork: true });
+    const nodeTransport = new HttpTransport(node);
 
     async function fund(...addresses) {
         for (const address of addresses) {
@@ -43,13 +45,17 @@ function harness(chain) {
     // anvil forwards receipt lookups for hashes it has not stored yet to the
     // fork upstream, and a public upstream can reject those (publicnode answers
     // 403 "archive request"). ethers' tx.wait() treats that as fatal, so poll
-    // the node directly until automine has stored the receipt.
+    // the node directly until automine has stored the receipt. Each request is
+    // aborted at the deadline so a hung upstream cannot stall the poll.
     async function waitForReceipt(hash) {
         const deadline = Date.now() + 30000;
         let lastError;
         while (Date.now() < deadline) {
             try {
-                const receipt = await sendJsonRpcRequest(node, 'eth_getTransactionReceipt', [hash]);
+                const receipt = await nodeTransport.request(
+                    { method: 'eth_getTransactionReceipt', params: [hash] },
+                    { signal: AbortSignal.timeout(deadline - Date.now()) },
+                );
                 if (receipt != null) return receipt;
             } catch (error) {
                 lastError = error;
