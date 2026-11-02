@@ -40,10 +40,29 @@ function harness(chain) {
         return (await account.sendUserOperation(userOp, bundler)).included();
     }
 
+    // anvil forwards receipt lookups for hashes it has not stored yet to the
+    // fork upstream, and a public upstream can reject those (publicnode answers
+    // 403 "archive request"). ethers' tx.wait() treats that as fatal, so poll
+    // the node directly until automine has stored the receipt.
+    async function waitForReceipt(hash) {
+        const deadline = Date.now() + 30000;
+        let lastError;
+        while (Date.now() < deadline) {
+            try {
+                const receipt = await sendJsonRpcRequest(node, 'eth_getTransactionReceipt', [hash]);
+                if (receipt != null) return receipt;
+            } catch (error) {
+                lastError = error;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        throw new Error(`no receipt for ${hash} within 30s`, { cause: lastError });
+    }
+
     async function sendTx(wallet, metaTransaction) {
         const tx = await wallet.sendTransaction({ to: metaTransaction.to, data: metaTransaction.data });
-        const receipt = await tx.wait();
-        expect(receipt.status).toBe(1);
+        const receipt = await waitForReceipt(tx.hash);
+        expect(receipt.status).toBe('0x1');
     }
 
     async function expectRevert(from, metaTransaction, reason) {
