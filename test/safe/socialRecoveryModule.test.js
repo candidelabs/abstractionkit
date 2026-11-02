@@ -52,6 +52,100 @@ describe('SocialRecoveryModule versions', () => {
         );
         expect(sel('changeThreshold(uint256)')).toBe('0x694e80c3');
     });
+
+    // Guards against selector drift in the methods both versions inherit from
+    // SocialRecoveryModuleBase: each generated calldata must start with the
+    // selector of its contract signature.
+    test.each([
+        ['v0.1.0', () => new ak.SocialRecoveryModuleV1()],
+        ['v0.2.0', () => new ak.SocialRecoveryModuleV2()],
+    ])('shared methods encode their contract selectors (%s)', async (_, create) => {
+        const srm = create();
+        const sel = (s) => id(s).slice(0, 10);
+        const selectorOf = (tx) => tx.data.slice(0, 10);
+        const capture = (result) => {
+            const calls = [];
+            const node = {
+                request: async ({ params }) => {
+                    calls.push(params[0].data);
+                    return result;
+                },
+            };
+            return { node, selector: () => calls[0].slice(0, 10) };
+        };
+
+        expect(selectorOf(srm.createExecuteRecoveryMetaTransaction(ACCOUNT, [NEW_OWNER], 1))).toBe(
+            sel('executeRecovery(address,address[],uint256)'),
+        );
+        expect(selectorOf(srm.createFinalizeRecoveryMetaTransaction(ACCOUNT))).toBe(
+            sel('finalizeRecovery(address)'),
+        );
+        expect(selectorOf(srm.createCancelRecoveryMetaTransaction())).toBe(sel('cancelRecovery()'));
+        expect(selectorOf(srm.createAddGuardianWithThresholdMetaTransaction(LOW, 1n))).toBe(
+            sel('addGuardianWithThreshold(address,uint256)'),
+        );
+        expect(
+            selectorOf(srm.createStandardRevokeGuardianWithThresholdMetaTransaction(LOW, HIGH, 1n)),
+        ).toBe(sel('revokeGuardianWithThreshold(address,address,uint256)'));
+        expect(
+            selectorOf(
+                await srm.createRevokeGuardianWithThresholdMetaTransaction(
+                    mockNode('0x'),
+                    ACCOUNT,
+                    HIGH,
+                    1n,
+                    { prevGuardianAddress: LOW },
+                ),
+            ),
+        ).toBe(sel('revokeGuardianWithThreshold(address,address,uint256)'));
+        expect(selectorOf(srm.createChangeThresholdMetaTransaction(1n))).toBe(
+            sel('changeThreshold(uint256)'),
+        );
+
+        const views = [
+            [
+                'getRecoveryHash(address,address[],uint256,uint256)',
+                coder.encode(['bytes32'], ['0x' + '11'.repeat(32)]),
+                (node) => srm.getRecoveryHash(node, ACCOUNT, [NEW_OWNER], 1, 0n),
+            ],
+            [
+                'getRecoveryApprovals(address,address[],uint256)',
+                coder.encode(['uint256'], [0n]),
+                (node) => srm.getRecoveryApprovals(node, ACCOUNT, [NEW_OWNER], 1),
+            ],
+            [
+                'hasGuardianApproved(address,address,address[],uint256)',
+                coder.encode(['bool'], [false]),
+                (node) => srm.hasGuardianApproved(node, ACCOUNT, LOW, [NEW_OWNER], 1),
+            ],
+            [
+                'isGuardian(address,address)',
+                coder.encode(['bool'], [false]),
+                (node) => srm.isGuardian(node, ACCOUNT, LOW),
+            ],
+            [
+                'guardiansCount(address)',
+                coder.encode(['uint256'], [0n]),
+                (node) => srm.guardiansCount(node, ACCOUNT),
+            ],
+            [
+                'threshold(address)',
+                coder.encode(['uint256'], [0n]),
+                (node) => srm.threshold(node, ACCOUNT),
+            ],
+            [
+                'getGuardians(address)',
+                coder.encode(['address[]'], [[]]),
+                (node) => srm.getGuardians(node, ACCOUNT),
+            ],
+            ['nonce(address)', coder.encode(['uint256'], [0n]), (node) => srm.nonce(node, ACCOUNT)],
+        ];
+        for (const [signature, result, call] of views) {
+            const { node, selector } = capture(result);
+            await call(node);
+            expect(selector()).toBe(sel(signature));
+        }
+    });
 });
 
 describe('SocialRecoveryModuleV2 (v0.2.0)', () => {
