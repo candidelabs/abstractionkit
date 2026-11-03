@@ -41,8 +41,8 @@ export interface FromSafeWebauthnParams {
 	 * an on-chain owner, surfacing as a generic "Invalid UserOp signature"
 	 * (`GS026` on-chain) with no offline diagnostic. Pass the same class you
 	 * passed to `initializeNewAccount` — `SafeAccountV0_2_0` /
-	 * `SafeAccountV0_3_0` for v0.2.0, or `SafeMultiChainSigAccountV1` for
-	 * v0.2.1.
+	 * `SafeAccountV0_3_0` for v0.2.0, or `SafeMultiChainSigAccountV1` /
+	 * `SafeMultiChainSigAccountV2` for v0.2.1.
 	 *
 	 * Typed against just the static surface the adapter reads (not
 	 * `typeof SafeAccount`) because Safe subclass constructors take fewer
@@ -93,7 +93,7 @@ export interface FromSafeWebauthnParams {
  * `initializeNewAccount` so the adapter sources the right Safe Passkey
  * module defaults — v0.2.0 / FCL P256 for `SafeAccount` / `SafeAccountV0_2_0`
  * / `SafeAccountV0_3_0`, v0.2.1 / Daimo P256 + RIP-7951 for
- * `SafeMultiChainSigAccountV1`. Every individual WebAuthn override
+ * `SafeMultiChainSigAccountV1` / `SafeMultiChainSigAccountV2`. Every individual WebAuthn override
  * (`webAuthnSharedSigner`, `webAuthnSignerFactory`, `webAuthnSignerSingleton`,
  * `webAuthnSignerProxyCreationCode`, `eip7212WebAuthnPrecompileVerifier`,
  * `eip7212WebAuthnContractVerifier`) must likewise match what was passed to
@@ -120,7 +120,7 @@ export interface FromSafeWebauthnParams {
  * const signer = fromSafeWebauthn({
  *   publicKey: { x, y },
  *   isInit: userOperation.nonce === 0n,
- *   accountClass: SafeAccountV0_3_0, // SafeMultiChainSigAccountV1 for multi-chain
+ *   accountClass: SafeAccountV0_3_0, // SafeMultiChainSigAccountV1 / V2 for multi-chain
  *   getAssertion: async (challenge) => {
  *     const assertion = await navigator.credentials.get({
  *       publicKey: { challenge, rpId, allowCredentials, userVerification },
