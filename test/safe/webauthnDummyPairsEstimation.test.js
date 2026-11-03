@@ -103,3 +103,73 @@ describe('WebAuthn dummySignerSignaturePairs in baseEstimateUserOperationGas', (
         expect(encodedOwner(sentOp.signature)).toBe(customVerifierProxy.slice(2).toLowerCase());
     });
 });
+
+// The multi-chain wrapper adds a flag byte before the static segments, so
+// locate the encoded owner after the 12-byte validity window instead of
+// slicing at a fixed offset.
+const afterTimestamps = (signature) => signature.slice(2 + 24).toLowerCase();
+
+// The public per-class estimator applies that class's Passkey module defaults
+// (v0.2.0 for SafeAccountV0_3_0, v0.2.1 for the multi-chain classes), so the
+// dummy owner it encodes must be the verifier proxy that same class derives.
+describe.each([
+    ['SafeAccountV0_3_0', () => ak.SafeAccountV0_3_0, {}],
+    ['SafeMultiChainSigAccountV1', () => ak.SafeMultiChainSigAccountV1, { eip7702Auth: null }],
+    ['SafeMultiChainSigAccountV2', () => ak.SafeMultiChainSigAccountV2, { eip7702Auth: null }],
+])('%s.estimateUserOperationGas with WebAuthn dummy pairs', (_name, cls, extraFields) => {
+    function estimate({ factory }) {
+        const captured = [];
+        const bundler = new ak.Bundler({
+            request: async ({ method, params }) => {
+                captured.push({ method, params });
+                return GAS_RESULT;
+            },
+        });
+        const account = new (cls())(ACCOUNT);
+        const userOperation = {
+            sender: ACCOUNT,
+            nonce: 0n,
+            factory,
+            factoryData: null,
+            callData: '0x',
+            callGasLimit: 0n,
+            verificationGasLimit: 0n,
+            preVerificationGas: 0n,
+            maxFeePerGas: 0n,
+            maxPriorityFeePerGas: 0n,
+            paymaster: null,
+            paymasterVerificationGasLimit: null,
+            paymasterPostOpGasLimit: null,
+            paymasterData: null,
+            signature: '0x',
+            ...extraFields,
+        };
+        const estimation = account.estimateUserOperationGas(userOperation, bundler, {
+            dummySignerSignaturePairs: [{ signer: WEBAUTHN_KEY, signature: WEBAUTHN_SIG }],
+        });
+        return { estimation, captured };
+    }
+
+    test('init op encodes the class shared signer', async () => {
+        const { estimation, captured } = estimate({ factory: '0x' + '11'.repeat(20) });
+        await expect(estimation).resolves.toBeDefined();
+        expect(afterTimestamps(captured[0].params[0].signature)).toContain(
+            cls().DEFAULT_WEB_AUTHN_SHARED_SIGNER.slice(2).toLowerCase(),
+        );
+    });
+
+    test('deployed op encodes the class verifier proxy', async () => {
+        const { estimation, captured } = estimate({ factory: null });
+        await expect(estimation).resolves.toBeDefined();
+        const proxy = cls().createWebAuthnSignerVerifierAddress(WEBAUTHN_KEY.x, WEBAUTHN_KEY.y);
+        expect(afterTimestamps(captured[0].params[0].signature)).toContain(proxy.slice(2).toLowerCase());
+    });
+});
+
+test('the multi-chain classes derive a different dummy owner than SafeAccountV0_3_0', () => {
+    const v03 = ak.SafeAccountV0_3_0.createWebAuthnSignerVerifierAddress(WEBAUTHN_KEY.x, WEBAUTHN_KEY.y);
+    const v1 = ak.SafeMultiChainSigAccountV1.createWebAuthnSignerVerifierAddress(WEBAUTHN_KEY.x, WEBAUTHN_KEY.y);
+    const v2 = ak.SafeMultiChainSigAccountV2.createWebAuthnSignerVerifierAddress(WEBAUTHN_KEY.x, WEBAUTHN_KEY.y);
+    expect(v1).toBe(v2);
+    expect(v1).not.toBe(v03);
+});
