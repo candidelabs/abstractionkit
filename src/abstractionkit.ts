@@ -14,8 +14,9 @@ export {
 	AllowanceModule,
 } from "./account/Safe/modules/AllowanceModule";
 export type {
-	RecoveryRequest,
 	RecoveryRequestTypedDataDomain,
+	RecoveryRequestV1,
+	RecoveryRequestV2,
 	RecoveryRequestTypedMessageValue,
 	RecoverySignaturePair,
 } from "./account/Safe/modules/SocialRecoveryModule";
@@ -26,8 +27,11 @@ export type {
 export {
 	EIP712_RECOVERY_MODULE_TYPE,
 	EXECUTE_RECOVERY_PRIMARY_TYPE,
-	SocialRecoveryModule,
-	SocialRecoveryModuleGracePeriodSelector,
+	SocialRecoveryModuleBase,
+	SocialRecoveryModuleGracePeriodSelectorV1,
+	SocialRecoveryModuleGracePeriodSelectorV2,
+	SocialRecoveryModuleV1,
+	SocialRecoveryModuleV2,
 } from "./account/Safe/modules/SocialRecoveryModule";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
 export { SafeAccountV0_3_0 } from "./account/Safe/SafeAccountV0_3_0";
