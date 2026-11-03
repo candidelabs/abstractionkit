@@ -20,7 +20,7 @@ AbstractionKit is agnostic of:
 - **Safe Accounts** with passkey authentication, social recovery, multisig, and allowance management
 - **EIP-7702** support via `Calibur7702Account` and `Simple7702Account`
 - **Gas abstraction** with sponsored UserOperations and ERC-20 gas payment via `CandidePaymaster`
-- **Multichain signatures** via `SafeMultiChainSigAccountV1` (sign once, replay across chains)
+- **Multichain signatures** via `SafeMultiChainSigAccountV1` and `SafeMultiChainSigAccountV2` (sign once, replay across chains)
 - **Bundler client** compatible with standard ERC-4337 methods
 - **EntryPoint v0.6, v0.7, v0.8, and v0.9** support with a version-safe account/UserOp mapping
 

@@ -4,7 +4,8 @@
 
 ### Breaking Changes
 
-- **`SafeAccountV1_5_0_M_0_3_0` is removed.** Use `SafeMultiChainSigAccountV2` for new Safe v1.5.0 accounts. Accounts it already deployed run Safe 4337 module v0.3.0 on EntryPoint v0.7: operate them with `new SafeAccountV0_3_0(address)`, which uses the module and EntryPoint only, or move them to EntryPoint v0.9 by sending `createMigrateToSafeMultiChainSigAccountV1MetaTransactions` from the account and then operating it with `new SafeMultiChainSigAccountV2(address)`.
+- **`SafeAccountV1_5_0_M_0_3_0` is removed.**
+- **`SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions` is renamed `createMigrateToSafeMultiChainSigAccountMetaTransactions`.** The batch it builds enables the `Safe4337MultiChainSignatureModule`, which `SafeMultiChainSigAccountV1` and `SafeMultiChainSigAccountV2` share, so a migrated account can be attached with either class (V2 for Safe v1.5.0). The old name still works as a deprecated alias and will be removed in the next release.
 - **`SocialRecoveryModule` and `SocialRecoveryModuleGracePeriodSelector` are replaced by versioned names.** Social Recovery Module v0.2.0 fixes the findings of Certora's audit and is a new deployment with new addresses ([release](https://github.com/candidelabs/candide-contracts/releases/tag/recovery%2Fv0.2.0)). v0.1.0 stays deployed. Pick the class that matches the module your accounts enabled:
   - `SocialRecoveryModuleV1` with `SocialRecoveryModuleGracePeriodSelectorV1` for v0.1.0. These are what `SocialRecoveryModule` and `SocialRecoveryModuleGracePeriodSelector` used to be, with the same addresses.
   - `SocialRecoveryModuleV2` with `SocialRecoveryModuleGracePeriodSelectorV2` for v0.2.0.
@@ -25,6 +26,10 @@
 - **`SafeMultiChainSigAccountV2`.** The multi-chain signature module on EntryPoint v0.9, like `SafeMultiChainSigAccountV1`, but new accounts deploy the Safe L2 v1.5.0 singleton instead of v1.4.1. Same module, signing and Safe Passkey module v0.2.1 WebAuthn defaults; only the counterfactual address differs. A deployed account can be attached with either class, since the singleton is only used for address derivation and deployment.
 - `SafeMultiChainSigAccountV1.initializeNewAccount` is polymorphic, so subclasses get their own type back.
 - `Safe_L2_V1_4_1` and `Safe_L2_V1_5_0` (singleton address and init hash) are exported, for the `safeAccountSingleton` override.
+
+### API Changes
+
+- Removed the `SafeAccountV1_4_1_M_0_3_0` alias of `SafeAccountV0_3_0`. It was never exported, so this shouldn't affect anyone.
 
 ## 0.4.3
 

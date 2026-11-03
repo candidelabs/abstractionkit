@@ -1044,7 +1044,7 @@ export class SafeAccount extends SmartAccount {
 	 * @deprecated Use `account.formatUserOperationSignature([{ signer, signature }], options)`
 	 * when an account instance is available, or
 	 * `SafeAccount.formatSignaturesToUseroperationSignature([{ signer, signature }], options)`
-	 * for static formatting. For `SafeMultiChainSigAccountV1`, prefer the
+	 * for static formatting. For the Safe multi-chain classes, prefer the
 	 * instance method so `isMultiChainSignature` is applied automatically; if
 	 * using the lower-level static formatter directly, pass
 	 * `isMultiChainSignature: true`.
@@ -3261,7 +3261,7 @@ export class SafeAccount extends SmartAccount {
 	 * @returns a promise of [disableOld, enableNew, setFallbackHandler] MetaTransactions
 	 *
 	 * @remarks Shared implementation behind the version-specific migration helpers
-	 * (e.g. {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions}).
+	 * (e.g. {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountMetaTransactions}).
 	 * It is `protected` on purpose: those wrappers pin the correct module addresses,
 	 * so callers reach migration through them rather than supplying raw module
 	 * addresses directly.

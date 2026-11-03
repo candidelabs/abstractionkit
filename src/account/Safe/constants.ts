@@ -20,6 +20,7 @@ export const DEFAULT_WEB_AUTHN_DAIMO_VERIFIER_V_0_2_1 =
 
 /**
  * Safe 4337 multi-chain signature module (EntryPoint v0.9): the module of
- * SafeMultiChainSigAccountV1 and the default for SafeAccount's `_V9` EIP-712 helpers.
+ * SafeMultiChainSigAccountV1 and SafeMultiChainSigAccountV2, and the default for
+ * SafeAccount's `_V9` EIP-712 helpers.
  */
 export const DEFAULT_SAFE_4337_MULTI_CHAIN_SIG_MODULE_V1 = "0x22939E839e3c0F479B713eAF95e0df128554AEAd";

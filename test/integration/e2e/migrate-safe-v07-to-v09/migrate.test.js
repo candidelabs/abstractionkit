@@ -60,7 +60,7 @@ describe.each(runnable)('Safe v0.7 -> v0.9 migration e2e: $name (chainId $chainI
 
     test('migrate to the v0.9 multi-chain module (validated by the v0.7 module)', async () => {
         oldAccount = new SafeAccountV0_3_0(accountAddress);
-        const batch = await oldAccount.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(node);
+        const batch = await oldAccount.createMigrateToSafeMultiChainSigAccountMetaTransactions(node);
         expect(batch).toHaveLength(3);
 
         const receipt = await sendUserOp(oldAccount, v07Bundler, batch);
