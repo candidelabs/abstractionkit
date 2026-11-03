@@ -3261,7 +3261,7 @@ export class SafeAccount extends SmartAccount {
 	 * @returns a promise of [disableOld, enableNew, setFallbackHandler] MetaTransactions
 	 *
 	 * @remarks Shared implementation behind the version-specific migration helpers
-	 * (e.g. {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions}).
+	 * (e.g. {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountMetaTransactions}).
 	 * It is `protected` on purpose: those wrappers pin the correct module addresses,
 	 * so callers reach migration through them rather than supplying raw module
 	 * addresses directly.

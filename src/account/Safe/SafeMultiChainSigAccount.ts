@@ -65,7 +65,7 @@ import type {
  *   configuration have to change first — the v0.9 module must be enabled on
  *   the Safe, and the Safe's fallback handler must be updated to point at it.
  *   Until both land, UserOperations sent to the account will fail. Use
- *   {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions},
+ *   {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountMetaTransactions},
  *   whose batch must be sent as a UserOperation from the v0.7 account itself.
  *
  * @example Single-chain use — the common case
