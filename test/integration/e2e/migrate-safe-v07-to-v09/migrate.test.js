@@ -164,7 +164,9 @@ describe.each(runnable)('Safe v0.7 -> v0.9 migration e2e with a passkey owner: $
             verificationGasLimitPercentageMultiplier: 200,
             ...overrides,
         });
-        const isInit = userOp.nonce === 0n;
+        // The nonce restarts at 0 on the v0.9 EntryPoint after migration, so
+        // it cannot tell a deployment from a plain op; the factory field can.
+        const isInit = userOp.factory != null;
         userOp.signature = await account.signUserOperationWithSigners(userOp, [passkeySigner(isInit)], chainId);
         return (await account.sendUserOperation(userOp, bundler)).included();
     }
