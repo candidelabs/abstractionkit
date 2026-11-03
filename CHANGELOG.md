@@ -4,7 +4,7 @@
 
 ### Breaking Changes
 
-- **`SafeAccountV1_5_0_M_0_3_0` is removed.** Use `SafeMultiChainSigAccountV2` for new Safe v1.5.0 accounts. Accounts it already deployed run Safe 4337 module v0.3.0 on EntryPoint v0.7: operate them with `new SafeAccountV0_3_0(address)`, which uses the module and EntryPoint only, or move them to EntryPoint v0.9 by sending `createMigrateToSafeMultiChainSigAccountV1MetaTransactions` from the account and then operating it with `new SafeMultiChainSigAccountV2(address)`.
+- **`SafeAccountV1_5_0_M_0_3_0` is removed.**
 - **`SocialRecoveryModule` and `SocialRecoveryModuleGracePeriodSelector` are replaced by versioned names.** Social Recovery Module v0.2.0 fixes the findings of Certora's audit and is a new deployment with new addresses ([release](https://github.com/candidelabs/candide-contracts/releases/tag/recovery%2Fv0.2.0)). v0.1.0 stays deployed. Pick the class that matches the module your accounts enabled:
   - `SocialRecoveryModuleV1` with `SocialRecoveryModuleGracePeriodSelectorV1` for v0.1.0. These are what `SocialRecoveryModule` and `SocialRecoveryModuleGracePeriodSelector` used to be, with the same addresses.
   - `SocialRecoveryModuleV2` with `SocialRecoveryModuleGracePeriodSelectorV2` for v0.2.0.
