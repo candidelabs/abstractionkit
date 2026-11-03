@@ -9,7 +9,7 @@ const { SUPPORTED_ENTRYPOINTS } = require('./_entrypoints.cjs');
 const { teardown, NETWORK } = require('./_teardown.cjs');
 
 const ANVIL_IMAGE = 'ghcr.io/foundry-rs/foundry:v1.7.1';
-const VOLTAIRE_IMAGE = 'ghcr.io/candidelabs/voltaire/voltaire-bundler:0.1.0a72';
+const VOLTAIRE_IMAGE = 'ghcr.io/candidelabs/voltaire/voltaire-bundler:v3.0.13';
 const ANVIL_INTERNAL_PORT = '8545';
 const VOLTAIRE_INTERNAL_PORT = '3000';
 const TEN_ETH_HEX = '0x8ac7230489e80000';
@@ -124,7 +124,12 @@ function startVoltaire(chain, ep, bundlerSecret) {
         '--unsafe', 'y',
         '--logs_incremental_range', '100',
         '--logs_number_of_ranges', '1',
-        '--enforce_gas_price_tolerance', '50',
+        // 100 disables voltaire's gas price check. anvil suggests the tip of
+        // the last mined block (floored at 1 gwei) and the bundler caches its
+        // reading for 5s, so an empty evm_mine or a bundle from a differently
+        // escalated bundler instance can move the reference price several
+        // fold between the SDK's fetch and the bundler's check.
+        '--enforce_gas_price_tolerance', '100',
         '--bundle_gas_estimation_multiplier', '3',
         '--eip7702', 'y',
     ]);
