@@ -366,3 +366,24 @@ describe('SafeAccount readers', () => {
         expect(await account.getSafeVersion(transport)).toBe('1.4.1');
     });
 });
+
+describe('migration target is the module shared by both multi-chain classes', () => {
+    test('the default target equals V1 and V2 DEFAULT_SAFE_4337_MODULE_ADDRESS', async () => {
+        const { SafeMultiChainSigAccountV2 } = require('../../dist/index.cjs');
+        expect(SafeMultiChainSigAccountV2.DEFAULT_SAFE_4337_MODULE_ADDRESS).toBe(
+            SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+        );
+        const account = new SafeAccountV0_3_0(ACCOUNT);
+        const batch = await account.createMigrateToSafeMultiChainSigAccountMetaTransactions(
+            'https://unused.invalid',
+            { prevModuleAddress: SENTINEL, skipPreflight: true },
+        );
+        expect(addrArg(batch[1].data, 0)).toBe(getAddress(SafeMultiChainSigAccountV2.DEFAULT_SAFE_4337_MODULE_ADDRESS));
+        expect(addrArg(batch[2].data, 0)).toBe(getAddress(SafeMultiChainSigAccountV2.DEFAULT_SAFE_4337_MODULE_ADDRESS));
+        // A migrated account attaches to either class with the same module and EntryPoint.
+        const v1 = new SafeMultiChainSigAccountV1(ACCOUNT);
+        const v2 = new SafeMultiChainSigAccountV2(ACCOUNT);
+        expect(v2.safe4337ModuleAddress).toBe(v1.safe4337ModuleAddress);
+        expect(v2.entrypointAddress).toBe(v1.entrypointAddress);
+    });
+});
