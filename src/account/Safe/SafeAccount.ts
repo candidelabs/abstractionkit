@@ -89,7 +89,7 @@ import {
  * multi-signer aggregation (ECDSA + WebAuthn), module enable/disable helpers,
  * and UserOperation construction. Versioned subclasses
  * ({@link SafeAccountV0_2_0}, {@link SafeAccountV0_3_0},
- * {@link SafeAccountV1_5_0_M_0_3_0}) bind this class to a specific EntryPoint
+ * {@link SafeMultiChainSigAccountV1}) bind this class to a specific EntryPoint
  * and Safe singleton, and expose version-typed wrappers.
  *
  * Instantiate directly only for an already-deployed account; use a subclass's
@@ -106,7 +106,7 @@ export class SafeAccount extends SmartAccount {
 	// EIP-7212 contract verifier used in the verifier proxy CREATE2 salt and
 	// installed as the shared signer's contract verifier at init time.
 	// Defaults to FCL P256 because that's what Safe Passkey module v0.2.0
-	// shipped — newer modules (v0.2.1+, v1.5.0_M_0.3.0) override with Daimo.
+	// shipped — newer modules (v0.2.1+) override with Daimo.
 	// FCL has known non-security-critical bugs and is being phased out
 	// upstream now that EIP-7951 (precompile) supersedes it.
 	static readonly DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER: string =
