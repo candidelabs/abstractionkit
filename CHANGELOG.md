@@ -4,6 +4,12 @@
 
 ### Breaking Changes
 
+- **`SafeAccountV1_5_0_M_0_3_0` is renamed `SafeAccountV0_4_0` and moves to EntryPoint v0.9.** It now extends `SafeMultiChainSigAccountV1` instead of `SafeAccountV0_3_0`, so it runs the Safe 4337 multi-chain signature module on EntryPoint v0.9 and uses the full Safe Passkey module v0.2.1 set (shared signer, signer factory and singleton, RIP-7951 precompile with the Daimo P-256 verifier as fallback). Previously it ran Safe 4337 module v0.3.0 on EntryPoint v0.7 with the Passkey module v0.2.0 shared signer and factory. The Safe L2 v1.5.0 singleton is unchanged. Consequences:
+  - New accounts derive a different counterfactual address for the same owners.
+  - Accounts deployed through `SafeAccountV1_5_0_M_0_3_0` keep running on EntryPoint v0.7. Operate them with `SafeAccountV0_3_0` and `{ safeAccountSingleton: Safe_L2_V1_5_0 }`, or migrate them with `createMigrateToSafeMultiChainSigAccountV1MetaTransactions` before using `SafeAccountV0_4_0`.
+  - `createUserOperation` returns a `UserOperationV9`, and the EIP-712 helpers are the v0.9 ones inherited from `SafeMultiChainSigAccountV1`.
+  - `SafeMultiChainSigAccountV1.initializeNewAccount` is now polymorphic, so subclasses get their own type back.
+
 - **`SocialRecoveryModule` and `SocialRecoveryModuleGracePeriodSelector` are replaced by versioned names.** Social Recovery Module v0.2.0 fixes the findings of Certora's audit and is a new deployment with new addresses ([release](https://github.com/candidelabs/candide-contracts/releases/tag/recovery%2Fv0.2.0)). v0.1.0 stays deployed. Pick the class that matches the module your accounts enabled:
   - `SocialRecoveryModuleV1` with `SocialRecoveryModuleGracePeriodSelectorV1` for v0.1.0. These are what `SocialRecoveryModule` and `SocialRecoveryModuleGracePeriodSelector` used to be, with the same addresses.
   - `SocialRecoveryModuleV2` with `SocialRecoveryModuleGracePeriodSelectorV2` for v0.2.0.
@@ -21,6 +27,7 @@
 ### New Features
 
 - `SocialRecoveryModuleBase` holds the methods both versions share, for code that accepts either version.
+- `Safe_L2_V1_4_1` and `Safe_L2_V1_5_0` (singleton address and init hash) are exported, for the `safeAccountSingleton` override.
 
 ## 0.4.3
 

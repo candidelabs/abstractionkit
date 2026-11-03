@@ -45,8 +45,35 @@ describe("initializeNewAccount runtime type (#116)", () => {
 		const init = ak.SafeAccountV0_4_0.initializeNewAccount;
 		const account = init([OWNER]);
 		// Pre-polymorphic behavior: the wrapper class degrades to the base,
-		// but the v1.5.0 singleton/verifier overrides still apply.
-		expect(account).toBeInstanceOf(ak.SafeAccountV0_3_0);
+		// but the v1.5.0 singleton override still applies.
+		expect(account).toBeInstanceOf(ak.SafeMultiChainSigAccountV1);
 		expect(account.accountAddress).toBe(ak.SafeAccountV0_4_0.createAccountAddress([OWNER]));
+	});
+
+	test("SafeAccountV0_4_0 runs on EntryPoint v0.9 with Safe v1.5.0 and Passkey module v0.2.1", () => {
+		const account = ak.SafeAccountV0_4_0.initializeNewAccount([OWNER]);
+		expect(account).toBeInstanceOf(ak.SafeMultiChainSigAccountV1);
+		expect(account.entrypointAddress).toBe(ak.ENTRYPOINT_V9);
+		expect(account.safe4337ModuleAddress).toBe(
+			ak.SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+		);
+		expect(account.safeAccountSingleton).toEqual(ak.Safe_L2_V1_5_0);
+		// Same owners, different singleton: a different address than the v1.4.1 account.
+		expect(account.accountAddress).not.toBe(
+			ak.SafeMultiChainSigAccountV1.createAccountAddress([OWNER]),
+		);
+		// The WebAuthn defaults are the full Safe Passkey module v0.2.1 set.
+		expect(ak.SafeAccountV0_4_0.DEFAULT_WEB_AUTHN_SHARED_SIGNER).toBe(
+			"0x94a4F6affBd8975951142c3999aEAB7ecee555c2",
+		);
+		expect(ak.SafeAccountV0_4_0.DEFAULT_WEB_AUTHN_SIGNER_FACTORY).toBe(
+			"0x1d31F259eE307358a26dFb23EB365939E8641195",
+		);
+		expect(ak.SafeAccountV0_4_0.DEFAULT_WEB_AUTHN_PRECOMPILE).toBe(
+			"0x0000000000000000000000000000000000000100",
+		);
+		expect(ak.SafeAccountV0_4_0.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER).toBe(
+			"0xc2b78104907F722DABAc4C69f826a522B2754De4",
+		);
 	});
 });

@@ -63,11 +63,12 @@ describe('eip-712 signing', () => {
             );
 
             if (entry.isSafeMultiSig) {
-                // MultiChainSigV1's on-chain module verifies against a Merkle
-                // root even for single-op signatures, so the formatter needs
-                // to mark this signature as multi-chain so the wrapper
-                // includes the Merkle proof bit. Other Safe versions ignore.
-                const isMultiChain = entry.accountVersion === 'MultiChainSigV1';
+                // The multi-chain signature module (MultiChainSigV1, and
+                // V0_4_0 which extends it) verifies against a Merkle root
+                // even for single-op signatures, so the formatter needs to
+                // mark this signature as multi-chain so the wrapper includes
+                // the Merkle proof bit. Other Safe versions ignore.
+                const isMultiChain = ['MultiChainSigV1', 'V0_4_0'].includes(entry.accountVersion);
                 const singleFormatted = Account.formatEip712SingleSignatureToUseroperationSignature(
                     signature,
                     { isMultiChainSignature: isMultiChain },

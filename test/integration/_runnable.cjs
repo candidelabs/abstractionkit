@@ -22,8 +22,8 @@ const { SUPPORTED_ENTRYPOINTS } = require('./_entrypoints.cjs');
 
 // `entrypoint` selects which per-chain voltaire instance to route through —
 // each (chain × entrypoint) pair has its own bundler EOA and so its own nonce
-// sequence. V0_3_0 and V1_5_0_M_0_3_0 share v7, and MultiChainSigV1 and
-// SimpleAccountV09 share v9; voltaire serialises bundles per instance so the
+// sequence. V0_3_0 uses v7, and MultiChainSigV1, V0_4_0 and SimpleAccountV09
+// share v9; voltaire serialises bundles per instance so the
 // shared EOA's nonce sequence is fine. v8 is used only by the 7702 accounts.
 //
 // `isSafeMultiSig` flags accounts that use Safe's multi-owner calling
@@ -36,7 +36,7 @@ const { SUPPORTED_ENTRYPOINTS } = require('./_entrypoints.cjs');
 const accountVersions = [
     { name: 'V0_2_0', accountClass: SafeAccountV0_2_0, entrypoint: 'v6', isSafeMultiSig: true },
     { name: 'V0_3_0', accountClass: SafeAccountV0_3_0, entrypoint: 'v7', isSafeMultiSig: true },
-    { name: 'V1_5_0_M_0_3_0', accountClass: SafeAccountV0_4_0, entrypoint: 'v7', isSafeMultiSig: true },
+    { name: 'V0_4_0', accountClass: SafeAccountV0_4_0, entrypoint: 'v9', isSafeMultiSig: true },
     { name: 'MultiChainSigV1', accountClass: SafeMultiChainSigAccountV1, entrypoint: 'v9', isSafeMultiSig: true },
     { name: 'Calibur', accountClass: Calibur7702Account, entrypoint: 'v8' },
     { name: 'SimpleAccount', accountClass: Simple7702Account, entrypoint: 'v8' },
