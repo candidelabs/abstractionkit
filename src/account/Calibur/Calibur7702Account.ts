@@ -9,7 +9,7 @@ import {
 import {Bundler} from "src/Bundler";
 import {
 	BaseUserOperationDummyValues,
-	CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS,
+	CALIBUR_UNISWAP_V1_1_0_SINGLETON_ADDRESS,
 	ENTRYPOINT_V8,
 	ZeroAddress,
 } from "src/constants";
@@ -48,7 +48,7 @@ import {
 	type WebAuthnSignatureData,
 } from "./types";
 
-const DEFAULT_SINGLETON_ADDRESS = CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS;
+const DEFAULT_SINGLETON_ADDRESS = CALIBUR_UNISWAP_V1_1_0_SINGLETON_ADDRESS;
 
 /** Root key hash (bytes32 zero) — used for the EOA's own secp256k1 key */
 const ROOT_KEY_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
