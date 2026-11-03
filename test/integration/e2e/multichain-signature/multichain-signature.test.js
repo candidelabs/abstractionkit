@@ -76,8 +76,9 @@ const MULTI_CHAIN_CLASSES = [
 const crossChain = runnable.length >= 2 ? describe : describe.skip;
 
 crossChain.each(MULTI_CHAIN_CLASSES)('one signature, every chain: %s', (_name, Account) => {
-    const [chainA, chainB] = runnable;
-    const targets = [chainA, chainB].map((chain) => ({
+    // describe.skip still evaluates this callback, so never assume two chains
+    // here; with fewer the tests are skipped and targets is just shorter.
+    const targets = runnable.slice(0, 2).map((chain) => ({
         chain,
         chainId: BigInt(chain.chainId),
         node: nodeUrl(chain),
