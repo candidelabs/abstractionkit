@@ -469,9 +469,3 @@ export class SafeAccountV0_3_0 extends SafeAccount {
 		);
 	}
 }
-
-/**
- * Alias for {@link SafeAccountV0_3_0} representing Safe v1.4.1 singleton with module v0.3.0.
- * Uses the same defaults and behavior as SafeAccountV0_3_0.
- */
-export class SafeAccountV1_4_1_M_0_3_0 extends SafeAccountV0_3_0 {}

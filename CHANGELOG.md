@@ -26,6 +26,10 @@
 - `SafeMultiChainSigAccountV1.initializeNewAccount` is polymorphic, so subclasses get their own type back.
 - `Safe_L2_V1_4_1` and `Safe_L2_V1_5_0` (singleton address and init hash) are exported, for the `safeAccountSingleton` override.
 
+### API Changes
+
+- Removed the `SafeAccountV1_4_1_M_0_3_0` alias of `SafeAccountV0_3_0`. It was never exported, so this shouldn't affect anyone.
+
 ## 0.4.3
 
 ### New Features
