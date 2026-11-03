@@ -35,8 +35,8 @@ export {
 } from "./account/Safe/modules/SocialRecoveryModule";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
 export { SafeAccountV0_3_0 } from "./account/Safe/SafeAccountV0_3_0";
-export { SafeAccountV1_5_0_M_0_3_0 } from "./account/Safe/SafeAccountV1_5_0_M_0_3_0";
 export { SafeMultiChainSigAccountV1 } from "./account/Safe/SafeMultiChainSigAccount";
+export { SafeMultiChainSigAccountV2 } from "./account/Safe/SafeMultiChainSigAccountV2";
 export type {
 	SafeMessageTypedDataDomain,
 	SafeMessageTypedMessageValue,
@@ -82,6 +82,8 @@ export {
 	ENTRYPOINT_V7,
 	ENTRYPOINT_V8,
 	ENTRYPOINT_V9,
+	Safe_L2_V1_4_1,
+	Safe_L2_V1_5_0,
 	SAFE_FALLBACK_HANDLER_STORAGE_SLOT,
 	ZeroAddress,
 } from "./constants";

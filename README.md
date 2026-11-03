@@ -54,9 +54,9 @@ Default EntryPoint is class-specific. Override `entrypointAddress` only when you
 | Class | Default EntryPoint | Account Type | When to use |
 |---|---|---|---|
 | `SafeAccountV0_3_0` | EP v0.7 | Safe (counterfactual) | Recommended for most new projects |
-| `SafeAccountV1_5_0_M_0_3_0` | EP v0.7 | Safe v1.5.0 (counterfactual) | Safe v1.5.0 with EIP-7951 / Daimo P256 verifier for WebAuthn |
 | `SafeAccountV0_2_0` | EP v0.6 | Safe (counterfactual) | Legacy support for EntryPoint v0.6 |
-| `SafeMultiChainSigAccountV1` | EP v0.9 | Safe multichain | Sign once, replay across chains. |
+| `SafeMultiChainSigAccountV1` | EP v0.9 | Safe v1.4.1 multichain | Sign once, replay across chains. |
+| `SafeMultiChainSigAccountV2` | EP v0.9 | Safe v1.5.0 multichain | Same module and signing as V1 on the Safe v1.5.0 singleton. Recommended for new Safe v1.5.0 accounts |
 | `Calibur7702Account` | EP v0.8 | EIP-7702 (Uniswap Calibur) | Upgrade an EOA in place. Supports EOA, P256, and WebAuthn keys |
 | `Simple7702Account` | EP v0.8 | EIP-7702 (minimal) | Minimal reference EIP-7702 account |
 | `Simple7702AccountV09` | EP v0.9 | EIP-7702 (minimal, parallel paymaster) | EntryPoint v0.9 with parallel paymaster signing |
