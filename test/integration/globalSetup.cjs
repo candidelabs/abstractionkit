@@ -26,9 +26,9 @@ const ANVIL_CACHE_DIR = path.join(__dirname, '..', '..', '.anvil-cache');
 const FORK_BLOCK_OFFSET = 5; // pin a few blocks behind latest so the same
 // pinned block stays valid across consecutive runs (cache hits).
 // For chains with requiresArchiveState, the fork URL must serve state this far
-// behind the pinned block (~5.5h at 2s blocks), so the pinned block stays
-// readable for a full run.
-const ARCHIVE_PROBE_DEPTH = 10000;
+// behind the pinned block (~33 min at 2s blocks), so the pinned block stays
+// readable for a full run (~3 min today).
+const ARCHIVE_PROBE_DEPTH = 1000;
 
 const anvilContainer = (name) => `abstractionkit-anvil-${name}`;
 const voltaireContainer = (name, ep) => `abstractionkit-voltaire-${name}-${ep}`;
