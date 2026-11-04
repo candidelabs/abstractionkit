@@ -53,6 +53,7 @@ export type {
 	ECDSAPublicAddress,
 	InitCodeOverrides,
 	SafeUserOperationTypedDataDomain,
+	SafeWebAuthnConfig,
 	Signer,
 	SignerSignaturePair,
 	WebauthnPublicKey,

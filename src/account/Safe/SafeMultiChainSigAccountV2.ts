@@ -2,7 +2,7 @@ import { Safe_L2_V1_5_0 } from "src/constants";
 import type { OnChainIdentifierParamsType } from "src/types";
 import { SafeAccount } from "./SafeAccount";
 import { SafeMultiChainSigAccountV1 } from "./SafeMultiChainSigAccount";
-import type { InitCodeOverrides, SafeAccountSingleton, Signer } from "./types";
+import type { InitCodeOverrides, SafeAccountSingleton, SafeWebAuthnConfig, Signer } from "./types";
 
 /**
  * Safe v1.5.0 account on EntryPoint v0.9 with the multi-chain signature module.
@@ -40,6 +40,7 @@ export class SafeMultiChainSigAccountV2 extends SafeMultiChainSigAccountV1 {
 			onChainIdentifierParams?: OnChainIdentifierParamsType;
 			onChainIdentifier?: string;
 			safeAccountSingleton?: SafeAccountSingleton;
+			webAuthnConfig?: Partial<SafeWebAuthnConfig>;
 		} = {},
 	) {
 		super(accountAddress, {

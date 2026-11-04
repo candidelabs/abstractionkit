@@ -73,6 +73,7 @@ import {
 	type SafeUserOperationV6TypedMessageValue,
 	type SafeUserOperationV7TypedMessageValue,
 	type SafeUserOperationV9TypedMessageValue,
+	type SafeWebAuthnConfig,
 	type Signer,
 	type SignerSignaturePair,
 	WebauthnDummySignerSignaturePair,
@@ -80,6 +81,40 @@ import {
 	type WebauthnSignatureData,
 	type WebAuthnSignatureOverrides,
 } from "./types";
+
+/** The Safe Passkey module defaults a Safe account class declares. */
+function webAuthnDefaultsOf(accountClass: typeof SafeAccount): SafeWebAuthnConfig {
+	return {
+		webAuthnSharedSigner: accountClass.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+		webAuthnSignerFactory: accountClass.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
+		webAuthnSignerSingleton: accountClass.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
+		webAuthnSignerProxyCreationCode: accountClass.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
+		eip7212WebAuthnPrecompileVerifier: accountClass.DEFAULT_WEB_AUTHN_PRECOMPILE,
+		eip7212WebAuthnContractVerifier: accountClass.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
+	};
+}
+
+/**
+ * Overlay `overrides` on `base` field by field. A field that is missing or
+ * undefined in `overrides` keeps the `base` value, so callers can forward
+ * optional override bags (or wider objects carrying these fields) as-is.
+ */
+function mergeWebAuthnConfig(
+	base: SafeWebAuthnConfig,
+	overrides: Partial<SafeWebAuthnConfig> = {},
+): SafeWebAuthnConfig {
+	return {
+		webAuthnSharedSigner: overrides.webAuthnSharedSigner ?? base.webAuthnSharedSigner,
+		webAuthnSignerFactory: overrides.webAuthnSignerFactory ?? base.webAuthnSignerFactory,
+		webAuthnSignerSingleton: overrides.webAuthnSignerSingleton ?? base.webAuthnSignerSingleton,
+		webAuthnSignerProxyCreationCode:
+			overrides.webAuthnSignerProxyCreationCode ?? base.webAuthnSignerProxyCreationCode,
+		eip7212WebAuthnPrecompileVerifier:
+			overrides.eip7212WebAuthnPrecompileVerifier ?? base.eip7212WebAuthnPrecompileVerifier,
+		eip7212WebAuthnContractVerifier:
+			overrides.eip7212WebAuthnContractVerifier ?? base.eip7212WebAuthnContractVerifier,
+	};
+}
 
 /**
  * Base implementation shared by all Safe-account variants.
@@ -152,6 +187,18 @@ export class SafeAccount extends SmartAccount {
 	readonly onChainIdentifier: string | null;
 
 	/**
+	 * The Safe Passkey module contracts this account's WebAuthn owners are
+	 * bound to. Resolved once at construction from the defaults of the class
+	 * actually constructed (v0.2.0 for `SafeAccountV0_2_0` /
+	 * `SafeAccountV0_3_0`, v0.2.1 for the multi-chain classes) plus the
+	 * `webAuthnConfig` constructor override. Instance methods that derive a
+	 * passkey owner address read it, so they stay consistent with signing
+	 * without repeating overrides on every call. Per-call WebAuthn overrides
+	 * still take precedence.
+	 */
+	readonly webAuthnConfig: Readonly<SafeWebAuthnConfig>;
+
+	/**
 	 * @param accountAddress - On-chain address of the Safe account
 	 * @param safe4337ModuleAddress - Address of the Safe 4337 module the account delegates to
 	 * @param entrypointAddress - Target EntryPoint address (v0.6 / v0.7 / v0.9)
@@ -159,6 +206,7 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.onChainIdentifierParams - Attribution params for analytics (mutually exclusive with `onChainIdentifier`)
 	 * @param overrides.onChainIdentifier - Pre-computed 32-byte identifier hex (no 0x prefix or with 0x)
 	 * @param overrides.safeAccountSingleton - Override Safe singleton address + init hash (defaults to Safe L2 v1.4.1)
+	 * @param overrides.webAuthnConfig - Override individual Safe Passkey module contracts (defaults to the class defaults)
 	 */
 	constructor(
 		accountAddress: string,
@@ -168,6 +216,7 @@ export class SafeAccount extends SmartAccount {
 			onChainIdentifierParams?: OnChainIdentifierParamsType;
 			onChainIdentifier?: string;
 			safeAccountSingleton?: SafeAccountSingleton;
+			webAuthnConfig?: Partial<SafeWebAuthnConfig>;
 		} = {},
 	) {
 		super(accountAddress);
@@ -175,6 +224,13 @@ export class SafeAccount extends SmartAccount {
 		this.safe4337ModuleAddress = safe4337ModuleAddress;
 		this.factoryAddress = null;
 		this.factoryData = null;
+
+		// `new.target` is the class actually constructed, so a subclass's
+		// static DEFAULT_WEB_AUTHN_* (e.g. the multi-chain v0.2.1 set) win
+		// over the v0.2.0 values declared here.
+		this.webAuthnConfig = Object.freeze(
+			mergeWebAuthnConfig(webAuthnDefaultsOf(new.target), overrides.webAuthnConfig),
+		);
 
 		this.isInitWebAuthn = false;
 
@@ -200,6 +256,14 @@ export class SafeAccount extends SmartAccount {
 			this.onChainIdentifier = null;
 		}
 		this.safeAccountSingleton = overrides.safeAccountSingleton ?? Safe_L2_V1_4_1;
+	}
+
+	/**
+	 * Merge per-call WebAuthn overrides over {@link webAuthnConfig}. A field
+	 * left undefined in `overrides` keeps the instance value.
+	 */
+	protected resolveWebAuthnConfig(overrides?: Partial<SafeWebAuthnConfig>): SafeWebAuthnConfig {
+		return mergeWebAuthnConfig(this.webAuthnConfig, overrides);
 	}
 
 	/**
@@ -626,6 +690,7 @@ export class SafeAccount extends SmartAccount {
 	): string {
 		return SafeAccount.formatSignaturesToUseroperationSignature(signerSignaturePairs, {
 			...options,
+			...this.resolveWebAuthnConfig(options),
 			safe4337ModuleAddress: options.safe4337ModuleAddress ?? this.safe4337ModuleAddress,
 		});
 	}
@@ -1414,12 +1479,7 @@ export class SafeAccount extends SmartAccount {
 		const isInit = initCode != null && initCode !== "0x";
 		const webAuthnSignatureOverrides = {
 			isInit,
-			webAuthnSharedSigner: overrides.webAuthnSharedSigner,
-			eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-			eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-			webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-			webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-			webAuthnSignerProxyCreationCode: overrides.webAuthnSignerProxyCreationCode,
+			...this.resolveWebAuthnConfig(overrides),
 		};
 
 		// Number of dummy signatures this method placed on the estimated
@@ -1527,8 +1587,14 @@ export class SafeAccount extends SmartAccount {
 		if (transactions.length < 1) {
 			throw new RangeError("There should be at least one transaction");
 		}
-		const webAuthnSharedSigner =
-			overrides.webAuthnSharedSigner ?? SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
+		const {
+			webAuthnSharedSigner,
+			eip7212WebAuthnPrecompileVerifier,
+			eip7212WebAuthnContractVerifier,
+			webAuthnSignerFactory,
+			webAuthnSignerSingleton,
+			webAuthnSignerProxyCreationCode,
+		} = this.resolveWebAuthnConfig(overrides);
 		const safeModuleExecutorFunctionSelector =
 			overrides.safeModuleExecutorFunctionSelector ??
 			SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR;
@@ -1589,18 +1655,6 @@ export class SafeAccount extends SmartAccount {
 			(maxPriorityFeePerGas *
 				BigInt((overrides.maxPriorityFeePerGasPercentageMultiplier ?? 0) + 100)) /
 				100n;
-
-		const eip7212WebAuthnPrecompileVerifier =
-			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
-		const eip7212WebAuthnContractVerifier =
-			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
-		const webAuthnSignerFactory =
-			overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
-		const webAuthnSignerSingleton =
-			overrides.webAuthnSignerSingleton ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
-		const webAuthnSignerProxyCreationCode =
-			overrides.webAuthnSignerProxyCreationCode ??
-			SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
 		let factoryAddress: string | null = this.factoryAddress;
 		let factoryData: string | null = this.factoryData;
@@ -2420,39 +2474,33 @@ export class SafeAccount extends SmartAccount {
 		let deployNewOwnerSignerMetaTransaction: MetaTransaction | null = null;
 		let newOwnerT: string;
 		let oldOwnerT: string;
-		const webAuthnSignerProxyCreationCode =
-			overrides.webAuthnSignerProxyCreationCode ??
-			SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+		const webAuthnConfig = this.resolveWebAuthnConfig(overrides);
 
 		if (typeof newOwner !== "string") {
-			newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(newOwner.x, newOwner.y, {
-				eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-				eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-				webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-				webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-				webAuthnSignerProxyCreationCode,
-			});
+			newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(
+				newOwner.x,
+				newOwner.y,
+				webAuthnConfig,
+			);
 			const newOwnerCode = await JsonRpcNode.from(nodeRpcUrl).getCode(newOwnerT, "latest");
 			const newOwnerNotDeployed = newOwnerCode.length < 3;
 			if (newOwnerNotDeployed) {
 				deployNewOwnerSignerMetaTransaction =
-					SafeAccount.createDeployWebAuthnVerifierMetaTransaction(newOwner.x, newOwner.y, {
-						eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-						eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-						webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-					});
+					SafeAccount.createDeployWebAuthnVerifierMetaTransaction(
+						newOwner.x,
+						newOwner.y,
+						webAuthnConfig,
+					);
 			}
 		} else {
 			newOwnerT = newOwner;
 		}
 		if (typeof oldOwner !== "string") {
-			oldOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(oldOwner.x, oldOwner.y, {
-				eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-				eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-				webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-				webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-				webAuthnSignerProxyCreationCode,
-			});
+			oldOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(
+				oldOwner.x,
+				oldOwner.y,
+				webAuthnConfig,
+			);
 		} else {
 			oldOwnerT = oldOwner;
 		}
@@ -2511,20 +2559,10 @@ export class SafeAccount extends SmartAccount {
 		let ownerToDeleteT: string;
 
 		if (typeof ownerToDelete !== "string") {
-			const webAuthnSignerProxyCreationCode =
-				overrides.webAuthnSignerProxyCreationCode ??
-				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
-
 			ownerToDeleteT = SafeAccount.createWebAuthnSignerVerifierAddress(
 				ownerToDelete.x,
 				ownerToDelete.y,
-				{
-					eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-					eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-					webAuthnSignerProxyCreationCode,
-				},
+				this.resolveWebAuthnConfig(overrides),
 			);
 		} else {
 			ownerToDeleteT = ownerToDelete;
@@ -2573,17 +2611,12 @@ export class SafeAccount extends SmartAccount {
 		let newOwnerT: string;
 
 		if (typeof newOwner !== "string") {
-			const webAuthnSignerProxyCreationCode =
-				overrides.webAuthnSignerProxyCreationCode ??
-				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
-
-			newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(newOwner.x, newOwner.y, {
-				eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-				eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-				webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-				webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-				webAuthnSignerProxyCreationCode,
-			});
+			const webAuthnConfig = this.resolveWebAuthnConfig(overrides);
+			newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(
+				newOwner.x,
+				newOwner.y,
+				webAuthnConfig,
+			);
 			if (overrides.nodeRpcUrl == null) {
 				throw new RangeError("overrides.nodeRpcUrl can't be null if adding a webauthn owner");
 			}
@@ -2591,11 +2624,11 @@ export class SafeAccount extends SmartAccount {
 			const newOwnerNotDeployed = newOwnerCode.length < 3;
 			if (newOwnerNotDeployed) {
 				deployNewOwnerSignerMetaTransaction =
-					SafeAccount.createDeployWebAuthnVerifierMetaTransaction(newOwner.x, newOwner.y, {
-						eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-						eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-						webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-					});
+					SafeAccount.createDeployWebAuthnVerifierMetaTransaction(
+						newOwner.x,
+						newOwner.y,
+						webAuthnConfig,
+					);
 			}
 		} else {
 			newOwnerT = newOwner;

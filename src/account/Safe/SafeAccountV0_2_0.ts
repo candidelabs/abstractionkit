@@ -12,6 +12,7 @@ import type {
 	SafeSignatureOptions,
 	SafeUserOperationTypedDataDomain,
 	SafeUserOperationV6TypedMessageValue,
+	SafeWebAuthnConfig,
 	Signer,
 	SignerSignaturePair,
 } from "./types";
@@ -47,6 +48,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			entrypointAddress?: string;
 			onChainIdentifierParams?: OnChainIdentifierParamsType;
 			onChainIdentifier?: string;
+			webAuthnConfig?: Partial<SafeWebAuthnConfig>;
 		} = {},
 	) {
 		const safe4337ModuleAddress =
@@ -57,6 +59,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		super(accountAddress, safe4337ModuleAddress, entrypointAddress, {
 			onChainIdentifierParams: overrides.onChainIdentifierParams,
 			onChainIdentifier: overrides.onChainIdentifier,
+			webAuthnConfig: overrides.webAuthnConfig,
 		});
 	}
 
@@ -139,6 +142,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			entrypointAddress: overrides.entrypointAddress,
 			onChainIdentifierParams: overrides.onChainIdentifierParams,
 			onChainIdentifier: overrides.onChainIdentifier,
+			webAuthnConfig: { webAuthnSharedSigner: overrides.webAuthnSharedSigner },
 		});
 		safe.factoryAddress = factoryAddress;
 		safe.factoryData = factoryData;

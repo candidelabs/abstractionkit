@@ -178,6 +178,33 @@ export interface WebAuthnSignatureOverrides {
 }
 
 /**
+ * The Safe Passkey module contracts a Safe account's WebAuthn owners are
+ * bound to. A passkey owner's on-chain address is derived from all of these
+ * fields, so every step that adds, swaps, removes, or signs for a passkey
+ * owner must use the same values.
+ *
+ * Each account instance resolves one as `account.webAuthnConfig`: the
+ * defaults of the class that was constructed (module v0.2.0 for
+ * `SafeAccountV0_2_0` / `SafeAccountV0_3_0`, v0.2.1 for the multi-chain
+ * classes), plus any constructor override. Field names match the per-call
+ * WebAuthn overrides, which still take precedence when passed.
+ */
+export interface SafeWebAuthnConfig {
+	/** Shared signer that stands in for the passkey owner on the deployment UserOperation */
+	webAuthnSharedSigner: string;
+	/** Factory that deploys each passkey owner's verifier proxy */
+	webAuthnSignerFactory: string;
+	/** Singleton the verifier proxies delegate to */
+	webAuthnSignerSingleton: string;
+	/** Creation code of the verifier proxy, used for its CREATE2 address */
+	webAuthnSignerProxyCreationCode: string;
+	/** P-256 verification precompile; the zero address means none */
+	eip7212WebAuthnPrecompileVerifier: string;
+	/** P-256 verifier contract used when no precompile is available */
+	eip7212WebAuthnContractVerifier: string;
+}
+
+/**
  * Per-call options for Safe UserOperation signing/formatting. Carries
  * timing, multi-chain encoding, and module-address routing. Future
  * per-call flags are added here, not on {@link WebAuthnSignatureOverrides}.

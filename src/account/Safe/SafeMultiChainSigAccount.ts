@@ -34,6 +34,7 @@ import type {
 	SafeSignatureOptions,
 	SafeUserOperationTypedDataDomain,
 	SafeUserOperationV9TypedMessageValue,
+	SafeWebAuthnConfig,
 	Signer,
 	SignerSignaturePair,
 	UserOperationToSign,
@@ -132,6 +133,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			onChainIdentifierParams?: OnChainIdentifierParamsType;
 			onChainIdentifier?: string;
 			safeAccountSingleton?: SafeAccountSingleton;
+			webAuthnConfig?: Partial<SafeWebAuthnConfig>;
 		} = {},
 	) {
 		const safe4337ModuleAddress =
@@ -144,6 +146,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			onChainIdentifierParams: overrides.onChainIdentifierParams,
 			onChainIdentifier: overrides.onChainIdentifier,
 			safeAccountSingleton: overrides.safeAccountSingleton,
+			webAuthnConfig: overrides.webAuthnConfig,
 		});
 	}
 
@@ -251,6 +254,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			onChainIdentifierParams: overrides.onChainIdentifierParams,
 			onChainIdentifier: overrides.onChainIdentifier,
 			safeAccountSingleton: overrides.safeAccountSingleton,
+			webAuthnConfig: { webAuthnSharedSigner: overrides.webAuthnSharedSigner },
 		});
 		safe.factoryAddress = factoryAddress;
 		safe.factoryData = factoryData;
@@ -450,28 +454,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				false,
 				providerRpc,
 				bundlerRpc,
-				{
-					...overrides,
-					isMultiChainSignature: true,
-					webAuthnSharedSigner:
-						overrides.webAuthnSharedSigner ??
-						SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
-					eip7212WebAuthnPrecompileVerifier:
-						overrides.eip7212WebAuthnPrecompileVerifier ??
-						SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
-					eip7212WebAuthnContractVerifier:
-						overrides.eip7212WebAuthnContractVerifier ??
-						SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
-					webAuthnSignerFactory:
-						overrides.webAuthnSignerFactory ??
-						SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
-					webAuthnSignerSingleton:
-						overrides.webAuthnSignerSingleton ??
-						SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
-					webAuthnSignerProxyCreationCode:
-						overrides.webAuthnSignerProxyCreationCode ??
-						SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
-				},
+				{ ...overrides, isMultiChainSignature: true },
 			);
 		if (parallelPaymasterInitValues != null) {
 			return {
@@ -523,24 +506,6 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		return this.baseEstimateUserOperationGas(userOperation, bundlerRpc, {
 			...overrides,
 			isMultiChainSignature: true,
-			webAuthnSharedSigner:
-				overrides.webAuthnSharedSigner ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
-			webAuthnSignerFactory:
-				overrides.webAuthnSignerFactory ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
-			webAuthnSignerSingleton:
-				overrides.webAuthnSignerSingleton ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
-			webAuthnSignerProxyCreationCode:
-				overrides.webAuthnSignerProxyCreationCode ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
-			eip7212WebAuthnPrecompileVerifier:
-				overrides.eip7212WebAuthnPrecompileVerifier ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifier:
-				overrides.eip7212WebAuthnContractVerifier ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		});
 	}
 
@@ -617,7 +582,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				...options,
 				safe4337ModuleAddress: options.safe4337ModuleAddress ?? this.safe4337ModuleAddress,
 			},
-			options,
+			{ ...options, ...this.resolveWebAuthnConfig(options) },
 		);
 	}
 
