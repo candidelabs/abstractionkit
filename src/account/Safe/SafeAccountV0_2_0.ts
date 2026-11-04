@@ -108,6 +108,17 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	public static initializeNewAccount<T extends typeof SafeAccountV0_2_0>(
 		this: T,
 		owners: Signer[],
+		overrides?: InitCodeOverrides,
+	): InstanceType<T>;
+	/** Detached call (`const init = SafeAccountV0_2_0.initializeNewAccount; init(...)`). */
+	public static initializeNewAccount(
+		this: void,
+		owners: Signer[],
+		overrides?: InitCodeOverrides,
+	): SafeAccountV0_2_0;
+	public static initializeNewAccount<T extends typeof SafeAccountV0_2_0>(
+		this: T | undefined,
+		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): InstanceType<T> {
 		let isInitWebAuthn = false;
