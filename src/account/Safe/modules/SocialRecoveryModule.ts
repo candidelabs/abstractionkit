@@ -1,16 +1,33 @@
-import {AbstractionKitError} from "../../../errors";
-import {decodeAbiParameters} from "../../../ethereUtils";
-import type {Transport} from "../../../transport";
-import {JsonRpcNode} from "../../../transport";
-import type {MetaTransaction} from "../../../types";
-import {createCallData} from "../../../utils";
-import {SafeModule} from "./SafeModule";
+import { AbstractionKitError } from "../../../errors";
+import { decodeAbiParameters } from "../../../ethereUtils";
+import type { Transport } from "../../../transport";
+import { JsonRpcNode } from "../../../transport";
+import type { MetaTransaction } from "../../../types";
+import { createCallData } from "../../../utils";
+import { SafeModule } from "./SafeModule";
 
 /**
- * Pre-deployed Social Recovery Module addresses, each with a different
- * grace period before a confirmed recovery can be finalized.
+ * Pre-deployed Social Recovery Module v0.2.0 addresses, each with a different
+ * grace period before a confirmed recovery can be finalized. The addresses
+ * are the same on every network.
  */
-export enum SocialRecoveryModuleGracePeriodSelector {
+export enum SocialRecoveryModuleGracePeriodSelectorV2 {
+	/** 3-minute grace period. Deployed on testnets only. */
+	After3Minutes = "0x4dF6081A82E07A7cD99aEf91C72d12a5138e468B",
+	/** 3-day grace period. */
+	After3Days = "0x00480F5ecC008995469fA7e12c70Ef3DC9FEe7fD",
+	/** 7-day grace period. */
+	After7Days = "0xEaC444E2F28469E641215F129874Aff8294cAfE0",
+	/** 14-day grace period. */
+	After14Days = "0x4d92D03a47468d9FC62495d85E3F205b4616FC5c",
+}
+
+/**
+ * Pre-deployed Social Recovery Module v0.1.0 addresses, each with a different
+ * grace period before a confirmed recovery can be finalized. Use these with
+ * {@link SocialRecoveryModuleV1} for accounts that enabled the v0.1.0 module.
+ */
+export enum SocialRecoveryModuleGracePeriodSelectorV1 {
 	/** 3-minute grace period (useful for testing). */
 	After3Minutes = "0x949d01d424bE050D09C16025dd007CB59b3A8c66",
 	/** 3-day grace period. */
@@ -22,103 +39,18 @@ export enum SocialRecoveryModuleGracePeriodSelector {
 }
 
 /**
- * Safe module for social recovery with guardians. Allows designated guardians
- * to replace the owners of a Safe account when the original keys are lost.
- * Guardians must reach a configurable approval threshold before recovery
- * can be executed, and a grace period must elapse before finalization.
+ * Methods shared by every Social Recovery Module version. Use
+ * {@link SocialRecoveryModuleV2} for new integrations, or {@link SocialRecoveryModuleV1} for accounts that
+ * enabled the v0.1.0 module.
+ *
+ * The module lets designated guardians replace the owners of a Safe account
+ * when the original keys are lost. Guardians must reach a configurable
+ * approval threshold before recovery can be executed, and a grace period must
+ * elapse before finalization.
  */
-export class SocialRecoveryModule extends SafeModule {
-	static readonly DEFAULT_SOCIAL_RECOVERY_ADDRESS =
-		SocialRecoveryModuleGracePeriodSelector.After3Days;
-
-	/**
-	 * @param moduleAddress - Deployed address of the Social Recovery Module.
-	 *   Defaults to the 3-day grace period deployment.
-	 */
-	constructor(moduleAddress: string = SocialRecoveryModule.DEFAULT_SOCIAL_RECOVERY_ADDRESS) {
-		super(moduleAddress);
-	}
-
-	/**
-	 * create MetaTransaction that lets single guardian confirm the execution of the recovery request.
-	 * Can also trigger the start of the execution by passing true to 'execute' parameter.
-	 * Once triggered the recovery is pending for the recovery period before it can be finalised.
-	 * @param accountAddress - The target account.
-	 * @param newOwners - The new owners' addresses.
-	 * @param newThreshold - The new threshold for the safe.
-	 * @param execute - Whether to auto-start execution of recovery.
-	 * @returns a MetaTransaction
-	 */
-	public createConfirmRecoveryMetaTransaction(
-		accountAddress: string,
-		newOwners: string[],
-		newThreshold: number,
-		execute: boolean,
-	): MetaTransaction {
-		//"confirmRecovery(address,address[],uint256,bool)"
-		const functionSelector = "0x064e2d0e";
-		const callData = createCallData(
-			functionSelector,
-			["address", "address[]", "uint256", "bool"],
-			[accountAddress, newOwners, newThreshold, execute],
-		);
-		return {
-			to: this.moduleAddress,
-			data: callData,
-			value: 0n,
-		};
-	}
-
-	/**
-	 * create MetaTransaction that lets multiple guardians confirm the execution of the recovery request.
-	 * Can also trigger the start of the execution by passing true to 'execute' parameter.
-	 * Once triggered the recovery is pending for the recovery period before it can be finalised.
-	 * @param accountAddress - The target account.
-	 * @param newOwners - The new owners' addresses.
-	 * @param newThreshold - The new threshold for the safe.
-	 * @param signatureData - The guardians signers and signatures pair list.
-	 * @param execute - true to auto-start execution of recovery or false for not.
-	 * @returns a MetaTransaction
-	 */
-	public createMultiConfirmRecoveryMetaTransaction(
-		accountAddress: string,
-		newOwners: string[],
-		newThreshold: number,
-		signaturePairList: RecoverySignaturePair[],
-		execute: boolean,
-	): MetaTransaction {
-		//"multiConfirmRecovery(address,address[],uint256,SignatureData[],bool)"
-		const functionSelector = "0x0728e1e7";
-		// The on-chain module rejects with "SM: duplicate signers/invalid ordering"
-		// unless signature pairs are sorted by signer address ascending. Sort here
-		// so callers don't have to know about this internal constraint.
-		const sortedPairs = [...signaturePairList].sort((a, b) => {
-			const aSigner = BigInt(a.signer);
-			const bSigner = BigInt(b.signer);
-			if (aSigner < bSigner) return -1;
-			if (aSigner > bSigner) return 1;
-			throw new AbstractionKitError(
-				"BAD_DATA",
-				`Duplicate signer in recovery signaturePairList: ${a.signer}`,
-			);
-		});
-		const callData = createCallData(
-			functionSelector,
-			["address", "address[]", "uint256", "(address,bytes)[]", "bool"],
-			[
-				accountAddress,
-				newOwners,
-				newThreshold,
-				sortedPairs.map((signaturePair) => [signaturePair.signer, signaturePair.signature]),
-				execute,
-			],
-		);
-		return {
-			to: this.moduleAddress,
-			data: callData,
-			value: 0n,
-		};
-	}
+export abstract class SocialRecoveryModuleBase extends SafeModule {
+	/** The `version` of the module's EIP-712 domain. */
+	protected abstract readonly eip712DomainVersion: string;
 
 	/**
 	 * @notice create MetaTransaction that lets the guardians start the execution of the recovery request.
@@ -166,6 +98,9 @@ export class SocialRecoveryModule extends SafeModule {
 
 	/**
 	 * create a MetaTransaction that lets the account cancel an ongoing recovery request.
+	 * On v0.2.0 it also invalidates the guardian confirmations collected for the
+	 * current nonce, and can be sent when no recovery is in progress. On v0.1.0 it
+	 * reverts when no recovery is in progress.
 	 * @returns a MetaTransaction
 	 */
 	public createCancelRecoveryMetaTransaction(): MetaTransaction {
@@ -182,6 +117,8 @@ export class SocialRecoveryModule extends SafeModule {
 
 	/**
 	 * create a MetaTransaction that lets the owner add a guardian for its account.
+	 * On v0.2.0 this also cancels any recovery in progress and invalidates
+	 * collected guardian confirmations.
 	 * @param guardianAddress - The guardian to add.
 	 * @param threshold - The new threshold that will be set after addition.
 	 * @returns a MetaTransaction
@@ -206,6 +143,8 @@ export class SocialRecoveryModule extends SafeModule {
 
 	/**
 	 * create MetaTransaction that lets the owner revoke a guardian from its account.
+	 * On v0.2.0 this also cancels any recovery in progress and invalidates
+	 * collected guardian confirmations.
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain
 	 * (to get the prevGuardian parameter).
 	 * @param accountAddress - The target account.
@@ -250,6 +189,8 @@ export class SocialRecoveryModule extends SafeModule {
 
 	/**
 	 * create MetaTransaction that lets the owner revoke a guardian from its account.
+	 * On v0.2.0 this also cancels any recovery in progress and invalidates
+	 * collected guardian confirmations.
 	 * @param prevGuardian - The previous guardian linking to the guardian in the linked list.
 	 * @param guardian - The guardian to revoke.
 	 * @param threshold - The new threshold that will be set after execution of revocation.
@@ -276,11 +217,13 @@ export class SocialRecoveryModule extends SafeModule {
 
 	/**
 	 * create MetaTransaction that lets the owner change the guardian threshold required to initiate a recovery.
+	 * On v0.2.0 this also cancels any recovery in progress and invalidates
+	 * collected guardian confirmations.
 	 * @param threshold - The new threshold that will be set after execution of revocation.
 	 * @returns a MetaTransaction
 	 */
 	public createChangeThresholdMetaTransaction(threshold: bigint): MetaTransaction {
-		//"changeThreshold(address,uint256)"
+		//"changeThreshold(uint256)"
 		const functionSelector = "0x694e80c3";
 		const callData = createCallData(functionSelector, ["uint256"], [threshold]);
 		return {
@@ -327,41 +270,6 @@ export class SocialRecoveryModule extends SafeModule {
 	}
 
 	/**
-	 * Retrieves the account's current ongoing recovery request.
-	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
-	 * @param accountAddress - The target account.
-	 * @return promise of the account's current recovery request
-	 */
-	public async getRecoveryRequest(
-		nodeRpcUrl: string | Transport | JsonRpcNode,
-		accountAddress: string,
-	): Promise<RecoveryRequest> {
-		//"getRecoveryRequest(address)"
-		const functionSelector = "0x4f9a28b9";
-		const callData = createCallData(functionSelector, ["address"], [accountAddress]);
-
-		const ethCallParams = {
-			to: this.moduleAddress,
-			data: callData,
-		};
-
-		const recoveryRequestResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
-
-		this.checkForEmptyResultAndRevert(recoveryRequestResult, "getRecoveryRequest");
-		const decodedCalldata = decodeAbiParameters<[[bigint, bigint, bigint, string[]]]>(
-			["(uint256,uint256,uint64,address[])"],
-			recoveryRequestResult,
-		);
-
-		return {
-			guardiansApprovalCount: BigInt(decodedCalldata[0][0]),
-			newThreshold: BigInt(decodedCalldata[0][1]),
-			executeAfter: BigInt(decodedCalldata[0][2]),
-			newOwners: decodedCalldata[0][3],
-		};
-	}
-
-	/**
 	 * Retrieves the guardian approval count for this particular recovery request at current nonce.
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
 	 * @param accountAddress - The target account.
@@ -397,6 +305,7 @@ export class SocialRecoveryModule extends SafeModule {
 
 	/**
 	 * Retrieves specific guardian approval status a particular recovery request at current nonce.
+	 * On v0.2.0 only current guardians are reported as having approved.
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
 	 * @param accountAddress - The target account.
 	 * @param guardian - The guardian.
@@ -423,7 +332,10 @@ export class SocialRecoveryModule extends SafeModule {
 			to: this.moduleAddress,
 			data: callData,
 		};
-		const hasGuardianApprovedResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
+		const hasGuardianApprovedResult = await JsonRpcNode.from(nodeRpcUrl).call(
+			ethCallParams,
+			"latest",
+		);
 
 		this.checkForEmptyResultAndRevert(hasGuardianApprovedResult, "hasGuardianApproved");
 		const decodedCalldata = decodeAbiParameters<[boolean]>(["bool"], hasGuardianApprovedResult);
@@ -592,13 +504,7 @@ export class SocialRecoveryModule extends SafeModule {
 		types: Record<string, { name: string; type: string }[]>;
 		messageValue: RecoveryRequestTypedMessageValue;
 	}> {
-		let recoveryNonce: bigint;
-		if (overrides.recoveryNonce == null) {
-			const socialRecoveryModule = new SocialRecoveryModule(this.moduleAddress);
-			recoveryNonce = await socialRecoveryModule.nonce(rpcNode, accountAddress);
-		} else {
-			recoveryNonce = overrides.recoveryNonce;
-		}
+		const recoveryNonce = overrides.recoveryNonce ?? (await this.nonce(rpcNode, accountAddress));
 
 		const messageValue: RecoveryRequestTypedMessageValue = {
 			wallet: accountAddress,
@@ -608,7 +514,7 @@ export class SocialRecoveryModule extends SafeModule {
 		};
 		const domain: RecoveryRequestTypedDataDomain = {
 			name: "Social Recovery Module",
-			version: "0.0.1",
+			version: this.eip712DomainVersion,
 			chainId: Number(chainId),
 			verifyingContract: this.moduleAddress,
 		};
@@ -619,17 +525,312 @@ export class SocialRecoveryModule extends SafeModule {
 			messageValue,
 		};
 	}
+
+	/**
+	 * The on-chain module rejects with "SM: duplicate signers/invalid ordering"
+	 * unless signature pairs are sorted by signer address ascending. Sort here
+	 * so callers don't have to know about this internal constraint.
+	 */
+	protected sortSignaturePairs(signaturePairList: RecoverySignaturePair[]): [string, string][] {
+		const sortedPairs = [...signaturePairList].sort((a, b) => {
+			const aSigner = BigInt(a.signer);
+			const bSigner = BigInt(b.signer);
+			if (aSigner < bSigner) return -1;
+			if (aSigner > bSigner) return 1;
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`Duplicate signer in recovery signaturePairList: ${a.signer}`,
+			);
+		});
+		return sortedPairs.map((signaturePair) => [signaturePair.signer, signaturePair.signature]);
+	}
 }
 
 /**
- * Represents an ongoing recovery request for a Safe account.
+ * Social Recovery Module v0.2.0, the version audited by Certora.
+ *
+ * Differences from v0.1.0 that affect callers:
+ * - Guardian confirmations name the recovery nonce they are meant for.
+ * - The EIP-712 domain version is "0.2.0", so v0.1.0 guardian signatures are invalid.
+ * - `getRecoveryRequest` returns the request nonce and `executableAt`.
+ * - Any guardian configuration change, and `cancelRecovery`, cancels the
+ *   recovery in progress and invalidates collected confirmations.
  */
-export type RecoveryRequest = {
+export class SocialRecoveryModuleV2 extends SocialRecoveryModuleBase {
+	static readonly DEFAULT_SOCIAL_RECOVERY_ADDRESS =
+		SocialRecoveryModuleGracePeriodSelectorV2.After3Days;
+
+	protected readonly eip712DomainVersion = "0.2.0";
+
+	/**
+	 * @param moduleAddress - Deployed address of the Social Recovery Module v0.2.0.
+	 *   Defaults to the 3-day grace period deployment.
+	 */
+	constructor(moduleAddress: string = SocialRecoveryModuleV2.DEFAULT_SOCIAL_RECOVERY_ADDRESS) {
+		super(moduleAddress);
+	}
+
+	/**
+	 * create MetaTransaction that lets single guardian confirm the execution of the recovery request.
+	 * Can also trigger the start of the execution by passing true to 'execute' parameter.
+	 * Once triggered the recovery is pending for the recovery period before it can be finalised.
+	 * @param accountAddress - The target account.
+	 * @param newOwners - The new owners' addresses.
+	 * @param newThreshold - The new threshold for the safe.
+	 * @param nonce - The account's current recovery nonce (see `nonce()`). The
+	 *   module reverts if it changed before the transaction is included.
+	 * @param execute - Whether to auto-start execution of recovery.
+	 * @returns a MetaTransaction
+	 */
+	public createConfirmRecoveryMetaTransaction(
+		accountAddress: string,
+		newOwners: string[],
+		newThreshold: number,
+		nonce: bigint,
+		execute: boolean,
+	): MetaTransaction {
+		//"confirmRecovery(address,address[],uint256,uint256,bool)"
+		const functionSelector = "0xaa33d34d";
+		const callData = createCallData(
+			functionSelector,
+			["address", "address[]", "uint256", "uint256", "bool"],
+			[accountAddress, newOwners, newThreshold, nonce, execute],
+		);
+		return {
+			to: this.moduleAddress,
+			data: callData,
+			value: 0n,
+		};
+	}
+
+	/**
+	 * create MetaTransaction that lets multiple guardians confirm the execution of the recovery request.
+	 * Can also trigger the start of the execution by passing true to 'execute' parameter.
+	 * Once triggered the recovery is pending for the recovery period before it can be finalised.
+	 * A signature may be empty when its signer is the transaction sender, or when the
+	 * signer is a Safe guardian that pre-approved the recovery hash (EIP-1271).
+	 * @param accountAddress - The target account.
+	 * @param newOwners - The new owners' addresses.
+	 * @param newThreshold - The new threshold for the safe.
+	 * @param nonce - The recovery nonce the guardians signed. It must still be the
+	 *   account's current nonce when the transaction is included.
+	 * @param signaturePairList - The guardians signers and signatures pair list.
+	 * @param execute - true to auto-start execution of recovery or false for not.
+	 * @returns a MetaTransaction
+	 */
+	public createMultiConfirmRecoveryMetaTransaction(
+		accountAddress: string,
+		newOwners: string[],
+		newThreshold: number,
+		nonce: bigint,
+		signaturePairList: RecoverySignaturePair[],
+		execute: boolean,
+	): MetaTransaction {
+		//"multiConfirmRecovery(address,address[],uint256,uint256,(address,bytes)[],bool)"
+		const functionSelector = "0x9771fa44";
+		const callData = createCallData(
+			functionSelector,
+			["address", "address[]", "uint256", "uint256", "(address,bytes)[]", "bool"],
+			[
+				accountAddress,
+				newOwners,
+				newThreshold,
+				nonce,
+				this.sortSignaturePairs(signaturePairList),
+				execute,
+			],
+		);
+		return {
+			to: this.moduleAddress,
+			data: callData,
+			value: 0n,
+		};
+	}
+
+	/**
+	 * Retrieves the account's current ongoing recovery request.
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+	 * @param accountAddress - The target account.
+	 * @return promise of the account's current recovery request
+	 */
+	public async getRecoveryRequest(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		accountAddress: string,
+	): Promise<RecoveryRequestV2> {
+		//"getRecoveryRequest(address)"
+		const functionSelector = "0x4f9a28b9";
+		const callData = createCallData(functionSelector, ["address"], [accountAddress]);
+
+		const ethCallParams = {
+			to: this.moduleAddress,
+			data: callData,
+		};
+
+		const recoveryRequestResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
+
+		this.checkForEmptyResultAndRevert(recoveryRequestResult, "getRecoveryRequest");
+		const decodedCalldata = decodeAbiParameters<[[bigint, bigint, bigint, bigint, string[]]]>(
+			["(uint256,uint256,uint256,uint64,address[])"],
+			recoveryRequestResult,
+		);
+
+		return {
+			guardiansApprovalCount: BigInt(decodedCalldata[0][0]),
+			newThreshold: BigInt(decodedCalldata[0][1]),
+			nonce: BigInt(decodedCalldata[0][2]),
+			executableAt: BigInt(decodedCalldata[0][3]),
+			newOwners: decodedCalldata[0][4],
+		};
+	}
+}
+
+/**
+ * Social Recovery Module v0.1.0. Use it for accounts that enabled a v0.1.0
+ * deployment ({@link SocialRecoveryModuleGracePeriodSelectorV1}).
+ */
+export class SocialRecoveryModuleV1 extends SocialRecoveryModuleBase {
+	static readonly DEFAULT_SOCIAL_RECOVERY_ADDRESS =
+		SocialRecoveryModuleGracePeriodSelectorV1.After3Days;
+
+	protected readonly eip712DomainVersion = "0.0.1";
+
+	/**
+	 * @param moduleAddress - Deployed address of the Social Recovery Module v0.1.0.
+	 *   Defaults to the 3-day grace period deployment.
+	 */
+	constructor(moduleAddress: string = SocialRecoveryModuleV1.DEFAULT_SOCIAL_RECOVERY_ADDRESS) {
+		super(moduleAddress);
+	}
+
+	/**
+	 * create MetaTransaction that lets single guardian confirm the execution of the recovery request.
+	 * Can also trigger the start of the execution by passing true to 'execute' parameter.
+	 * Once triggered the recovery is pending for the recovery period before it can be finalised.
+	 * @param accountAddress - The target account.
+	 * @param newOwners - The new owners' addresses.
+	 * @param newThreshold - The new threshold for the safe.
+	 * @param execute - Whether to auto-start execution of recovery.
+	 * @returns a MetaTransaction
+	 */
+	public createConfirmRecoveryMetaTransaction(
+		accountAddress: string,
+		newOwners: string[],
+		newThreshold: number,
+		execute: boolean,
+	): MetaTransaction {
+		//"confirmRecovery(address,address[],uint256,bool)"
+		const functionSelector = "0x064e2d0e";
+		const callData = createCallData(
+			functionSelector,
+			["address", "address[]", "uint256", "bool"],
+			[accountAddress, newOwners, newThreshold, execute],
+		);
+		return {
+			to: this.moduleAddress,
+			data: callData,
+			value: 0n,
+		};
+	}
+
+	/**
+	 * create MetaTransaction that lets multiple guardians confirm the execution of the recovery request.
+	 * Can also trigger the start of the execution by passing true to 'execute' parameter.
+	 * Once triggered the recovery is pending for the recovery period before it can be finalised.
+	 * @param accountAddress - The target account.
+	 * @param newOwners - The new owners' addresses.
+	 * @param newThreshold - The new threshold for the safe.
+	 * @param signaturePairList - The guardians signers and signatures pair list.
+	 * @param execute - true to auto-start execution of recovery or false for not.
+	 * @returns a MetaTransaction
+	 */
+	public createMultiConfirmRecoveryMetaTransaction(
+		accountAddress: string,
+		newOwners: string[],
+		newThreshold: number,
+		signaturePairList: RecoverySignaturePair[],
+		execute: boolean,
+	): MetaTransaction {
+		//"multiConfirmRecovery(address,address[],uint256,(address,bytes)[],bool)"
+		const functionSelector = "0x0728e1e7";
+		const callData = createCallData(
+			functionSelector,
+			["address", "address[]", "uint256", "(address,bytes)[]", "bool"],
+			[
+				accountAddress,
+				newOwners,
+				newThreshold,
+				this.sortSignaturePairs(signaturePairList),
+				execute,
+			],
+		);
+		return {
+			to: this.moduleAddress,
+			data: callData,
+			value: 0n,
+		};
+	}
+
+	/**
+	 * Retrieves the account's current ongoing recovery request.
+	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
+	 * @param accountAddress - The target account.
+	 * @return promise of the account's current recovery request
+	 */
+	public async getRecoveryRequest(
+		nodeRpcUrl: string | Transport | JsonRpcNode,
+		accountAddress: string,
+	): Promise<RecoveryRequestV1> {
+		//"getRecoveryRequest(address)"
+		const functionSelector = "0x4f9a28b9";
+		const callData = createCallData(functionSelector, ["address"], [accountAddress]);
+
+		const ethCallParams = {
+			to: this.moduleAddress,
+			data: callData,
+		};
+
+		const recoveryRequestResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
+
+		this.checkForEmptyResultAndRevert(recoveryRequestResult, "getRecoveryRequest");
+		const decodedCalldata = decodeAbiParameters<[[bigint, bigint, bigint, string[]]]>(
+			["(uint256,uint256,uint64,address[])"],
+			recoveryRequestResult,
+		);
+
+		return {
+			guardiansApprovalCount: BigInt(decodedCalldata[0][0]),
+			newThreshold: BigInt(decodedCalldata[0][1]),
+			executeAfter: BigInt(decodedCalldata[0][2]),
+			newOwners: decodedCalldata[0][3],
+		};
+	}
+}
+
+/**
+ * Represents an ongoing recovery request for a Safe account (module v0.2.0).
+ */
+export type RecoveryRequestV2 = {
 	/** Number of guardians that have approved this recovery request. */
 	guardiansApprovalCount: bigint;
 	/** The new owner threshold that will be set after recovery. */
 	newThreshold: bigint;
-	/** Unix timestamp (seconds) after which the recovery can be finalized. 0 if not yet executed. */
+	/** The recovery nonce the request was approved under. */
+	nonce: bigint;
+	/** Unix timestamp (seconds) from which the recovery can be finalized. 0 if no recovery is in progress. */
+	executableAt: bigint;
+	/** The list of new owner addresses that will replace the current owners. */
+	newOwners: string[];
+};
+
+/**
+ * Represents an ongoing recovery request for a Safe account (module v0.1.0).
+ */
+export type RecoveryRequestV1 = {
+	/** Number of guardians that have approved this recovery request. */
+	guardiansApprovalCount: bigint;
+	/** The new owner threshold that will be set after recovery. */
+	newThreshold: bigint;
+	/** Unix timestamp (seconds) from which the recovery can be finalized. 0 if not yet executed. */
 	executeAfter: bigint;
 	/** The list of new owner addresses that will replace the current owners. */
 	newOwners: string[];
@@ -654,7 +855,7 @@ export const EXECUTE_RECOVERY_PRIMARY_TYPE = "ExecuteRecovery";
 export type RecoveryRequestTypedDataDomain = {
 	/** Domain name, always "Social Recovery Module". */
 	name: string;
-	/** Domain version, e.g. "0.0.1". */
+	/** Domain version: "0.2.0" for module v0.2.0, "0.0.1" for module v0.1.0. */
 	version: string;
 	/** Chain ID of the target network. */
 	chainId: number;

@@ -1,14 +1,13 @@
 const { Wallet } = require('ethers');
 const { hexToBytes, keccak256, numberToBytes, toBytes } = require('viem');
 const {
-    SafeAccountV0_3_0,
     fromSafeWebauthn,
     pubkeyCoordinatesFromJson,
     pubkeyCoordinatesToJson,
     sendJsonRpcRequest,
     webauthnSignatureFromAssertion,
 } = require('../../../../dist/index.cjs');
-const { runnable, unrunnable, nodeUrl, bundlerUrl } = require('../../_runnable.cjs');
+const { runnableMatrix, unrunnable, nodeUrl, bundlerUrl, accountVersions } = require('../../_runnable.cjs');
 const { WebAuthnCredentials, UserVerificationRequirement, extractPublicKey } = require('./_webauthn.cjs');
 
 jest.setTimeout(180000);
@@ -16,13 +15,21 @@ jest.setTimeout(180000);
 const ONE_ETH = 10n ** 18n;
 const toHex = (n) => `0x${n.toString(16)}`;
 
+// Every Safe class with a WebAuthn owner path: SafeAccountV0_3_0 on the Passkey
+// module v0.2.0 defaults (FCL verifier, no precompile) over EntryPoint v0.7, and
+// the multi-chain classes on the v0.2.1 defaults (RIP-7951 precompile with the
+// Daimo P-256 fallback) over EntryPoint v0.9.
+const PASSKEY_VERSIONS = ['V0_3_0', 'MultiChainSigV1', 'MultiChainSigV2'];
+const matrix = runnableMatrix(accountVersions.filter((v) => PASSKEY_VERSIONS.includes(v.name)));
+
 describe('passkeys', () => {
-    test.concurrent.each(runnable)(
-        'passkey-owned Safe deploys and executes a userop: $name (chainId $chainId)',
-        async (chain) => {
-            const node = nodeUrl(chain);
-            const bundler = bundlerUrl(chain);
-            const chainId = BigInt(chain.chainId);
+    test.concurrent.each(matrix)(
+        'passkey-owned Safe deploys and executes a userop: $chainName / $accountVersion (chainId $chainId)',
+        async (entry) => {
+            const node = nodeUrl(entry);
+            const bundler = bundlerUrl(entry);
+            const chainId = BigInt(entry.chainId);
+            const AccountClass = entry.accountClass;
 
             const navigator = { credentials: new WebAuthnCredentials() };
             const credential = navigator.credentials.create({
@@ -41,7 +48,7 @@ describe('passkeys', () => {
             const persisted = pubkeyCoordinatesToJson(extractPublicKey(credential.response));
             const publicKey = pubkeyCoordinatesFromJson(persisted);
 
-            const account = SafeAccountV0_3_0.initializeNewAccount([publicKey]);
+            const account = AccountClass.initializeNewAccount([publicKey]);
             await sendJsonRpcRequest(node, 'anvil_setBalance', [account.accountAddress, toHex(ONE_ETH)]);
 
             const recipient = Wallet.createRandom().address;
@@ -58,7 +65,7 @@ describe('passkeys', () => {
             const signer = fromSafeWebauthn({
                 publicKey,
                 isInit,
-                accountClass: SafeAccountV0_3_0,
+                accountClass: AccountClass,
                 getAssertion: async (challenge) => {
                     const assertion = navigator.credentials.get({
                         publicKey: {

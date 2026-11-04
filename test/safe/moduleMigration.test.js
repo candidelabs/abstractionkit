@@ -69,10 +69,24 @@ function safeMock({ fallback = V07_MODULE, moduleEnabled = true, version = '1.4.
 
 // createModuleMigrationMetaTransactions is protected; its shape and predecessor
 // lookup are exercised through the public version-specific wrapper.
-describe('SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions', () => {
+describe('SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountMetaTransactions', () => {
+    test('the deprecated V1-named alias delegates to the renamed helper', async () => {
+        const account = new SafeAccountV0_3_0(ACCOUNT);
+        const opts = { prevModuleAddress: SENTINEL, skipPreflight: true };
+        const viaAlias = await account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
+            'https://unused.invalid',
+            opts,
+        );
+        const viaNew = await account.createMigrateToSafeMultiChainSigAccountMetaTransactions(
+            'https://unused.invalid',
+            opts,
+        );
+        expect(viaAlias).toEqual(viaNew);
+    });
+
     test('returns [disable, enable, setFallbackHandler] with correct selectors and targets', async () => {
         const account = new SafeAccountV0_3_0(ACCOUNT);
-        const batch = await account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
+        const batch = await account.createMigrateToSafeMultiChainSigAccountMetaTransactions(
             'https://unused.invalid',
             { prevModuleAddress: SENTINEL, skipPreflight: true },
         );
@@ -98,7 +112,7 @@ describe('SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransac
     test('looks up the predecessor on-chain when prevModuleAddress is omitted', async () => {
         const transport = safeMock();
         const account = new SafeAccountV0_3_0(ACCOUNT);
-        const batch = await account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
+        const batch = await account.createMigrateToSafeMultiChainSigAccountMetaTransactions(
             transport,
             { skipPreflight: true },
         );
@@ -113,7 +127,7 @@ describe('SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransac
         const customOld = '0x00000000000000000000000000000000000000a7';
         const customNew = '0x00000000000000000000000000000000000000a9';
         const account = new SafeAccountV0_3_0(ACCOUNT);
-        const batch = await account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
+        const batch = await account.createMigrateToSafeMultiChainSigAccountMetaTransactions(
             'https://unused.invalid',
             { safeV07ModuleAddress: customOld, safeV09ModuleAddress: customNew, prevModuleAddress: SENTINEL, skipPreflight: true },
         );
@@ -234,7 +248,7 @@ describe('createDisableModuleMetaTransaction pagination', () => {
 describe('migration preflight', () => {
     test('passes when the old module is the fallback handler, enabled, and version >= 1.4.1', async () => {
         const account = new SafeAccountV0_3_0(ACCOUNT);
-        const batch = await account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
+        const batch = await account.createMigrateToSafeMultiChainSigAccountMetaTransactions(
             safeMock({ fallback: V07_MODULE, moduleEnabled: true, version: '1.4.1' }),
         );
         expect(batch).toHaveLength(3);
@@ -242,7 +256,7 @@ describe('migration preflight', () => {
 
     test('passes on a newer Safe version (1.5.0)', async () => {
         const account = new SafeAccountV0_3_0(ACCOUNT);
-        const batch = await account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
+        const batch = await account.createMigrateToSafeMultiChainSigAccountMetaTransactions(
             safeMock({ version: '1.5.0' }),
         );
         expect(batch).toHaveLength(3);
@@ -251,7 +265,7 @@ describe('migration preflight', () => {
     test('throws when the fallback handler is not the old module', async () => {
         const account = new SafeAccountV0_3_0(ACCOUNT);
         await expect(
-            account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
+            account.createMigrateToSafeMultiChainSigAccountMetaTransactions(
                 safeMock({ fallback: '0x00000000000000000000000000000000000000cc' }),
             ),
         ).rejects.toMatchObject({ code: 'BAD_DATA' });
@@ -260,7 +274,7 @@ describe('migration preflight', () => {
     test('throws when the old module is not enabled', async () => {
         const account = new SafeAccountV0_3_0(ACCOUNT);
         await expect(
-            account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
+            account.createMigrateToSafeMultiChainSigAccountMetaTransactions(
                 safeMock({ fallback: V07_MODULE, moduleEnabled: false }),
             ),
         ).rejects.toMatchObject({ code: 'BAD_DATA' });
@@ -269,7 +283,7 @@ describe('migration preflight', () => {
     test('throws when the Safe version is below 1.4.1', async () => {
         const account = new SafeAccountV0_3_0(ACCOUNT);
         await expect(
-            account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
+            account.createMigrateToSafeMultiChainSigAccountMetaTransactions(
                 safeMock({ version: '1.3.0' }),
             ),
         ).rejects.toMatchObject({ code: 'BAD_DATA' });
@@ -280,7 +294,7 @@ describe('migration preflight', () => {
         // and never reads the fallback-handler slot.
         const transport = safeMock({ fallback: '0x00000000000000000000000000000000000000cc' });
         const account = new SafeAccountV0_3_0(ACCOUNT);
-        const batch = await account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
+        const batch = await account.createMigrateToSafeMultiChainSigAccountMetaTransactions(
             transport,
             { prevModuleAddress: SENTINEL, skipPreflight: true },
         );
@@ -299,7 +313,7 @@ describe('migration preflight', () => {
         });
         const account = new SafeAccountV0_3_0(ACCOUNT);
         await expect(
-            account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(transport),
+            account.createMigrateToSafeMultiChainSigAccountMetaTransactions(transport),
         ).rejects.toMatchObject({ name: 'AbstractionKitError', code: 'BAD_DATA' });
     });
 
@@ -316,14 +330,14 @@ describe('migration preflight', () => {
         });
         const account = new SafeAccountV0_3_0(ACCOUNT);
         await expect(
-            account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(transport),
+            account.createMigrateToSafeMultiChainSigAccountMetaTransactions(transport),
         ).rejects.toMatchObject({ name: 'AbstractionKitError', code: 'BAD_DATA' });
     });
 
     test('treats an empty VERSION() string as a failed preflight', async () => {
         const account = new SafeAccountV0_3_0(ACCOUNT);
         await expect(
-            account.createMigrateToSafeMultiChainSigAccountV1MetaTransactions(
+            account.createMigrateToSafeMultiChainSigAccountMetaTransactions(
                 safeMock({ version: '' }),
             ),
         ).rejects.toMatchObject({ code: 'BAD_DATA' });
@@ -350,5 +364,26 @@ describe('SafeAccount readers', () => {
         });
         const account = new SafeAccountV0_3_0(ACCOUNT);
         expect(await account.getSafeVersion(transport)).toBe('1.4.1');
+    });
+});
+
+describe('migration target is the module shared by both multi-chain classes', () => {
+    test('the default target equals V1 and V2 DEFAULT_SAFE_4337_MODULE_ADDRESS', async () => {
+        const { SafeMultiChainSigAccountV2 } = require('../../dist/index.cjs');
+        expect(SafeMultiChainSigAccountV2.DEFAULT_SAFE_4337_MODULE_ADDRESS).toBe(
+            SafeMultiChainSigAccountV1.DEFAULT_SAFE_4337_MODULE_ADDRESS,
+        );
+        const account = new SafeAccountV0_3_0(ACCOUNT);
+        const batch = await account.createMigrateToSafeMultiChainSigAccountMetaTransactions(
+            'https://unused.invalid',
+            { prevModuleAddress: SENTINEL, skipPreflight: true },
+        );
+        expect(addrArg(batch[1].data, 0)).toBe(getAddress(SafeMultiChainSigAccountV2.DEFAULT_SAFE_4337_MODULE_ADDRESS));
+        expect(addrArg(batch[2].data, 0)).toBe(getAddress(SafeMultiChainSigAccountV2.DEFAULT_SAFE_4337_MODULE_ADDRESS));
+        // A migrated account attaches to either class with the same module and EntryPoint.
+        const v1 = new SafeMultiChainSigAccountV1(ACCOUNT);
+        const v2 = new SafeMultiChainSigAccountV2(ACCOUNT);
+        expect(v2.safe4337ModuleAddress).toBe(v1.safe4337ModuleAddress);
+        expect(v2.entrypointAddress).toBe(v1.entrypointAddress);
     });
 });

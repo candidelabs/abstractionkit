@@ -14,8 +14,9 @@ export {
 	AllowanceModule,
 } from "./account/Safe/modules/AllowanceModule";
 export type {
-	RecoveryRequest,
 	RecoveryRequestTypedDataDomain,
+	RecoveryRequestV1,
+	RecoveryRequestV2,
 	RecoveryRequestTypedMessageValue,
 	RecoverySignaturePair,
 } from "./account/Safe/modules/SocialRecoveryModule";
@@ -26,13 +27,16 @@ export type {
 export {
 	EIP712_RECOVERY_MODULE_TYPE,
 	EXECUTE_RECOVERY_PRIMARY_TYPE,
-	SocialRecoveryModule,
-	SocialRecoveryModuleGracePeriodSelector,
+	SocialRecoveryModuleBase,
+	SocialRecoveryModuleGracePeriodSelectorV1,
+	SocialRecoveryModuleGracePeriodSelectorV2,
+	SocialRecoveryModuleV1,
+	SocialRecoveryModuleV2,
 } from "./account/Safe/modules/SocialRecoveryModule";
 export { SafeAccountV0_2_0 } from "./account/Safe/SafeAccountV0_2_0";
 export { SafeAccountV0_3_0 } from "./account/Safe/SafeAccountV0_3_0";
-export { SafeAccountV1_5_0_M_0_3_0 } from "./account/Safe/SafeAccountV1_5_0_M_0_3_0";
 export { SafeMultiChainSigAccountV1 } from "./account/Safe/SafeMultiChainSigAccount";
+export { SafeMultiChainSigAccountV2 } from "./account/Safe/SafeMultiChainSigAccountV2";
 export type {
 	SafeMessageTypedDataDomain,
 	SafeMessageTypedMessageValue,
@@ -67,7 +71,7 @@ export { Simple7702AccountV09 } from "./account/simple/Simple7702AccountV09";
 export { Bundler } from "./Bundler";
 export {
 	BaseUserOperationDummyValues,
-	CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS,
+	CALIBUR_UNISWAP_V1_1_0_SINGLETON_ADDRESS,
 	DEFAULT_SECP256R1_PRECOMPILE_ADDRESS,
 	EIP712_MULTI_CHAIN_OPERATIONS_PRIMARY_TYPE,
 	EIP712_MULTI_CHAIN_OPERATIONS_TYPE,
@@ -78,6 +82,8 @@ export {
 	ENTRYPOINT_V7,
 	ENTRYPOINT_V8,
 	ENTRYPOINT_V9,
+	Safe_L2_V1_4_1,
+	Safe_L2_V1_5_0,
 	SAFE_FALLBACK_HANDLER_STORAGE_SLOT,
 	ZeroAddress,
 } from "./constants";

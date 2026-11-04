@@ -58,3 +58,44 @@ describe('WebAuthn init signature sorting', () => {
         expect(seg1.slice(128, 130)).toBe('00');
     });
 });
+
+// buildSignaturesFromSingerSignaturePairs defaults to the base-class (Passkey
+// module v0.2.0) addresses; the multi-chain classes reach it with their own
+// v0.2.1 defaults as overrides. Pin that passing a class's statics encodes
+// that class's shared signer / verifier proxy.
+describe.each([
+    ['SafeMultiChainSigAccountV1', () => ak.SafeMultiChainSigAccountV1],
+    ['SafeMultiChainSigAccountV2', () => ak.SafeMultiChainSigAccountV2],
+])('%s WebAuthn owner encoding through the class defaults', (_name, cls) => {
+    const overridesFor = (c) => ({
+        webAuthnSharedSigner: c.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+        webAuthnSignerFactory: c.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
+        webAuthnSignerSingleton: c.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
+        webAuthnSignerProxyCreationCode: c.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
+        eip7212WebAuthnPrecompileVerifier: c.DEFAULT_WEB_AUTHN_PRECOMPILE,
+        eip7212WebAuthnContractVerifier: c.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
+    });
+
+    test('isInit: true encodes the v0.2.1 shared signer', () => {
+        const sig = cls().buildSignaturesFromSingerSignaturePairs(
+            [{ signer: WEBAUTHN_KEY, signature: WEBAUTHN_SIG }],
+            { isInit: true, ...overridesFor(cls()) },
+        );
+        const seg = sig.slice(2, 132);
+        expect(seg.slice(24, 64)).toBe(cls().DEFAULT_WEB_AUTHN_SHARED_SIGNER.slice(2).toLowerCase());
+        expect(cls().DEFAULT_WEB_AUTHN_SHARED_SIGNER).not.toBe(SHARED_SIGNER);
+    });
+
+    test('isInit: false encodes the v0.2.1 verifier proxy', () => {
+        const sig = cls().buildSignaturesFromSingerSignaturePairs(
+            [{ signer: WEBAUTHN_KEY, signature: WEBAUTHN_SIG }],
+            { isInit: false, ...overridesFor(cls()) },
+        );
+        const seg = sig.slice(2, 132);
+        const proxy = cls().createWebAuthnSignerVerifierAddress(WEBAUTHN_KEY.x, WEBAUTHN_KEY.y);
+        expect(seg.slice(24, 64)).toBe(proxy.slice(2).toLowerCase());
+        expect(proxy).not.toBe(
+            ak.SafeAccountV0_3_0.createWebAuthnSignerVerifierAddress(WEBAUTHN_KEY.x, WEBAUTHN_KEY.y),
+        );
+    });
+});

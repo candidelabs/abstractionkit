@@ -65,7 +65,7 @@ import type {
  *   configuration have to change first — the v0.9 module must be enabled on
  *   the Safe, and the Safe's fallback handler must be updated to point at it.
  *   Until both land, UserOperations sent to the account will fail. Use
- *   {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions},
+ *   {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountMetaTransactions},
  *   whose batch must be sent as a UserOperation from the v0.7 account itself.
  *
  * @example Single-chain use — the common case
@@ -192,10 +192,11 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * @param overrides - override values to change the initialization default values
 	 * @returns a SafeAccount object
 	 */
-	public static initializeNewAccount(
+	public static initializeNewAccount<T extends typeof SafeMultiChainSigAccountV1>(
+		this: T,
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
-	): SafeMultiChainSigAccountV1 {
+	): InstanceType<T> {
 		let isInitWebAuthn = false;
 		let x = 0n;
 		let y = 0n;
@@ -238,7 +239,13 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 					SafeMultiChainSigAccountV1.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
-		const safe = new SafeMultiChainSigAccountV1(accountAddress, {
+		// Plain-JS callers may invoke this factory detached
+		// (`const init = SafeMultiChainSigAccountV1.initializeNewAccount; init(...)`),
+		// leaving strict-mode `this` undefined; fall back to this class so
+		// such calls keep working instead of throwing on `new this(...)`.
+		// biome-ignore lint/complexity/noThisInStatic: polymorphic factory; subclasses must get their own type back
+		const ctor = (this as T | undefined) ?? SafeMultiChainSigAccountV1;
+		const safe: SafeMultiChainSigAccountV1 = new ctor(accountAddress, {
 			safe4337ModuleAddress: overrides.safe4337ModuleAddress,
 			entrypointAddress: overrides.entrypointAddress,
 			onChainIdentifierParams: overrides.onChainIdentifierParams,
@@ -253,7 +260,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			safe.y = y;
 		}
 
-		return safe;
+		return safe as InstanceType<T>;
 	}
 
 	/**
@@ -886,7 +893,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			};
 			const schemes = signers.map((signer, i) =>
 				pickScheme(signer, ["typedData", "hash"], {
-					accountName: "SafeMultiChainSigAccountV1 (multi-op Merkle root)",
+					accountName: "Safe multi-chain (multi-op Merkle root)",
 					signerIndex: i,
 				}),
 			);
@@ -1002,8 +1009,8 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 		if (userOperationsToSign.length < 2) {
 			throw new RangeError(
 				"Multi-chain Merkle wrapper helpers require >= 2 userOperations. " +
-					"For a single UserOperation, use SafeMultiChainSigAccountV1.getUserOperationEip712Data " +
-					"or SafeMultiChainSigAccountV1.getUserOperationEip712Hash (these multichain-class overrides " +
+					"For a single UserOperation, use this class's getUserOperationEip712Data " +
+					"or getUserOperationEip712Hash (these multichain-class overrides " +
 					"default safe4337ModuleAddress to DEFAULT_SAFE_4337_MODULE_ADDRESS, the multi-chain module). " +
 					"The on-chain depth=0 path verifies against the per-op SafeOp digest, not a Merkle wrapper.",
 			);

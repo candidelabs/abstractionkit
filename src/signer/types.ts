@@ -30,7 +30,7 @@ export type SigningScheme = "hash" | "typedData";
  * {@link SignTypedDataFn}.
  *
  * For the multi-op Merkle path
- * (`SafeMultiChainSigAccountV1.signUserOperationsWithSigners`), see
+ * (`signUserOperationsWithSigners` on the Safe multi-chain classes), see
  * {@link MultiOpSignContext}.
  */
 export interface SignContext<T extends BaseUserOperation = BaseUserOperation> {
@@ -41,7 +41,7 @@ export interface SignContext<T extends BaseUserOperation = BaseUserOperation> {
 
 /**
  * Context for the multi-op Merkle signing path
- * (`SafeMultiChainSigAccountV1.signUserOperationsWithSigners`). The signer
+ * (`signUserOperationsWithSigners` on the Safe multi-chain classes). The signer
  * sees the full bundle so you can show "you're
  * authorizing N ops across these chains" instead of an opaque root.
  *

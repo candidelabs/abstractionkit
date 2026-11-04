@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.0.0
+
+### Breaking Changes
+
+- **`SafeAccountV1_5_0_M_0_3_0` is removed.**
+- **`SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions` is renamed `createMigrateToSafeMultiChainSigAccountMetaTransactions`.** The batch it builds enables the `Safe4337MultiChainSignatureModule`, which `SafeMultiChainSigAccountV1` and `SafeMultiChainSigAccountV2` share, so a migrated account can be attached with either class (V2 for Safe v1.5.0). The old name still works as a deprecated alias and will be removed in the next release.
+- **`Calibur7702Account` delegates to Uniswap Calibur v1.1.0 by default.** `CALIBUR_UNISWAP_V1_0_0_SINGLETON_ADDRESS` is replaced by `CALIBUR_UNISWAP_V1_1_0_SINGLETON_ADDRESS` (`0x000000005c84F8Fd50b21CAC312528A64437030e`), the new default `delegateeAddress`. v1.1.0 keeps the EIP-712 domain (`"Calibur"`, `"1.0.0"`), every selector the SDK uses and the storage layout, so registered keys survive a re-delegation from v1.0.0. An EOA still delegated to v1.0.0 passes `0x000000009B1D0aF20D8C6d0A44e162d11F9b8f00` as `delegateeAddress`.
+- **`SocialRecoveryModule` and `SocialRecoveryModuleGracePeriodSelector` are replaced by versioned names.** Social Recovery Module v0.2.0 fixes the findings of Certora's audit and is a new deployment with new addresses ([release](https://github.com/candidelabs/candide-contracts/releases/tag/recovery%2Fv0.2.0)). v0.1.0 stays deployed. Pick the class that matches the module your accounts enabled:
+  - `SocialRecoveryModuleV1` with `SocialRecoveryModuleGracePeriodSelectorV1` for v0.1.0. These are what `SocialRecoveryModule` and `SocialRecoveryModuleGracePeriodSelector` used to be, with the same addresses.
+  - `SocialRecoveryModuleV2` with `SocialRecoveryModuleGracePeriodSelectorV2` for v0.2.0.
+
+  **If your users enabled the v0.1.0 module, use `SocialRecoveryModuleV1` and `SocialRecoveryModuleGracePeriodSelectorV1`.** Pointed at a v0.2.0 address, an account that enabled v0.1.0 has no guardians, and its recovery calls fail.
+
+  The `RecoveryRequest` type is likewise replaced by `RecoveryRequestV1` and `RecoveryRequestV2`.
+
+  What changes with v0.2.0:
+  - `createConfirmRecoveryMetaTransaction` and `createMultiConfirmRecoveryMetaTransaction` take the recovery `nonce` before `execute` and before the signatures, respectively. Use the nonce the guardians signed (`messageValue.nonce` from `getRecoveryRequestEip712Data`). The module reverts if the nonce changed before the transaction is included.
+  - Guardian signatures use EIP-712 domain version `"0.2.0"`. Signatures made for v0.1.0 are not valid on v0.2.0.
+  - `getRecoveryRequest` returns the request's `nonce`, and `executeAfter` is renamed `executableAt` (`RecoveryRequestV2`).
+  - Adding or revoking a guardian, changing the threshold, and `cancelRecovery` all cancel the recovery in progress and invalidate the guardian confirmations collected so far. `cancelRecovery` also works when no recovery is in progress.
+
+### New Features
+
+- `SocialRecoveryModuleBase` holds the methods both versions share, for code that accepts either version.
+- **`SafeMultiChainSigAccountV2`.** The multi-chain signature module on EntryPoint v0.9, like `SafeMultiChainSigAccountV1`, but new accounts deploy the Safe L2 v1.5.0 singleton instead of v1.4.1. Same module, signing and Safe Passkey module v0.2.1 WebAuthn defaults; only the counterfactual address differs. A deployed account can be attached with either class, since the singleton is only used for address derivation and deployment.
+- `SafeMultiChainSigAccountV1.initializeNewAccount` is polymorphic, so subclasses get their own type back.
+- `Safe_L2_V1_4_1` and `Safe_L2_V1_5_0` (singleton address and init hash) are exported, for the `safeAccountSingleton` override.
+
+### API Changes
+
+- Removed the `SafeAccountV1_4_1_M_0_3_0` alias of `SafeAccountV0_3_0`. It was never exported, so this shouldn't affect anyone.
+
 ## 0.4.3
 
 ### New Features

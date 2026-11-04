@@ -89,7 +89,7 @@ import {
  * multi-signer aggregation (ECDSA + WebAuthn), module enable/disable helpers,
  * and UserOperation construction. Versioned subclasses
  * ({@link SafeAccountV0_2_0}, {@link SafeAccountV0_3_0},
- * {@link SafeAccountV1_5_0_M_0_3_0}) bind this class to a specific EntryPoint
+ * {@link SafeMultiChainSigAccountV1}) bind this class to a specific EntryPoint
  * and Safe singleton, and expose version-typed wrappers.
  *
  * Instantiate directly only for an already-deployed account; use a subclass's
@@ -106,7 +106,7 @@ export class SafeAccount extends SmartAccount {
 	// EIP-7212 contract verifier used in the verifier proxy CREATE2 salt and
 	// installed as the shared signer's contract verifier at init time.
 	// Defaults to FCL P256 because that's what Safe Passkey module v0.2.0
-	// shipped — newer modules (v0.2.1+, v1.5.0_M_0.3.0) override with Daimo.
+	// shipped — newer modules (v0.2.1+) override with Daimo.
 	// FCL has known non-security-critical bugs and is being phased out
 	// upstream now that EIP-7951 (precompile) supersedes it.
 	static readonly DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER: string =
@@ -1044,7 +1044,7 @@ export class SafeAccount extends SmartAccount {
 	 * @deprecated Use `account.formatUserOperationSignature([{ signer, signature }], options)`
 	 * when an account instance is available, or
 	 * `SafeAccount.formatSignaturesToUseroperationSignature([{ signer, signature }], options)`
-	 * for static formatting. For `SafeMultiChainSigAccountV1`, prefer the
+	 * for static formatting. For the Safe multi-chain classes, prefer the
 	 * instance method so `isMultiChainSignature` is applied automatically; if
 	 * using the lower-level static formatter directly, pass
 	 * `isMultiChainSignature: true`.
@@ -3261,7 +3261,7 @@ export class SafeAccount extends SmartAccount {
 	 * @returns a promise of [disableOld, enableNew, setFallbackHandler] MetaTransactions
 	 *
 	 * @remarks Shared implementation behind the version-specific migration helpers
-	 * (e.g. {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountV1MetaTransactions}).
+	 * (e.g. {@link SafeAccountV0_3_0.createMigrateToSafeMultiChainSigAccountMetaTransactions}).
 	 * It is `protected` on purpose: those wrappers pin the correct module addresses,
 	 * so callers reach migration through them rather than supplying raw module
 	 * addresses directly.
@@ -3544,7 +3544,7 @@ function generateOnChainIdentifier(
 	project: string,
 	platform: "Web" | "Mobile" | "Safe App" | "Widget" = "Web",
 	tool: string = "abstractionkit",
-	toolVersion: string = "0.4.3",
+	toolVersion: string = "1.0.0",
 ): string {
 	const identifierPrefix = "5afe"; // Safe identifier prefix
 	const identifierVersion = "00"; // First version
