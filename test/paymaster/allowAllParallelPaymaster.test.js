@@ -10,6 +10,9 @@ const ak = require('../../dist/index.cjs');
 const OWNER = '0x' + '42'.repeat(20);
 const CUSTOM_ADDRESS = '0x' + '77'.repeat(20);
 const PAYMASTER_SIG_MAGIC = '22e325a297439656';
+// The fixed signature the AllowAll contract accepts, its 2-byte length (0x0020) and the magic.
+const APPROVED_PAYMASTER_DATA =
+    '0x7603fbcd3c6cebdb7193b716f62fe7e9d4afd859df4bf7fcdb2e9d486f57a1ca' + '0020' + PAYMASTER_SIG_MAGIC;
 
 const GAS_RESULT = {
     callGasLimit: '0x10000',
@@ -68,7 +71,7 @@ describe('ExperimentalAllowAllParallelPaymaster payloads', () => {
         expect(approved).not.toBe(init.paymasterData);
         // the 2-byte length word and the 8-byte magic are identical; only the signature differs
         expect(approved.slice(-20)).toBe(init.paymasterData.slice(-20));
-        expect(approved.slice(0, 66)).not.toBe(init.paymasterData.slice(0, 66));
+        expect(approved).toBe(APPROVED_PAYMASTER_DATA);
     });
 });
 
