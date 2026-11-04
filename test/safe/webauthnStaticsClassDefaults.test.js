@@ -140,6 +140,55 @@ describe.each(CLASSES)('%s WebAuthn statics', (_name, Account, expected, other, 
     });
 });
 
+describe.each(CLASSES)('%s baseEstimateUserOperationGas', (_name, Account, expected) => {
+    const GAS = { callGasLimit: '0x10000', verificationGasLimit: '0x10000', preVerificationGas: '0x10000' };
+    const BASE_OP = {
+        nonce: 0n,
+        callData: '0x',
+        callGasLimit: 0n,
+        verificationGasLimit: 0n,
+        preVerificationGas: 0n,
+        maxFeePerGas: 0n,
+        maxPriorityFeePerGas: 0n,
+        paymaster: null,
+        paymasterVerificationGasLimit: null,
+        paymasterPostOpGasLimit: null,
+        paymasterData: null,
+        signature: '0x',
+    };
+
+    async function estimatedSignature(account, op, viaBase) {
+        let captured;
+        const bundler = new ak.Bundler({
+            request: async ({ params }) => {
+                captured = params[0];
+                return GAS;
+            },
+        });
+        const method = viaBase ? 'baseEstimateUserOperationGas' : 'estimateUserOperationGas';
+        await account[method]({ ...op }, bundler, { expectedSigners: [PASSKEY] });
+        return captured.signature;
+    }
+
+    test('the dummy signature names the class shared signer on a deployment op', async () => {
+        const account = Account.initializeNewAccount([PASSKEY]);
+        const op = { ...BASE_OP, sender: account.accountAddress, factory: account.factoryAddress, factoryData: account.factoryData };
+        const viaBase = await estimatedSignature(account, op, true);
+        const viaPublic = await estimatedSignature(account, op, false);
+        expect(includesAddress(viaBase, Account.DEFAULT_WEB_AUTHN_SHARED_SIGNER)).toBe(true);
+        expect(includesAddress(viaPublic, Account.DEFAULT_WEB_AUTHN_SHARED_SIGNER)).toBe(true);
+    });
+
+    test('the dummy signature names the class proxy on a deployed account', async () => {
+        const account = new Account(ACCOUNT);
+        const op = { ...BASE_OP, sender: ACCOUNT, factory: null, factoryData: null };
+        const viaBase = await estimatedSignature(account, op, true);
+        const viaPublic = await estimatedSignature(account, op, false);
+        expect(includesAddress(viaBase, expected)).toBe(true);
+        expect(includesAddress(viaPublic, expected)).toBe(true);
+    });
+});
+
 describe('detached calls', () => {
     test('a detached static keeps working and falls back to the v0.2.0 base defaults', () => {
         const detached = ak.SafeMultiChainSigAccountV1.getSignerLowerCaseAddress;

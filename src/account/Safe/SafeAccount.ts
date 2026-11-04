@@ -1381,6 +1381,9 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.stateOverrideSet - state override values to set during gs estimation
 	 * @param overrides.dummySignerSignaturePairs - list of dummy signers signature pairs
 	 * defaults to a single eoa signature
+	 * @param overrides.isMultiChainSignature - wrap the dummy signature in the
+	 * multi-chain module layout; the multi-chain classes set it from
+	 * `estimateUserOperationGas`, which is the entry point to prefer
 	 * @returns promise with [preVerificationGas, verificationGasLimit, callGasLimit]
 	 */
 	public async baseEstimateUserOperationGas(
@@ -1401,6 +1404,10 @@ export class SafeAccount extends SmartAccount {
 	): Promise<[bigint, bigint, bigint]> {
 		const validAfter = 0xffffffffffffn;
 		const validUntil = 0xffffffffffffn;
+		// Dummy signatures are built through the constructed class so a
+		// subclass's Passkey module defaults (multi-chain v0.2.1) apply when a
+		// dummy pair carries a raw WebauthnPublicKey signer.
+		const accountClass = this.constructor as typeof SafeAccount;
 
 		// Derived from the operation's own init fields; the signature encoder
 		// needs the init flag and verifier config whenever a dummy pair
@@ -1438,7 +1445,7 @@ export class SafeAccount extends SmartAccount {
 				throw new RangeError("Number of dummy signers signature pairs can't be less than 1");
 			}
 			dummySignersCount = overrides.dummySignerSignaturePairs.length;
-			estimationSignature = SafeAccount.formatSignaturesToUseroperationSignature(
+			estimationSignature = accountClass.formatSignaturesToUseroperationSignature(
 				overrides.dummySignerSignaturePairs,
 				{
 					validAfter,
@@ -1449,12 +1456,12 @@ export class SafeAccount extends SmartAccount {
 			);
 		} else if (overrides.expectedSigners != null) {
 			const dummySignerSignaturePairs =
-				SafeAccount.createDummySignerSignaturePairForExpectedSigners(
+				accountClass.createDummySignerSignaturePairForExpectedSigners(
 					overrides.expectedSigners,
 					webAuthnSignatureOverrides,
 				);
 			dummySignersCount = dummySignerSignaturePairs.length;
-			estimationSignature = SafeAccount.formatSignaturesToUseroperationSignature(
+			estimationSignature = accountClass.formatSignaturesToUseroperationSignature(
 				dummySignerSignaturePairs,
 				{
 					validAfter,
@@ -1465,7 +1472,7 @@ export class SafeAccount extends SmartAccount {
 			);
 		} else if (userOperation.signature.length < 3) {
 			dummySignersCount = 1;
-			estimationSignature = SafeAccount.formatSignaturesToUseroperationSignature(
+			estimationSignature = accountClass.formatSignaturesToUseroperationSignature(
 				[EOADummySignerSignaturePair],
 				{
 					validAfter,
