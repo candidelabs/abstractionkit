@@ -2403,6 +2403,11 @@ export class SafeAccount extends SmartAccount {
 	 * @param overrides.prevOwner - if set, it will be used as the previous owner and
 	 * nodeRpcUrl won't be used to fetch it
 	 * @returns a promise of a list of metaTransactions
+	 *
+	 * @remarks WebAuthn owner addresses are derived through the constructed
+	 * class's static `createWebAuthnSignerVerifierAddress`, so a subclass that
+	 * targets a different Safe Passkey module release (the multi-chain classes
+	 * use v0.2.1) derives the same owner it signs with. Per-call overrides win.
 	 */
 	public async createSwapOwnerMetaTransactions(
 		nodeRpcUrl: string | Transport | JsonRpcNode,
@@ -2420,39 +2425,33 @@ export class SafeAccount extends SmartAccount {
 		let deployNewOwnerSignerMetaTransaction: MetaTransaction | null = null;
 		let newOwnerT: string;
 		let oldOwnerT: string;
-		const webAuthnSignerProxyCreationCode =
-			overrides.webAuthnSignerProxyCreationCode ??
-			SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+		const accountClass = this.constructor as typeof SafeAccount;
 
 		if (typeof newOwner !== "string") {
-			newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(newOwner.x, newOwner.y, {
-				eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-				eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-				webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-				webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-				webAuthnSignerProxyCreationCode,
-			});
+			newOwnerT = accountClass.createWebAuthnSignerVerifierAddress(
+				newOwner.x,
+				newOwner.y,
+				overrides,
+			);
 			const newOwnerCode = await JsonRpcNode.from(nodeRpcUrl).getCode(newOwnerT, "latest");
 			const newOwnerNotDeployed = newOwnerCode.length < 3;
 			if (newOwnerNotDeployed) {
 				deployNewOwnerSignerMetaTransaction =
-					SafeAccount.createDeployWebAuthnVerifierMetaTransaction(newOwner.x, newOwner.y, {
-						eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-						eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-						webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-					});
+					accountClass.createDeployWebAuthnVerifierMetaTransaction(
+						newOwner.x,
+						newOwner.y,
+						overrides,
+					);
 			}
 		} else {
 			newOwnerT = newOwner;
 		}
 		if (typeof oldOwner !== "string") {
-			oldOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(oldOwner.x, oldOwner.y, {
-				eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-				eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-				webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-				webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-				webAuthnSignerProxyCreationCode,
-			});
+			oldOwnerT = accountClass.createWebAuthnSignerVerifierAddress(
+				oldOwner.x,
+				oldOwner.y,
+				overrides,
+			);
 		} else {
 			oldOwnerT = oldOwner;
 		}
@@ -2511,20 +2510,11 @@ export class SafeAccount extends SmartAccount {
 		let ownerToDeleteT: string;
 
 		if (typeof ownerToDelete !== "string") {
-			const webAuthnSignerProxyCreationCode =
-				overrides.webAuthnSignerProxyCreationCode ??
-				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
-
-			ownerToDeleteT = SafeAccount.createWebAuthnSignerVerifierAddress(
+			const accountClass = this.constructor as typeof SafeAccount;
+			ownerToDeleteT = accountClass.createWebAuthnSignerVerifierAddress(
 				ownerToDelete.x,
 				ownerToDelete.y,
-				{
-					eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-					eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-					webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-					webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-					webAuthnSignerProxyCreationCode,
-				},
+				overrides,
 			);
 		} else {
 			ownerToDeleteT = ownerToDelete;
@@ -2573,17 +2563,12 @@ export class SafeAccount extends SmartAccount {
 		let newOwnerT: string;
 
 		if (typeof newOwner !== "string") {
-			const webAuthnSignerProxyCreationCode =
-				overrides.webAuthnSignerProxyCreationCode ??
-				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
-
-			newOwnerT = SafeAccount.createWebAuthnSignerVerifierAddress(newOwner.x, newOwner.y, {
-				eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-				eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-				webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-				webAuthnSignerSingleton: overrides.webAuthnSignerSingleton,
-				webAuthnSignerProxyCreationCode,
-			});
+			const accountClass = this.constructor as typeof SafeAccount;
+			newOwnerT = accountClass.createWebAuthnSignerVerifierAddress(
+				newOwner.x,
+				newOwner.y,
+				overrides,
+			);
 			if (overrides.nodeRpcUrl == null) {
 				throw new RangeError("overrides.nodeRpcUrl can't be null if adding a webauthn owner");
 			}
@@ -2591,11 +2576,11 @@ export class SafeAccount extends SmartAccount {
 			const newOwnerNotDeployed = newOwnerCode.length < 3;
 			if (newOwnerNotDeployed) {
 				deployNewOwnerSignerMetaTransaction =
-					SafeAccount.createDeployWebAuthnVerifierMetaTransaction(newOwner.x, newOwner.y, {
-						eip7212WebAuthnPrecompileVerifier: overrides.eip7212WebAuthnPrecompileVerifier,
-						eip7212WebAuthnContractVerifier: overrides.eip7212WebAuthnContractVerifier,
-						webAuthnSignerFactory: overrides.webAuthnSignerFactory,
-					});
+					accountClass.createDeployWebAuthnVerifierMetaTransaction(
+						newOwner.x,
+						newOwner.y,
+						overrides,
+					);
 			}
 		} else {
 			newOwnerT = newOwner;

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+- **Passkey owner helpers on `SafeMultiChainSigAccountV1` and `SafeMultiChainSigAccountV2` derived v0.2.0 owners.** `createAddOwnerWithThresholdMetaTransactions`, `createSwapOwnerMetaTransactions` and `createRemoveOwnerMetaTransaction` always resolved a `WebauthnPublicKey` through the Safe Passkey module v0.2.0 defaults, while these classes sign with v0.2.1. An added passkey was registered under an address the account never signs with, and swapping or removing an existing passkey owner threw `not a current owner`. The helpers now derive the owner through the constructed class's `createWebAuthnSignerVerifierAddress` and `createDeployWebAuthnVerifierMetaTransaction`, so every class registers the owner it signs with. `SafeAccountV0_2_0` and `SafeAccountV0_3_0` keep v0.2.0. Per-call overrides still take precedence.
+
 ## 1.0.0
 
 ### Breaking Changes
