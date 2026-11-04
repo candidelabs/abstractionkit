@@ -2103,14 +2103,16 @@ export class SafeAccount extends SmartAccount {
 			webAuthnSignerProxyCreationCode?: string;
 		} = {},
 	): string {
+		// biome-ignore lint/complexity/noThisInStatic: the Passkey module defaults of the class this was called on (multi-chain v0.2.1) must win; detached calls fall back to SafeAccount
+		const cls: typeof SafeAccount = this ?? SafeAccount;
 		const eip7212WebAuthnPrecompileVerifier =
-			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+			overrides.eip7212WebAuthnPrecompileVerifier ?? cls.DEFAULT_WEB_AUTHN_PRECOMPILE;
 		const eip7212WebAuthnContractVerifier =
-			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
+			overrides.eip7212WebAuthnContractVerifier ?? cls.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 		const webAuthnSignerFactory =
-			overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+			overrides.webAuthnSignerFactory ?? cls.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 		const webAuthnSignerSingleton =
-			overrides.webAuthnSignerSingleton ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+			overrides.webAuthnSignerSingleton ?? cls.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
 
 		if (
 			eip7212WebAuthnPrecompileVerifier.length !== 42 ||
@@ -2126,7 +2128,7 @@ export class SafeAccount extends SmartAccount {
 				["bytes", "uint256", "uint256", "uint256", "uint256"],
 				[
 					overrides.webAuthnSignerProxyCreationCode ??
-						SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
+						cls.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
 					webAuthnSignerSingleton,
 					x,
 					y,
@@ -2160,10 +2162,12 @@ export class SafeAccount extends SmartAccount {
 		signerSignaturePairs: SignerSignaturePair[],
 		options: SafeSignatureOptions & WebAuthnSignatureOverrides = {},
 	): string {
+		// biome-ignore lint/complexity/noThisInStatic: the Passkey module defaults of the class this was called on (multi-chain v0.2.1) must win; detached calls fall back to SafeAccount
+		const cls: typeof SafeAccount = this ?? SafeAccount;
 		const validAfter = options.validAfter ?? 0n;
 		const validUntil = options.validUntil ?? 0n;
 
-		const signature = SafeAccount.buildSignaturesFromSingerSignaturePairs(
+		const signature = cls.buildSignaturesFromSingerSignaturePairs(
 			signerSignaturePairs,
 			options,
 		);
@@ -2239,28 +2243,30 @@ export class SafeAccount extends SmartAccount {
 		signer: Signer,
 		overrides: WebAuthnSignatureOverrides = {},
 	): string {
+		// biome-ignore lint/complexity/noThisInStatic: the Passkey module defaults of the class this was called on (multi-chain v0.2.1) must win; detached calls fall back to SafeAccount
+		const cls: typeof SafeAccount = this ?? SafeAccount;
 		if (typeof signer === "string") {
 			return signer.toLowerCase();
 		} else if (overrides.isInit) {
 			// on init the encoded owner is the WebAuthn shared signer, not the
 			// per-owner verifier proxy — sort by the same address that gets encoded
 			const webAuthnSharedSigner =
-				overrides.webAuthnSharedSigner ?? SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
+				overrides.webAuthnSharedSigner ?? cls.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
 			return webAuthnSharedSigner.toLowerCase();
 		} else {
 			const eip7212WebAuthnPrecompileVerifier =
-				overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+				overrides.eip7212WebAuthnPrecompileVerifier ?? cls.DEFAULT_WEB_AUTHN_PRECOMPILE;
 			const eip7212WebAuthnContractVerifier =
-				overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
+				overrides.eip7212WebAuthnContractVerifier ?? cls.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 			const webAuthnSignerFactory =
-				overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+				overrides.webAuthnSignerFactory ?? cls.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 			const webAuthnSignerSingleton =
-				overrides.webAuthnSignerSingleton ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+				overrides.webAuthnSignerSingleton ?? cls.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
 			const webAuthnSignerProxyCreationCode =
 				overrides.webAuthnSignerProxyCreationCode ??
-				SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+				cls.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
-			return SafeAccount.createWebAuthnSignerVerifierAddress(signer.x, signer.y, {
+			return cls.createWebAuthnSignerVerifierAddress(signer.x, signer.y, {
 				eip7212WebAuthnPrecompileVerifier,
 				eip7212WebAuthnContractVerifier,
 				webAuthnSignerFactory,
@@ -2281,9 +2287,11 @@ export class SafeAccount extends SmartAccount {
 		signerSignaturePairs: SignerSignaturePair[],
 		overrides: WebAuthnSignatureOverrides = {},
 	) {
+		// biome-ignore lint/complexity/noThisInStatic: the Passkey module defaults of the class this was called on (multi-chain v0.2.1) must win; detached calls fall back to SafeAccount
+		const cls: typeof SafeAccount = this ?? SafeAccount;
 		signerSignaturePairs.sort((left, right) =>
-			SafeAccount.getSignerLowerCaseAddress(left.signer, overrides).localeCompare(
-				SafeAccount.getSignerLowerCaseAddress(right.signer, overrides),
+			cls.getSignerLowerCaseAddress(left.signer, overrides).localeCompare(
+				cls.getSignerLowerCaseAddress(right.signer, overrides),
 			),
 		);
 	}
@@ -2298,7 +2306,9 @@ export class SafeAccount extends SmartAccount {
 		signerSignaturePairs: SignerSignaturePair[],
 		webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
 	): string {
-		SafeAccount.sortSignatures(signerSignaturePairs, webAuthnSignatureOverrides);
+		// biome-ignore lint/complexity/noThisInStatic: the Passkey module defaults of the class this was called on (multi-chain v0.2.1) must win; detached calls fall back to SafeAccount
+		const cls: typeof SafeAccount = this ?? SafeAccount;
+		cls.sortSignatures(signerSignaturePairs, webAuthnSignatureOverrides);
 		const start = 65 * signerSignaturePairs.length;
 		const { segments } = signerSignaturePairs.reduce(
 			({ segments, offset }, { signer, signature, isContractSignature }) => {
@@ -2313,26 +2323,26 @@ export class SafeAccount extends SmartAccount {
 						if (webAuthnSignatureOverrides.isInit) {
 							const webauthnsharedsigner =
 								webAuthnSignatureOverrides.webAuthnSharedSigner ??
-								SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
+								cls.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
 							signer = webauthnsharedsigner;
 						} else {
 							const eip7212WebAuthnPrecompileVerifier =
 								webAuthnSignatureOverrides.eip7212WebAuthnPrecompileVerifier ??
-								SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+								cls.DEFAULT_WEB_AUTHN_PRECOMPILE;
 							const eip7212WebAuthnContractVerifier =
 								webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier ??
-								SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
+								cls.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 							const webAuthnSignerFactory =
 								webAuthnSignatureOverrides.webAuthnSignerFactory ??
-								SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+								cls.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 							const webAuthnSignerSingleton =
 								webAuthnSignatureOverrides.webAuthnSignerSingleton ??
-								SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+								cls.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
 							const webAuthnSignerProxyCreationCode =
 								webAuthnSignatureOverrides.webAuthnSignerProxyCreationCode ??
-								SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+								cls.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
-							signer = SafeAccount.createWebAuthnSignerVerifierAddress(signer.x, signer.y, {
+							signer = cls.createWebAuthnSignerVerifierAddress(signer.x, signer.y, {
 								eip7212WebAuthnPrecompileVerifier,
 								eip7212WebAuthnContractVerifier,
 								webAuthnSignerFactory,
@@ -2747,12 +2757,14 @@ export class SafeAccount extends SmartAccount {
 			webAuthnSignerFactory?: string;
 		} = {},
 	): MetaTransaction {
+		// biome-ignore lint/complexity/noThisInStatic: the Passkey module defaults of the class this was called on (multi-chain v0.2.1) must win; detached calls fall back to SafeAccount
+		const cls: typeof SafeAccount = this ?? SafeAccount;
 		const eip7212WebAuthnPrecompileVerifier =
-			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+			overrides.eip7212WebAuthnPrecompileVerifier ?? cls.DEFAULT_WEB_AUTHN_PRECOMPILE;
 		const eip7212WebAuthnContractVerifier =
-			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
+			overrides.eip7212WebAuthnContractVerifier ?? cls.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 		const webAuthnSignerFactory =
-			overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+			overrides.webAuthnSignerFactory ?? cls.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 
 		const createDeterministicWebAuthnVerifierOwnerCallData = createCallData(
 			"0x0d2f0489", //createSigner
@@ -2942,6 +2954,8 @@ export class SafeAccount extends SmartAccount {
 		expectedSigners: Signer[],
 		webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
 	): SignerSignaturePair[] {
+		// biome-ignore lint/complexity/noThisInStatic: the Passkey module defaults of the class this was called on (multi-chain v0.2.1) must win; detached calls fall back to SafeAccount
+		const cls: typeof SafeAccount = this ?? SafeAccount;
 		const signers = [...expectedSigners];
 		const dummySignerSignatures: SignerSignaturePair[] = [];
 		for (const signer of signers) {
@@ -2956,26 +2970,26 @@ export class SafeAccount extends SmartAccount {
 				if (webAuthnSignatureOverrides.isInit) {
 					const webauthnsharedsigner =
 						webAuthnSignatureOverrides.webAuthnSharedSigner ??
-						SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
+						cls.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
 					signerSignaturePair.signer = webauthnsharedsigner;
 				} else {
 					const eip7212WebAuthnPrecompileVerifier =
 						webAuthnSignatureOverrides.eip7212WebAuthnPrecompileVerifier ??
-						SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+						cls.DEFAULT_WEB_AUTHN_PRECOMPILE;
 					const eip7212WebAuthnContractVerifier =
 						webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier ??
-						SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
+						cls.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 					const webAuthnSignerFactory =
 						webAuthnSignatureOverrides.webAuthnSignerFactory ??
-						SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+						cls.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 					const webAuthnSignerSingleton =
 						webAuthnSignatureOverrides.webAuthnSignerSingleton ??
-						SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+						cls.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
 					const webAuthnSignerProxyCreationCode =
 						webAuthnSignatureOverrides.webAuthnSignerProxyCreationCode ??
-						SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+						cls.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
-					signerSignaturePair.signer = SafeAccount.createWebAuthnSignerVerifierAddress(
+					signerSignaturePair.signer = cls.createWebAuthnSignerVerifierAddress(
 						signer.x,
 						signer.y,
 						{
@@ -3018,16 +3032,18 @@ export class SafeAccount extends SmartAccount {
 			webAuthnSignerSingleton?: string;
 		} = {},
 	): Promise<boolean> {
+		// biome-ignore lint/complexity/noThisInStatic: the Passkey module defaults of the class this was called on (multi-chain v0.2.1) must win; detached calls fall back to SafeAccount
+		const cls: typeof SafeAccount = this ?? SafeAccount;
 		if (messageHash.length !== 66 || messageHash.slice(0, 2) !== "0x") {
 			throw new RangeError("Invalid messageHash, must be a 0x-prefixed keccak256 hash.");
 		}
 
 		const eip7212WebAuthnPrecompileVerifier =
-			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+			overrides.eip7212WebAuthnPrecompileVerifier ?? cls.DEFAULT_WEB_AUTHN_PRECOMPILE;
 		const eip7212WebAuthnContractVerifier =
-			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
+			overrides.eip7212WebAuthnContractVerifier ?? cls.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 		const webAuthnSignerSingleton =
-			overrides.webAuthnSignerSingleton ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+			overrides.webAuthnSignerSingleton ?? cls.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
 
 		if (
 			eip7212WebAuthnPrecompileVerifier.length !== 42 ||
