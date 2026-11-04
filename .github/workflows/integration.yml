@@ -67,4 +67,5 @@ jobs:
         run: yarn test:integration
         env:
           ETHEREUM_RPC: ${{ secrets.ETHEREUM_RPC }}
+          # Must be archive-capable: globalSetup.cjs checks it serves historical state.
           OPTIMISM_RPC: ${{ secrets.OPTIMISM_RPC }}
