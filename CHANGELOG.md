@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+- **`SafeAccountV0_2_0.initializeNewAccount` returns the class it is called on.** It constructed a plain `SafeAccountV0_2_0` even when invoked on a consumer subclass, unlike `SafeAccountV0_3_0` and the multi-chain classes (#116). Detached calls (`const init = SafeAccountV0_2_0.initializeNewAccount; init(...)`) still fall back to `SafeAccountV0_2_0`.
+
 ## 1.0.0
 
 ### Breaking Changes

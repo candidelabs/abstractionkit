@@ -105,10 +105,11 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 * @example
 	 * const smartAccount = SafeAccountV0_2_0.initializeNewAccount(["0xOwnerAddress"]);
 	 */
-	public static initializeNewAccount(
+	public static initializeNewAccount<T extends typeof SafeAccountV0_2_0>(
+		this: T,
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
-	): SafeAccountV0_2_0 {
+	): InstanceType<T> {
 		let isInitWebAuthn = false;
 		let x = 0n;
 		let y = 0n;
@@ -134,7 +135,13 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 				overrides.safeModuleSetupAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
-		const safe = new SafeAccountV0_2_0(accountAddress, {
+		// Plain-JS callers may invoke this factory detached
+		// (`const init = SafeAccountV0_2_0.initializeNewAccount; init(...)`),
+		// leaving strict-mode `this` undefined; fall back to this class so
+		// such calls keep working instead of throwing on `new this(...)`.
+		// biome-ignore lint/complexity/noThisInStatic: polymorphic factory; subclasses must get their own type back
+		const ctor = (this as T | undefined) ?? SafeAccountV0_2_0;
+		const safe: SafeAccountV0_2_0 = new ctor(accountAddress, {
 			safe4337ModuleAddress: overrides.safe4337ModuleAddress,
 			entrypointAddress: overrides.entrypointAddress,
 			onChainIdentifierParams: overrides.onChainIdentifierParams,
@@ -148,7 +155,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			safe.y = y;
 		}
 
-		return safe;
+		return safe as InstanceType<T>;
 	}
 
 	/**
