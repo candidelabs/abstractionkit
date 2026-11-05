@@ -337,6 +337,26 @@ export class Calibur7702Account
 		if (transactions.length < 1) {
 			throw new RangeError("There should be at least one transaction");
 		}
+		// Reject bad input before any RPC call starts. A request left running
+		// behind a synchronous throw rejects with nobody listening, which Node
+		// reports as an unhandled rejection even though the caller caught the
+		// error that was thrown.
+		if (typeof overrides.maxFeePerGas === "bigint" && overrides.maxFeePerGas < 0n) {
+			throw new RangeError("maxFeePerGas override can't be negative");
+		}
+		if (typeof overrides.maxPriorityFeePerGas === "bigint" && overrides.maxPriorityFeePerGas < 0n) {
+			throw new RangeError("maxPriorityFeePerGas override can't be negative");
+		}
+		if (
+			overrides.eip7702Auth != null &&
+			overrides.eip7702Auth.nonce == null &&
+			providerRpc == null
+		) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"providerRpc can't be null if eoaDelegatorNonce is not overridden",
+			);
+		}
 
 		let nonce: bigint | null = null;
 		let nonceOp: Promise<bigint> | null = null;
@@ -352,14 +372,6 @@ export class Calibur7702Account
 			}
 		} else {
 			nonce = overrides.nonce;
-		}
-
-		if (typeof overrides.maxFeePerGas === "bigint" && overrides.maxFeePerGas < 0n) {
-			throw new RangeError("maxFeePerGas override can't be negative");
-		}
-
-		if (typeof overrides.maxPriorityFeePerGas === "bigint" && overrides.maxPriorityFeePerGas < 0n) {
-			throw new RangeError("maxPriorityFeePerGas override can't be negative");
 		}
 
 		let maxFeePerGas = BaseUserOperationDummyValues.maxFeePerGas;
@@ -586,13 +598,16 @@ export class Calibur7702Account
 				preVerificationGas = BigInt(estimation.preVerificationGas);
 				verificationGasLimit = BigInt(estimation.verificationGasLimit);
 				callGasLimit = BigInt(estimation.callGasLimit);
-				// Compensate for signature verification cost the bundler skips
-				// during `eth_estimateUserOperationGas`: estimation runs with a
-				// dummy signature whose signature path is short-circuited
-				// (the dummy doesn't recover to a real key, so the bundler
-				// bypasses signature validation). ~55k gas covers the on-chain
-				// signature path that simulation never paid for, whether the
-				// real key is secp256k1 (ECRECOVER), P-256, or WebAuthn-P256.
+				// Headroom on top of the bundler's estimate, which is taken
+				// with a dummy signature. For a secp256k1 key the dummy is
+				// recovered like a real signature, so the estimate already
+				// includes that cost. A dummy WebAuthn signature fails before
+				// the P-256 check runs; where the chain has the P-256
+				// precompile (RIP-7212 / EIP-7951) this margin covers the
+				// difference. On a chain without it the check runs in the
+				// contract and costs far more: raise
+				// `verificationGasLimitPercentageMultiplier` or set
+				// `verificationGasLimit` there.
 				verificationGasLimit += 55_000n;
 
 				userOperation.maxFeePerGas = inputMaxFeePerGas;
@@ -1217,6 +1232,9 @@ export class Calibur7702Account
 		]);
 
 		if (typeof result === "string") {
+			// An EOA that is not delegated has no code and answers "0x":
+			// no key is registered there (getKeys returns [] for it too).
+			if (result === "0x") return false;
 			const decoded = decodeAbiParameters<[boolean]>(["bool"], result);
 			return decoded[0];
 		}
@@ -1246,6 +1264,7 @@ export class Calibur7702Account
 		]);
 
 		if (typeof result === "string") {
+			Calibur7702Account.ensureDelegatedCallResult(result, "getKeySettings");
 			const decoded = decodeAbiParameters<[bigint]>(["uint256"], result);
 			return Calibur7702Account.unpackKeySettings(BigInt(decoded[0]));
 		}
@@ -1272,6 +1291,7 @@ export class Calibur7702Account
 		]);
 
 		if (typeof result === "string") {
+			Calibur7702Account.ensureDelegatedCallResult(result, "getKey");
 			const decoded = decodeAbiParameters<[[bigint, string]]>(["(uint8,bytes)"], result);
 			const keyTuple = decoded[0];
 			return {
@@ -1280,6 +1300,19 @@ export class Calibur7702Account
 			};
 		}
 		throw new AbstractionKitError("BAD_DATA", "Unexpected response from getKey call");
+	}
+
+	/**
+	 * An `eth_call` to an EOA that is not delegated returns "0x". Decoding that
+	 * fails with an opaque ABI error, so name the likely cause instead.
+	 */
+	private static ensureDelegatedCallResult(result: string, method: string): void {
+		if (result === "0x") {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`${method} returned an empty result, the account is probably not delegated to Calibur yet.`,
+			);
+		}
 	}
 
 	/**

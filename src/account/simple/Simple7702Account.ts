@@ -389,6 +389,26 @@ export class BaseSimple7702Account extends SmartAccount {
 		if (transactions.length < 1) {
 			throw new RangeError("There should be at least one transaction");
 		}
+		// Reject bad input before any RPC call starts. A request left running
+		// behind a synchronous throw rejects with nobody listening, which Node
+		// reports as an unhandled rejection even though the caller caught the
+		// error that was thrown.
+		if (typeof overrides.maxFeePerGas === "bigint" && overrides.maxFeePerGas < 0n) {
+			throw new RangeError("maxFeePerGas override can't be negative");
+		}
+		if (typeof overrides.maxPriorityFeePerGas === "bigint" && overrides.maxPriorityFeePerGas < 0n) {
+			throw new RangeError("maxPriorityFeePerGas override can't be negative");
+		}
+		if (
+			overrides.eip7702Auth != null &&
+			overrides.eip7702Auth.nonce == null &&
+			providerRpc == null
+		) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"providerRpc can't be null if eoaDelegatorNonce is not overridden",
+			);
+		}
 		let nonce: bigint | null = null;
 		let nonceOp: Promise<bigint> | null = null;
 
@@ -405,13 +425,6 @@ export class BaseSimple7702Account extends SmartAccount {
 			nonce = overrides.nonce;
 		}
 
-		if (typeof overrides.maxFeePerGas === "bigint" && overrides.maxFeePerGas < 0n) {
-			throw new RangeError("maxFeePerGas override can't be negative");
-		}
-
-		if (typeof overrides.maxPriorityFeePerGas === "bigint" && overrides.maxPriorityFeePerGas < 0n) {
-			throw new RangeError("maxPriorityFeePerGas override can't be negative");
-		}
 		let maxFeePerGas = BaseUserOperationDummyValues.maxFeePerGas;
 		let maxPriorityFeePerGas = BaseUserOperationDummyValues.maxPriorityFeePerGas;
 
@@ -620,7 +633,15 @@ export class BaseSimple7702Account extends SmartAccount {
 		// gas limits are pre-specified would produce an invalid signature.
 		const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
 		if (parallelPaymasterInitValues != null) {
-			if (this.entrypointAddress !== ENTRYPOINT_V9) {
+			// same checks as the Safe classes: any letter case is a valid
+			// address, and the hash only excludes the paymaster signature
+			// when paymasterData ends with the magic
+			if (!parallelPaymasterInitValues.paymasterData.toLowerCase().endsWith("22e325a297439656")) {
+				throw new RangeError(
+					"Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'.",
+				);
+			}
+			if (this.entrypointAddress.toLowerCase() !== ENTRYPOINT_V9.toLowerCase()) {
 				throw new RangeError("parallelPaymasterInitValues only works with ep v0.9");
 			}
 			userOperation.paymaster = parallelPaymasterInitValues.paymaster;
@@ -650,13 +671,13 @@ export class BaseSimple7702Account extends SmartAccount {
 				[preVerificationGas, verificationGasLimit, callGasLimit] =
 					await this.baseEstimateUserOperationGas(userOperationToEstimate, bundlerRpc, {
 						stateOverrideSet: overrides.state_override_set,
+						dummySignature: overrides.dummySignature,
 					});
-				// Compensate for ECDSA verification cost the bundler skips during
-				// `eth_estimateUserOperationGas`: estimation runs with a dummy
-				// signature whose signature path is short-circuited (the dummy
-				// doesn't recover to a real owner, so the bundler bypasses
-				// signature validation). ~55k gas is the on-chain ECRECOVER +
-				// signature decode cost that simulation never paid for.
+				// Headroom on top of the bundler's estimate, which is taken
+				// with a dummy signature. The dummy is a well-formed ECDSA
+				// signature, so validation recovers a signer from it just as
+				// it does from a real one and the estimate already includes
+				// that cost; this is a margin, not a correction.
 				verificationGasLimit += 55_000n;
 
 				userOperation.maxFeePerGas = inputMaxFeePerGas;

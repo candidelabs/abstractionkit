@@ -1143,7 +1143,10 @@ export function privateKeyToAddress(privateKey: string): Hex {
 
 export function signHash(privateKey: string, hash: BytesLike): Signature {
     assertCheck(dataLength(hash) === 32, "invalid digest length");
-    const sig = secp256k1.sign(getBytesCopy(hash), getBytesCopy(normalizePrivateKey(privateKey)), { lowS: true });
+    // named "key" so a malformed private key is redacted from the error message
+    const sig = secp256k1.sign(getBytesCopy(hash), getBytesCopy(normalizePrivateKey(privateKey), "key"), {
+        lowS: true,
+    });
     const r = toBeHex(sig.r, 32);
     const s = toBeHex(sig.s, 32);
     const yParity = (sig.recovery & 1) as 0 | 1;
