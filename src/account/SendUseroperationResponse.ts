@@ -43,6 +43,9 @@ export class SendUseroperationResponse {
 	 * @throws AbstractionKitError with code "TIMEOUT" if the operation is not found within the
 	 * timeout (wall-clock). A failed poll does not end the wait; if the wait times out, the last
 	 * poll failure is the error's `cause`.
+	 * @throws the poll's own error, without waiting out the timeout, when retrying cannot help:
+	 * the bundler rejected the request itself (JSON-RPC -32600 invalid request, -32601 method
+	 * not found, -32602 invalid params, e.g. a malformed hash).
 	 */
 	async included(
 		timeoutInSeconds: number = 180,
@@ -64,7 +67,13 @@ export class SendUseroperationResponse {
 		const deadline = Date.now() + timeoutInSeconds * 1000;
 		let lastError: Error | undefined;
 		while (true) {
-			await this.delay(intervalInMilliseconds);
+			// The last sleep is cut short so the final poll lands on the
+			// deadline instead of up to one interval before it.
+			const remaining = deadline - Date.now();
+			if (remaining <= 0) {
+				break;
+			}
+			await this.delay(Math.min(intervalInMilliseconds, remaining));
 			try {
 				const res = await this.bundler.getUserOperationReceipt(this.userOperationHash);
 				if (res != null) {
@@ -72,14 +81,16 @@ export class SendUseroperationResponse {
 				}
 				lastError = undefined;
 			} catch (err) {
+				const error = ensureError(err);
+				// A request the bundler rejects as such fails the same way on
+				// every poll; report it now rather than after the timeout.
+				if (isPermanentPollError(error)) {
+					throw error;
+				}
 				// One failed poll (a 502, a dropped connection) says nothing
 				// about the operation. Keep polling and report the last
 				// failure if the wait times out.
-				lastError = ensureError(err);
-			}
-			// stop when the next poll would land after the deadline
-			if (Date.now() + intervalInMilliseconds > deadline) {
-				break;
+				lastError = error;
 			}
 		}
 		throw new AbstractionKitError("TIMEOUT", "can't find useroperation", {
@@ -87,4 +98,21 @@ export class SendUseroperationResponse {
 			cause: lastError,
 		});
 	}
+}
+
+/**
+ * JSON-RPC codes for a request the server refuses as such: invalid request,
+ * method not found, invalid params. Retrying the same request cannot succeed.
+ */
+const PERMANENT_JSON_RPC_CODES = new Set([-32600, -32601, -32602]);
+
+/**
+ * Whether a failed receipt poll will fail the same way on every retry.
+ * {@link Bundler} reports the JSON-RPC code as `errno`; a raw transport error
+ * carries it as `code`.
+ */
+function isPermanentPollError(error: Error): boolean {
+	const { errno, code } = error as Error & { errno?: unknown; code?: unknown };
+	const rpcCode = typeof errno === "number" ? errno : code;
+	return typeof rpcCode === "number" && PERMANENT_JSON_RPC_CODES.has(rpcCode);
 }

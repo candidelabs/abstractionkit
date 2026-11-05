@@ -3,6 +3,9 @@
 //   took, so a slow bundler stretched the wait to several times the timeout.
 // - NaN slipped past the argument checks.
 // - One failed poll (a 502, a dropped connection) ended the whole wait.
+// - Once failed polls were retried, a request the bundler refuses as such
+//   (invalid params, method not found) was retried until the timeout.
+// - The last poll could land up to one interval before the deadline.
 // Offline, with short real timers.
 
 const ak = require('../dist/index.cjs');
@@ -89,6 +92,41 @@ describe('SendUseroperationResponse.included', () => {
         const error = await caught(response.included(0.1, 0.02));
         expect(error.code).toBe('TIMEOUT');
         expect(error.cause).toBeUndefined();
+    });
+
+    test.each([
+        ['invalid params', -32602],
+        ['method not found', -32601],
+        ['invalid request', -32600],
+    ])('a bundler error for %s ends the wait at once', async (_name, code) => {
+        const failure = new ak.AbstractionKitError('BUNDLER_ERROR', 'bundler call failed', { errno: code });
+        const { response, polls } = responseWith([failure]);
+        const started = Date.now();
+        const error = await caught(response.included(5, 0.02));
+        expect(error).toBe(failure);
+        expect(polls()).toBe(1);
+        expect(Date.now() - started).toBeLessThan(1000);
+    });
+
+    test('a raw transport error with a permanent code ends the wait at once', async () => {
+        const failure = new ak.TransportRpcError(-32602, 'invalid hash');
+        const { response, polls } = responseWith([failure]);
+        expect(await caught(response.included(5, 0.02))).toBe(failure);
+        expect(polls()).toBe(1);
+    });
+
+    test('a transient bundler error is retried', async () => {
+        const failure = new ak.AbstractionKitError('BUNDLER_ERROR', 'bundler call failed', { errno: -32603 });
+        const { response, polls } = responseWith([failure, RECEIPT]);
+        expect(await response.included(2, 0.02)).toBe(RECEIPT);
+        expect(polls()).toBe(2);
+    });
+
+    test('the last poll lands on the deadline', async () => {
+        // 250 ms budget, 100 ms interval: polls at 100, 200 and 250 ms.
+        const { response, polls } = responseWith([null, null, RECEIPT]);
+        expect(await response.included(0.25, 0.1)).toBe(RECEIPT);
+        expect(polls()).toBe(3);
     });
 
     test.each([
