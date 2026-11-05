@@ -67,15 +67,23 @@ perChain('eip-7702 raw transactions: $name (chainId $chainId)', (chain) => {
         return BigInt(await sendJsonRpcRequest(node, 'eth_getTransactionCount', [address, 'latest']));
     }
 
-    // anvil automines, but give the receipt a few polls to appear.
+    // anvil automines, but give the receipt a few polls to appear. Until the
+    // block is mined anvil forwards the lookup to the fork URL, and some
+    // public endpoints (Optimism publicnode) answer an unknown hash with an
+    // "archive requests" error instead of null, so a failed poll is retried.
     async function broadcast(raw) {
         const hash = await sendJsonRpcRequest(node, 'eth_sendRawTransaction', [raw]);
+        let lastError;
         for (let i = 0; i < 40; i++) {
-            const receipt = await sendJsonRpcRequest(node, 'eth_getTransactionReceipt', [hash]);
-            if (receipt != null) return { hash, receipt };
+            try {
+                const receipt = await sendJsonRpcRequest(node, 'eth_getTransactionReceipt', [hash]);
+                if (receipt != null) return { hash, receipt };
+            } catch (e) {
+                lastError = e;
+            }
             await new Promise((r) => setTimeout(r, 250));
         }
-        throw new Error(`no receipt for ${hash}`);
+        throw new Error(`no receipt for ${hash}${lastError ? `: ${lastError.message}` : ''}`);
     }
 
     async function delegateWithRawTransaction(eoa, delegatee) {

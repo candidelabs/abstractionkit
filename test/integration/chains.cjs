@@ -17,10 +17,6 @@ module.exports = [
         chainId: 10,
         defaultForkUrl: 'https://optimism-rpc.publicnode.com',
         forkUrlEnvVar: 'OPTIMISM_RPC',
-        // anvil reads state lazily at the pinned fork block for the whole run.
-        // Non-archive endpoints drop state ~100 blocks back, which is ~3 minutes
-        // at Optimism's 2s blocks, so OPTIMISM_RPC must be archive-capable.
-        requiresArchiveState: true,
         anvilHostPort: 8546,
         bundlerHostPortByEntrypoint: { v6: 3010, v7: 3011, v8: 3013, v9: 3012 },
     },

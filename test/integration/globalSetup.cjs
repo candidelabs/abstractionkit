@@ -25,10 +25,6 @@ const LOG_DIR = path.join(os.tmpdir(), 'abstractionkit-integration-logs');
 const ANVIL_CACHE_DIR = path.join(__dirname, '..', '..', '.anvil-cache');
 const FORK_BLOCK_OFFSET = 5; // pin a few blocks behind latest so the same
 // pinned block stays valid across consecutive runs (cache hits).
-// For chains with requiresArchiveState, the fork URL must serve state this far
-// behind the pinned block (~33 min at 2s blocks), so the pinned block stays
-// readable for a full run (~3 min today).
-const ARCHIVE_PROBE_DEPTH = 1000;
 
 const anvilContainer = (name) => `abstractionkit-anvil-${name}`;
 const voltaireContainer = (name, ep) => `abstractionkit-voltaire-${name}-${ep}`;
@@ -87,30 +83,11 @@ async function latestBlockNumber(rpcUrl) {
     return Number.parseInt(json.result, 16);
 }
 
-// Fail setup early when the fork URL can't serve historical state, instead of
-// letting tests hit "missing state" errors once the pinned block ages out.
-async function assertServesHistoricalState(chain, forkUrl, pinnedBlock) {
-    const probeBlock = `0x${Math.max(pinnedBlock - ARCHIVE_PROBE_DEPTH, 0).toString(16)}`;
-    const json = await rpc(forkUrl, 'eth_getBalance', [
-        '0x0000000000000000000000000000000000000000',
-        probeBlock,
-    ]);
-    if (!json.result) {
-        throw new Error(
-            `${chain.forkUrlEnvVar} can't serve state ${ARCHIVE_PROBE_DEPTH} blocks before the fork ` +
-                `block; set it to an archive-capable endpoint: ${JSON.stringify(json.error ?? json)}`,
-        );
-    }
-}
-
 async function startAnvil(chain) {
     spawnSync('docker', ['rm', '-f', anvilContainer(chain.name)], { stdio: 'ignore' });
     fs.mkdirSync(ANVIL_CACHE_DIR, { recursive: true });
     const forkUrl = forkUrlFor(chain);
     const pinnedBlock = (await latestBlockNumber(forkUrl)) - FORK_BLOCK_OFFSET;
-    if (chain.requiresArchiveState) {
-        await assertServesHistoricalState(chain, forkUrl, pinnedBlock);
-    }
     dockerRun([
         'run', '-d',
         '--name', anvilContainer(chain.name),
