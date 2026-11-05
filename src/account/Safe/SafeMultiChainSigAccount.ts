@@ -1158,24 +1158,9 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			webAuthnSignerProxyCreationCode?: string;
 		} = {},
 	): string {
-		return SafeAccount.createWebAuthnSignerVerifierAddress(x, y, {
-			...overrides,
-			eip7212WebAuthnPrecompileVerifier:
-				overrides.eip7212WebAuthnPrecompileVerifier ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifier:
-				overrides.eip7212WebAuthnContractVerifier ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
-			webAuthnSignerFactory:
-				overrides.webAuthnSignerFactory ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
-			webAuthnSignerSingleton:
-				overrides.webAuthnSignerSingleton ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
-			webAuthnSignerProxyCreationCode:
-				overrides.webAuthnSignerProxyCreationCode ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
-		});
+		// biome-ignore lint/complexity/noThisInStatic: a subclass's Passkey module defaults must win; detached calls fall back to this class
+		const cls = this ?? SafeMultiChainSigAccountV1;
+		return SafeAccount.createWebAuthnSignerVerifierAddress.call(cls, x, y, overrides);
 	}
 
 	public static createDeployWebAuthnVerifierMetaTransaction(
@@ -1187,45 +1172,22 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			webAuthnSignerFactory?: string;
 		} = {},
 	): MetaTransaction {
-		return SafeAccount.createDeployWebAuthnVerifierMetaTransaction(x, y, {
-			...overrides,
-			eip7212WebAuthnPrecompileVerifier:
-				overrides.eip7212WebAuthnPrecompileVerifier ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifier:
-				overrides.eip7212WebAuthnContractVerifier ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
-			webAuthnSignerFactory:
-				overrides.webAuthnSignerFactory ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
-		});
+		// biome-ignore lint/complexity/noThisInStatic: a subclass's Passkey module defaults must win; detached calls fall back to this class
+		const cls = this ?? SafeMultiChainSigAccountV1;
+		return SafeAccount.createDeployWebAuthnVerifierMetaTransaction.call(cls, x, y, overrides);
 	}
 
 	public static createDummySignerSignaturePairForExpectedSigners(
 		expectedSigners: Signer[],
 		webAuthnSignatureOverrides: WebAuthnSignatureOverrides = {},
 	): SignerSignaturePair[] {
-		return SafeAccount.createDummySignerSignaturePairForExpectedSigners(expectedSigners, {
-			...webAuthnSignatureOverrides,
-			eip7212WebAuthnPrecompileVerifier:
-				webAuthnSignatureOverrides.eip7212WebAuthnPrecompileVerifier ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
-			eip7212WebAuthnContractVerifier:
-				webAuthnSignatureOverrides.eip7212WebAuthnContractVerifier ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
-			webAuthnSignerFactory:
-				webAuthnSignatureOverrides.webAuthnSignerFactory ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_FACTORY,
-			webAuthnSignerSingleton:
-				webAuthnSignatureOverrides.webAuthnSignerSingleton ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
-			webAuthnSignerProxyCreationCode:
-				webAuthnSignatureOverrides.webAuthnSignerProxyCreationCode ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
-			webAuthnSharedSigner:
-				webAuthnSignatureOverrides.webAuthnSharedSigner ??
-				SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
-		});
+		// biome-ignore lint/complexity/noThisInStatic: a subclass's Passkey module defaults must win; detached calls fall back to this class
+		const cls = this ?? SafeMultiChainSigAccountV1;
+		return SafeAccount.createDummySignerSignaturePairForExpectedSigners.call(
+			cls,
+			expectedSigners,
+			webAuthnSignatureOverrides,
+		);
 	}
 
 	public static async verifyWebAuthnSignatureForMessageHash(
@@ -1239,23 +1201,15 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			webAuthnSignerSingleton?: string;
 		} = {},
 	): Promise<boolean> {
-		return SafeAccount.verifyWebAuthnSignatureForMessageHash(
+		// biome-ignore lint/complexity/noThisInStatic: a subclass's Passkey module defaults must win; detached calls fall back to this class
+		const cls = this ?? SafeMultiChainSigAccountV1;
+		return SafeAccount.verifyWebAuthnSignatureForMessageHash.call(
+			cls,
 			nodeRpcUrl,
 			signer,
 			messageHash,
 			signature,
-			{
-				...overrides,
-				eip7212WebAuthnPrecompileVerifier:
-					overrides.eip7212WebAuthnPrecompileVerifier ??
-					SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_PRECOMPILE,
-				eip7212WebAuthnContractVerifier:
-					overrides.eip7212WebAuthnContractVerifier ??
-					SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
-				webAuthnSignerSingleton:
-					overrides.webAuthnSignerSingleton ??
-					SafeMultiChainSigAccountV1.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON,
-			},
+			overrides,
 		);
 	}
 }

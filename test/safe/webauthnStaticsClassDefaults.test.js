@@ -195,3 +195,78 @@ describe('detached calls', () => {
         expect(detached(PASSKEY, { isInit: false })).toBe(V0_2_0_PROXY.toLowerCase());
     });
 });
+
+// SafeMultiChainSigAccountV1 overrides the WebAuthn statics; they must still
+// resolve omitted defaults from the class they are called on, so a subclass
+// that swaps a Passkey module default gets it on the dummy-pair path too.
+describe('a SafeMultiChainSigAccountV1 subclass with its own signer factory', () => {
+    class CustomFactoryAccount extends ak.SafeMultiChainSigAccountV1 {
+        static DEFAULT_WEB_AUTHN_SIGNER_FACTORY = CUSTOM_SIGNER_FACTORY;
+    }
+    const customProxy = ak.SafeMultiChainSigAccountV1.createWebAuthnSignerVerifierAddress(PASSKEY.x, PASSKEY.y, {
+        webAuthnSignerFactory: CUSTOM_SIGNER_FACTORY,
+    });
+
+    test('the custom factory derives a different proxy than v0.2.1', () => {
+        expect(customProxy).not.toBe(V0_2_1_PROXY);
+    });
+
+    test('createWebAuthnSignerVerifierAddress uses the subclass factory', () => {
+        expect(CustomFactoryAccount.createWebAuthnSignerVerifierAddress(PASSKEY.x, PASSKEY.y)).toBe(customProxy);
+    });
+
+    test('the dummy pair names the subclass proxy, matching the raw-pair formatter', () => {
+        const [pair] = CustomFactoryAccount.createDummySignerSignaturePairForExpectedSigners([PASSKEY], { isInit: false });
+        expect(pair.signer).toBe(customProxy);
+        const raw = CustomFactoryAccount.formatSignaturesToUseroperationSignature(
+            [{ signer: PASSKEY, signature: pair.signature }],
+            { isInit: false, isMultiChainSignature: true },
+        );
+        expect(includesAddress(raw, customProxy)).toBe(true);
+    });
+
+    test('baseEstimateUserOperationGas puts the subclass proxy in the estimation dummy', async () => {
+        let captured;
+        const bundler = new ak.Bundler({
+            request: async ({ params }) => {
+                captured = params[0];
+                return { callGasLimit: '0x10000', verificationGasLimit: '0x10000', preVerificationGas: '0x10000' };
+            },
+        });
+        const op = {
+            sender: ACCOUNT,
+            nonce: 0n,
+            factory: null,
+            factoryData: null,
+            callData: '0x',
+            callGasLimit: 0n,
+            verificationGasLimit: 0n,
+            preVerificationGas: 0n,
+            maxFeePerGas: 0n,
+            maxPriorityFeePerGas: 0n,
+            paymaster: null,
+            paymasterVerificationGasLimit: null,
+            paymasterPostOpGasLimit: null,
+            paymasterData: null,
+            signature: '0x',
+        };
+        await new CustomFactoryAccount(ACCOUNT).baseEstimateUserOperationGas(op, bundler, {
+            expectedSigners: [PASSKEY],
+            isMultiChainSignature: true,
+        });
+        expect(includesAddress(captured.signature, customProxy)).toBe(true);
+        expect(includesAddress(captured.signature, V0_2_1_PROXY)).toBe(false);
+    });
+
+    test('createDeployWebAuthnVerifierMetaTransaction targets the subclass factory', () => {
+        const tx = CustomFactoryAccount.createDeployWebAuthnVerifierMetaTransaction(PASSKEY.x, PASSKEY.y);
+        expect(tx.to.toLowerCase()).toBe(CUSTOM_SIGNER_FACTORY.toLowerCase());
+    });
+
+    test('detached multi-chain overrides fall back to the v0.2.1 defaults', () => {
+        const detachedDummy = ak.SafeMultiChainSigAccountV1.createDummySignerSignaturePairForExpectedSigners;
+        expect(detachedDummy([PASSKEY], { isInit: false })[0].signer).toBe(V0_2_1_PROXY);
+        const detachedProxy = ak.SafeMultiChainSigAccountV1.createWebAuthnSignerVerifierAddress;
+        expect(detachedProxy(PASSKEY.x, PASSKEY.y)).toBe(V0_2_1_PROXY);
+    });
+});
