@@ -106,7 +106,8 @@ export class SafeMultiChainSigAccountV2 extends SafeMultiChainSigAccountV1 {
 	 * @returns The deterministic account address
 	 */
 	public static createAccountAddress(owners: Signer[], overrides: InitCodeOverrides = {}): string {
-		return SafeMultiChainSigAccountV1.createAccountAddress(owners, {
+		// biome-ignore lint/complexity/noThisInStatic: keep the calling class as the receiver so a subclass's defaults apply
+		return SafeMultiChainSigAccountV1.createAccountAddress.call(this ?? SafeMultiChainSigAccountV2, owners, {
 			...overrides,
 			safeAccountSingleton: overrides.safeAccountSingleton ?? Safe_L2_V1_5_0,
 		});
@@ -124,7 +125,8 @@ export class SafeMultiChainSigAccountV2 extends SafeMultiChainSigAccountV1 {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): [string, string] {
-		return SafeMultiChainSigAccountV1.createFactoryAddressAndData(owners, {
+		// biome-ignore lint/complexity/noThisInStatic: keep the calling class as the receiver so a subclass's defaults apply
+		return SafeMultiChainSigAccountV1.createFactoryAddressAndData.call(this ?? SafeMultiChainSigAccountV2, owners, {
 			...overrides,
 			safeAccountSingleton: overrides.safeAccountSingleton ?? Safe_L2_V1_5_0,
 		});

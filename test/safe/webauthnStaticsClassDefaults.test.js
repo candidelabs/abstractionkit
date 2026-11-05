@@ -270,3 +270,104 @@ describe('a SafeMultiChainSigAccountV1 subclass with its own signer factory', ()
         expect(detachedProxy(PASSKEY.x, PASSKEY.y)).toBe(V0_2_1_PROXY);
     });
 });
+
+// The instance flows and the init-code statics on the multi-chain classes
+// also resolve Passkey module defaults from the constructed class.
+describe('multi-chain subclass defaults reach the instance and init-code paths', () => {
+    const CUSTOM_SHARED_SIGNER = '0x' + '66'.repeat(20);
+    class CustomFactoryAccount extends ak.SafeMultiChainSigAccountV1 {
+        static DEFAULT_WEB_AUTHN_SIGNER_FACTORY = CUSTOM_SIGNER_FACTORY;
+    }
+    class CustomSharedSignerV1 extends ak.SafeMultiChainSigAccountV1 {
+        static DEFAULT_WEB_AUTHN_SHARED_SIGNER = CUSTOM_SHARED_SIGNER;
+    }
+    class CustomSharedSignerV2 extends ak.SafeMultiChainSigAccountV2 {
+        static DEFAULT_WEB_AUTHN_SHARED_SIGNER = CUSTOM_SHARED_SIGNER;
+    }
+    const customProxy = ak.SafeMultiChainSigAccountV1.createWebAuthnSignerVerifierAddress(PASSKEY.x, PASSKEY.y, {
+        webAuthnSignerFactory: CUSTOM_SIGNER_FACTORY,
+    });
+    const GAS = { callGasLimit: '0x10000', verificationGasLimit: '0x10000', preVerificationGas: '0x10000' };
+
+    function capturingBundler() {
+        const calls = [];
+        const bundler = new ak.Bundler({
+            request: async ({ method, params }) => {
+                calls.push({ method, params });
+                return GAS;
+            },
+        });
+        return { bundler, estimated: () => calls.find((c) => c.method === 'eth_estimateUserOperationGas').params[0] };
+    }
+
+    test('estimateUserOperationGas puts the subclass proxy in the estimation dummy', async () => {
+        const { bundler, estimated } = capturingBundler();
+        const op = {
+            sender: ACCOUNT,
+            nonce: 1n,
+            factory: null,
+            factoryData: null,
+            callData: '0x',
+            callGasLimit: 0n,
+            verificationGasLimit: 0n,
+            preVerificationGas: 0n,
+            maxFeePerGas: 0n,
+            maxPriorityFeePerGas: 0n,
+            paymaster: null,
+            paymasterVerificationGasLimit: null,
+            paymasterPostOpGasLimit: null,
+            paymasterData: null,
+            signature: '0x',
+        };
+        await new CustomFactoryAccount(ACCOUNT).estimateUserOperationGas(op, bundler, { expectedSigners: [PASSKEY] });
+        expect(includesAddress(estimated().signature, customProxy)).toBe(true);
+        expect(includesAddress(estimated().signature, V0_2_1_PROXY)).toBe(false);
+    });
+
+    test('createUserOperation estimates with, and returns, the subclass proxy', async () => {
+        const { bundler, estimated } = capturingBundler();
+        const op = await new CustomFactoryAccount(ACCOUNT).createUserOperation(
+            [{ to: EOA, value: 0n, data: '0x' }],
+            undefined,
+            bundler,
+            { nonce: 1n, maxFeePerGas: 1n, maxPriorityFeePerGas: 1n, expectedSigners: [PASSKEY] },
+        );
+        expect(includesAddress(estimated().signature, customProxy)).toBe(true);
+        expect(includesAddress(op.signature, customProxy)).toBe(true);
+        expect(includesAddress(op.signature, V0_2_1_PROXY)).toBe(false);
+    });
+
+    test('formatUserOperationSignature and the multi-op formatter encode the subclass proxy', () => {
+        const [dummy] = CustomFactoryAccount.createDummySignerSignaturePairForExpectedSigners([PASSKEY], { isInit: false });
+        const raw = [{ signer: PASSKEY, signature: dummy.signature }];
+        const viaInstance = new CustomFactoryAccount(ACCOUNT).formatUserOperationSignature(raw, { isInit: false });
+        expect(includesAddress(viaInstance, customProxy)).toBe(true);
+
+        const op = { sender: ACCOUNT, nonce: 1n, callData: '0x', signature: '0x' };
+        const [single] = CustomFactoryAccount.formatSignaturesToUseroperationsSignatures(
+            [{ userOperation: op, chainId: 1n, validAfter: 0n, validUntil: 0n, webAuthnSignatureOverrides: { isInit: false } }],
+            raw,
+        );
+        expect(includesAddress(single, customProxy)).toBe(true);
+    });
+
+    test.each([
+        ['V1', ak.SafeMultiChainSigAccountV1, CustomSharedSignerV1],
+        ['V2', ak.SafeMultiChainSigAccountV2, CustomSharedSignerV2],
+    ])('%s init-code statics use the subclass shared signer', (_n, Base, Custom) => {
+        const withOverride = { webAuthnSharedSigner: CUSTOM_SHARED_SIGNER };
+        expect(Custom.createAccountAddress([PASSKEY])).toBe(Base.createAccountAddress([PASSKEY], withOverride));
+        expect(Custom.createAccountAddress([PASSKEY])).not.toBe(Base.createAccountAddress([PASSKEY]));
+        expect(Custom.createFactoryAddressAndData([PASSKEY])).toEqual(
+            Base.createFactoryAddressAndData([PASSKEY], withOverride),
+        );
+        const account = Custom.initializeNewAccount([PASSKEY]);
+        expect(account).toBeInstanceOf(Custom);
+        expect(account.accountAddress).toBe(Custom.createAccountAddress([PASSKEY]));
+    });
+
+    test('V1 createInitializerCallData uses the subclass shared signer', () => {
+        const data = CustomSharedSignerV1.createInitializerCallData([PASSKEY], 1);
+        expect(includesAddress(data, CUSTOM_SHARED_SIGNER)).toBe(true);
+    });
+});
