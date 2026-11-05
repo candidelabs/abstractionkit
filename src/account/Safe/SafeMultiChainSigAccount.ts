@@ -43,6 +43,21 @@ import type {
 } from "./types";
 
 /**
+ * Copy `value` without the keys set to `undefined`. Spreading a caller's
+ * options over a set of defaults treats an explicit `undefined` as a value
+ * and erases the default; wrappers that forward optional config produce
+ * exactly that.
+ */
+function omitUndefined<T extends object>(value: T | undefined): Partial<T> {
+	const result: Partial<T> = {};
+	if (value == null) return result;
+	for (const key of Object.keys(value) as (keyof T)[]) {
+		if (value[key] !== undefined) result[key] = value[key];
+	}
+	return result;
+}
+
+/**
  * Safe account on EntryPoint v0.9. Use it as a regular single-chain Safe
  * account, and opt into multi-chain signatures via Merkle trees when you want
  * to sign UserOperations for several chains under one signature.
@@ -1074,8 +1089,8 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 			webAuthnSignerProxyCreationCode:
 				cls.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE,
 			webAuthnSharedSigner: cls.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
-			...options,
-			...webAuthnSignatureOverrides,
+			...omitUndefined(options),
+			...omitUndefined(webAuthnSignatureOverrides),
 			isMultiChainSignature: true,
 		});
 	}
@@ -1115,8 +1130,12 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 					signerSignaturePairs,
 					{
 						...userOperationsToSign[0].options,
-						validAfter: userOperationsToSign[0].validAfter,
-						validUntil: userOperationsToSign[0].validUntil,
+						// options win over the top-level window, as in the
+						// Merkle branch below
+						validAfter:
+							userOperationsToSign[0].options?.validAfter ?? userOperationsToSign[0].validAfter,
+						validUntil:
+							userOperationsToSign[0].options?.validUntil ?? userOperationsToSign[0].validUntil,
 					},
 					userOperationsToSign[0].webAuthnSignatureOverrides,
 				),
@@ -1153,8 +1172,8 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 				SafeAccount.formatSignaturesToUseroperationSignature(signerSignaturePairs, {
 					...defaultOptions,
 					...defaultWebAuthnOverrides,
-					...userOperationToSign.options,
-					...userOperationToSign.webAuthnSignatureOverrides,
+					...omitUndefined(userOperationToSign.options),
+					...omitUndefined(userOperationToSign.webAuthnSignatureOverrides),
 					validAfter: resolvedValidity[index].validAfter,
 					validUntil: resolvedValidity[index].validUntil,
 					isMultiChainSignature: true,

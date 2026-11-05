@@ -44,7 +44,13 @@ import {
 	type UserOperationV7,
 	type UserOperationV9,
 } from "../../types";
-import {createCallData, fetchAccountNonce, getFunctionSelector, handlefetchGasPrice,} from "../../utils";
+import {
+	createCallData,
+	fetchAccountNonce,
+	getFunctionSelector,
+	handlefetchGasPrice,
+	stripV9PaymasterSignature,
+} from "../../utils";
 import {
 	simulateSenderCallDataWithTenderly,
 	simulateSenderCallDataWithTenderlyAndCreateShareLink,
@@ -65,6 +71,7 @@ import {
 	type BaseInitOverrides,
 	type CreateBaseUserOperationOverrides,
 	type CreateUserOperationV6Overrides,
+	type CreateUserOperationV7Overrides,
 	EOADummySignerSignaturePair,
 	type SafeAccountSingleton,
 	SafeModuleExecutorFunctionSelector,
@@ -509,7 +516,23 @@ export class SafeAccount extends SmartAccount {
 			},
 		);
 
-		return executorFunctionCallData;
+		// Bytes after the ABI-encoded arguments are not part of the call, but
+		// they are part of the callData: `createUserOperation` appends the
+		// on-chain identifier there. Carry them over to the rewritten callData.
+		const canonicalCallData = SafeAccount.createAccountCallData(
+			metaTransaction.to,
+			metaTransaction.value,
+			metaTransaction.data,
+			metaTransaction.operation ?? Operation.Call,
+			{
+				safeModuleExecutorFunctionSelector,
+			},
+		);
+		const trailingBytes = callData.toLowerCase().startsWith(canonicalCallData.toLowerCase())
+			? callData.slice(canonicalCallData.length)
+			: "";
+
+		return executorFunctionCallData + trailingBytes;
 	}
 
 	/**
@@ -864,23 +887,11 @@ export class SafeAccount extends SmartAccount {
 				).slice(34);
 			}
 			if (useroperation.paymasterData != null) {
-				const PAYMASTER_SIG_MAGIC = "22e325a297439656";
-				if (
-					overrides.is_v9 &&
-					useroperation.paymasterData.toLowerCase().endsWith(PAYMASTER_SIG_MAGIC)
-				) {
-					const sigLenHex = useroperation.paymasterData.slice(
-						useroperation.paymasterData.length - 16 - 4,
-						useroperation.paymasterData.length - 16,
-					);
-					const sigLen = parseInt(sigLenHex, 16);
-					const prefixEnd = useroperation.paymasterData.length - 16 - 4 - sigLen * 2;
-					paymasterAndData +=
-						useroperation.paymasterData.slice(0, prefixEnd).replaceAll("0x", "") +
-						PAYMASTER_SIG_MAGIC;
-				} else {
-					paymasterAndData += useroperation.paymasterData.slice(2);
-				}
+				paymasterAndData += (
+					overrides.is_v9
+						? stripV9PaymasterSignature(useroperation.paymasterData)
+						: useroperation.paymasterData
+				).slice(2);
 			}
 		}
 		const messageValue: SafeUserOperationV7TypedMessageValue = {
@@ -1092,6 +1103,37 @@ export class SafeAccount extends SmartAccount {
 		);
 
 		return new SendUseroperationResponse(sendUserOperationRes, bundler, this.entrypointAddress);
+	}
+
+	/**
+	 * Fill the shared-signer Passkey module fields the caller left unset from
+	 * `cls`. The init helpers below are called on `SafeAccount` by name, so
+	 * they cannot see the class a public static was invoked on; the public
+	 * statics pass it here so a subclass that overrides a Passkey module
+	 * default is initialised with the same shared signer it later signs with.
+	 * @param cls - the class whose defaults apply
+	 * @param overrides - the caller's init overrides
+	 * @returns a copy of `overrides` with the three shared-signer fields set
+	 */
+	protected static withSharedSignerDefaults<T extends BaseInitOverrides>(
+		cls: Pick<
+			typeof SafeAccount,
+			| "DEFAULT_WEB_AUTHN_SHARED_SIGNER"
+			| "DEFAULT_WEB_AUTHN_PRECOMPILE"
+			| "DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER"
+		>,
+		overrides: T,
+	): T {
+		return {
+			...overrides,
+			webAuthnSharedSigner: overrides.webAuthnSharedSigner ?? cls.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+			eip7212WebAuthnPrecompileVerifierForSharedSigner:
+				overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner ??
+				cls.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifierForSharedSigner:
+				overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
+				cls.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
+		};
 	}
 
 	/**
@@ -1534,8 +1576,19 @@ export class SafeAccount extends SmartAccount {
 		if (transactions.length < 1) {
 			throw new RangeError("There should be at least one transaction");
 		}
+		// Reject bad overrides before any RPC call starts: a request left
+		// running behind a synchronous throw rejects with nobody listening.
+		if (typeof overrides.maxFeePerGas === "bigint" && overrides.maxFeePerGas < 0n) {
+			throw new RangeError("maxFeePerGas overrid can't be negative");
+		}
+		if (typeof overrides.maxPriorityFeePerGas === "bigint" && overrides.maxPriorityFeePerGas < 0n) {
+			throw new RangeError("maxPriorityFeePerGas overrid can't be negative");
+		}
+		// Passkey module defaults come from the constructed class, so a
+		// subclass that overrides them deploys and signs with the same owner.
+		const accountClass = this.constructor as typeof SafeAccount;
 		const webAuthnSharedSigner =
-			overrides.webAuthnSharedSigner ?? SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
+			overrides.webAuthnSharedSigner ?? accountClass.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
 		const safeModuleExecutorFunctionSelector =
 			overrides.safeModuleExecutorFunctionSelector ??
 			SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR;
@@ -1558,13 +1611,6 @@ export class SafeAccount extends SmartAccount {
 			nonce = overrides.nonce;
 		}
 
-		if (typeof overrides.maxFeePerGas === "bigint" && overrides.maxFeePerGas < 0n) {
-			throw new RangeError("maxFeePerGas overrid can't be negative");
-		}
-
-		if (typeof overrides.maxPriorityFeePerGas === "bigint" && overrides.maxPriorityFeePerGas < 0n) {
-			throw new RangeError("maxPriorityFeePerGas overrid can't be negative");
-		}
 		let maxFeePerGas = BaseUserOperationDummyValues.maxFeePerGas;
 		let maxPriorityFeePerGas = BaseUserOperationDummyValues.maxPriorityFeePerGas;
 
@@ -1598,16 +1644,16 @@ export class SafeAccount extends SmartAccount {
 				100n;
 
 		const eip7212WebAuthnPrecompileVerifier =
-			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+			overrides.eip7212WebAuthnPrecompileVerifier ?? accountClass.DEFAULT_WEB_AUTHN_PRECOMPILE;
 		const eip7212WebAuthnContractVerifier =
-			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
+			overrides.eip7212WebAuthnContractVerifier ?? accountClass.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 		const webAuthnSignerFactory =
-			overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+			overrides.webAuthnSignerFactory ?? accountClass.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 		const webAuthnSignerSingleton =
-			overrides.webAuthnSignerSingleton ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+			overrides.webAuthnSignerSingleton ?? accountClass.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
 		const webAuthnSignerProxyCreationCode =
 			overrides.webAuthnSignerProxyCreationCode ??
-			SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+			accountClass.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
 		let factoryAddress: string | null = this.factoryAddress;
 		let factoryData: string | null = this.factoryData;
@@ -1616,11 +1662,25 @@ export class SafeAccount extends SmartAccount {
 			throw new RangeError("failed to determine nonce");
 		} else if (nonce < 0n) {
 			throw new RangeError("nonce can't be negative");
-		} else if (nonce > 0n) {
+		}
+		// The nonce is `key << 64 | sequence`. A non-zero sequence proves the
+		// account has already run an operation. Sequence 0 under a non-zero
+		// key proves nothing about deployment, so ask the node when there is
+		// one; without a node a non-zero nonce still means "deployed".
+		let isFirstOperation = nonce === 0n;
+		if (
+			nonce > 0n &&
+			(nonce & 0xffffffffffffffffn) === 0n &&
+			factoryAddress != null &&
+			providerRpc != null
+		) {
+			isFirstOperation = !(await SafeAccount.isDeployed(this.accountAddress, providerRpc));
+		}
+		if (!isFirstOperation) {
 			factoryAddress = null;
 			factoryData = null;
 		} else if (this.isInitWebAuthn) {
-			//nonce = 0
+			//first operation of a passkey account
 			if (this.x == null || this.y == null) {
 				throw new RangeError(
 					"Invalid account initialization with Webauthn signer." +
@@ -1733,6 +1793,18 @@ export class SafeAccount extends SmartAccount {
 		// "0x" must select the deployed-account WebAuthn owner encoding even
 		// when a factory address is set.
 		let resolvedV06InitCode: string | null = null;
+		if (!isV06) {
+			// EntryPoint v0.7+ callers can override the factory fields. Apply
+			// them here, like the v0.6 initCode below, so `isInit`, the dummy
+			// signature and the estimation op agree with the returned op.
+			const factoryOverrides = overrides as CreateUserOperationV7Overrides;
+			if (factoryOverrides.factory !== undefined) {
+				factoryAddress = factoryOverrides.factory;
+			}
+			if (factoryOverrides.factoryData !== undefined) {
+				factoryData = factoryOverrides.factoryData;
+			}
+		}
 		if (isV06) {
 			resolvedV06InitCode = (overrides as CreateUserOperationV6Overrides).initCode ?? null;
 			if (resolvedV06InitCode == null) {
@@ -2808,6 +2880,7 @@ export class SafeAccount extends SmartAccount {
 			data: callData,
 		};
 		const getOwnersResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
+		SafeAccount.ensureNonEmptyCallResult(getOwnersResult, "getOwners");
 
 		const decodedCalldata = decodeAbiParameters<[string[]]>(["address[]"], getOwnersResult);
 
@@ -2828,6 +2901,7 @@ export class SafeAccount extends SmartAccount {
 			data: callData,
 		};
 		const getThresholdResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
+		SafeAccount.ensureNonEmptyCallResult(getThresholdResult, "getThreshold");
 
 		const decodedCalldata = decodeAbiParameters<[bigint]>(["uint256"], getThresholdResult);
 
@@ -2910,6 +2984,7 @@ export class SafeAccount extends SmartAccount {
 			data: callData,
 		};
 		const isModuleEnabledResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
+		SafeAccount.ensureNonEmptyCallResult(isModuleEnabledResult, "isModuleEnabled");
 
 		const decodedCalldata = decodeAbiParameters<[boolean]>(["bool"], isModuleEnabledResult);
 
@@ -2932,7 +3007,22 @@ export class SafeAccount extends SmartAccount {
 			SAFE_FALLBACK_HANDLER_STORAGE_SLOT,
 			"latest",
 		);
-		return getAddress("0x" + word.slice(-40));
+		// a node may answer "0x" for an empty slot instead of a zero word
+		return getAddress("0x" + word.slice(2).padStart(64, "0").slice(-40));
+	}
+
+	/**
+	 * An `eth_call` to an address with no code returns "0x". Decoding that
+	 * fails with an opaque ABI error, so name the likely cause instead.
+	 */
+	private static ensureNonEmptyCallResult(result: string, method: string): void {
+		if (result === "0x") {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`${method} returned an empty result, the target account is ` +
+					"probably not deployed yet.",
+			);
+		}
 	}
 
 	/**
@@ -2948,6 +3038,7 @@ export class SafeAccount extends SmartAccount {
 			{ to: this.accountAddress, data: callData },
 			"latest",
 		);
+		SafeAccount.ensureNonEmptyCallResult(result, "getSafeVersion");
 		const [version] = decodeAbiParameters<[string]>(["string"], result);
 		return version;
 	}
@@ -3089,9 +3180,10 @@ export class SafeAccount extends SmartAccount {
 			},
 		);
 
-		const decodedCalldata = decodeAbiParameters<[boolean]>(["bool"], isModuleEnabledResult);
-
-		return decodedCalldata[0];
+		// isValidSignature answers with the ERC-1271 magic value, a bytes4
+		// left-aligned in the word, and with zero for a bad signature. It is
+		// not a bool: the last byte is zero either way.
+		return isModuleEnabledResult.slice(0, 10).toLowerCase() === functionSelector;
 	}
 
 	private static createSafeWebAuthnSignerProxyDeployedByteCode(

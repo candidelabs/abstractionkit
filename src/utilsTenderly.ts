@@ -605,11 +605,21 @@ export async function simulateUserOperationCallDataWithTenderly(
 				}
 			}
 
-			const userOpHash = createUserOperationHash(
-				userOperation as UserOperationV7 | UserOperationV8 | UserOperationV9,
-				entrypointAddress,
-				chainId,
-			);
+			// The hash is only an argument of executeUserOp here. For the
+			// EIP-7702 marker without an authorization it depends on the
+			// sender's on-chain delegate, which this helper does not read, so
+			// pass a zero hash rather than refuse to simulate.
+			const delegateIsUnknown =
+				isEip7702FactorySentinel(userOperation.factory) &&
+				(userOperation as UserOperationV8ToSimulate | UserOperationV9ToSimulate).eip7702Auth
+					?.address == null;
+			const userOpHash = delegateIsUnknown
+				? `0x${"00".repeat(32)}`
+				: createUserOperationHash(
+						userOperation as UserOperationV7 | UserOperationV8 | UserOperationV9,
+						entrypointAddress,
+						chainId,
+					);
 
 			const packedUserOp = [
 				userOperation.sender,

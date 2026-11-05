@@ -112,12 +112,70 @@ export function createUserOperationHash(
 export function buildPackedInitCodeV8V9(useroperation: UserOperationV8 | UserOperationV9): string {
 	if (useroperation.factory == null) return "0x";
 	const eip7702Auth = useroperation.eip7702Auth;
+	// For the EIP-7702 marker the EntryPoint hashes the sender's delegate in
+	// place of the marker. Without the authorization there is no delegate to
+	// read it from, and hashing the marker itself gives a hash the EntryPoint
+	// never computes.
+	const factoryLowerCase = useroperation.factory.toLowerCase();
+	const isEip7702Marker =
+		factoryLowerCase === "0x7702" || factoryLowerCase === `0x7702${"0".repeat(36)}`;
+	if (isEip7702Marker && (eip7702Auth == null || eip7702Auth.address == null)) {
+		throw new RangeError(
+			"factory is the EIP-7702 marker but eip7702Auth.address is missing. " +
+				"The EntryPoint hashes the account's delegate in place of the marker, " +
+				"so set eip7702Auth.address to that delegate, or drop the factory for " +
+				"an account that is already delegated.",
+		);
+	}
 	const head =
 		eip7702Auth != null && eip7702Auth.address != null
 			? eip7702Auth.address
 			: useroperation.factory;
 	const factoryData = useroperation.factoryData != null ? useroperation.factoryData.slice(2) : "";
 	return head + factoryData;
+}
+
+/**
+ * @internal
+ * EntryPoint v0.9 lets a paymaster add its signature after the account has
+ * signed: `paymasterData = prefix ‖ signature ‖ uint16(signature length) ‖ MAGIC`.
+ * The signature is left out of the userOp hash, which commits to
+ * `prefix ‖ MAGIC` instead. This returns the `paymasterData` to hash, following
+ * the EntryPoint:
+ * - no magic suffix, or no room for the length field: hashed as is
+ * - a zero length: hashed as is
+ * - a length that runs past the start of the data: the EntryPoint reverts,
+ *   so this throws
+ *
+ * Shared by {@link buildPaymasterAndData} and the Safe multi-chain SafeOp
+ * hash. Not re-exported from `src/abstractionkit.ts`.
+ *
+ * @param paymasterData - 0x-prefixed `paymasterData` of a v0.9 UserOperation
+ * @returns 0x-prefixed `paymasterData` as the EntryPoint hashes it
+ */
+export function stripV9PaymasterSignature(paymasterData: string): string {
+	const PAYMASTER_SIG_MAGIC = "22e325a297439656";
+	const LENGTH_FIELD_NIBBLES = 4;
+	const suffixNibbles = PAYMASTER_SIG_MAGIC.length + LENGTH_FIELD_NIBBLES;
+	const data = paymasterData.slice(2);
+	if (!data.toLowerCase().endsWith(PAYMASTER_SIG_MAGIC) || data.length < suffixNibbles) {
+		return paymasterData;
+	}
+	const signatureLength = Number.parseInt(
+		data.slice(data.length - suffixNibbles, data.length - PAYMASTER_SIG_MAGIC.length),
+		16,
+	);
+	if (signatureLength === 0) {
+		return paymasterData;
+	}
+	const prefixEnd = data.length - suffixNibbles - signatureLength * 2;
+	if (prefixEnd < 0) {
+		throw new RangeError(
+			`Invalid paymasterData: the paymaster signature length (${signatureLength} bytes) ` +
+				"is larger than the data before the PAYMASTER_SIG_MAGIC suffix.",
+		);
+	}
+	return `0x${data.slice(0, prefixEnd)}${PAYMASTER_SIG_MAGIC}`;
 }
 
 /**
@@ -185,22 +243,11 @@ export function buildPaymasterAndData(
 		).slice(34);
 	}
 	if (useroperation.paymasterData != null) {
-		const PAYMASTER_SIG_MAGIC = "22e325a297439656";
-		if (
-			stripV9PaymasterSig &&
-			useroperation.paymasterData.toLowerCase().endsWith(PAYMASTER_SIG_MAGIC)
-		) {
-			const sigLenHex = useroperation.paymasterData.slice(
-				useroperation.paymasterData.length - 16 - 4,
-				useroperation.paymasterData.length - 16,
-			);
-			const sigLen = parseInt(sigLenHex, 16);
-			const prefixEnd = useroperation.paymasterData.length - 16 - 4 - sigLen * 2;
-			paymasterAndData +=
-				useroperation.paymasterData.slice(0, prefixEnd).replaceAll("0x", "") + PAYMASTER_SIG_MAGIC;
-		} else {
-			paymasterAndData += useroperation.paymasterData.slice(2);
-		}
+		paymasterAndData += (
+			stripV9PaymasterSig
+				? stripV9PaymasterSignature(useroperation.paymasterData)
+				: useroperation.paymasterData
+		).slice(2);
 	}
 	return paymasterAndData;
 }
