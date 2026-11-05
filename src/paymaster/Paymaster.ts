@@ -86,9 +86,15 @@ export function toPaymasterError(message: string, err: unknown): Error {
 	const error = ensureError(err);
 	if (error instanceof AbstractionKitError) {
 		if (error.code === "BUNDLER_ERROR" && isPaymasterRejection(error)) {
+			// The bundler's own reason (e.g. "AA50 postOp reverted") sits
+			// one level below the BUNDLER_ERROR. Repeat it in the message so
+			// the wrapper says why, and so code that matches the AA code in
+			// `message` or `cause.message` (as it could before the wrapper
+			// existed) still finds it.
+			const reason = error.cause instanceof Error ? error.cause.message : error.message;
 			return new AbstractionKitError(
 				"PAYMASTER_ERROR",
-				`${message}: the paymaster rejected the UserOperation`,
+				`${message}: the paymaster rejected the UserOperation: ${reason}`,
 				{ cause: error, aaCode: error.aaCode, errno: error.errno },
 			);
 		}

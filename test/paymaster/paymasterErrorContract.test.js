@@ -188,7 +188,7 @@ describe('Erc7677Paymaster splits estimation failures by who caused them', () =>
     test.each(PAYMASTER_REJECTIONS)('a paymaster rejection, %s, is a PAYMASTER_ERROR', async (_name, code, message) => {
         const error = await run(bundlerFailing(code, message));
         expect(error.code).toBe('PAYMASTER_ERROR');
-        expect(error.message).toBe('createPaymasterUserOperation failed: the paymaster rejected the UserOperation');
+        expect(error.message).toBe(`createPaymasterUserOperation failed: the paymaster rejected the UserOperation: ${message}`);
         expect(error.errno).toBe(code);
         expect(error.aaCode).toBe(ak.parseAaCode(message));
         expect(error.cause.code).toBe('BUNDLER_ERROR');
@@ -198,6 +198,52 @@ describe('Erc7677Paymaster splits estimation failures by who caused them', () =>
         const error = await run(bundlerFailing(-32501, 'AA23 reverted'));
         expect(error.code).toBe('BUNDLER_ERROR');
         expect(error.aaCode).toBe('AA23');
+    });
+});
+
+// Dependent wallets detect "the account cannot repay the paymaster" (AA50)
+// by matching the error. These are their checks, copied verbatim, run
+// against the real error, so a change to the wrapping cannot silently break
+// them again.
+describe('AA50 stays detectable by dependent wallets', () => {
+    // tetherto/wdk-wallet-evm-7702-gasless, _buildSponsoredUserOperation
+    const wdk7702 = (error) =>
+        error instanceof ak.AbstractionKitError &&
+        (error.message.includes('AA50') || error.cause?.message?.includes('AA50'));
+    // tetherto/wdk-wallet-evm-erc-4337, _isAA50Error
+    const wdk4337 = (err) => err instanceof ak.AbstractionKitError && (err.aaCode === 'AA50' || err.message.includes('AA50'));
+
+    const aa50 = bundlerFailing(-32500, 'AA50 postOp reverted');
+    const flows = [
+        [
+            'Erc7677Paymaster.createPaymasterUserOperation',
+            () =>
+                new ak.Erc7677Paymaster(transport({ pm_getPaymasterStubData: () => STUB }), {
+                    chainId: 1n,
+                    provider: null,
+                }).createPaymasterUserOperation(account, userOp(), aa50),
+        ],
+        [
+            'CandidePaymaster.createSponsorPaymasterUserOperation',
+            () =>
+                new ak.CandidePaymaster(
+                    transport({ pm_chainId: () => '0x1', pm_supportedERC20Tokens: SUPPORTED }),
+                ).createSponsorPaymasterUserOperation(account, userOp(), aa50),
+        ],
+        [
+            'CandidePaymaster.createTokenPaymasterUserOperation',
+            () =>
+                new ak.CandidePaymaster(
+                    transport({ pm_chainId: () => '0x1', pm_supportedERC20Tokens: SUPPORTED }),
+                ).createTokenPaymasterUserOperation(account, userOp(), TOKEN, aa50),
+        ],
+    ];
+
+    test.each(flows)('%s', async (_name, run) => {
+        const error = await caught(run());
+        expect(error.code).toBe('PAYMASTER_ERROR');
+        expect(wdk7702(error)).toBe(true);
+        expect(wdk4337(error)).toBe(true);
     });
 });
 
@@ -237,7 +283,7 @@ describe('CandidePaymaster error contract', () => {
         async (name, _case, code, message, run) => {
             const error = await caught(run(new ak.CandidePaymaster(paymasterRpc()), bundlerFailing(code, message)));
             expect(error.code).toBe('PAYMASTER_ERROR');
-            expect(error.message).toBe(`${name} failed: the paymaster rejected the UserOperation`);
+            expect(error.message).toBe(`${name} failed: the paymaster rejected the UserOperation: ${message}`);
             expect(error.errno).toBe(code);
             expect(error.aaCode).toBe(ak.parseAaCode(message));
             expect(error.cause.code).toBe('BUNDLER_ERROR');
