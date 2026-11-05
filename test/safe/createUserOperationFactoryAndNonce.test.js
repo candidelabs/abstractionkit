@@ -3,6 +3,10 @@
 //
 // - `factory` / `factoryData` overrides (EntryPoint v0.7+) were accepted by the
 //   type and ignored, unlike the v0.6 `initCode` override.
+// - The factory override was applied after the callData was built, so a
+//   passkey account whose deployment was overridden away still carried the
+//   passkey setup calls (which revert on a deployed account), and one whose
+//   deployment was overridden in did not.
 // - A nonce with a non-zero key and sequence 0 was read as "already deployed"
 //   and dropped the factory of a counterfactual account.
 // - Bad overrides were rejected only after RPC calls had started, leaving a
@@ -99,6 +103,78 @@ describe.each(V7_PLUS)('%s factory overrides', (_name, Account) => {
         const later = await account.createUserOperation(TX, undefined, undefined, { nonce: 3n, ...FEES, ...GAS });
         expect(later.factory).toBeNull();
         expect(later.factoryData).toBeNull();
+    });
+});
+
+describe('deployment overrides decide whether a passkey account gets its setup calls', () => {
+    const PASSKEY = { x: 1234567890n, y: 9876543210n };
+    const callDataFor = async (account, overrides) =>
+        (await account.createUserOperation(TX, undefined, undefined, { ...FEES, ...GAS, ...overrides })).callData;
+
+    test.each(V7_PLUS)('%s: factory overridden away drops the setup calls', async (_name, Account) => {
+        const account = Account.initializeNewAccount([PASSKEY]);
+        const deployed = await callDataFor(account, { nonce: 5n });
+        const op = await account.createUserOperation(TX, undefined, undefined, {
+            nonce: 0n,
+            ...FEES,
+            ...GAS,
+            factory: null,
+        });
+        expect(op.callData).toBe(deployed);
+        expect(op.factory).toBeNull();
+    });
+
+    test.each(V7_PLUS)('%s: factory overridden in adds the setup calls', async (_name, Account) => {
+        const account = Account.initializeNewAccount([PASSKEY]);
+        const firstOperation = await callDataFor(account, { nonce: 0n });
+        const op = await account.createUserOperation(TX, undefined, undefined, {
+            nonce: 5n,
+            ...FEES,
+            ...GAS,
+            factory: account.factoryAddress,
+        });
+        expect(op.callData).toBe(firstOperation);
+        expect(op.factory).toBe(account.factoryAddress);
+        expect(op.factoryData).toBe(account.factoryData);
+    });
+
+    test('SafeAccountV0_2_0: initCode "0x" drops the setup calls', async () => {
+        const account = ak.SafeAccountV0_2_0.initializeNewAccount([PASSKEY]);
+        const deployed = await callDataFor(account, { nonce: 5n });
+        const op = await account.createUserOperation(TX, undefined, undefined, {
+            nonce: 0n,
+            ...FEES,
+            ...GAS,
+            initCode: '0x',
+        });
+        expect(op.callData).toBe(deployed);
+        expect(op.initCode).toBe('0x');
+    });
+
+    test('SafeAccountV0_2_0: an initCode override adds the setup calls', async () => {
+        const account = ak.SafeAccountV0_2_0.initializeNewAccount([PASSKEY]);
+        const firstOperation = await callDataFor(account, { nonce: 0n });
+        const initCode = account.factoryAddress + account.factoryData.slice(2);
+        const op = await account.createUserOperation(TX, undefined, undefined, {
+            nonce: 5n,
+            ...FEES,
+            ...GAS,
+            initCode,
+        });
+        expect(op.callData).toBe(firstOperation);
+        expect(op.initCode).toBe(initCode);
+    });
+
+    test.each(V7_PLUS)('%s: an override skips the deployment lookup', async (_name, Account) => {
+        const account = Account.initializeNewAccount([OWNER]);
+        const { node, calls } = mockNode('0x');
+        await account.createUserOperation(TX, node, undefined, {
+            nonce: 1n << 64n,
+            ...FEES,
+            ...GAS,
+            factory: account.factoryAddress,
+        });
+        expect(calls).toEqual([]);
     });
 });
 

@@ -1663,23 +1663,52 @@ export class SafeAccount extends SmartAccount {
 		} else if (nonce < 0n) {
 			throw new RangeError("nonce can't be negative");
 		}
-		// The nonce is `key << 64 | sequence`. A non-zero sequence proves the
-		// account has already run an operation. Sequence 0 under a non-zero
-		// key proves nothing about deployment, so ask the node when there is
-		// one; without a node a non-zero nonce still means "deployed".
-		let isFirstOperation = nonce === 0n;
-		if (
-			nonce > 0n &&
-			(nonce & 0xffffffffffffffffn) === 0n &&
-			factoryAddress != null &&
-			providerRpc != null
-		) {
-			isFirstOperation = !(await SafeAccount.isDeployed(this.accountAddress, providerRpc));
+		// The deployment fields a caller overrides decide whether this
+		// operation deploys the account: the v0.6 `initCode`, or the v0.7+
+		// `factory`. They have to be read before the callData is built, since
+		// a passkey account's first operation also carries the passkey setup
+		// calls, which revert on an account that is already deployed.
+		const v06InitCodeOverride = isV06
+			? ((overrides as CreateUserOperationV6Overrides).initCode ?? null)
+			: null;
+		const factoryOverrides: CreateUserOperationV7Overrides = isV06
+			? {}
+			: (overrides as CreateUserOperationV7Overrides);
+		let isFirstOperation: boolean;
+		if (v06InitCodeOverride != null) {
+			isFirstOperation = v06InitCodeOverride !== "0x";
+		} else if (factoryOverrides.factory !== undefined) {
+			isFirstOperation = factoryOverrides.factory != null && factoryOverrides.factory !== "0x";
+		} else {
+			// The nonce is `key << 64 | sequence`. A non-zero sequence proves
+			// the account has already run an operation. Sequence 0 under a
+			// non-zero key proves nothing about deployment, so ask the node
+			// when there is one; without a node a non-zero nonce still means
+			// "deployed".
+			isFirstOperation = nonce === 0n;
+			if (
+				nonce > 0n &&
+				(nonce & 0xffffffffffffffffn) === 0n &&
+				factoryAddress != null &&
+				providerRpc != null
+			) {
+				isFirstOperation = !(await SafeAccount.isDeployed(this.accountAddress, providerRpc));
+			}
 		}
 		if (!isFirstOperation) {
 			factoryAddress = null;
 			factoryData = null;
-		} else if (this.isInitWebAuthn) {
+		}
+		// EntryPoint v0.7+ callers can override the factory fields; they
+		// replace the derived ones in the returned op, the estimation op and
+		// the dummy signature.
+		if (factoryOverrides.factory !== undefined) {
+			factoryAddress = factoryOverrides.factory;
+		}
+		if (factoryOverrides.factoryData !== undefined) {
+			factoryData = factoryOverrides.factoryData;
+		}
+		if (isFirstOperation && this.isInitWebAuthn) {
 			//first operation of a passkey account
 			if (this.x == null || this.y == null) {
 				throw new RangeError(
@@ -1793,20 +1822,8 @@ export class SafeAccount extends SmartAccount {
 		// "0x" must select the deployed-account WebAuthn owner encoding even
 		// when a factory address is set.
 		let resolvedV06InitCode: string | null = null;
-		if (!isV06) {
-			// EntryPoint v0.7+ callers can override the factory fields. Apply
-			// them here, like the v0.6 initCode below, so `isInit`, the dummy
-			// signature and the estimation op agree with the returned op.
-			const factoryOverrides = overrides as CreateUserOperationV7Overrides;
-			if (factoryOverrides.factory !== undefined) {
-				factoryAddress = factoryOverrides.factory;
-			}
-			if (factoryOverrides.factoryData !== undefined) {
-				factoryData = factoryOverrides.factoryData;
-			}
-		}
 		if (isV06) {
-			resolvedV06InitCode = (overrides as CreateUserOperationV6Overrides).initCode ?? null;
+			resolvedV06InitCode = v06InitCodeOverride;
 			if (resolvedV06InitCode == null) {
 				resolvedV06InitCode = "0x";
 				if (factoryAddress != null) {
