@@ -8,6 +8,9 @@
 // - All three classes threw for bad input after RPC calls had started. The
 //   caller caught that error; the abandoned request then rejected with nobody
 //   listening, which Node reports as an unhandled rejection.
+// - The remaining input checks (yParity, parallelPaymasterInitValues,
+//   negative gas limits, a missing bundler) ran after the node had been
+//   asked for the nonce and the gas price, wasting those requests.
 
 const ak = require('../dist/index.cjs');
 
@@ -95,6 +98,50 @@ describe.each(CLASSES)('%s createUserOperation rejects bad input before any RPC 
         await settle();
         expect(requests).toBe(0);
         expect(unhandled).toEqual([]);
+    });
+
+    describe('every input check runs before the node is asked', () => {
+        const countingNode = () => {
+            const node = {
+                requests: 0,
+                request: async () => {
+                    node.requests++;
+                    return '0x1';
+                },
+            };
+            return node;
+        };
+        const INIT_VALUES = {
+            paymaster: '0x36A337b8b4cE5CF6ca1dDaeef73Da4928d714DF2',
+            paymasterVerificationGasLimit: 45_000n,
+            paymasterPostOpGasLimit: 45_000n,
+            paymasterData: '0x' + 'ab'.repeat(8),
+        };
+        test.each([
+            ['an invalid yParity', { eip7702Auth: { chainId: 1n, yParity: '0x2' } }, /yParity/],
+            ['a negative preVerificationGas', { preVerificationGas: -1n }, /preVerificationGas/],
+            ['a negative verificationGasLimit', { verificationGasLimit: -1n }, /verificationGasLimit/],
+            ['a negative callGasLimit', { callGasLimit: -1n }, /callGasLimit/],
+            ['a missing bundler', {}, /bundlerRpc can't be null/],
+        ])('%s', async (_case, overrides, message) => {
+            const node = countingNode();
+            await expect(new Account(EOA).createUserOperation(TX, node, undefined, overrides)).rejects.toThrow(
+                message,
+            );
+            expect(node.requests).toBe(0);
+        });
+
+        if (Account !== ak.Calibur7702Account) {
+            test('bad parallelPaymasterInitValues', async () => {
+                const node = countingNode();
+                await expect(
+                    new Account(EOA).createUserOperation(TX, node, mockBundler().bundler, {
+                        parallelPaymasterInitValues: INIT_VALUES,
+                    }),
+                ).rejects.toThrow(RangeError);
+                expect(node.requests).toBe(0);
+            });
+        }
     });
 
     test('an authorization with an explicit nonce still needs no node', async () => {

@@ -366,6 +366,37 @@ export class Calibur7702Account
 				"providerRpc can't be null if eoaDelegatorNonce is not overridden",
 			);
 		}
+		if (overrides.eip7702Auth != null) {
+			const yParity = overrides.eip7702Auth.yParity ?? "0x0";
+			if (yParity !== "0x0" && yParity !== "0x00" && yParity !== "0x1" && yParity !== "0x01") {
+				throw new AbstractionKitError(
+					"BAD_DATA",
+					"invalid yParity value for eoaDelegatorSignature. " + "must be '0x0' or '0x1'",
+				);
+			}
+		}
+		if (typeof overrides.preVerificationGas === "bigint" && overrides.preVerificationGas < 0n) {
+			throw new RangeError("preVerificationGas override can't be negative");
+		}
+		if (typeof overrides.verificationGasLimit === "bigint" && overrides.verificationGasLimit < 0n) {
+			throw new RangeError("verificationGasLimit override can't be negative");
+		}
+		if (typeof overrides.callGasLimit === "bigint" && overrides.callGasLimit < 0n) {
+			throw new RangeError("callGasLimit override can't be negative");
+		}
+		const skipGasEstimation = overrides.skipGasEstimation ?? false;
+		const estimateGas =
+			!skipGasEstimation &&
+			(overrides.preVerificationGas == null ||
+				overrides.verificationGasLimit == null ||
+				overrides.callGasLimit == null);
+		if (estimateGas && bundlerRpc == null) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"bundlerRpc can't be null if preVerificationGas," +
+					"verificationGasLimit and callGasLimit are not overridden",
+			);
+		}
 
 		let nonce: bigint | null = null;
 		let nonceOp: Promise<bigint> | null = null;
@@ -519,13 +550,8 @@ export class Calibur7702Account
 		const pmFields = overrides.paymasterFields;
 		let userOperation: UserOperationV8;
 		if (overrides.eip7702Auth != null && !skipEip7702Auth) {
+			// validated before the RPC calls
 			const yParity = overrides.eip7702Auth.yParity ?? "0x0";
-			if (yParity !== "0x0" && yParity !== "0x00" && yParity !== "0x1" && yParity !== "0x01") {
-				throw new AbstractionKitError(
-					"BAD_DATA",
-					"invalid yParity value for eoaDelegatorSignature. " + "must be '0x0' or '0x1'",
-				);
-			}
 
 			const authorization: Authorization7702Hex = {
 				chainId: bigintToHex(eip7702AuthChainId as bigint),
@@ -576,14 +602,8 @@ export class Calibur7702Account
 		let verificationGasLimit = BaseUserOperationDummyValues.verificationGasLimit;
 		let callGasLimit = BaseUserOperationDummyValues.callGasLimit;
 
-		const skipGasEstimation = overrides.skipGasEstimation ?? false;
-
-		if (
-			!skipGasEstimation &&
-			(overrides.preVerificationGas == null ||
-				overrides.verificationGasLimit == null ||
-				overrides.callGasLimit == null)
-		) {
+		if (estimateGas) {
+			// bundlerRpc was checked before the RPC calls
 			if (bundlerRpc != null) {
 				userOperation.callGasLimit = 0n;
 				userOperation.verificationGasLimit = 0n;
@@ -628,18 +648,6 @@ export class Calibur7702Account
 						"verificationGasLimit and callGasLimit are not overridden",
 				);
 			}
-		}
-
-		if (typeof overrides.preVerificationGas === "bigint" && overrides.preVerificationGas < 0n) {
-			throw new RangeError("preVerificationGas override can't be negative");
-		}
-
-		if (typeof overrides.verificationGasLimit === "bigint" && overrides.verificationGasLimit < 0n) {
-			throw new RangeError("verificationGasLimit override can't be negative");
-		}
-
-		if (typeof overrides.callGasLimit === "bigint" && overrides.callGasLimit < 0n) {
-			throw new RangeError("callGasLimit override can't be negative");
 		}
 
 		userOperation.preVerificationGas =

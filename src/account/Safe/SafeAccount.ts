@@ -1577,12 +1577,61 @@ export class SafeAccount extends SmartAccount {
 			throw new RangeError("There should be at least one transaction");
 		}
 		// Reject bad overrides before any RPC call starts: a request left
-		// running behind a synchronous throw rejects with nobody listening.
+		// running behind a synchronous throw rejects with nobody listening,
+		// and a request that has finished is wasted.
 		if (typeof overrides.maxFeePerGas === "bigint" && overrides.maxFeePerGas < 0n) {
 			throw new RangeError("maxFeePerGas overrid can't be negative");
 		}
 		if (typeof overrides.maxPriorityFeePerGas === "bigint" && overrides.maxPriorityFeePerGas < 0n) {
 			throw new RangeError("maxPriorityFeePerGas overrid can't be negative");
+		}
+		if (typeof overrides.preVerificationGas === "bigint" && overrides.preVerificationGas < 0n) {
+			throw new RangeError("preVerificationGas overrid can't be negative");
+		}
+		if (typeof overrides.verificationGasLimit === "bigint" && overrides.verificationGasLimit < 0n) {
+			throw new RangeError("verificationGasLimit overrid can't be negative");
+		}
+		if (typeof overrides.callGasLimit === "bigint" && overrides.callGasLimit < 0n) {
+			throw new RangeError("callGasLimit overrid can't be negative");
+		}
+		if (overrides.dummySignerSignaturePairs != null) {
+			if (overrides.expectedSigners != null) {
+				throw new RangeError(
+					"Can't use both dummySignerSignaturePairs and expectedSigners overrides.",
+				);
+			}
+			if (overrides.dummySignerSignaturePairs.length < 1) {
+				throw new RangeError("Number of dummySignerSignaturePairs can't be less than 1");
+			}
+		}
+		if (overrides.parallelPaymasterInitValues != null) {
+			// lowercase like the EIP-712 trimmer and the MultiChain
+			// subclass — uppercase hex is valid input
+			if (
+				!overrides.parallelPaymasterInitValues.paymasterData
+					.toLowerCase()
+					.endsWith("22e325a297439656")
+			) {
+				throw new RangeError(
+					"Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'.",
+				);
+			}
+			if (this.entrypointAddress.toLowerCase() !== ENTRYPOINT_V9.toLowerCase()) {
+				throw new RangeError("parallelPaymasterInitValues only works with ep v0.9");
+			}
+		}
+		const skipGasEstimation = overrides.skipGasEstimation ?? false;
+		const estimateGas =
+			!skipGasEstimation &&
+			(overrides.preVerificationGas == null ||
+				overrides.verificationGasLimit == null ||
+				overrides.callGasLimit == null);
+		if (estimateGas && bundlerRpc == null) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"bundlerRpc can't be null if preVerificationGas," +
+					"verificationGasLimit and callGasLimit are not overridden",
+			);
 		}
 		// Passkey module defaults come from the constructed class, so a
 		// subclass that overrides them deploys and signs with the same owner.
@@ -1839,14 +1888,7 @@ export class SafeAccount extends SmartAccount {
 			: factoryAddress != null && factoryAddress !== "0x";
 		let dummySignerSignaturePairs: SignerSignaturePair[];
 		if (overrides.dummySignerSignaturePairs != null) {
-			if (overrides.expectedSigners != null) {
-				throw new RangeError(
-					"Can't use both dummySignerSignaturePairs and expectedSigners overrides.",
-				);
-			}
-			if (overrides.dummySignerSignaturePairs.length < 1) {
-				throw new RangeError("Number of dummySignerSignaturePairs can't be less than 1");
-			}
+			// validated before the RPC calls
 			dummySignerSignaturePairs = overrides.dummySignerSignaturePairs;
 		} else {
 			if (overrides.expectedSigners == null) {
@@ -1886,30 +1928,11 @@ export class SafeAccount extends SmartAccount {
 			},
 		);
 
-		// Validate before the estimation branch so a bad config is rejected
-		// even when estimation is skipped or every gas limit is supplied.
+		// validated before the RPC calls
 		const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
-		if (parallelPaymasterInitValues != null) {
-			// lowercase like the EIP-712 trimmer and the MultiChain
-			// subclass — uppercase hex is valid input
-			if (!parallelPaymasterInitValues.paymasterData.toLowerCase().endsWith("22e325a297439656")) {
-				throw new RangeError(
-					"Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'.",
-				);
-			}
-			if (this.entrypointAddress.toLowerCase() !== ENTRYPOINT_V9.toLowerCase()) {
-				throw new RangeError("parallelPaymasterInitValues only works with ep v0.9");
-			}
-		}
 
-		const skipGasEstimation = overrides.skipGasEstimation ?? false;
-
-		if (
-			!skipGasEstimation &&
-			(overrides.preVerificationGas == null ||
-				overrides.verificationGasLimit == null ||
-				overrides.callGasLimit == null)
-		) {
+		if (estimateGas) {
+			// bundlerRpc was checked before the RPC calls
 			if (bundlerRpc != null) {
 				userOperation.callGasLimit = 0n;
 				userOperation.verificationGasLimit = 0n;
@@ -1973,18 +1996,6 @@ export class SafeAccount extends SmartAccount {
 				);
 			}
 		}
-		if (typeof overrides.preVerificationGas === "bigint" && overrides.preVerificationGas < 0n) {
-			throw new RangeError("preVerificationGas overrid can't be negative");
-		}
-
-		if (typeof overrides.verificationGasLimit === "bigint" && overrides.verificationGasLimit < 0n) {
-			throw new RangeError("verificationGasLimit overrid can't be negative");
-		}
-
-		if (typeof overrides.callGasLimit === "bigint" && overrides.callGasLimit < 0n) {
-			throw new RangeError("callGasLimit overrid can't be negative");
-		}
-
 		userOperation.preVerificationGas =
 			overrides.preVerificationGas ??
 			(preVerificationGas * BigInt((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100)) /

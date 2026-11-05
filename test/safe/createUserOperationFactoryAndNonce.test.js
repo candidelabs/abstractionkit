@@ -10,7 +10,10 @@
 // - A nonce with a non-zero key and sequence 0 was read as "already deployed"
 //   and dropped the factory of a counterfactual account.
 // - Bad overrides were rejected only after RPC calls had started, leaving a
-//   request running that nobody awaited.
+//   request running that nobody awaited. The other input checks (negative
+//   gas limits, a missing bundler, conflicting dummy signer overrides,
+//   parallelPaymasterInitValues) ran after the node had answered, wasting
+//   the requests.
 // - SafeAccountV0_2_0 / V0_3_0 pointed at EntryPoint v0.9 accepted
 //   parallelPaymasterInitValues, estimated with them and returned an op
 //   without them.
@@ -243,6 +246,32 @@ describe('overrides are validated before any RPC call starts', () => {
                 RangeError,
             );
         }
+        expect(requests).toBe(0);
+    });
+
+    const PAIR = { signer: OWNER, signature: '0x' + '00'.repeat(65) };
+    test.each(ALL.flatMap(([name, Account]) => [
+        [name, 'a negative preVerificationGas', Account, { preVerificationGas: -1n }, RangeError],
+        [name, 'a negative verificationGasLimit', Account, { verificationGasLimit: -1n }, RangeError],
+        [name, 'a negative callGasLimit', Account, { callGasLimit: -1n }, RangeError],
+        [name, 'a missing bundler', Account, {}, /bundlerRpc can't be null/],
+        [name, 'an empty dummySignerSignaturePairs', Account, { dummySignerSignaturePairs: [] }, RangeError],
+        [
+            name,
+            'both dummy signer overrides',
+            Account,
+            { dummySignerSignaturePairs: [PAIR], expectedSigners: [OWNER] },
+            /Can't use both/,
+        ],
+    ]))('%s rejects %s without touching the node', async (_name, _case, Account, overrides, error) => {
+        let requests = 0;
+        const node = {
+            request: async () => {
+                requests++;
+                return '0x1';
+            },
+        };
+        await expect(new Account(ACCOUNT).createUserOperation(TX, node, undefined, overrides)).rejects.toThrow(error);
         expect(requests).toBe(0);
     });
 });
