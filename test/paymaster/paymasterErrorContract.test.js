@@ -4,8 +4,13 @@
 // The contract: the error code names the service that failed.
 // - The paymaster failed (an RPC error, a malformed response, an unsupported
 //   token): PAYMASTER_ERROR, the raw error as its cause, never wrapped twice.
-// - Gas estimation failed: the bundler's BUNDLER_ERROR as is, the same error
-//   an account's createUserOperation throws, with its aaCode.
+// - Gas estimation failed because the paymaster rejected the operation (an
+//   AA3x / AA50 code, or bundler code -32501 / -32508): PAYMASTER_ERROR with
+//   the bundler error as cause and its aaCode / errno copied up, so a "pay
+//   another way" fallback still fires.
+// - Gas estimation failed for any other reason (e.g. AA23, the account's own
+//   validation): the bundler's BUNDLER_ERROR as is, the same error an
+//   account's createUserOperation throws, with its aaCode.
 // - The UserOperation input is invalid (a negative gas override): RangeError
 //   as is, as the accounts throw it. Invalid paymaster context (the token,
 //   exchangeRate) is the paymaster part and a PAYMASTER_ERROR.
@@ -75,6 +80,17 @@ const failingBundler = {
         throw new ak.TransportRpcError(-32500, 'AA23 reverted');
     },
 };
+const bundlerFailing = (code, message) => ({
+    request: async () => {
+        throw new ak.TransportRpcError(code, message);
+    },
+});
+const PAYMASTER_REJECTIONS = [
+    ['AA33 (paymaster validation reverted)', -32500, 'AA33 reverted: insufficient token balance'],
+    ['AA31 (paymaster deposit too low)', -32500, 'AA31 paymaster deposit too low'],
+    ['-32501 without an AA code', -32501, 'paymaster validation failed'],
+    ['-32508 without an AA code', -32508, 'paymaster deposit too low'],
+];
 const caught = (promise) =>
     promise.then(
         () => {
@@ -157,6 +173,34 @@ describe('Erc7677Paymaster.createPaymasterUserOperation always throws Abstractio
     });
 });
 
+describe('Erc7677Paymaster splits estimation failures by who caused them', () => {
+    const run = (bundler) => {
+        const rpc = transport({ pm_getPaymasterStubData: () => STUB });
+        return caught(
+            new ak.Erc7677Paymaster(rpc, { chainId: 1n, provider: null }).createPaymasterUserOperation(
+                account,
+                userOp(),
+                bundler,
+            ),
+        );
+    };
+
+    test.each(PAYMASTER_REJECTIONS)('a paymaster rejection, %s, is a PAYMASTER_ERROR', async (_name, code, message) => {
+        const error = await run(bundlerFailing(code, message));
+        expect(error.code).toBe('PAYMASTER_ERROR');
+        expect(error.message).toBe('createPaymasterUserOperation failed: the paymaster rejected the UserOperation');
+        expect(error.errno).toBe(code);
+        expect(error.aaCode).toBe(ak.parseAaCode(message));
+        expect(error.cause.code).toBe('BUNDLER_ERROR');
+    });
+
+    test('an account AA code wins over a paymaster JSON-RPC code', async () => {
+        const error = await run(bundlerFailing(-32501, 'AA23 reverted'));
+        expect(error.code).toBe('BUNDLER_ERROR');
+        expect(error.aaCode).toBe('AA23');
+    });
+});
+
 describe('CandidePaymaster error contract', () => {
     const paymasterRpc = (extra = {}) =>
         transport({
@@ -186,6 +230,31 @@ describe('CandidePaymaster error contract', () => {
         expect(error.aaCode).toBe('AA23');
         expect(error.errno).toBe(-32500);
         expect(error.cause.code).toBe('SIMULATE_VALIDATION');
+    });
+
+    test.each(FLOWS.flatMap(([name, run]) => PAYMASTER_REJECTIONS.map((r) => [name, ...r, run])))(
+        '%s reports a paymaster rejection, %s, as PAYMASTER_ERROR',
+        async (name, _case, code, message, run) => {
+            const error = await caught(run(new ak.CandidePaymaster(paymasterRpc()), bundlerFailing(code, message)));
+            expect(error.code).toBe('PAYMASTER_ERROR');
+            expect(error.message).toBe(`${name} failed: the paymaster rejected the UserOperation`);
+            expect(error.errno).toBe(code);
+            expect(error.aaCode).toBe(ak.parseAaCode(message));
+            expect(error.cause.code).toBe('BUNDLER_ERROR');
+            expect(error.cause.cause.cause).toMatchObject({ code, message });
+        },
+    );
+
+    test.each(FLOWS)('%s reports an EntryPoint the paymaster does not support as PAYMASTER_ERROR', async (_name, run) => {
+        const rpc = paymasterRpc({
+            pm_supportedERC20Tokens: () => {
+                throw new ak.TransportRpcError(-32602, 'unsupported entrypoint');
+            },
+        });
+        const error = await caught(run(new ak.CandidePaymaster(rpc), rpc));
+        expect(error.code).toBe('PAYMASTER_ERROR');
+        expect(error.errno).toBe(-32602);
+        expect(error.cause.message).toBe('unsupported entrypoint');
     });
 
     test.each(FLOWS)('%s throws a bad override as the RangeError it is', async (_name, run) => {

@@ -58,17 +58,24 @@ export function assertPaymasterMatchesApproveSpender(
 
 /**
  * The error a paymaster client throws for a failure, shared by the clients
- * so they keep one contract. The code names the service that failed:
- * - An {@link AbstractionKitError} is returned as is. A PAYMASTER_ERROR is
- *   not wrapped again (that pushed its `context`, e.g. the supported tokens,
- *   several causes deep), and an error from another service keeps its code:
- *   a gas estimation failure is the bundler's BUNDLER_ERROR, exactly as from
- *   an account's `createUserOperation`, with its `aaCode` and `errno`.
- * - A `RangeError` is invalid UserOperation input (a negative gas override,
- *   an unsupported EntryPoint) and is returned as is, as the account classes
- *   throw it. Invalid paymaster context (the token, `exchangeRate`) is not
- *   UserOperation input: the clients throw it as PAYMASTER_ERROR at the
- *   source, so one handler covers every problem with the paymaster part.
+ * so they keep one contract. The code names who failed, not which method
+ * was called:
+ * - A PAYMASTER_ERROR is returned as is. It is not wrapped again (that
+ *   pushed its `context`, e.g. the supported tokens, several causes deep).
+ * - A BUNDLER_ERROR from gas estimation is split by its cause. When the
+ *   paymaster rejected the operation (see {@link isPaymasterRejection}) it
+ *   becomes the `cause` of a PAYMASTER_ERROR that carries its `aaCode` and
+ *   `errno`, so a "pay another way" fallback still sees a paymaster failure.
+ *   Any other bundler failure (the account's own validation, the network)
+ *   is returned as is, exactly as an account's `createUserOperation` throws
+ *   it.
+ * - Any other {@link AbstractionKitError} keeps the code of the service
+ *   that failed.
+ * - A `RangeError` is invalid UserOperation input (a negative gas override)
+ *   and is returned as is, as the account classes throw it. Invalid
+ *   paymaster context (the token, `exchangeRate`) is not UserOperation
+ *   input: the clients throw it as PAYMASTER_ERROR at the source, so one
+ *   handler covers every problem with the paymaster part.
  * - Anything else came from the paymaster: a raw error from its RPC or a
  *   `TypeError` from a malformed response. It becomes the `cause` of a
  *   PAYMASTER_ERROR, with a JSON-RPC error code copied to `errno`.
@@ -77,10 +84,39 @@ export function assertPaymasterMatchesApproveSpender(
  */
 export function toPaymasterError(message: string, err: unknown): Error {
 	const error = ensureError(err);
-	if (error instanceof AbstractionKitError || error instanceof RangeError) {
+	if (error instanceof AbstractionKitError) {
+		if (error.code === "BUNDLER_ERROR" && isPaymasterRejection(error)) {
+			return new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				`${message}: the paymaster rejected the UserOperation`,
+				{ cause: error, aaCode: error.aaCode, errno: error.errno },
+			);
+		}
+		return error;
+	}
+	if (error instanceof RangeError) {
 		return error;
 	}
 	return paymasterRpcError(message, error);
+}
+
+/**
+ * Whether a bundler error says the paymaster, not the account, made the
+ * operation fail:
+ * - an EntryPoint `AA3x` code (paymaster deposit, validation, signature,
+ *   time range or gas limit) or `AA50` (postOp reverted). An AA code is the
+ *   most specific signal, so a non-paymaster one (e.g. `AA23`, the account
+ *   reverted) decides against it whatever the JSON-RPC code says.
+ * - without an AA code, the ERC-4337 bundler codes `-32501` (paymaster
+ *   validation failed) and `-32508` (paymaster deposit too low).
+ *
+ * @internal
+ */
+export function isPaymasterRejection(error: AbstractionKitError): boolean {
+	if (error.aaCode != null) {
+		return /^AA3\d$/.test(error.aaCode) || error.aaCode === "AA50";
+	}
+	return error.errno === -32501 || error.errno === -32508;
 }
 
 /**

@@ -466,8 +466,13 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 *   malformed response, or invalid paymaster context such as an
 	 *   unparseable `context.exchangeRate` or an account that cannot prepend
 	 *   the token approval.
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when gas estimation
+	 *   fails because the paymaster rejected the operation (an EntryPoint
+	 *   `AA3x` / `AA50` code, or bundler code -32501 / -32508). The bundler's
+	 *   error is the `cause`; `aaCode` and `errno` are copied to the top.
 	 * @throws AbstractionKitError with code "BUNDLER_ERROR" when gas estimation
-	 *   fails, as from an account's `createUserOperation`; `aaCode` names the
+	 *   fails for any other reason (e.g. `AA23`, the account's own validation),
+	 *   as from an account's `createUserOperation`; `aaCode` names the
 	 *   EntryPoint error.
 	 * @throws RangeError for invalid UserOperation input, e.g. a negative gas
 	 *   override.

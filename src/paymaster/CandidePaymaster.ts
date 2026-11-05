@@ -210,6 +210,24 @@ export class CandidePaymaster extends Paymaster implements Transport {
 		return this.entrypointData.get(entrypoint.toLowerCase());
 	}
 
+	/**
+	 * The cached data for `entrypoint`, which `ensureInitialized` has loaded.
+	 * A paymaster that does not support the EntryPoint already fails in
+	 * `ensureInitialized` (its `pm_supportedERC20Tokens` call errors), so this
+	 * guards against a missing cache entry with the same PAYMASTER_ERROR.
+	 */
+	private requireEntrypointData(entrypoint: string): SupportedERC20TokensAndMetadata {
+		const data = this.getEntrypointData(entrypoint);
+		if (data == null) {
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				`the paymaster does not support entrypoint ${entrypoint}`,
+				{ context: { entrypoint } },
+			);
+		}
+		return data;
+	}
+
 	private static mapTokens(
 		tokens: { name: string; symbol: string; address: string; decimals: number | string }[],
 	): ERC20Token[] {
@@ -354,11 +372,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	async getPaymasterMetaData(entrypoint: string): Promise<PaymasterMetadata | null> {
 		await this.ensureInitialized(entrypoint);
 
-		const data = this.getEntrypointData(entrypoint);
-		if (data == null) {
-			throw new RangeError("unsupported entrypoint.");
-		}
-		return data.paymasterMetadata;
+		return this.requireEntrypointData(entrypoint).paymasterMetadata;
 	}
 
 	/**
@@ -382,7 +396,8 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 * @param erc20TokenAddress - The ERC-20 token contract address
 	 * @param entrypoint - Target EntryPoint address (default: ENTRYPOINT_V7)
 	 * @returns The token data (name, symbol, address, decimals), or null if not supported
-	 * @throws RangeError if the entrypoint is not supported
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the entrypoint is not
+	 *   supported or the paymaster cannot be initialized
 	 */
 	async getSupportedERC20TokenData(
 		erc20TokenAddress: string,
@@ -390,10 +405,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	): Promise<ERC20Token | null> {
 		await this.ensureInitialized(entrypoint);
 
-		const data = this.getEntrypointData(entrypoint);
-		if (data == null) {
-			throw new RangeError("unsupported entrypoint.");
-		}
+		const data = this.requireEntrypointData(entrypoint);
 
 		const gasToken = data.tokens.find(
 			(token) => token.address.toLowerCase() === erc20TokenAddress.toLowerCase(),
@@ -602,13 +614,19 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 * @param overrides - Override gas limits and multipliers
 	 * @returns An object `{ userOperation, sponsorMetadata? }`
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when the paymaster
-	 *   fails: an RPC error such as a denied sponsorship policy (the `cause`, its
-	 *   JSON-RPC code in `errno`), or a response without a paymaster.
+	 *   fails: an RPC error such as a denied sponsorship policy or an
+	 *   unsupported EntryPoint (the `cause`, its JSON-RPC code in `errno`), or
+	 *   a response without a paymaster.
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when gas estimation
+	 *   fails because the paymaster rejected the operation (an EntryPoint
+	 *   `AA3x` / `AA50` code, or bundler code -32501 / -32508). The bundler's
+	 *   error is the `cause`; `aaCode` and `errno` are copied to the top.
 	 * @throws AbstractionKitError with code "BUNDLER_ERROR" when gas estimation
-	 *   fails, as from an account's `createUserOperation`; `aaCode` names the
+	 *   fails for any other reason (e.g. `AA23`, the account's own validation),
+	 *   as from an account's `createUserOperation`; `aaCode` names the
 	 *   EntryPoint error.
 	 * @throws RangeError for invalid UserOperation input, e.g. a negative gas
-	 *   override or an EntryPoint the paymaster does not support.
+	 *   override.
 	 */
 	async createSponsorPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: SmartAccountWithEntrypoint,
@@ -626,10 +644,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			};
 			const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
 			await this.ensureInitialized(entrypoint);
-			const epData = this.getEntrypointData(entrypoint);
-			if (epData == null) {
-				throw new RangeError(`UserOperation for entrypoint ${entrypoint} is not supported`);
-			}
+			const epData = this.requireEntrypointData(entrypoint);
 			if (context.signingPhase !== "finalize") {
 				this.setDummyPaymasterFields(userOp, epData);
 				await this.estimateAndApplyGasLimits(userOp, bundlerRpc, entrypoint, overrides ?? {});
@@ -669,14 +684,19 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 *   when called under the `finalize` signing phase (no cost recomputation).
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when the paymaster
 	 *   part fails: the token is not a valid address or is not supported
-	 *   (`context.supportedTokens` lists the ones that are), an RPC error (the
-	 *   `cause`), or a paymaster that differs from the one the approval was
-	 *   built for.
+	 *   (`context.supportedTokens` lists the ones that are), an RPC error such
+	 *   as an unsupported EntryPoint (the `cause`), or a paymaster that differs
+	 *   from the one the approval was built for.
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when gas estimation
+	 *   fails because the paymaster rejected the operation (an EntryPoint
+	 *   `AA3x` / `AA50` code, or bundler code -32501 / -32508). The bundler's
+	 *   error is the `cause`; `aaCode` and `errno` are copied to the top.
 	 * @throws AbstractionKitError with code "BUNDLER_ERROR" when gas estimation
-	 *   fails, as from an account's `createUserOperation`; `aaCode` names the
+	 *   fails for any other reason (e.g. `AA23`, the account's own validation),
+	 *   as from an account's `createUserOperation`; `aaCode` names the
 	 *   EntryPoint error.
 	 * @throws RangeError for invalid UserOperation input, e.g. a negative gas
-	 *   override or an EntryPoint the paymaster does not support.
+	 *   override.
 	 */
 	async createTokenPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: PrependTokenPaymasterApproveAccount,
@@ -705,10 +725,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			await this.ensureInitialized(entrypoint);
 			let tokenQuote: TokenQuote | undefined;
 			if (context.signingPhase !== "finalize") {
-				const epData = this.getEntrypointData(entrypoint);
-				if (epData == null) {
-					throw new RangeError(`UserOperation for entrypoint ${entrypoint} is not supported`);
-				}
+				const epData = this.requireEntrypointData(entrypoint);
 				this.setDummyPaymasterFields(userOp, epData);
 				// Prepend an infinite approval and re-estimate gas; a proper
 				// allowance is calculated later and replaces the infinite one.
@@ -771,10 +788,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			// the operation comes from pm_getPaymasterData (applyPaymasterResult
 			// assigns the response fields unconditionally, so the operation
 			// reflects the raw payload). They must agree.
-			const epMetadata = this.getEntrypointData(entrypoint);
-			if (epMetadata == null) {
-				throw new RangeError(`UserOperation for entrypoint ${entrypoint} is not supported`);
-			}
+			const epMetadata = this.requireEntrypointData(entrypoint);
 			assertPaymasterMatchesApproveSpender(
 				getUserOperationPaymaster(resultUserOp),
 				epMetadata.paymasterMetadata.address,
@@ -878,9 +892,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 		try {
 			await this.ensureInitialized(entrypoint);
 
-			if (this.getEntrypointData(entrypoint) == null) {
-				throw new RangeError("unsupported entrypoint.");
-			}
+			this.requireEntrypointData(entrypoint);
 
 			const result = (await this.fetchSupportedTokensRpc(
 				entrypoint,
