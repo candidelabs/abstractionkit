@@ -127,6 +127,32 @@ describe('parallelPaymasterInitValues on SafeMultiChainSigAccountV1 (EntryPoint 
         );
     });
 
+    // The checks run before the estimation branch, so skipping estimation or
+    // supplying every gas limit doesn't bypass them.
+    const BYPASS_ESTIMATION = {
+        'skipGasEstimation is set': { skipGasEstimation: true },
+        'every gas limit is supplied': { preVerificationGas: 1n, verificationGasLimit: 1n, callGasLimit: 1n },
+    };
+
+    for (const [path, gasOverrides] of Object.entries(BYPASS_ESTIMATION)) {
+        test(`unsupported EntryPoints still reject init values when ${path}`, async () => {
+            const init = await paymaster.getPaymasterFieldsInitValues(1n);
+            for (const Account of [ak.SafeAccountV0_3_0, ak.SafeAccountV0_2_0]) {
+                await expect(
+                    createOp(Account, { ...gasOverrides, parallelPaymasterInitValues: init }),
+                ).rejects.toThrow(/only works with ep v0\.9/);
+            }
+        });
+
+        test(`paymasterData without the magic suffix is still rejected when ${path}`, async () => {
+            const init = await paymaster.getPaymasterFieldsInitValues(1n);
+            const bad = { ...init, paymasterData: '0x' + 'ab'.repeat(42) };
+            await expect(
+                createOp(ak.SafeMultiChainSigAccountV1, { ...gasOverrides, parallelPaymasterInitValues: bad }),
+            ).rejects.toThrow(/PAYMASTER_SIG_MAGIC/);
+        });
+    }
+
     test('without init values the returned op has no paymaster', async () => {
         const { userOperation } = await createOp(ak.SafeMultiChainSigAccountV1, {});
         expect(userOperation.paymaster).toBeNull();

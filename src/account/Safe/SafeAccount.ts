@@ -1790,6 +1790,22 @@ export class SafeAccount extends SmartAccount {
 			},
 		);
 
+		// Validate before the estimation branch so a bad config is rejected
+		// even when estimation is skipped or every gas limit is supplied.
+		const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
+		if (parallelPaymasterInitValues != null) {
+			// lowercase like the EIP-712 trimmer and the MultiChain
+			// subclass — uppercase hex is valid input
+			if (!parallelPaymasterInitValues.paymasterData.toLowerCase().endsWith("22e325a297439656")) {
+				throw new RangeError(
+					"Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'.",
+				);
+			}
+			if (this.entrypointAddress.toLowerCase() !== ENTRYPOINT_V9.toLowerCase()) {
+				throw new RangeError("parallelPaymasterInitValues only works with ep v0.9");
+			}
+		}
+
 		const skipGasEstimation = overrides.skipGasEstimation ?? false;
 
 		if (
@@ -1825,22 +1841,7 @@ export class SafeAccount extends SmartAccount {
 						paymasterData: null,
 					};
 
-					const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
 					if (parallelPaymasterInitValues != null) {
-						// lowercase like the EIP-712 trimmer and the MultiChain
-						// subclass — uppercase hex is valid input
-						if (
-							!parallelPaymasterInitValues.paymasterData
-								.toLowerCase()
-								.endsWith("22e325a297439656")
-						) {
-							throw new RangeError(
-								"Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'.",
-							);
-						}
-						if (this.entrypointAddress.toLowerCase() !== ENTRYPOINT_V9.toLowerCase()) {
-							throw new RangeError("parallelPaymasterInitValues only works with ep v0.9");
-						}
 						userOperationToEstimate.paymaster = parallelPaymasterInitValues.paymaster;
 						userOperationToEstimate.paymasterVerificationGasLimit =
 							parallelPaymasterInitValues.paymasterVerificationGasLimit;

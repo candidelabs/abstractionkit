@@ -5,6 +5,7 @@
 ### Bug Fixes
 
 - **`SafeAccountV0_2_0.initializeNewAccount` returns the class it is called on.** It constructed a plain `SafeAccountV0_2_0` even when invoked on a consumer subclass, unlike `SafeAccountV0_3_0` and the multi-chain classes (#116). Detached calls (`const init = SafeAccountV0_2_0.initializeNewAccount; init(...)`) still fall back to `SafeAccountV0_2_0`.
+- **Safe `createUserOperation` validates `parallelPaymasterInitValues` on every path.** The `PAYMASTER_SIG_MAGIC` suffix and EntryPoint v0.9 checks ran only during gas estimation, so `skipGasEstimation: true` or fully supplied gas limits let a `SafeAccountV0_2_0` or `SafeAccountV0_3_0` accept init values it silently dropped. These calls now throw a `RangeError`.
 
 ## 1.0.0
 
