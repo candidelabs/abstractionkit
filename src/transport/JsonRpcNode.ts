@@ -266,7 +266,7 @@ export class JsonRpcNode implements Transport {
 				}
 				gasPrice = BigInt(result);
 			} catch (err) {
-				if (!isMethodNotSupportedError(err, "eth_gasPrice")) throw err;
+				if (!isMethodNotSupportedError(err)) throw err;
 				// method unsupported on this node; fall through to gas-price-less branch
 			}
 
@@ -284,7 +284,7 @@ export class JsonRpcNode implements Transport {
 				}
 				maxPriorityFeePerGas = BigInt(result);
 			} catch (err) {
-				if (!isMethodNotSupportedError(err, "eth_maxPriorityFeePerGas")) throw err;
+				if (!isMethodNotSupportedError(err)) throw err;
 				// older chains don't support this; fall through
 			}
 
@@ -463,22 +463,14 @@ function scaleBigIntByGasLevel(value: bigint, gasLevel: number): bigint {
  *
  * @internal
  */
-function isMethodNotSupportedError(err: unknown, method: string): boolean {
+function isMethodNotSupportedError(err: unknown): boolean {
 	const code = (err as ProviderRpcError | undefined)?.code;
 	if (code === -32601) return true;
-	// Some nodes report a missing method under another code. Accept that only
-	// when the message is about the method: a bare "not supported" also
-	// matches "chain not supported on this plan" or an HTTP 415 "Unsupported
-	// Media Type", and falling back on those invents a gas price.
 	const message = (err as Error | undefined)?.message?.toLowerCase() ?? "";
-	if (!message.includes("method") && !message.includes(method.toLowerCase())) return false;
 	return (
-		message.includes("not found") ||
+		message.includes("method not found") ||
 		message.includes("not supported") ||
-		message.includes("unsupported") ||
-		message.includes("not available") ||
-		message.includes("not implemented") ||
-		message.includes("does not exist")
+		message.includes("unsupported")
 	);
 }
 
