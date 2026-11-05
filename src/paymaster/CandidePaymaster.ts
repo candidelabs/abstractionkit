@@ -607,8 +607,8 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 * @throws AbstractionKitError with code "BUNDLER_ERROR" when gas estimation
 	 *   fails, as from an account's `createUserOperation`; `aaCode` names the
 	 *   EntryPoint error.
-	 * @throws RangeError for invalid input, e.g. a negative gas override or an
-	 *   EntryPoint the paymaster does not support.
+	 * @throws RangeError for invalid UserOperation input, e.g. a negative gas
+	 *   override or an EntryPoint the paymaster does not support.
 	 */
 	async createSponsorPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: SmartAccountWithEntrypoint,
@@ -668,14 +668,15 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 * @returns An object `{ userOperation, tokenQuote? }`. `tokenQuote` is absent
 	 *   when called under the `finalize` signing phase (no cost recomputation).
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when the paymaster
-	 *   fails: the token is not supported (`context.supportedTokens` lists the
-	 *   ones that are), an RPC error (the `cause`), or a paymaster that differs
-	 *   from the one the approval was built for.
+	 *   part fails: the token is not a valid address or is not supported
+	 *   (`context.supportedTokens` lists the ones that are), an RPC error (the
+	 *   `cause`), or a paymaster that differs from the one the approval was
+	 *   built for.
 	 * @throws AbstractionKitError with code "BUNDLER_ERROR" when gas estimation
 	 *   fails, as from an account's `createUserOperation`; `aaCode` names the
 	 *   EntryPoint error.
-	 * @throws RangeError for invalid input, e.g. a negative gas override, an invalid token address or an
-	 *   EntryPoint the paymaster does not support.
+	 * @throws RangeError for invalid UserOperation input, e.g. a negative gas
+	 *   override or an EntryPoint the paymaster does not support.
 	 */
 	async createTokenPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: PrependTokenPaymasterApproveAccount,
@@ -691,8 +692,14 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				...(context || {}),
 				token: tokenAddress,
 			};
+			// The token is paymaster context, so an invalid one is a
+			// PAYMASTER_ERROR like an unsupported one, not a RangeError.
 			if (!context.token || context.token.trim().length === 0 || !isAddress(context.token)) {
-				throw new RangeError(`Invalid token ${context.token ?? "undefined"}`);
+				throw new AbstractionKitError(
+					"PAYMASTER_ERROR",
+					`Invalid token ${context.token ?? "undefined"}`,
+					{ context: { token: context.token } },
+				);
 			}
 			const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
 			await this.ensureInitialized(entrypoint);

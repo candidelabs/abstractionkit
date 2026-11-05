@@ -6,7 +6,9 @@
 //   token): PAYMASTER_ERROR, the raw error as its cause, never wrapped twice.
 // - Gas estimation failed: the bundler's BUNDLER_ERROR as is, the same error
 //   an account's createUserOperation throws, with its aaCode.
-// - The caller's input is invalid: RangeError as is, as the accounts throw it.
+// - The UserOperation input is invalid (a negative gas override): RangeError
+//   as is, as the accounts throw it. Invalid paymaster context (the token,
+//   exchangeRate) is the paymaster part and a PAYMASTER_ERROR.
 //
 // What it fixes:
 // - Erc7677Paymaster.createPaymasterUserOperation returned its two flows
@@ -203,13 +205,15 @@ describe('CandidePaymaster error contract', () => {
         expect(error.cause).toMatchObject({ code: -32000, message: 'policy denied' });
     });
 
-    test('an invalid token address is thrown as a RangeError', async () => {
+    test('an invalid token address is paymaster context, so a PAYMASTER_ERROR', async () => {
         const rpc = paymasterRpc();
         const error = await caught(
             new ak.CandidePaymaster(rpc).createTokenPaymasterUserOperation(account, userOp(), '0x1234', rpc),
         );
-        expect(error).toBeInstanceOf(RangeError);
-        expect(error.message).toMatch(/Invalid token/);
+        expect(error).toBeInstanceOf(ak.AbstractionKitError);
+        expect(error.code).toBe('PAYMASTER_ERROR');
+        expect(error.message).toBe('Invalid token 0x1234');
+        expect(error.context).toEqual({ token: '0x1234' });
     });
 
     test.each(FLOWS)('%s reports a null pm_getPaymasterData result', async (_name, run) => {

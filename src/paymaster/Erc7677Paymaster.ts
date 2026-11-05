@@ -462,12 +462,15 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 * @returns An object `{ userOperation, tokenQuote? }`. `tokenQuote` is only
 	 *   populated when the token-payment flow is taken (`context.token` set).
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when the paymaster
-	 *   fails: an RPC error (the `cause`, its JSON-RPC code in `errno`) or a
-	 *   malformed response.
+	 *   part fails: an RPC error (the `cause`, its JSON-RPC code in `errno`), a
+	 *   malformed response, or invalid paymaster context such as an
+	 *   unparseable `context.exchangeRate` or an account that cannot prepend
+	 *   the token approval.
 	 * @throws AbstractionKitError with code "BUNDLER_ERROR" when gas estimation
 	 *   fails, as from an account's `createUserOperation`; `aaCode` names the
 	 *   EntryPoint error.
-	 * @throws RangeError for invalid input, e.g. a negative gas override.
+	 * @throws RangeError for invalid UserOperation input, e.g. a negative gas
+	 *   override.
 	 */
 	async createPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: SmartAccountWithEntrypoint,

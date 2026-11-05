@@ -64,9 +64,11 @@ export function assertPaymasterMatchesApproveSpender(
  *   several causes deep), and an error from another service keeps its code:
  *   a gas estimation failure is the bundler's BUNDLER_ERROR, exactly as from
  *   an account's `createUserOperation`, with its `aaCode` and `errno`.
- * - A `RangeError` is the caller's input (a negative gas override, an
- *   invalid token address, an unsupported EntryPoint) and is returned as is,
- *   as the account classes throw it.
+ * - A `RangeError` is invalid UserOperation input (a negative gas override,
+ *   an unsupported EntryPoint) and is returned as is, as the account classes
+ *   throw it. Invalid paymaster context (the token, `exchangeRate`) is not
+ *   UserOperation input: the clients throw it as PAYMASTER_ERROR at the
+ *   source, so one handler covers every problem with the paymaster part.
  * - Anything else came from the paymaster: a raw error from its RPC or a
  *   `TypeError` from a malformed response. It becomes the `cause` of a
  *   PAYMASTER_ERROR, with a JSON-RPC error code copied to `errno`.
