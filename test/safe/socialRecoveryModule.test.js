@@ -322,3 +322,64 @@ describe('SocialRecoveryModuleV1 (v0.1.0)', () => {
         expect(domain.version).toBe('0.0.1');
     });
 });
+
+// getGuardians returns checksummed addresses. The predecessor lookup compared
+// the caller's address with indexOf, so a lowercase (or all-caps) address of a
+// real guardian was reported as "not a current guardian".
+describe.each([
+    ['SocialRecoveryModuleV1', ak.SocialRecoveryModuleV1],
+    ['SocialRecoveryModuleV2', ak.SocialRecoveryModuleV2],
+])('%s createRevokeGuardianWithThresholdMetaTransaction predecessor lookup', (_name, Module) => {
+    const { AbiCoder: Coder } = require('ethers');
+    const ACCOUNT_ADDRESS = '0x' + '42'.repeat(20);
+    const GUARDIANS = [
+        '0x1a02592A3484c2077d2E5D24482497F85e1980C6',
+        '0x084f4dB6bae8fBb7fb9709c0A25532E21C7A097E',
+        '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+    ];
+    const SENTINEL = '0x0000000000000000000000000000000000000001';
+    const node = { request: async () => Coder.defaultAbiCoder().encode(['address[]'], [GUARDIANS]) };
+    const module = new Module();
+
+    async function revoke(guardian, overrides) {
+        const tx = await module.createRevokeGuardianWithThresholdMetaTransaction(
+            node,
+            ACCOUNT_ADDRESS,
+            guardian,
+            1n,
+            overrides,
+        );
+        // revokeGuardianWithThreshold(prevGuardian, guardian, threshold)
+        const [prev, revoked, threshold] = Coder.defaultAbiCoder().decode(
+            ['address', 'address', 'uint256'],
+            '0x' + tx.data.slice(10),
+        );
+        return { prev, revoked, threshold };
+    }
+
+    test.each([
+        ['checksummed', (a) => a],
+        ['lowercase', (a) => a.toLowerCase()],
+        ['uppercase hex', (a) => '0x' + a.slice(2).toUpperCase()],
+    ])('finds the predecessor of a %s guardian address', async (_case, format) => {
+        expect((await revoke(format(GUARDIANS[0]))).prev).toBe(SENTINEL);
+        expect((await revoke(format(GUARDIANS[1]))).prev).toBe(GUARDIANS[0]);
+        expect((await revoke(format(GUARDIANS[2]))).prev).toBe(GUARDIANS[1]);
+    });
+
+    test('an address that is not a guardian is still rejected', async () => {
+        await expect(revoke('0x' + '99'.repeat(20))).rejects.toThrow(/not a current guardian/);
+    });
+
+    test('an explicit predecessor skips the lookup', async () => {
+        const offline = { request: async () => { throw new Error('no RPC expected'); } };
+        const tx = await module.createRevokeGuardianWithThresholdMetaTransaction(
+            offline,
+            ACCOUNT_ADDRESS,
+            GUARDIANS[1],
+            1n,
+            { prevGuardianAddress: GUARDIANS[0] },
+        );
+        expect(tx.data.toLowerCase()).toContain(GUARDIANS[0].slice(2).toLowerCase());
+    });
+});

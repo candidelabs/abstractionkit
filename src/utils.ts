@@ -579,9 +579,13 @@ export async function sendJsonRpcRequest(
 		id: Date.now(),
 		jsonrpc: "2.0",
 	});
+	// The body is always JSON. Custom headers (an API key, say) used to
+	// replace the default Content-Type and the body went out as text/plain;
+	// add it unless the caller set one of their own.
+	const hasContentType = Object.keys(headers).some((name) => name.toLowerCase() === "content-type");
 	const fetchResult = await fetch(rpc, {
 		method: "POST",
-		headers,
+		headers: hasContentType ? headers : { ...headers, "Content-Type": "application/json" },
 		body: raw,
 		redirect: "follow",
 	});
@@ -614,13 +618,20 @@ export async function sendJsonRpcRequest(
 		// server's own error (e.g. a 429 rate limit).
 		const err = response.error as JsonRpcError | undefined;
 		if (err != null && typeof err === "object") {
-			throw new TransportRpcError(err.code, err.message);
+			throw new TransportRpcError(err.code, err.message, err.data);
 		}
 		throw new TransportRpcError(
 			-32603,
 			`HTTP ${fetchResult.status} ${fetchResult.statusText}`.trim(),
 			response,
 		);
+	}
+	// An error object wins over a `result` delivered next to it, as it does
+	// on the Transport path (BaseRpcTransport.parseResponse).
+	const responseError = response.error as JsonRpcError | null | undefined;
+	if (responseError != null && typeof responseError === "object") {
+		// `data` carries the revert bytes of a failed eth_call
+		throw new TransportRpcError(responseError.code, responseError.message, responseError.data);
 	}
 	if ("result" in response) {
 		return response.result as JsonRpcResult;
@@ -630,17 +641,12 @@ export async function sendJsonRpcRequest(
 	if ("simulation_results" in response) {
 		return response.simulation_results as JsonRpcResult;
 	}
-	const err = response.error as JsonRpcError;
-	if (err == null || typeof err !== "object") {
-		// no result and no error object — report the HTTP status rather than
-		// crashing on err.code
-		throw new TransportRpcError(
-			-32603,
-			`HTTP ${fetchResult.status} ${fetchResult.statusText}: malformed JSON-RPC response`.trim(),
-			response,
-		);
-	}
-	throw new TransportRpcError(err.code, err.message);
+	// no result and no error object — report the HTTP status
+	throw new TransportRpcError(
+		-32603,
+		`HTTP ${fetchResult.status} ${fetchResult.statusText}: malformed JSON-RPC response`.trim(),
+		response,
+	);
 }
 
 /**
@@ -697,6 +703,12 @@ export async function fetchGasPricePolygon(
 	const gasStationUrl = `https://gasstation.polygon.technology/${polygonChain}`;
 	try {
 		const fetchResult = await fetch(gasStationUrl);
+		if (!fetchResult.ok) {
+			// e.g. the retired zkevm / cardona endpoints answer 404
+			throw new Error(
+				`the gas station responded with HTTP ${fetchResult.status} ${fetchResult.statusText}`.trim(),
+			);
+		}
 		const response = (await fetchResult.json()) as PolygonGasStationJsonRpcResponse;
 		let gasPrice: GasPrice;
 		if (gasLevel === GasOption.Slow) {
@@ -705,6 +717,9 @@ export async function fetchGasPricePolygon(
 			gasPrice = response.standard;
 		} else {
 			gasPrice = response.fast;
+		}
+		if (gasPrice == null) {
+			throw new Error("the gas station response has no price for the requested gas level");
 		}
 		let maxFeePerGas = BigInt(Math.ceil(Number(gasPrice.maxFee) * 1000000000));
 		let maxPriorityFeePerGas = BigInt(Math.ceil(Number(gasPrice.maxPriorityFee) * 1000000000));

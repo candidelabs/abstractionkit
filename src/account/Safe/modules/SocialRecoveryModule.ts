@@ -166,7 +166,11 @@ export abstract class SocialRecoveryModuleBase extends SafeModule {
 		let prevGuardianAddressT = overrides.prevGuardianAddress;
 		if (prevGuardianAddressT == null) {
 			const guardians = await this.getGuardians(nodeRpcUrl, accountAddress);
-			const guardianToDeleteIndex = guardians.indexOf(guardianAddress);
+			// getGuardians returns checksummed addresses; the caller may not
+			const guardianLowerCase = guardianAddress.toLowerCase();
+			const guardianToDeleteIndex = guardians.findIndex(
+				(guardian) => guardian.toLowerCase() === guardianLowerCase,
+			);
 			if (guardianToDeleteIndex === -1) {
 				throw new RangeError(
 					`${guardianAddress} is not a current guardian for account : ${accountAddress}`,
