@@ -174,8 +174,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			const result = await this.outbound.request<string>({ method: "pm_chainId" });
 			return result;
 		} catch (err) {
-			const error = ensureError(err);
-			throw new AbstractionKitError("PAYMASTER_ERROR", "pm_chainId failed", { cause: error });
+			throw CandidePaymaster.toPaymasterError("pm_chainId failed", err);
 		}
 	}
 
@@ -284,11 +283,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			}
 			this.entrypointData.set(entrypoint.toLowerCase(), data);
 		} catch (err) {
-			const error = ensureError(err);
-
-			throw new AbstractionKitError("PAYMASTER_ERROR", "failed initializing the paymaster", {
-				cause: error,
-			});
+			throw CandidePaymaster.toPaymasterError("failed initializing the paymaster", err);
 		}
 	}
 
@@ -308,11 +303,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				paymasterMetadata: CandidePaymaster.normalizePaymasterMetadata(result.paymasterMetadata),
 			};
 		} catch (err) {
-			const error = ensureError(err);
-
-			throw new AbstractionKitError("PAYMASTER_ERROR", "fetchAndTransformTokenData failed", {
-				cause: error,
-			});
+			throw CandidePaymaster.toPaymasterError("fetchAndTransformTokenData failed", err);
 		}
 	}
 
@@ -335,11 +326,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			});
 			return result;
 		} catch (err) {
-			const error = ensureError(err);
-
-			throw new AbstractionKitError("PAYMASTER_ERROR", "pm_supportedEntryPoints failed", {
-				cause: error,
-			});
+			throw CandidePaymaster.toPaymasterError("pm_supportedEntryPoints failed", err);
 		}
 	}
 
@@ -517,6 +504,26 @@ export class CandidePaymaster extends Paymaster implements Transport {
 		}
 	}
 
+	/**
+	 * Report a failure as PAYMASTER_ERROR without burying what a caller needs.
+	 * - A PAYMASTER_ERROR is returned as is. Wrapping it again at every layer
+	 *   pushed its `context` (e.g. the supported tokens) three causes deep.
+	 * - Anything else becomes the `cause`, and an AbstractionKitError cause
+	 *   keeps its `aaCode` and `errno` readable on the wrapper.
+	 */
+	private static toPaymasterError(message: string, err: unknown): AbstractionKitError {
+		const error = ensureError(err);
+		if (error instanceof AbstractionKitError) {
+			if (error.code === "PAYMASTER_ERROR") return error;
+			return new AbstractionKitError("PAYMASTER_ERROR", message, {
+				cause: error,
+				aaCode: error.aaCode,
+				errno: error.errno,
+			});
+		}
+		return new AbstractionKitError("PAYMASTER_ERROR", message, { cause: error });
+	}
+
 	private applyPaymasterResult(
 		userOp: AnyUserOperation,
 		jsonRpcResult: unknown,
@@ -526,6 +533,10 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			| PmUserOperationV7Result
 			| PmUserOperationV6Result;
 
+		if (jsonRpcResult == null || typeof jsonRpcResult !== "object") {
+			throw new AbstractionKitError("BAD_DATA", "pm_getPaymasterData returned no result");
+		}
+
 		// Set version-specific paymaster fields (gas limits/prices are not overridden)
 		if ("initCode" in userOp) {
 			const v6Result = jsonRpcResult as PmUserOperationV6Result;
@@ -533,8 +544,15 @@ export class CandidePaymaster extends Paymaster implements Transport {
 		} else {
 			const v7Result = jsonRpcResult as PmUserOperationV7Result;
 			userOp.paymaster = v7Result.paymaster;
-			userOp.paymasterVerificationGasLimit = BigInt(v7Result.paymasterVerificationGasLimit);
-			userOp.paymasterPostOpGasLimit = BigInt(v7Result.paymasterPostOpGasLimit);
+			// ERC-7677 only requires `paymaster` and `paymasterData` here. When
+			// the gas limits are left out, the ones already on the operation
+			// (from the stub or the commit phase) stay.
+			if (v7Result.paymasterVerificationGasLimit != null) {
+				userOp.paymasterVerificationGasLimit = BigInt(v7Result.paymasterVerificationGasLimit);
+			}
+			if (v7Result.paymasterPostOpGasLimit != null) {
+				userOp.paymasterPostOpGasLimit = BigInt(v7Result.paymasterPostOpGasLimit);
+			}
 			userOp.paymasterData = v7Result.paymasterData;
 		}
 
@@ -574,10 +592,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				sponsorMetadata,
 			};
 		} catch (err) {
-			const error = ensureError(err);
-			throw new AbstractionKitError("PAYMASTER_ERROR", "pm_getPaymasterData failed", {
-				cause: error,
-			});
+			throw CandidePaymaster.toPaymasterError("pm_getPaymasterData failed", err);
 		}
 	}
 
@@ -603,23 +618,41 @@ export class CandidePaymaster extends Paymaster implements Transport {
 		context?: CandidePaymasterContext,
 		overrides?: GasPaymasterUserOperationOverrides,
 	): Promise<{ userOperation: SameUserOp<T>; sponsorMetadata?: SponsorMetadata }> {
-		const userOp = { ...userOperation } as T;
-		context = {
-			...(context || {}),
-			...(sponsorshipPolicyId !== undefined ? { sponsorshipPolicyId } : {}),
-		};
-		const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
-		await this.ensureInitialized(entrypoint);
-		const epData = this.getEntrypointData(entrypoint);
-		if (epData == null) {
-			throw new RangeError(`UserOperation for entrypoint ${entrypoint} is not supported`);
+		try {
+			const userOp = { ...userOperation } as T;
+			context = {
+				...(context || {}),
+				...(sponsorshipPolicyId !== undefined ? { sponsorshipPolicyId } : {}),
+			};
+			const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
+			await this.ensureInitialized(entrypoint);
+			const epData = this.getEntrypointData(entrypoint);
+			if (epData == null) {
+				throw new RangeError(`UserOperation for entrypoint ${entrypoint} is not supported`);
+			}
+			if (context.signingPhase !== "finalize") {
+				this.setDummyPaymasterFields(userOp, epData);
+				await this.estimateAndApplyGasLimits(userOp, bundlerRpc, entrypoint, overrides ?? {});
+			}
+			const _overrides = { ...(overrides || {}), entrypoint: entrypoint };
+			const result = await this.createPaymasterUserOperation(
+				smartAccount,
+				userOp,
+				context,
+				_overrides,
+			);
+			// a response without a paymaster is not a sponsorship
+			if (getUserOperationPaymaster(result.userOperation) == null) {
+				throw new AbstractionKitError(
+					"PAYMASTER_ERROR",
+					"pm_getPaymasterData returned no paymaster for the sponsored operation",
+				);
+			}
+			return result;
+		} catch (err) {
+			// same contract as createTokenPaymasterUserOperation
+			throw CandidePaymaster.toPaymasterError("createSponsorPaymasterUserOperation failed", err);
 		}
-		if (context.signingPhase !== "finalize") {
-			this.setDummyPaymasterFields(userOp, epData);
-			await this.estimateAndApplyGasLimits(userOp, bundlerRpc, entrypoint, overrides ?? {});
-		}
-		const _overrides = { ...(overrides || {}), entrypoint: entrypoint };
-		return await this.createPaymasterUserOperation(smartAccount, userOp, context, _overrides);
 	}
 
 	/**
@@ -733,11 +766,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			);
 			return { userOperation: resultUserOp, tokenQuote };
 		} catch (err) {
-			const error = ensureError(err);
-
-			throw new AbstractionKitError("PAYMASTER_ERROR", "createTokenPaymasterUserOperation failed", {
-				cause: error,
-			});
+			throw CandidePaymaster.toPaymasterError("createTokenPaymasterUserOperation failed", err);
 		}
 	}
 
@@ -768,15 +797,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			);
 			return calculateUserOperationErc20TokenCost(userOperation, exchangeRate);
 		} catch (err) {
-			const error = ensureError(err);
-
-			throw new AbstractionKitError(
-				"PAYMASTER_ERROR",
-				"calculateUserOperationErc20TokenMaxGasCost failed",
-				{
-					cause: error,
-				},
-			);
+			throw CandidePaymaster.toPaymasterError("calculateUserOperationErc20TokenMaxGasCost failed", err);
 		}
 	}
 
@@ -824,11 +845,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			}
 			return exchangeRate;
 		} catch (err) {
-			const error = ensureError(err);
-
-			throw new AbstractionKitError("PAYMASTER_ERROR", "fetchTokenPaymasterExchangeRate failed", {
-				cause: error,
-			});
+			throw CandidePaymaster.toPaymasterError("fetchTokenPaymasterExchangeRate failed", err);
 		}
 	}
 
@@ -858,15 +875,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				paymasterMetadata: CandidePaymaster.normalizePaymasterMetadata(result.paymasterMetadata),
 			};
 		} catch (err) {
-			const error = ensureError(err);
-
-			throw new AbstractionKitError(
-				"PAYMASTER_ERROR",
-				"fetchSupportedERC20TokensAndPaymasterMetadata failed",
-				{
-					cause: error,
-				},
-			);
+			throw CandidePaymaster.toPaymasterError("fetchSupportedERC20TokensAndPaymasterMetadata failed", err);
 		}
 	}
 }

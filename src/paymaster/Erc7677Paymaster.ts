@@ -476,7 +476,8 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 
 			// Token paymaster flow: triggered when context.token is set
 			if (context.token != null && typeof context.token === "string") {
-				return this.tokenPaymasterFlow(
+				// `await` so a rejection is handled by the catch below
+				return await this.tokenPaymasterFlow(
 					smartAccount as unknown as PrependTokenPaymasterApproveAccount,
 					userOp,
 					context.token as string,
@@ -489,7 +490,14 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			}
 
 			// Delegate to the sponsored flow (stub → estimate → final).
-			return this.sponsoredFlow(userOp, bundlerRpc, entrypoint, chainIdHex, context, overrides);
+			return await this.sponsoredFlow(
+				userOp,
+				bundlerRpc,
+				entrypoint,
+				chainIdHex,
+				context,
+				overrides,
+			);
 		} catch (err) {
 			const error = ensureError(err);
 			if (error instanceof AbstractionKitError) throw error;
