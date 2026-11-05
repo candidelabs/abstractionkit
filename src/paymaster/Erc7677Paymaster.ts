@@ -16,7 +16,12 @@ import {
 	type DecodeTokenQuoteOverrides,
 	decodeTokenQuote as decodeTokenQuoteImpl,
 } from "./decodeTokenQuote";
-import {assertPaymasterMatchesApproveSpender, extractPaymasterAddress, Paymaster} from "./Paymaster";
+import {
+	assertPaymasterMatchesApproveSpender,
+	extractPaymasterAddress,
+	Paymaster,
+	toPaymasterError,
+} from "./Paymaster";
 import type {
 	AnyUserOperation,
 	Erc7677PaymasterConstructorOptions,
@@ -461,6 +466,9 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 *
 	 * @returns An object `{ userOperation, tokenQuote? }`. `tokenQuote` is only
 	 *   populated when the token-payment flow is taken (`context.token` set).
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" for every failure.
+	 *   An underlying SDK error (e.g. a `BUNDLER_ERROR` from gas estimation) is
+	 *   the `cause`, with its `aaCode` and `errno` copied to the top.
 	 */
 	async createPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: SmartAccountWithEntrypoint,
@@ -499,11 +507,10 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 				overrides,
 			);
 		} catch (err) {
-			const error = ensureError(err);
-			if (error instanceof AbstractionKitError) throw error;
-			throw new AbstractionKitError("PAYMASTER_ERROR", "createPaymasterUserOperation failed", {
-				cause: error,
-			});
+			// Same contract as CandidePaymaster: a PAYMASTER_ERROR passes
+			// through, anything else (a BUNDLER_ERROR from gas estimation, a
+			// RangeError for a bad override) becomes its cause.
+			throw toPaymasterError("createPaymasterUserOperation failed", err);
 		}
 	}
 

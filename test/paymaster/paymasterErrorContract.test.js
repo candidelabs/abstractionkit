@@ -124,11 +124,28 @@ describe('Erc7677Paymaster.createPaymasterUserOperation always throws Abstractio
         expect(error.cause).toBeInstanceOf(RangeError);
     });
 
-    test('an AbstractionKitError from a flow is passed through unchanged', async () => {
+    test('a PAYMASTER_ERROR from a flow is passed through unchanged', async () => {
         const rpc = transport({ pm_getPaymasterStubData: rpcError('rate limited') });
         const error = await create(rpc, { provider: null });
         expect(error.code).toBe('PAYMASTER_ERROR');
         expect(error.message).toBe('pm_getPaymasterStubData failed');
+    });
+
+    test('a bundler failure is reported as PAYMASTER_ERROR and keeps the AA code', async () => {
+        const rpc = transport({ pm_getPaymasterStubData: () => STUB });
+        const error = await caught(
+            new ak.Erc7677Paymaster(rpc, { chainId: 1n, provider: null }).createPaymasterUserOperation(
+                account,
+                userOp(),
+                failingBundler,
+            ),
+        );
+        expect(error).toBeInstanceOf(ak.AbstractionKitError);
+        expect(error.code).toBe('PAYMASTER_ERROR');
+        expect(error.message).toBe('createPaymasterUserOperation failed');
+        expect(error.aaCode).toBe('AA23');
+        expect(error.errno).toBe(-32500);
+        expect(error.cause.code).toBe('BUNDLER_ERROR');
     });
 });
 

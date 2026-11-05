@@ -1,7 +1,7 @@
 import {isAddress} from "src/ethereUtils";
 import {Bundler} from "src/Bundler";
 import {ENTRYPOINT_V6, ENTRYPOINT_V7, ENTRYPOINT_V8} from "src/constants";
-import {AbstractionKitError, ensureError} from "src/errors";
+import {AbstractionKitError} from "src/errors";
 import {
 	HttpTransport,
 	type JsonRpcNode,
@@ -28,7 +28,12 @@ import {
 	type DecodeTokenQuoteOverrides,
 	decodeTokenQuote as decodeTokenQuoteImpl,
 } from "./decodeTokenQuote";
-import {assertPaymasterMatchesApproveSpender, getUserOperationPaymaster, Paymaster} from "./Paymaster";
+import {
+	assertPaymasterMatchesApproveSpender,
+	getUserOperationPaymaster,
+	Paymaster,
+	toPaymasterError,
+} from "./Paymaster";
 import type {
 	AnyUserOperation,
 	CandidePaymasterContext,
@@ -178,7 +183,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			const result = await this.outbound.request<string>({ method: "pm_chainId" });
 			return result;
 		} catch (err) {
-			throw CandidePaymaster.toPaymasterError("pm_chainId failed", err);
+			throw toPaymasterError("pm_chainId failed", err);
 		}
 	}
 
@@ -287,7 +292,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			}
 			this.entrypointData.set(entrypoint.toLowerCase(), data);
 		} catch (err) {
-			throw CandidePaymaster.toPaymasterError("failed initializing the paymaster", err);
+			throw toPaymasterError("failed initializing the paymaster", err);
 		}
 	}
 
@@ -307,7 +312,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				paymasterMetadata: CandidePaymaster.normalizePaymasterMetadata(result.paymasterMetadata),
 			};
 		} catch (err) {
-			throw CandidePaymaster.toPaymasterError("fetchAndTransformTokenData failed", err);
+			throw toPaymasterError("fetchAndTransformTokenData failed", err);
 		}
 	}
 
@@ -330,7 +335,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			});
 			return result;
 		} catch (err) {
-			throw CandidePaymaster.toPaymasterError("pm_supportedEntryPoints failed", err);
+			throw toPaymasterError("pm_supportedEntryPoints failed", err);
 		}
 	}
 
@@ -510,26 +515,6 @@ export class CandidePaymaster extends Paymaster implements Transport {
 		}
 	}
 
-	/**
-	 * Report a failure as PAYMASTER_ERROR without burying what a caller needs.
-	 * - A PAYMASTER_ERROR is returned as is. Wrapping it again at every layer
-	 *   pushed its `context` (e.g. the supported tokens) three causes deep.
-	 * - Anything else becomes the `cause`, and an AbstractionKitError cause
-	 *   keeps its `aaCode` and `errno` readable on the wrapper.
-	 */
-	private static toPaymasterError(message: string, err: unknown): AbstractionKitError {
-		const error = ensureError(err);
-		if (error instanceof AbstractionKitError) {
-			if (error.code === "PAYMASTER_ERROR") return error;
-			return new AbstractionKitError("PAYMASTER_ERROR", message, {
-				cause: error,
-				aaCode: error.aaCode,
-				errno: error.errno,
-			});
-		}
-		return new AbstractionKitError("PAYMASTER_ERROR", message, { cause: error });
-	}
-
 	private applyPaymasterResult(
 		userOp: AnyUserOperation,
 		jsonRpcResult: unknown,
@@ -598,7 +583,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				sponsorMetadata,
 			};
 		} catch (err) {
-			throw CandidePaymaster.toPaymasterError("pm_getPaymasterData failed", err);
+			throw toPaymasterError("pm_getPaymasterData failed", err);
 		}
 	}
 
@@ -657,7 +642,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			return result;
 		} catch (err) {
 			// same contract as createTokenPaymasterUserOperation
-			throw CandidePaymaster.toPaymasterError("createSponsorPaymasterUserOperation failed", err);
+			throw toPaymasterError("createSponsorPaymasterUserOperation failed", err);
 		}
 	}
 
@@ -772,7 +757,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			);
 			return { userOperation: resultUserOp, tokenQuote };
 		} catch (err) {
-			throw CandidePaymaster.toPaymasterError("createTokenPaymasterUserOperation failed", err);
+			throw toPaymasterError("createTokenPaymasterUserOperation failed", err);
 		}
 	}
 
@@ -803,7 +788,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			);
 			return calculateUserOperationErc20TokenCost(userOperation, exchangeRate);
 		} catch (err) {
-			throw CandidePaymaster.toPaymasterError("calculateUserOperationErc20TokenMaxGasCost failed", err);
+			throw toPaymasterError("calculateUserOperationErc20TokenMaxGasCost failed", err);
 		}
 	}
 
@@ -851,7 +836,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			}
 			return exchangeRate;
 		} catch (err) {
-			throw CandidePaymaster.toPaymasterError("fetchTokenPaymasterExchangeRate failed", err);
+			throw toPaymasterError("fetchTokenPaymasterExchangeRate failed", err);
 		}
 	}
 
@@ -881,7 +866,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				paymasterMetadata: CandidePaymaster.normalizePaymasterMetadata(result.paymasterMetadata),
 			};
 		} catch (err) {
-			throw CandidePaymaster.toPaymasterError("fetchSupportedERC20TokensAndPaymasterMetadata failed", err);
+			throw toPaymasterError("fetchSupportedERC20TokensAndPaymasterMetadata failed", err);
 		}
 	}
 }

@@ -1,4 +1,4 @@
-import { AbstractionKitError } from "../errors";
+import { AbstractionKitError, ensureError } from "../errors";
 import type { AnyUserOperation } from "./types";
 
 /**
@@ -54,4 +54,29 @@ export function assertPaymasterMatchesApproveSpender(
 			{ context: { approveSpender: spender, finalPaymaster } },
 		);
 	}
+}
+
+/**
+ * Report a paymaster failure as PAYMASTER_ERROR without burying what a
+ * caller needs. Shared by the paymaster clients so they all keep the same
+ * contract.
+ * - A PAYMASTER_ERROR is returned as is. Wrapping it again at every layer
+ *   pushes its `context` (e.g. the supported tokens) several causes deep.
+ * - Anything else becomes the `cause`, and an AbstractionKitError cause
+ *   (e.g. a BUNDLER_ERROR from gas estimation) keeps its `aaCode` and
+ *   `errno` readable on the wrapper.
+ *
+ * @internal
+ */
+export function toPaymasterError(message: string, err: unknown): AbstractionKitError {
+	const error = ensureError(err);
+	if (error instanceof AbstractionKitError) {
+		if (error.code === "PAYMASTER_ERROR") return error;
+		return new AbstractionKitError("PAYMASTER_ERROR", message, {
+			cause: error,
+			aaCode: error.aaCode,
+			errno: error.errno,
+		});
+	}
+	return new AbstractionKitError("PAYMASTER_ERROR", message, { cause: error });
 }
