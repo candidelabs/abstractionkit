@@ -7,6 +7,9 @@
 //   passkey account whose deployment was overridden away still carried the
 //   passkey setup calls (which revert on a deployed account), and one whose
 //   deployment was overridden in did not.
+// - A `factory` override of "0x" was returned as is, a value no bundler
+//   reads as "no deployment", and factoryData stayed on an op without a
+//   factory.
 // - A nonce with a non-zero key and sequence 0 was read as "already deployed"
 //   and dropped the factory of a counterfactual account.
 // - Bad overrides were rejected only after RPC calls had started, leaving a
@@ -96,6 +99,29 @@ describe.each(V7_PLUS)('%s factory overrides', (_name, Account) => {
         });
         expect(op.factory).toBe(account.factoryAddress);
         expect(op.factoryData).toBe(FACTORY_DATA);
+    });
+
+    test.each([['0x'], ['']])('a factory override of %j is returned as no factory', async (factory) => {
+        const { bundler, captured } = mockBundler();
+        const account = Account.initializeNewAccount([OWNER]);
+        const op = await account.createUserOperation(TX, undefined, bundler, { nonce: 0n, ...FEES, factory });
+        const estimated = captured.find((c) => c.method === 'eth_estimateUserOperationGas').params[0];
+        expect(op.factory).toBeNull();
+        expect(op.factoryData).toBeNull();
+        expect(estimated.factory ?? null).toBeNull();
+        expect(estimated.factoryData ?? null).toBeNull();
+    });
+
+    test('factoryData without a factory is dropped', async () => {
+        const account = Account.initializeNewAccount([OWNER]);
+        const op = await account.createUserOperation(TX, undefined, undefined, {
+            nonce: 5n,
+            ...FEES,
+            ...GAS,
+            factoryData: FACTORY_DATA,
+        });
+        expect(op.factory).toBeNull();
+        expect(op.factoryData).toBeNull();
     });
 
     test('without overrides the derived factory fields are unchanged', async () => {

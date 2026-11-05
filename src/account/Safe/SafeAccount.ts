@@ -88,6 +88,11 @@ import {
 	type WebAuthnSignatureOverrides,
 } from "./types";
 
+/** Whether a v0.7+ `factory` value names no factory at all. */
+function isEmptyFactory(factory: string | null | undefined): boolean {
+	return factory == null || factory === "" || factory === "0x";
+}
+
 /**
  * Base implementation shared by all Safe-account variants.
  *
@@ -1727,7 +1732,7 @@ export class SafeAccount extends SmartAccount {
 		if (v06InitCodeOverride != null) {
 			isFirstOperation = v06InitCodeOverride !== "0x";
 		} else if (factoryOverrides.factory !== undefined) {
-			isFirstOperation = factoryOverrides.factory != null && factoryOverrides.factory !== "0x";
+			isFirstOperation = !isEmptyFactory(factoryOverrides.factory);
 		} else {
 			// The nonce is `key << 64 | sequence`. A non-zero sequence proves
 			// the account has already run an operation. Sequence 0 under a
@@ -1756,6 +1761,14 @@ export class SafeAccount extends SmartAccount {
 		}
 		if (factoryOverrides.factoryData !== undefined) {
 			factoryData = factoryOverrides.factoryData;
+		}
+		// "0x" (or "") names no factory. Return it as null, the v0.7+ shape
+		// for "no deployment", and drop factoryData, which means nothing
+		// without a factory: the EntryPoint packs initCode as
+		// factory ‖ factoryData.
+		if (isEmptyFactory(factoryAddress)) {
+			factoryAddress = null;
+			factoryData = null;
 		}
 		if (isFirstOperation && this.isInitWebAuthn) {
 			//first operation of a passkey account
@@ -1883,9 +1896,7 @@ export class SafeAccount extends SmartAccount {
 				}
 			}
 		}
-		const isInit = isV06
-			? resolvedV06InitCode !== "0x"
-			: factoryAddress != null && factoryAddress !== "0x";
+		const isInit = isV06 ? resolvedV06InitCode !== "0x" : factoryAddress != null;
 		let dummySignerSignaturePairs: SignerSignaturePair[];
 		if (overrides.dummySignerSignaturePairs != null) {
 			// validated before the RPC calls
