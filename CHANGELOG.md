@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Breaking Changes
+
+These follow from the bug fixes below. Each one changes what working code gets back, or makes a call throw that used to return.
+
+- **The paymaster clients throw `PAYMASTER_ERROR` for every failure.** `CandidePaymaster.createSponsorPaymasterUserOperation` and `Erc7677Paymaster.createPaymasterUserOperation` used to let a `BUNDLER_ERROR` (gas estimation), a `RangeError` (bad override) and similar through. **Match `error.cause.code` or `error.aaCode` instead of `error.code === "BUNDLER_ERROR"`.** In `CandidePaymaster` a `PAYMASTER_ERROR` is no longer wrapped again, so the "token is not supported" error and its `context.supportedTokens` are the error you catch, not its cause's cause.
+- **`createUserOperationHash` throws a `RangeError` for `factory: "0x7702"` without `eip7702Auth.address`.** The hash it returned was not the one the EntryPoint computes. Set `eip7702Auth.address` to the account's delegate, or drop the factory for an account that is already delegated. Operations built by the SDK are unaffected.
+- **Safe readers throw `BAD_DATA` on an undeployed account.** `getOwners`, `getThreshold`, `isModuleEnabled` and `getSafeVersion` threw an ABI decoding error before; code that caught that error by message has to match `code === "BAD_DATA"`.
+- **`JsonRpcNode.getFeeData` throws errors it used to swallow.** It fell back to a 1 gwei price on any error mentioning "not supported" or "unsupported" (an HTTP 415, "chain not supported on this plan"). Only a missing fee method still falls back.
+- **`SendUseroperationResponse.included()` keeps polling after a failed poll.** A transient failure (a 502, a dropped connection) used to reject at once; it now becomes the `cause` of the `TIMEOUT` error if the wait runs out. A request the bundler refuses as such (`-32600`, `-32601`, `-32602`) is still thrown at once.
+- **Safe `createUserOperation` honours the `factory` / `factoryData` overrides on EntryPoint v0.7+.** They were ignored, so code passing them got the derived values; it now gets what it passed, and a deployment override decides whether a passkey account's setup calls are included. A `factory` of `"0x"` comes back as `null`.
+- **Safe `createUserOperation` asks the node for code when the nonce has a non-zero key and sequence 0** (one extra `eth_getCode`), and keeps the factory if the account is not deployed.
+- **Overrides the classes cannot honour are rejected.** `SafeAccountV0_2_0` and `SafeAccountV0_3_0` throw for `parallelPaymasterInitValues` on every path, and `Simple7702AccountV09` throws for `paymasterData` without the `PAYMASTER_SIG_MAGIC` suffix. An invalid `yParity` is rejected even when the account is already delegated.
+- **An `ExternalSigner` signature ending in `v = 0` / `1` is rewritten to `27` / `28`.** Signers of `type: "contract"` and Safe's own `v = 0` / `1` encodings are left alone.
+- **`AllowanceModule.createAllowanceTransferMetaTransaction` encodes `paymentAmount` without `paymentToken`** as a native-token payment instead of dropping it. See the method's documentation for who receives it.
+- **`decodeUserOperationRevertReason` no longer reports a paymaster `postOp` revert or a too-low prefund as `outOfGas`.** Check the new `postOpReverted` and `prefundTooLow` fields.
+- **`sendJsonRpcRequest` with a URL throws when a response carries both `result` and `error`**, as the transports do, instead of returning the `result`.
+- **`fromViem` offers no raw-hash signing for an account without `sign`**, so a scheme negotiation that needs `hash` fails up front instead of at signing time.
+- **Subclasses of `SafeAccountV0_2_0` / `SafeAccountV0_3_0` that override a Passkey module default get a different counterfactual address**, the one they actually sign for. The built-in classes are unchanged.
+
 ### Bug Fixes
 
 - **Passkey owner helpers on `SafeMultiChainSigAccountV1` and `SafeMultiChainSigAccountV2` derived v0.2.0 owners.** `createAddOwnerWithThresholdMetaTransactions`, `createSwapOwnerMetaTransactions` and `createRemoveOwnerMetaTransaction` always resolved a `WebauthnPublicKey` through the Safe Passkey module v0.2.0 defaults, while these classes sign with v0.2.1. An added passkey was registered under an address the account never signs with, and swapping or removing an existing passkey owner threw `not a current owner`. The helpers now derive the owner through the constructed class's `createWebAuthnSignerVerifierAddress` and `createDeployWebAuthnVerifierMetaTransaction`, so every class registers the owner it signs with. `SafeAccountV0_2_0` and `SafeAccountV0_3_0` keep v0.2.0. Per-call overrides still take precedence.
