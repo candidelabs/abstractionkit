@@ -334,7 +334,10 @@ function translateBundlerError(
 	// here so callers can branch on a stable code instead of matching the message.
 	const aaCode = parseAaCode(error.message);
 	return new AbstractionKitError("BUNDLER_ERROR", `bundler ${method} rpc call failed`, {
-		cause: new AbstractionKitError(innerCode, error.message, { errno: code, aaCode }),
+		// The transport error stays reachable as `cause.cause`: it carries the
+		// JSON-RPC `data` (revert bytes, paymaster or stake info), the reason
+		// behind a failed fetch, and the AbortError name of a cancelled call.
+		cause: new AbstractionKitError(innerCode, error.message, { errno: code, aaCode, cause: error }),
 		errno: code,
 		context,
 		aaCode,

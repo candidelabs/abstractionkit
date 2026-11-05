@@ -1,0 +1,106 @@
+// Tests for SendUseroperationResponse.included(), which had no unit test.
+// - The timeout counted only the sleeps between polls, not the time each poll
+//   took, so a slow bundler stretched the wait to several times the timeout.
+// - NaN slipped past the argument checks.
+// - One failed poll (a 502, a dropped connection) ended the whole wait.
+// Offline, with short real timers.
+
+const ak = require('../dist/index.cjs');
+
+const HASH = '0x' + 'ab'.repeat(32);
+const RECEIPT = { success: true, userOpHash: HASH };
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// `answers` is consumed one per poll; the last one repeats.
+function responseWith(answers, latencyMs = 0) {
+    let polls = 0;
+    const bundler = {
+        getUserOperationReceipt: async (hash) => {
+            expect(hash).toBe(HASH);
+            const answer = answers[Math.min(polls, answers.length - 1)];
+            polls++;
+            if (latencyMs > 0) await sleep(latencyMs);
+            if (answer instanceof Error) throw answer;
+            return answer;
+        },
+    };
+    return { response: new ak.SendUseroperationResponse(HASH, bundler, ak.ENTRYPOINT_V7), polls: () => polls };
+}
+const caught = (promise) =>
+    promise.then(
+        () => {
+            throw new Error('expected a rejection');
+        },
+        (error) => error,
+    );
+
+describe('SendUseroperationResponse.included', () => {
+    test('polls until the receipt appears', async () => {
+        const { response, polls } = responseWith([null, null, RECEIPT]);
+        expect(await response.included(2, 0.02)).toBe(RECEIPT);
+        expect(polls()).toBe(3);
+    });
+
+    test('times out with the user operation hash as context', async () => {
+        const { response, polls } = responseWith([null]);
+        const error = await caught(response.included(0.1, 0.02));
+        expect(error).toBeInstanceOf(ak.AbstractionKitError);
+        expect(error.code).toBe('TIMEOUT');
+        expect(error.context).toBe(HASH);
+        expect(error.cause).toBeUndefined();
+        expect(polls()).toBeGreaterThanOrEqual(3);
+        expect(polls()).toBeLessThanOrEqual(5);
+    });
+
+    test('the timeout is wall-clock time, however slow each poll is', async () => {
+        // 100 ms per poll, 50 ms between polls, 300 ms budget. Counting only
+        // the sleeps took 7 polls and more than a second.
+        const { response, polls } = responseWith([null], 100);
+        const started = Date.now();
+        const error = await caught(response.included(0.3, 0.05));
+        const elapsed = Date.now() - started;
+        expect(error.code).toBe('TIMEOUT');
+        expect(elapsed).toBeLessThan(800);
+        expect(polls()).toBeLessThanOrEqual(4);
+    });
+
+    test('a timeout equal to the interval still polls once', async () => {
+        const { response, polls } = responseWith([null]);
+        await caught(response.included(0.05, 0.05));
+        expect(polls()).toBe(1);
+    });
+
+    test('a failed poll does not end the wait', async () => {
+        const { response, polls } = responseWith([new Error('502 Bad Gateway'), null, RECEIPT]);
+        expect(await response.included(2, 0.02)).toBe(RECEIPT);
+        expect(polls()).toBe(3);
+    });
+
+    test('when every poll fails, the timeout carries the last failure as its cause', async () => {
+        const failure = new Error('connect ECONNREFUSED');
+        const { response } = responseWith([failure]);
+        const error = await caught(response.included(0.1, 0.02));
+        expect(error.code).toBe('TIMEOUT');
+        expect(error.cause).toBe(failure);
+    });
+
+    test('a failure followed by empty polls times out without a stale cause', async () => {
+        const { response } = responseWith([new Error('blip'), null]);
+        const error = await caught(response.included(0.1, 0.02));
+        expect(error.code).toBe('TIMEOUT');
+        expect(error.cause).toBeUndefined();
+    });
+
+    test.each([
+        ['a zero timeout', [0, 1]],
+        ['a zero interval', [1, 0]],
+        ['a negative timeout', [-1, 1]],
+        ['a NaN timeout', [Number.NaN, 1]],
+        ['a NaN interval', [1, Number.NaN]],
+        ['a timeout shorter than the interval', [1, 2]],
+    ])('%s is rejected before any poll', async (_name, args) => {
+        const { response, polls } = responseWith([RECEIPT]);
+        await expect(response.included(...args)).rejects.toThrow(RangeError);
+        expect(polls()).toBe(0);
+    });
+});

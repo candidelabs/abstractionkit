@@ -1,7 +1,9 @@
+import type { HDAccount, LocalAccount, PrivateKeyAccount } from "viem";
 import {
 	fromEthersWallet,
 	fromPrivateKey,
 	fromSafeWebauthn,
+	fromViem,
 	type ExternalSigner,
 	type MultiOpSignContext,
 	SafeMultiChainSigAccountV1,
@@ -119,3 +121,16 @@ const userOperationV9: UserOperationV9 = {
 void safe.estimateUserOperationGas(userOperationV9, "http://localhost:4337", {
 	expectedSigners: [address],
 });
+
+// fromViem takes viem's own account types. `LocalAccount` declares `sign` as
+// optional (a custom `toAccount` may leave it out), so requiring it rejected
+// the type the adapter's documentation names.
+declare const localAccount: LocalAccount;
+declare const privateKeyAccount: PrivateKeyAccount;
+declare const hdAccount: HDAccount;
+const fromLocalAccount: ExternalSigner<unknown> = fromViem(localAccount);
+const fromPrivateKeyAccount: ExternalSigner<unknown> = fromViem(privateKeyAccount);
+const fromHdAccount: ExternalSigner<unknown> = fromViem(hdAccount);
+void fromLocalAccount;
+void fromPrivateKeyAccount;
+void fromHdAccount;

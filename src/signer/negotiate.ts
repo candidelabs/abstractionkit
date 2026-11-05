@@ -88,10 +88,37 @@ export async function invokeSigner<C>(
 				`scheme "typedData" selected but no typedData payload provided`,
 			);
 		}
-		return signer.signTypedData(payload.typedData, payload.context);
+		return normalizeRecoveryId(
+			signer,
+			await signer.signTypedData(payload.typedData, payload.context),
+		);
 	}
 	if (typeof signer.signHash !== "function") {
 		throw new AbstractionKitError("BAD_DATA", `signer ${signer.address} is missing signHash`);
 	}
-	return signer.signHash(payload.hash, payload.context);
+	return normalizeRecoveryId(signer, await signer.signHash(payload.hash, payload.context));
+}
+
+/**
+ * KMS, HSM and MPC raw-sign APIs often return the recovery id as 0 / 1
+ * (yParity) where the contracts expect 27 / 28. Left as is, a Safe reads
+ * v = 0 as a contract signature and v = 1 as an approved hash, and an ECDSA
+ * recover rejects both, so the operation fails only at the bundler.
+ *
+ * Only a 65-byte signature of an `"ecdsa"` signer is touched, and only when
+ * `r` is a real curve value. Safe's own v = 0 / v = 1 encodings put a
+ * left-padded address in `r`, which a real signature never has, so they
+ * pass through unchanged.
+ */
+function normalizeRecoveryId<C>(
+	signer: ExternalSigner<C>,
+	signature: `0x${string}`,
+): `0x${string}` {
+	if (signer.type === "contract") return signature;
+	if (typeof signature !== "string" || signature.length !== 2 + 65 * 2) return signature;
+	const v = signature.slice(-2).toLowerCase();
+	if (v !== "00" && v !== "01") return signature;
+	const rIsPaddedAddress = /^0x0{24}/i.test(signature);
+	if (rIsPaddedAddress) return signature;
+	return `${signature.slice(0, -2)}${v === "00" ? "1b" : "1c"}` as `0x${string}`;
 }

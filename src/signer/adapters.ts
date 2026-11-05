@@ -16,7 +16,8 @@ import type { ExternalSigner, TypedData } from "./types";
  */
 export interface ViemLocalAccountLike {
 	address: `0x${string}`;
-	sign: (args: { hash: `0x${string}` }) => Promise<`0x${string}`>;
+	/** Optional, as in viem's `LocalAccount`: custom accounts (`toAccount`) may leave it out. */
+	sign?: (args: { hash: `0x${string}` }) => Promise<`0x${string}`>;
 	signTypedData: (args: {
 		domain: TypedData["domain"];
 		types: Record<string, Array<{ name: string; type: string }>>;
@@ -100,21 +101,29 @@ export function fromPrivateKey(privateKey: string): ExternalSigner<unknown> {
 
 /**
  * Adapt a viem Local Account (e.g. `privateKeyToAccount(pk)`) to an ExternalSigner.
- * Supports both raw-hash and typed-data signing.
+ * Supports typed-data signing, and raw-hash signing when the account has a
+ * `sign` method (a custom `toAccount` may not).
  *
  * @remarks Requires viem &gt;= 2.0.
  */
 export function fromViem(account: ViemLocalAccountLike): ExternalSigner<unknown> {
+	const signTypedData: ExternalSigner<unknown>["signTypedData"] = (td) =>
+		account.signTypedData({
+			domain: td.domain,
+			types: td.types,
+			primaryType: td.primaryType,
+			message: td.message,
+		});
+	// Advertise raw-hash signing only when the account has it, so the
+	// negotiation never picks a scheme this account cannot perform.
+	const sign = account.sign;
+	if (typeof sign !== "function") {
+		return { address: account.address, signTypedData };
+	}
 	return {
 		address: account.address,
-		signHash: (hash) => account.sign({ hash }),
-		signTypedData: (td) =>
-			account.signTypedData({
-				domain: td.domain,
-				types: td.types,
-				primaryType: td.primaryType,
-				message: td.message,
-			}),
+		signHash: (hash) => sign.call(account, { hash }),
+		signTypedData,
 	};
 }
 

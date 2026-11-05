@@ -266,7 +266,7 @@ export class JsonRpcNode implements Transport {
 				}
 				gasPrice = BigInt(result);
 			} catch (err) {
-				if (!isMethodNotSupportedError(err)) throw err;
+				if (!isMethodNotSupportedError(err, "eth_gasPrice")) throw err;
 				// method unsupported on this node; fall through to gas-price-less branch
 			}
 
@@ -284,7 +284,7 @@ export class JsonRpcNode implements Transport {
 				}
 				maxPriorityFeePerGas = BigInt(result);
 			} catch (err) {
-				if (!isMethodNotSupportedError(err)) throw err;
+				if (!isMethodNotSupportedError(err, "eth_maxPriorityFeePerGas")) throw err;
 				// older chains don't support this; fall through
 			}
 
@@ -463,14 +463,22 @@ function scaleBigIntByGasLevel(value: bigint, gasLevel: number): bigint {
  *
  * @internal
  */
-function isMethodNotSupportedError(err: unknown): boolean {
+function isMethodNotSupportedError(err: unknown, method: string): boolean {
 	const code = (err as ProviderRpcError | undefined)?.code;
 	if (code === -32601) return true;
+	// Some nodes report a missing method under another code. Accept that only
+	// when the message is about the method: a bare "not supported" also
+	// matches "chain not supported on this plan" or an HTTP 415 "Unsupported
+	// Media Type", and falling back on those invents a gas price.
 	const message = (err as Error | undefined)?.message?.toLowerCase() ?? "";
+	if (!message.includes("method") && !message.includes(method.toLowerCase())) return false;
 	return (
-		message.includes("method not found") ||
+		message.includes("not found") ||
 		message.includes("not supported") ||
-		message.includes("unsupported")
+		message.includes("unsupported") ||
+		message.includes("not available") ||
+		message.includes("not implemented") ||
+		message.includes("does not exist")
 	);
 }
 
@@ -493,8 +501,12 @@ function translateNodeError(err: unknown, method: string): AbstractionKitError {
 		codeString in JsonRpcErrorDict ? JsonRpcErrorDict[codeString] : "UNKNOWN_ERROR";
 	const error = ensureError(err);
 	return new AbstractionKitError("NODE_ERROR", `node ${method} rpc call failed`, {
+		// The transport error stays reachable as `cause.cause`: it carries the
+		// JSON-RPC `data` (the revert bytes of a failed eth_call), the reason
+		// behind a failed fetch, and the AbortError name of a cancelled call.
 		cause: new AbstractionKitError(innerCode, error.message, {
 			errno: code,
+			cause: error,
 		}),
 		errno: code,
 	});

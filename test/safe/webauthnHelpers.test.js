@@ -322,3 +322,122 @@ describe('parseDerP256Signature: bounds checks', () => {
         expect(out.rs[1]).toBe(1n);
     });
 });
+
+// ─── clientDataFields are the signed bytes ───────────────────────────────
+
+// The signer contract rebuilds clientDataJSON as
+//   {"type":"webauthn.get","challenge":"<challenge>",<clientDataFields>}
+// and verifies the signature over those bytes, so the fields have to be the
+// exact text the authenticator produced. Parsing and re-serializing them is
+// not byte-preserving.
+describe('webauthnSignatureFromAssertion: clientDataFields keep the signed bytes', () => {
+    const CHALLENGE = 'A'.repeat(43); // base64url of 32 bytes
+    const PREFIX = `{"type":"webauthn.get","challenge":"${CHALLENGE}",`;
+    const fieldsOf = (clientDataJSON) =>
+        Buffer.from(
+            ak
+                .webauthnSignatureFromAssertion({
+                    authenticatorData: new Uint8Array(37),
+                    clientDataJSON,
+                    signature: { r: 1n, s: 2n },
+                })
+                .clientDataFields.slice(2),
+            'hex',
+        ).toString('utf8');
+
+    test.each([
+        ['an escaped slash in the origin', '"origin":"https:\\/\\/example.com","crossOrigin":false'],
+        ['whitespace after separators', '"origin": "https://example.com", "crossOrigin": false'],
+        ['a unicode escape', '"origin":"https://ex\\u00e4mple.com"'],
+        ['a nested object', '"origin":"https://example.com","tokenBinding":{"status":"supported"}'],
+        ['the usual compact form', '"origin":"https://example.com","crossOrigin":false'],
+    ])('%s is returned byte for byte', (_name, fields) => {
+        expect(fieldsOf(`${PREFIX}${fields}}`)).toBe(fields);
+    });
+
+    test('rebuilding the JSON from the fields gives back what was signed', () => {
+        const signed = `${PREFIX}"origin":"https:\\/\\/example.com","crossOrigin":false}`;
+        expect(`${PREFIX}${fieldsOf(signed)}}`).toBe(signed);
+    });
+
+    test('a JSON in another key order is still re-serialized, as before', () => {
+        const reordered = `{"challenge":"${CHALLENGE}","origin":"https://example.com","type":"webauthn.get"}`;
+        expect(fieldsOf(reordered)).toBe('"origin":"https://example.com"');
+    });
+});
+
+// ─── base64url inputs (@simplewebauthn/browser) ─────────────────────────
+
+describe('webauthnSignatureFromAssertion: base64url string inputs', () => {
+    const toBase64Url = (bytes) => Buffer.from(bytes).toString('base64url');
+    const DER = new Uint8Array([0x30, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x02]); // r = 1, s = 2
+    const authenticatorData = hexToBytes(FIXTURE_AUTHENTICATOR_DATA_HEX);
+    const clientDataJSON = buildClientDataJSON('A'.repeat(43));
+    const fromBuffers = ak.webauthnSignatureFromAssertion({
+        authenticatorData,
+        clientDataJSON: Buffer.from(clientDataJSON, 'utf8'),
+        signature: DER,
+    });
+    const hexOf = (buffer) => Buffer.from(buffer).toString('hex');
+
+    test('all three fields as base64url give the same result as buffers', () => {
+        const out = ak.webauthnSignatureFromAssertion({
+            authenticatorData: toBase64Url(authenticatorData),
+            clientDataJSON: toBase64Url(Buffer.from(clientDataJSON, 'utf8')),
+            signature: toBase64Url(DER),
+        });
+        expect(hexOf(out.authenticatorData)).toBe(hexOf(fromBuffers.authenticatorData));
+        expect(out.clientDataFields).toBe(fromBuffers.clientDataFields);
+        expect(out.rs).toEqual([1n, 2n]);
+    });
+
+    test('padded standard base64 is accepted too', () => {
+        const out = ak.webauthnSignatureFromAssertion({
+            authenticatorData: Buffer.from(authenticatorData).toString('base64'),
+            clientDataJSON,
+            signature: Buffer.from(DER).toString('base64'),
+        });
+        expect(hexOf(out.authenticatorData)).toBe(hexOf(fromBuffers.authenticatorData));
+        expect(out.rs).toEqual([1n, 2n]);
+    });
+
+    test('0x-prefixed hex strings still work, for the signature as well', () => {
+        const out = ak.webauthnSignatureFromAssertion({
+            authenticatorData: '0x' + FIXTURE_AUTHENTICATOR_DATA_HEX,
+            clientDataJSON,
+            signature: '0x' + hexOf(DER),
+        });
+        expect(hexOf(out.authenticatorData)).toBe(FIXTURE_AUTHENTICATOR_DATA_HEX);
+        expect(out.rs).toEqual([1n, 2n]);
+    });
+
+    test('bare hex is rejected instead of being decoded as base64', () => {
+        expect(() =>
+            ak.webauthnSignatureFromAssertion({
+                authenticatorData: FIXTURE_AUTHENTICATOR_DATA_HEX,
+                clientDataJSON,
+                signature: { r: 1n, s: 2n },
+            }),
+        ).toThrow(/looks like hex without a 0x prefix/);
+    });
+
+    test('a string that is neither hex nor base64url is rejected', () => {
+        expect(() =>
+            ak.webauthnSignatureFromAssertion({
+                authenticatorData: 'not base64 !!',
+                clientDataJSON,
+                signature: { r: 1n, s: 2n },
+            }),
+        ).toThrow(/not a 0x-prefixed hex or base64url string/);
+    });
+});
+
+describe('pubkeyCoordinatesFromJson: empty coordinate strings', () => {
+    // BigInt("") and BigInt(" ") are 0n, so these used to come back as { x: 0n, y: 0n }
+    test.each([
+        ['an empty string', { x: '', y: '0x1' }],
+        ['a blank string', { x: '0x1', y: '  ' }],
+    ])('%s is rejected', (_name, input) => {
+        expect(() => ak.pubkeyCoordinatesFromJson(input)).toThrow(/not a valid bigint string/);
+    });
+});

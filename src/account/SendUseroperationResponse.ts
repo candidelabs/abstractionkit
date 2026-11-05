@@ -1,5 +1,5 @@
 import type { Bundler } from "src/Bundler";
-import { AbstractionKitError } from "src/errors";
+import { AbstractionKitError, ensureError } from "src/errors";
 import type { UserOperationReceiptResult } from "src/types";
 
 /**
@@ -40,13 +40,16 @@ export class SendUseroperationResponse {
 	 * @param requestIntervalInSeconds - Time between polling requests (default: 2s)
 	 * @returns The UserOperation receipt once included
 	 * @throws RangeError if timeout or interval are <= 0, or timeout < interval
-	 * @throws AbstractionKitError with code "TIMEOUT" if the operation is not found within the timeout
+	 * @throws AbstractionKitError with code "TIMEOUT" if the operation is not found within the
+	 * timeout (wall-clock). A failed poll does not end the wait; if the wait times out, the last
+	 * poll failure is the error's `cause`.
 	 */
 	async included(
 		timeoutInSeconds: number = 180,
 		requestIntervalInSeconds: number = 2,
 	): Promise<UserOperationReceiptResult> {
-		if (timeoutInSeconds <= 0 || requestIntervalInSeconds <= 0) {
+		// `!(x > 0)` also rejects NaN, which `x <= 0` lets through
+		if (!(timeoutInSeconds > 0) || !(requestIntervalInSeconds > 0)) {
 			throw new RangeError(
 				"timeoutInSeconds and requestIntervalInSeconds should be bigger than zero",
 			);
@@ -54,18 +57,34 @@ export class SendUseroperationResponse {
 		if (timeoutInSeconds < requestIntervalInSeconds) {
 			throw new RangeError("timeoutInSeconds can't be less than requestIntervalInSeconds");
 		}
-		let count = 0;
-		while (count <= timeoutInSeconds) {
-			await this.delay(requestIntervalInSeconds * 1000);
-			const res = await this.bundler.getUserOperationReceipt(this.userOperationHash);
-			if (res == null) {
-				count += requestIntervalInSeconds;
-			} else {
-				return res;
+		// The timeout is wall-clock time. Counting the sleeps alone ignored how
+		// long each request took, so a slow bundler stretched the wait to
+		// several times the timeout.
+		const intervalInMilliseconds = requestIntervalInSeconds * 1000;
+		const deadline = Date.now() + timeoutInSeconds * 1000;
+		let lastError: Error | undefined;
+		while (true) {
+			await this.delay(intervalInMilliseconds);
+			try {
+				const res = await this.bundler.getUserOperationReceipt(this.userOperationHash);
+				if (res != null) {
+					return res;
+				}
+				lastError = undefined;
+			} catch (err) {
+				// One failed poll (a 502, a dropped connection) says nothing
+				// about the operation. Keep polling and report the last
+				// failure if the wait times out.
+				lastError = ensureError(err);
+			}
+			// stop when the next poll would land after the deadline
+			if (Date.now() + intervalInMilliseconds > deadline) {
+				break;
 			}
 		}
 		throw new AbstractionKitError("TIMEOUT", "can't find useroperation", {
 			context: this.userOperationHash,
+			cause: lastError,
 		});
 	}
 }
