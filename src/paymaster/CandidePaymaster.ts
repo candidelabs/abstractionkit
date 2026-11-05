@@ -286,7 +286,9 @@ export class CandidePaymaster extends Paymaster implements Transport {
 		try {
 			const data = await this.fetchAndTransformTokenData(entrypoint);
 			if (data == null) {
-				throw new RangeError(
+				// the paymaster's answer, not the caller's input
+				throw new AbstractionKitError(
+					"PAYMASTER_ERROR",
 					`Invalid data received during initialization for entrypoint ${entrypoint}.`,
 				);
 			}
@@ -525,7 +527,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 			| PmUserOperationV6Result;
 
 		if (jsonRpcResult == null || typeof jsonRpcResult !== "object") {
-			throw new AbstractionKitError("BAD_DATA", "pm_getPaymasterData returned no result");
+			throw new AbstractionKitError("PAYMASTER_ERROR", "pm_getPaymasterData returned no result");
 		}
 
 		// Set version-specific paymaster fields (gas limits/prices are not overridden)
@@ -599,7 +601,14 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 * @param context - Optional additional context to pass to the paymaster RPC
 	 * @param overrides - Override gas limits and multipliers
 	 * @returns An object `{ userOperation, sponsorMetadata? }`
-	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if sponsorship fails
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when the paymaster
+	 *   fails: an RPC error such as a denied sponsorship policy (the `cause`, its
+	 *   JSON-RPC code in `errno`), or a response without a paymaster.
+	 * @throws AbstractionKitError with code "BUNDLER_ERROR" when gas estimation
+	 *   fails, as from an account's `createUserOperation`; `aaCode` names the
+	 *   EntryPoint error.
+	 * @throws RangeError for invalid input, e.g. a negative gas override or an
+	 *   EntryPoint the paymaster does not support.
 	 */
 	async createSponsorPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: SmartAccountWithEntrypoint,
@@ -658,7 +667,15 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 * @param overrides - Override gas limits and multipliers
 	 * @returns An object `{ userOperation, tokenQuote? }`. `tokenQuote` is absent
 	 *   when called under the `finalize` signing phase (no cost recomputation).
-	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the token is not supported
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when the paymaster
+	 *   fails: the token is not supported (`context.supportedTokens` lists the
+	 *   ones that are), an RPC error (the `cause`), or a paymaster that differs
+	 *   from the one the approval was built for.
+	 * @throws AbstractionKitError with code "BUNDLER_ERROR" when gas estimation
+	 *   fails, as from an account's `createUserOperation`; `aaCode` names the
+	 *   EntryPoint error.
+	 * @throws RangeError for invalid input, e.g. a negative gas override, an invalid token address or an
+	 *   EntryPoint the paymaster does not support.
 	 */
 	async createTokenPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: PrependTokenPaymasterApproveAccount,

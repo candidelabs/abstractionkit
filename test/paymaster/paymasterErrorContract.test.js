@@ -1,17 +1,23 @@
 // Regression tests for the errors the paymaster clients throw. Offline: the
 // paymaster and the bundler are mock transports.
 //
-// Erc7677Paymaster.createPaymasterUserOperation returned its two flows
-// without `await`, so its catch never saw their rejections: a provider RPC
-// error, a null response or a bad override escaped as a raw TransportRpcError,
-// TypeError or RangeError instead of the documented PAYMASTER_ERROR.
+// The contract: the error code names the service that failed.
+// - The paymaster failed (an RPC error, a malformed response, an unsupported
+//   token): PAYMASTER_ERROR, the raw error as its cause, never wrapped twice.
+// - Gas estimation failed: the bundler's BUNDLER_ERROR as is, the same error
+//   an account's createUserOperation throws, with its aaCode.
+// - The caller's input is invalid: RangeError as is, as the accounts throw it.
 //
-// CandidePaymaster had two contracts for the same failure: the token flow
-// wrapped everything as PAYMASTER_ERROR and the sponsor flow, whose doc
-// promises PAYMASTER_ERROR, wrapped nothing. Re-wrapping at every layer also
-// buried the "token not supported" context three causes deep, and a
-// pm_getPaymasterData response without gas limits (all ERC-7677 requires is
-// the paymaster and its data) failed on BigInt(undefined).
+// What it fixes:
+// - Erc7677Paymaster.createPaymasterUserOperation returned its two flows
+//   without `await`, so its catch never saw their rejections: a provider RPC
+//   error or a null response escaped as a raw TransportRpcError or TypeError.
+// - CandidePaymaster's token flow wrapped a bundler failure as
+//   PAYMASTER_ERROR (without its aaCode) while the sponsor flow did not, and
+//   re-wrapping at every layer buried the "token not supported" context
+//   three causes deep. A pm_getPaymasterData response without gas limits
+//   (all ERC-7677 requires is the paymaster and its data) failed on
+//   BigInt(undefined).
 
 const ak = require('../../dist/index.cjs');
 
@@ -96,6 +102,7 @@ describe('Erc7677Paymaster.createPaymasterUserOperation always throws Abstractio
         const error = await create(rpc, { provider }, context);
         expect(error).toBeInstanceOf(ak.AbstractionKitError);
         expect(error.code).toBe('PAYMASTER_ERROR');
+        expect(error.errno).toBe(-32000);
         expect(error.cause).toMatchObject({ code: -32000, message: 'invalid api key' });
     });
 
@@ -116,12 +123,11 @@ describe('Erc7677Paymaster.createPaymasterUserOperation always throws Abstractio
         expect(error.cause).toBeInstanceOf(TypeError);
     });
 
-    test('a negative gas override', async () => {
+    test('a negative gas override is thrown as the RangeError it is', async () => {
         const rpc = transport({ pm_getPaymasterStubData: () => STUB, eth_estimateUserOperationGas: () => ESTIMATE });
         const error = await create(rpc, { provider: null }, {}, { callGasLimit: -1n });
-        expect(error).toBeInstanceOf(ak.AbstractionKitError);
-        expect(error.code).toBe('PAYMASTER_ERROR');
-        expect(error.cause).toBeInstanceOf(RangeError);
+        expect(error).toBeInstanceOf(RangeError);
+        expect(error.message).toMatch(/callGasLimit/);
     });
 
     test('a PAYMASTER_ERROR from a flow is passed through unchanged', async () => {
@@ -129,9 +135,10 @@ describe('Erc7677Paymaster.createPaymasterUserOperation always throws Abstractio
         const error = await create(rpc, { provider: null });
         expect(error.code).toBe('PAYMASTER_ERROR');
         expect(error.message).toBe('pm_getPaymasterStubData failed');
+        expect(error.errno).toBe(-32000);
     });
 
-    test('a bundler failure is reported as PAYMASTER_ERROR and keeps the AA code', async () => {
+    test('a bundler failure is the bundler error, as from an account', async () => {
         const rpc = transport({ pm_getPaymasterStubData: () => STUB });
         const error = await caught(
             new ak.Erc7677Paymaster(rpc, { chainId: 1n, provider: null }).createPaymasterUserOperation(
@@ -141,11 +148,10 @@ describe('Erc7677Paymaster.createPaymasterUserOperation always throws Abstractio
             ),
         );
         expect(error).toBeInstanceOf(ak.AbstractionKitError);
-        expect(error.code).toBe('PAYMASTER_ERROR');
-        expect(error.message).toBe('createPaymasterUserOperation failed');
+        expect(error.code).toBe('BUNDLER_ERROR');
         expect(error.aaCode).toBe('AA23');
         expect(error.errno).toBe(-32500);
-        expect(error.cause.code).toBe('BUNDLER_ERROR');
+        expect(error.cause.code).toBe('SIMULATE_VALIDATION');
     });
 });
 
@@ -171,31 +177,46 @@ describe('CandidePaymaster error contract', () => {
         ],
     ];
 
-    test.each(FLOWS)('%s reports a bundler failure as PAYMASTER_ERROR and keeps the AA code', async (name, run) => {
+    test.each(FLOWS)('%s reports a bundler failure as the bundler error, as from an account', async (_name, run) => {
         const error = await caught(run(new ak.CandidePaymaster(paymasterRpc()), failingBundler));
         expect(error).toBeInstanceOf(ak.AbstractionKitError);
-        expect(error.code).toBe('PAYMASTER_ERROR');
-        expect(error.message).toBe(`${name} failed`);
+        expect(error.code).toBe('BUNDLER_ERROR');
         expect(error.aaCode).toBe('AA23');
         expect(error.errno).toBe(-32500);
-        expect(error.cause.code).toBe('BUNDLER_ERROR');
-        expect(error.cause.cause.code).toBe('SIMULATE_VALIDATION');
+        expect(error.cause.code).toBe('SIMULATE_VALIDATION');
     });
 
-    test.each(FLOWS)('%s reports a bad override as PAYMASTER_ERROR', async (_name, run) => {
+    test.each(FLOWS)('%s throws a bad override as the RangeError it is', async (_name, run) => {
         const rpc = paymasterRpc();
         const error = await caught(run(new ak.CandidePaymaster(rpc), rpc, { callGasLimit: -1n }));
+        expect(error).toBeInstanceOf(RangeError);
+        expect(error.message).toMatch(/callGasLimit/);
+    });
+
+    test.each(FLOWS)('%s reports a paymaster RPC error as PAYMASTER_ERROR', async (_name, run) => {
+        const rpc = paymasterRpc({ pm_getPaymasterData: rpcError('policy denied') });
+        const error = await caught(run(new ak.CandidePaymaster(rpc), rpc));
         expect(error).toBeInstanceOf(ak.AbstractionKitError);
         expect(error.code).toBe('PAYMASTER_ERROR');
-        expect(error.cause).toBeInstanceOf(RangeError);
+        expect(error.message).toBe('pm_getPaymasterData failed');
+        expect(error.errno).toBe(-32000);
+        expect(error.cause).toMatchObject({ code: -32000, message: 'policy denied' });
+    });
+
+    test('an invalid token address is thrown as a RangeError', async () => {
+        const rpc = paymasterRpc();
+        const error = await caught(
+            new ak.CandidePaymaster(rpc).createTokenPaymasterUserOperation(account, userOp(), '0x1234', rpc),
+        );
+        expect(error).toBeInstanceOf(RangeError);
+        expect(error.message).toMatch(/Invalid token/);
     });
 
     test.each(FLOWS)('%s reports a null pm_getPaymasterData result', async (_name, run) => {
         const rpc = paymasterRpc({ pm_getPaymasterData: () => null });
         const error = await caught(run(new ak.CandidePaymaster(rpc), rpc));
         expect(error.code).toBe('PAYMASTER_ERROR');
-        expect(error.message).toBe('pm_getPaymasterData failed');
-        expect(error.cause.message).toMatch(/returned no result/);
+        expect(error.message).toMatch(/returned no result/);
     });
 
     test('a sponsorship response without a paymaster is rejected', async () => {

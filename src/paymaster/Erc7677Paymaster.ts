@@ -20,6 +20,7 @@ import {
 	assertPaymasterMatchesApproveSpender,
 	extractPaymasterAddress,
 	Paymaster,
+	paymasterRpcError,
 	toPaymasterError,
 } from "./Paymaster";
 import type {
@@ -405,9 +406,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			});
 			return result as Erc7677StubDataResult;
 		} catch (err) {
-			throw new AbstractionKitError("PAYMASTER_ERROR", "pm_getPaymasterStubData failed", {
-				cause: ensureError(err),
-			});
+			throw paymasterRpcError("pm_getPaymasterStubData failed", err);
 		}
 	}
 
@@ -428,9 +427,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			});
 			return result as Erc7677PaymasterFields;
 		} catch (err) {
-			throw new AbstractionKitError("PAYMASTER_ERROR", "pm_getPaymasterData failed", {
-				cause: ensureError(err),
-			});
+			throw paymasterRpcError("pm_getPaymasterData failed", err);
 		}
 	}
 
@@ -446,9 +443,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		try {
 			return await this.outbound.request<unknown>({ method, params });
 		} catch (err) {
-			throw new AbstractionKitError("PAYMASTER_ERROR", `sendRPCRequest(${method}) failed`, {
-				cause: ensureError(err),
-			});
+			throw paymasterRpcError(`sendRPCRequest(${method}) failed`, err);
 		}
 	}
 
@@ -466,9 +461,13 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 *
 	 * @returns An object `{ userOperation, tokenQuote? }`. `tokenQuote` is only
 	 *   populated when the token-payment flow is taken (`context.token` set).
-	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" for every failure.
-	 *   An underlying SDK error (e.g. a `BUNDLER_ERROR` from gas estimation) is
-	 *   the `cause`, with its `aaCode` and `errno` copied to the top.
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when the paymaster
+	 *   fails: an RPC error (the `cause`, its JSON-RPC code in `errno`) or a
+	 *   malformed response.
+	 * @throws AbstractionKitError with code "BUNDLER_ERROR" when gas estimation
+	 *   fails, as from an account's `createUserOperation`; `aaCode` names the
+	 *   EntryPoint error.
+	 * @throws RangeError for invalid input, e.g. a negative gas override.
 	 */
 	async createPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: SmartAccountWithEntrypoint,
@@ -507,9 +506,9 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 				overrides,
 			);
 		} catch (err) {
-			// Same contract as CandidePaymaster: a PAYMASTER_ERROR passes
-			// through, anything else (a BUNDLER_ERROR from gas estimation, a
-			// RangeError for a bad override) becomes its cause.
+			// Same contract as CandidePaymaster: SDK errors keep the code of
+			// the service that failed, a RangeError for bad input is thrown
+			// as is, and anything else from the paymaster is wrapped.
 			throw toPaymasterError("createPaymasterUserOperation failed", err);
 		}
 	}

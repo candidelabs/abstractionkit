@@ -57,26 +57,41 @@ export function assertPaymasterMatchesApproveSpender(
 }
 
 /**
- * Report a paymaster failure as PAYMASTER_ERROR without burying what a
- * caller needs. Shared by the paymaster clients so they all keep the same
- * contract.
- * - A PAYMASTER_ERROR is returned as is. Wrapping it again at every layer
- *   pushes its `context` (e.g. the supported tokens) several causes deep.
- * - Anything else becomes the `cause`, and an AbstractionKitError cause
- *   (e.g. a BUNDLER_ERROR from gas estimation) keeps its `aaCode` and
- *   `errno` readable on the wrapper.
+ * The error a paymaster client throws for a failure, shared by the clients
+ * so they keep one contract. The code names the service that failed:
+ * - An {@link AbstractionKitError} is returned as is. A PAYMASTER_ERROR is
+ *   not wrapped again (that pushed its `context`, e.g. the supported tokens,
+ *   several causes deep), and an error from another service keeps its code:
+ *   a gas estimation failure is the bundler's BUNDLER_ERROR, exactly as from
+ *   an account's `createUserOperation`, with its `aaCode` and `errno`.
+ * - A `RangeError` is the caller's input (a negative gas override, an
+ *   invalid token address, an unsupported EntryPoint) and is returned as is,
+ *   as the account classes throw it.
+ * - Anything else came from the paymaster: a raw error from its RPC or a
+ *   `TypeError` from a malformed response. It becomes the `cause` of a
+ *   PAYMASTER_ERROR, with a JSON-RPC error code copied to `errno`.
  *
  * @internal
  */
-export function toPaymasterError(message: string, err: unknown): AbstractionKitError {
+export function toPaymasterError(message: string, err: unknown): Error {
 	const error = ensureError(err);
-	if (error instanceof AbstractionKitError) {
-		if (error.code === "PAYMASTER_ERROR") return error;
-		return new AbstractionKitError("PAYMASTER_ERROR", message, {
-			cause: error,
-			aaCode: error.aaCode,
-			errno: error.errno,
-		});
+	if (error instanceof AbstractionKitError || error instanceof RangeError) {
+		return error;
 	}
-	return new AbstractionKitError("PAYMASTER_ERROR", message, { cause: error });
+	return paymasterRpcError(message, error);
+}
+
+/**
+ * Wrap an error from the paymaster's own RPC endpoint as PAYMASTER_ERROR,
+ * with the raw error as `cause` and its JSON-RPC code copied to `errno`.
+ *
+ * @internal
+ */
+export function paymasterRpcError(message: string, err: unknown): AbstractionKitError {
+	const error = ensureError(err);
+	const rpcCode = (error as { code?: unknown }).code;
+	return new AbstractionKitError("PAYMASTER_ERROR", message, {
+		cause: error,
+		errno: typeof rpcCode === "number" ? rpcCode : undefined,
+	});
 }
