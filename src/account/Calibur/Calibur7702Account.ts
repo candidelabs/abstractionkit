@@ -88,7 +88,7 @@ const KEY_AT_SELECTOR = "0x4223b5c2";
  * batched transactions, passkey signing, ERC-4337 support, and per-key hooks.
  *
  * Unlike Safe accounts, there is no factory or proxy — the EOA IS the account.
- * All transactions go through `executeUserOp(bytes)` with `BatchedCall` encoding.
+ * All transactions go through `executeUserOp(PackedUserOperation,bytes32)` with `BatchedCall` encoding.
  *
  * @example
  * ```typescript
@@ -106,7 +106,7 @@ export class Calibur7702Account
 	extends SmartAccount
 	implements PrependTokenPaymasterApproveAccount
 {
-	/** Function selector for `executeUserOp(bytes)` */
+	/** Function selector for `executeUserOp(PackedUserOperation,bytes32)` */
 	static readonly executorFunctionSelector = EXECUTE_USER_OP_SELECTOR;
 
 	/**
@@ -124,8 +124,10 @@ export class Calibur7702Account
 
 	/**
 	 * Create a dummy WebAuthn signature for gas estimation with passkey signing.
-	 * The key hash must correspond to an actually registered key on the account,
-	 * otherwise the contract's `validateUserOp` will revert with `KeyDoesNotExist`.
+	 * The key hash must correspond to a key that is registered on the account.
+	 * For an unregistered key the account's `validateUserOp` reports a
+	 * signature failure early instead of reverting, so the estimate comes back
+	 * too low rather than failing.
 	 *
 	 * @param keyHash - The key hash of a registered passkey (from {@link getKeyHash})
 	 * @returns A dummy signature suitable for passing as `dummySignature` override
@@ -158,14 +160,17 @@ export class Calibur7702Account
 	}
 
 	/**
-	 * Wrap a raw ECDSA signature in Calibur's signature format:
+	 * Wrap a raw signature in Calibur's signature format:
 	 * `abi.encode(bytes32 keyHash, bytes signature, bytes hookData)`.
 	 *
 	 * Use this when signing externally (e.g., with viem, hardware wallet, MPC)
 	 * to avoid manually ABI-encoding the wrapped signature.
 	 *
 	 * @param keyHash - The key hash (use ROOT_KEY_HASH `0x00...00` for the EOA's root key)
-	 * @param rawSignature - The raw ECDSA signature (65 bytes, hex-encoded)
+	 * @param rawSignature - The raw signature, hex-encoded. For a secp256k1 key
+	 *   this is the 65-byte ECDSA signature over the userOpHash. For a raw
+	 *   P-256 key ({@link createP256Key}) it is `abi.encode(uint256 r, uint256 s)`
+	 *   of a signature over `sha256(userOpHash)`.
 	 * @param hookData - Optional hook data (default: "0x")
 	 * @returns Hex-encoded wrapped signature ready for `userOp.signature`
 	 */
@@ -247,8 +252,8 @@ export class Calibur7702Account
 	 * Intended for the secp256k1 key path (root key or any registered
 	 * secondary secp256k1 key), since `eth_signTypedData_v4` only produces
 	 * secp256k1 signatures. P-256 and WebAuthn-P256 keys sign with their
-	 * own primitives — for those, use {@link getUserOperationEip712Hash}
-	 * (the digest), which is the value-to-be-signed regardless of key type.
+	 * own primitives — for those, start from {@link getUserOperationEip712Hash}
+	 * (the digest); see there for how each key type signs it.
 	 *
 	 * @param userOperation - Unsigned UserOperation to wrap
 	 * @param chainId - Target chain ID
@@ -271,8 +276,12 @@ export class Calibur7702Account
 	 * `userOpHash`; the wrapped Calibur signature is verified against this
 	 * hash on-chain.
 	 *
-	 * Universal across Calibur key types: secp256k1 and P-256 keys sign
-	 * this digest directly, each with their own signing primitive.
+	 * This is the value every Calibur key type signs, but not all of them
+	 * sign it directly. A secp256k1 key signs this digest. For a raw P-256
+	 * key the contract verifies against `sha256(digest)`, which is what a
+	 * P-256 signer that hashes its input with SHA-256 (e.g. WebCrypto ECDSA)
+	 * produces when given the 32 digest bytes. A WebAuthn key signs its own
+	 * client data, with this digest as the challenge.
 	 *
 	 * @param userOperation - Unsigned UserOperation to hash
 	 * @param chainId - Target chain ID
@@ -292,7 +301,7 @@ export class Calibur7702Account
 	// ─── CallData Encoding ───────────────────────────────────────────────
 
 	/**
-	 * Encode calldata for `executeUserOp(bytes)` with BatchedCall format.
+	 * Encode calldata for `executeUserOp(PackedUserOperation,bytes32)` with BatchedCall format.
 	 * All transactions (even single ones) go through the same BatchedCall path.
 	 *
 	 * @param transactions - One or more transactions to encode
@@ -738,7 +747,7 @@ export class Calibur7702Account
 		overrides: CaliburSignatureOverrides = {},
 	): Promise<string> {
 		const scheme = pickScheme(signer, Calibur7702Account.ACCEPTED_SIGNING_SCHEMES, {
-			accountName: "Calibur (raw ECDSA over userOpHash)",
+			accountName: "Calibur (EIP-712 typed data or raw ECDSA over userOpHash)",
 			signerIndex: 0,
 		});
 		const hash = createUserOperationHash(
@@ -917,11 +926,13 @@ export class Calibur7702Account
 	 * Returns **two transactions**: `[register, update]`. Both must be included
 	 * in the same UserOperation.
 	 *
-	 * **Safety guardrail:** This method never sets `isAdmin: true` regardless
-	 * of input settings. Developers who need admin keys must encode calldata themselves.
+	 * **Safety guardrail:** This method does not register admin keys. Passing
+	 * `isAdmin: true` throws; developers who need admin keys must encode the
+	 * calldata themselves.
 	 *
 	 * @param key - The key to register
-	 * @param settings - Optional key settings (isAdmin is always forced to false)
+	 * @param settings - Optional key settings (`isAdmin: true` is rejected)
+	 * @throws AbstractionKitError with code "BAD_DATA" if `settings.isAdmin` is true
 	 * @returns A tuple of exactly two {@link SimpleMetaTransaction}s: [registerTx, updateTx].
 	 *          Both must be included in the same UserOperation.
 	 */
@@ -1175,7 +1186,12 @@ export class Calibur7702Account
 	/**
 	 * Create a meta-transaction to invalidate nonces up to a given value.
 	 *
-	 * @param newNonce - The new nonce value (all nonces below this are invalidated)
+	 * This acts on Calibur's own nonce, the one its signed batched calls use.
+	 * It does not touch the EntryPoint nonce that {@link getNonce} reads and
+	 * UserOperations consume.
+	 *
+	 * @param newNonce - The new nonce value, laid out as `(key << 64) | sequence`
+	 *   (all nonces of that key below the sequence are invalidated)
 	 * @returns A {@link SimpleMetaTransaction} that calls `invalidateNonce(uint256)`
 	 */
 	public static createInvalidateNonceMetaTransaction(newNonce: bigint): SimpleMetaTransaction {

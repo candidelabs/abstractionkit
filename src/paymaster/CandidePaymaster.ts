@@ -69,7 +69,11 @@ const TOKENS_REQUIRING_ALLOWANCE_RESET: string[] = [
  *
  * @example
  * const paymaster = new CandidePaymaster("https://api.candide.dev/public/v3/11155111");
- * const { userOperation: sponsoredOp } = await paymaster.createSponsorPaymasterUserOperation(userOp, bundlerRpcUrl);
+ * const { userOperation: sponsoredOp } = await paymaster.createSponsorPaymasterUserOperation(
+ *   smartAccount,
+ *   userOp,
+ *   bundlerRpcUrl,
+ * );
  */
 export class CandidePaymaster extends Paymaster implements Transport {
 	/**
@@ -336,7 +340,9 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 *
 	 * @param entrypoint - Target EntryPoint address
 	 * @returns The paymaster metadata (name, address, icons, dummyPaymasterAndData, etc.)
-	 * @throws RangeError if the entrypoint is not supported
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" if the entrypoint is not supported
+	 *   or the paymaster cannot be initialized. The method never resolves to `null`; the
+	 *   return type keeps it for compatibility.
 	 */
 	async getPaymasterMetaData(entrypoint: string): Promise<PaymasterMetadata | null> {
 		await this.ensureInitialized(entrypoint);

@@ -117,6 +117,26 @@ export interface Erc7677StubDataResult extends Erc7677PaymasterFields {
 }
 
 /**
+ * Raw shape of Candide's `pm_supportedERC20Tokens` response.
+ * `dummyPaymasterAndData` is a concatenated hex string for EntryPoint v0.6 and
+ * a structured object for v0.7+.
+ */
+interface CandideSupportedResponse {
+	tokens: Array<{ address: string; exchangeRate: string }>;
+	paymasterMetadata: {
+		address: string;
+		dummyPaymasterAndData:
+			| string
+			| {
+					paymaster: string;
+					paymasterVerificationGasLimit: string;
+					paymasterPostOpGasLimit: string;
+					paymasterData: string;
+			  };
+	};
+}
+
+/**
  * Generic ERC-7677 paymaster client.
  *
  * Speaks the [ERC-7677](https://eips.ethereum.org/EIPS/eip-7677) JSON-RPC
@@ -199,26 +219,6 @@ export interface Erc7677StubDataResult extends Erc7677PaymasterFields {
  * );
  * ```
  */
-/**
- * Raw shape of Candide's `pm_supportedERC20Tokens` response.
- * `dummyPaymasterAndData` is a concatenated hex string for EntryPoint v0.6 and
- * a structured object for v0.7+.
- */
-interface CandideSupportedResponse {
-	tokens: Array<{ address: string; exchangeRate: string }>;
-	paymasterMetadata: {
-		address: string;
-		dummyPaymasterAndData:
-			| string
-			| {
-					paymaster: string;
-					paymasterVerificationGasLimit: string;
-					paymasterPostOpGasLimit: string;
-					paymasterData: string;
-			  };
-	};
-}
-
 export class Erc7677Paymaster extends Paymaster implements Transport {
 	/**
 	 * The raw transport the user passed in (or {@link HttpTransport} when a URL
@@ -658,7 +658,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 *   $3000/ETH this is `3000 * 10^6 = 3e9`. Used to compute the token
 	 *   approval amount via `(exchangeRate * gasCostWei) / 10^18`, floored to
 	 *   a minimum of 1 token smallest-unit (see
-	 *   {@link Erc7677Paymaster.tokenFlow}).
+	 *   {@link Erc7677Paymaster.tokenPaymasterFlow}).
 	 */
 	private async fetchPimlicoTokenQuote(
 		tokenAddress: string,
@@ -737,7 +737,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 *   $3000/ETH this is `3000 * 10^6 = 3e9`. Used to compute the token
 	 *   approval amount via `(exchangeRate * gasCostWei) / 10^18`, floored to
 	 *   a minimum of 1 token smallest-unit (see
-	 *   {@link Erc7677Paymaster.tokenFlow}).
+	 *   {@link Erc7677Paymaster.tokenPaymasterFlow}).
 	 */
 	private async fetchCandideTokenQuote(
 		tokenAddress: string,

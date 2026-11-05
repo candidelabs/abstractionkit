@@ -664,7 +664,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * @param useroperation - useroperation to sign
 	 * @param privateKeys - for the signers
 	 * @param chainId - target chain id
-	 * @param options - {@link SafeSignatureOptions} — timing, multiChainMerkleProof, module address. The multi-chain flag is force-set true and overrides any caller value.
+	 * @param options - {@link SafeSignatureOptions} — timing and module address. The multi-chain flag is force-set true and overrides any caller value. `multiChainMerkleProof` is rejected here; use the multi-operation method for Merkle signatures.
 	 * @returns signature
 	 */
 	public signUserOperation(
@@ -719,7 +719,7 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 	 * @param userOperation - UserOperation to sign
 	 * @param signers - one ExternalSigner per owner (any order)
 	 * @param chainId - target chain id
-	 * @param options - {@link SafeSignatureOptions} — timing, multiChainMerkleProof, module address. The multi-chain flag is force-set true and overrides any caller value.
+	 * @param options - {@link SafeSignatureOptions} — timing and module address. The multi-chain flag is force-set true and overrides any caller value. `multiChainMerkleProof` is rejected here; use the multi-operation method for Merkle signatures.
 	 * @returns Promise resolving to the formatted signature string
 	 */
 	public signUserOperationWithSigners(
@@ -754,13 +754,11 @@ export class SafeMultiChainSigAccountV1 extends SafeAccount {
 
 	/**
 	 * sign a list of useroperations - multi chain signature
-	 * @param useroperation - useroperation to sign
+	 * @param userOperationsToSign - the useroperations to sign, each with its
+	 * chain id and, optionally, its validity window (`validAfter` / `validUntil`)
+	 * and per-operation options
 	 * @param privateKeys - for the signers
-	 * @param chainId - target chain id
-	 * @param overrides - overrides for the default values
-	 * @param overrides.validAfter - timestamp the signature will be valid after
-	 * @param overrides.validUntil - timestamp the signature will be valid until
-	 * @returns signature
+	 * @returns one signature per useroperation, in the same order
 	 */
 	public signUserOperations(
 		userOperationsToSign: UserOperationToSign[],

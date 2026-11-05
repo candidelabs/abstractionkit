@@ -54,7 +54,7 @@ function buildMismatchMessage(params: {
 			? "ExternalSigner must implement at least one of `signHash` or `signTypedData`. "
 			: "") +
 		"Hint: `fromViem` / `fromEthersWallet` give both; " +
-		"`fromViemWalletClient` gives only `typedData` (use Safe for JSON-RPC wallets)."
+		"`fromViemWalletClient` gives only `typedData`; `fromSafeWebauthn` gives only `hash`."
 	);
 }
 

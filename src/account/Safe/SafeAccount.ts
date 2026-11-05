@@ -219,7 +219,7 @@ export class SafeAccount extends SmartAccount {
 	 * SafeAccountFactory.DEFAULT_FACTORY_ADDRESS
 	 * @param overrides.singletonInitHash - a hash that includes the singleton address and the proxy bytecode
 	 * keccak256(solidityPacked(["bytes", "bytes"], [proxyByteCode, abiCoder.encode(["uint256"], [singletonAddress])]))
-	 * defaults to SafeAccount.safeAccountSingleton.singletonInitHash
+	 * defaults to the init hash of the Safe L2 v1.4.1 singleton (`Safe_L2_V1_4_1.singletonInitHash`)
 	 * @returns proxy/account address
 	 */
 	public static createProxyAddress(
@@ -3322,7 +3322,7 @@ export class SafeAccount extends SmartAccount {
 		accountAddress: string,
 	): MetaTransaction {
 		const callData = createCallData(
-			"0xe009cfde", //"disableModule(address)"
+			"0xe009cfde", //"disableModule(address,address)"
 			["address", "address"],
 			[prevModuleAddress, moduleAddress],
 		);
@@ -3638,7 +3638,7 @@ export class SafeAccount extends SmartAccount {
  * @param project - project name
  * @param platform - "Web", "Mobile", "Safe App", or "Widget"; defaults to "Web"
  * @param tool - tool name; defaults to "abstractionkit"
- * @param toolVersion - tool version; defaults to the current abstractionkit version
+ * @param toolVersion - tool version; defaults to "1.0.0"
  * @returns the on-chain identifier as a hex string (not 0x prefixed)
  */
 function generateOnChainIdentifier(

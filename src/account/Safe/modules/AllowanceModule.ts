@@ -87,6 +87,8 @@ export class AllowanceModule extends SafeModule {
 	 * Defaults to 0n, which starts the period accounting at the moment the Safe
 	 * executes the transaction for a new allowance; when updating an existing
 	 * allowance, 0n keeps its current accounting anchor unchanged.
+	 * Note that a validity period of 0 minutes does not recur: it creates a
+	 * one-time allowance, like {@link createOneTimeAllowanceMetaTransaction}.
 	 * @returns A MetaTransaction to be executed by the Safe.
 	 */
 	public createRecurringAllowanceMetaTransaction(
@@ -205,7 +207,8 @@ export class AllowanceModule extends SafeModule {
 	 *   sentinel value indicating the caller is the delegate themselves.
 	 * @param overrides.paymentToken - Optional token address used to pay for execution.
 	 * @param overrides.paymentAmount - Amount to pay for execution (required if paymentToken is set).
-	 * @returns A MetaTransaction to be executed by the Safe.
+	 *   Without a paymentToken it is paid in the native token.
+	 * @returns A MetaTransaction to be executed by the delegate, or by anyone holding the delegate's signature. It is not sent by the Safe that granted the allowance.
 	 * @throws Will revert on-chain if the delegate's nonce has reached 65534 for this token.
 	 */
 	public createAllowanceTransferMetaTransaction(
@@ -402,7 +405,9 @@ export class AllowanceModule extends SafeModule {
 	 * all results unless `maxNumberOfResults` is specified.
 	 * @param nodeRpcUrl - JSON-RPC endpoint URL for the target chain.
 	 * @param safeAddress - The Safe account address to query delegates for.
-	 * @param overrides.start - Starting index for pagination (default 0).
+	 * @param overrides.start - Pagination cursor (default 0, the first page). It is
+	 *   not an ordinal: pass the `next` value of a previous page, which the module
+	 *   derives from a delegate address.
 	 * @param overrides.maxNumberOfResults - Maximum number of delegates to return.
 	 *   If omitted, all delegates are fetched via automatic pagination.
 	 * @returns Array of delegate addresses.
@@ -451,7 +456,7 @@ export class AllowanceModule extends SafeModule {
 	 * Fetch a single page of delegate addresses from the module (used internally by `getDelegates`).
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
 	 * @param safeAddress - The target account.
-	 * @param start - Pagination start index
+	 * @param start - Pagination cursor: 0 for the first page, then the `next` value of the previous page (not an ordinal)
 	 * @param pageSize - Maximum number of delegates to return in this page
 	 * @returns promise of `{ results, next }` — `next` is 0 when there are no more pages
 	 */

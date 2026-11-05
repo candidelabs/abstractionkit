@@ -28,7 +28,10 @@ export interface FromSafeWebauthnParams {
 	 * signer's address is the WebAuthn shared signer (because the per-owner
 	 * verifier proxy isn't deployed yet); when `false`, it's the
 	 * deterministic verifier proxy address derived from `publicKey`.
-	 * Typically computed by the caller as `userOperation.nonce === 0n`.
+	 * Compute it from the operation's factory: `userOperation.factory != null`
+	 * (EntryPoint v0.7+) or `userOperation.initCode !== "0x"` (v0.6). The nonce
+	 * is not a reliable signal: a deployed account that migrates to a new
+	 * EntryPoint starts again at nonce 0.
 	 */
 	isInit: boolean;
 	/** Async callback that runs the WebAuthn ceremony for the SafeOp digest. */
@@ -119,7 +122,7 @@ export interface FromSafeWebauthnParams {
  *
  * const signer = fromSafeWebauthn({
  *   publicKey: { x, y },
- *   isInit: userOperation.nonce === 0n,
+ *   isInit: userOperation.factory != null,
  *   accountClass: SafeAccountV0_3_0, // SafeMultiChainSigAccountV1 / V2 for multi-chain
  *   getAssertion: async (challenge) => {
  *     const assertion = await navigator.credentials.get({

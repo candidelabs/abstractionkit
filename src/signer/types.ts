@@ -80,8 +80,8 @@ interface ExternalSignerBase {
 }
 
 /**
- * Sign a 32-byte hash raw (no EIP-191 prefix). Required for Simple7702 /
- * Calibur; acceptable fallback for Safe.
+ * Sign a 32-byte hash raw (no EIP-191 prefix). Every account accepts it;
+ * each prefers `signTypedData` when the signer offers both.
  *
  * Return type widens to `Hex | Promise<Hex>` so local-key signers (which
  * do ECDSA over a precomputed digest with no I/O) can be sync, while

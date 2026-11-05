@@ -150,7 +150,8 @@ export abstract class SocialRecoveryModuleBase extends SafeModule {
 	 * @param accountAddress - The target account.
 	 * @param guardianAddress - The guardian to revoke.
 	 * @param threshold - The new threshold that will be set after execution of revocation.
-	 * @param prevGuardian - (if not provided, will be detected using the nodeRpcUrl)
+	 * @param overrides.prevGuardianAddress - the guardian before this one in the
+	 * module's linked list (if not provided, it is looked up using the nodeRpcUrl)
 	 * The previous guardian linking to the guardian in the linked list.
 	 * @returns promise of a MetaTransaction
 	 */

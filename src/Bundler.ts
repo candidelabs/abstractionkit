@@ -97,8 +97,9 @@ export class Bundler implements Transport {
 	}
 
 	/**
-	 * Transport delegate. Forwards directly to the underlying
-	 * {@link Transport.request}. Lets a `Bundler` itself slot into any other
+	 * Transport delegate. Forwards to the underlying {@link Transport.request}
+	 * after converting bigint values in the params to 0x-hex, as every other
+	 * `Bundler` method does. Lets a `Bundler` itself slot into any other
 	 * transport position.
 	 */
 	request<T = unknown>(args: RequestArgs, options?: RequestOptions): Promise<T> {

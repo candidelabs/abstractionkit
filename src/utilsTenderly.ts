@@ -140,7 +140,7 @@ export async function shareTenderlySimulationAndCreateLink(
  * @param tenderlyAccessKey - The Tenderly API access key.
  * @param chainId - The chain ID to simulate on.
  * @param entrypointAddress - The EntryPoint contract address.
- * @param userOperation - The UserOperation to simulate (v0.6, v0.7, or v0.8).
+ * @param userOperation - The UserOperation to simulate (v0.6, v0.7, v0.8, or v0.9).
  * @param blockNumber - Optional block number for the simulation.
  * @param stateOverrides - Optional state overrides for the simulation.
  * @returns The simulation result and a shareable dashboard link.
@@ -191,7 +191,7 @@ export async function simulateUserOperationWithTenderlyAndCreateShareLink(
  * @param tenderlyAccessKey - The Tenderly API access key.
  * @param chainId - The chain ID to simulate on.
  * @param entrypointAddress - The EntryPoint contract address.
- * @param userOperation - The UserOperation to simulate (v0.6, v0.7, or v0.8).
+ * @param userOperation - The UserOperation to simulate (v0.6, v0.7, v0.8, or v0.9).
  * @param blockNumber - Optional block number for the simulation.
  * @param stateOverrides - Optional state overrides for the simulation.
  * @returns The simulation result from Tenderly.
@@ -426,7 +426,7 @@ export interface UserOperationV9ToSimulate extends UserOperationV8ToSimulate {}
  * @param tenderlyAccessKey - The Tenderly API access key.
  * @param chainId - The chain ID to simulate on.
  * @param entrypointAddress - The EntryPoint contract address.
- * @param userOperation - The UserOperation to simulate (v0.6, v0.7, or v0.8 format).
+ * @param userOperation - The UserOperation to simulate (v0.6, v0.7, v0.8, or v0.9 format).
  * @param blockNumber - Optional block number for the simulation.
  * @param stateOverrides - Optional state overrides for the simulation.
  * @returns The simulation results and shareable dashboard links.
@@ -502,7 +502,7 @@ export async function simulateUserOperationCallDataWithTenderlyAndCreateShareLin
  * @param tenderlyAccessKey - The Tenderly API access key.
  * @param chainId - The chain ID to simulate on.
  * @param entrypointAddress - The EntryPoint contract address.
- * @param userOperation - The UserOperation to simulate (v0.6, v0.7, or v0.8 format).
+ * @param userOperation - The UserOperation to simulate (v0.6, v0.7, v0.8, or v0.9 format).
  * @param blockNumber - Optional block number for the simulation.
  * @param stateOverrides - Optional state overrides for the simulation.
  * @returns The Tenderly simulation results.
