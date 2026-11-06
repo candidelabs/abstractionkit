@@ -6,6 +6,7 @@
 // - Once failed polls were retried, a request the bundler refuses as such
 //   (invalid params, method not found) was retried until the timeout.
 // - The last poll could land up to one interval before the deadline.
+// - A receipt request that hung kept the caller waiting past the deadline.
 // Offline, with short real timers.
 
 const ak = require('../dist/index.cjs');
@@ -127,6 +128,47 @@ describe('SendUseroperationResponse.included', () => {
         const { response, polls } = responseWith([null, null, RECEIPT]);
         expect(await response.included(0.25, 0.1)).toBe(RECEIPT);
         expect(polls()).toBe(3);
+    });
+
+    test('a request still pending at the deadline ends the wait with TIMEOUT', async () => {
+        // one 2 s request against a 200 ms budget
+        const { response, polls } = responseWith([null], 2000);
+        const started = Date.now();
+        const error = await caught(response.included(0.2, 0.05));
+        expect(error.code).toBe('TIMEOUT');
+        expect(error.context).toBe(HASH);
+        expect(Date.now() - started).toBeLessThan(600);
+        expect(polls()).toBe(1);
+    });
+
+    test('a request that never settles still times out', async () => {
+        let polls = 0;
+        const bundler = {
+            getUserOperationReceipt: () => {
+                polls++;
+                return new Promise(() => {});
+            },
+        };
+        const response = new ak.SendUseroperationResponse(HASH, bundler, ak.ENTRYPOINT_V7);
+        const error = await caught(response.included(0.15, 0.05));
+        expect(error.code).toBe('TIMEOUT');
+        expect(polls).toBe(1);
+    });
+
+    test('a pending request that times out keeps the earlier poll failure as the cause', async () => {
+        const failure = new Error('502 Bad Gateway');
+        let polls = 0;
+        const bundler = {
+            getUserOperationReceipt: async () => {
+                polls++;
+                if (polls === 1) throw failure;
+                return new Promise(() => {});
+            },
+        };
+        const response = new ak.SendUseroperationResponse(HASH, bundler, ak.ENTRYPOINT_V7);
+        const error = await caught(response.included(0.2, 0.05));
+        expect(error.code).toBe('TIMEOUT');
+        expect(error.cause).toBe(failure);
     });
 
     test.each([

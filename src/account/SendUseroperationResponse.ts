@@ -41,8 +41,9 @@ export class SendUseroperationResponse {
 	 * @returns The UserOperation receipt once included
 	 * @throws RangeError if timeout or interval are <= 0, or timeout < interval
 	 * @throws AbstractionKitError with code "TIMEOUT" if the operation is not found within the
-	 * timeout (wall-clock). A failed poll does not end the wait; if the wait times out, the last
-	 * poll failure is the error's `cause`.
+	 * timeout (wall-clock), including when a receipt request is still pending at the deadline.
+	 * A failed poll does not end the wait; if the wait times out, the last poll failure is the
+	 * error's `cause`.
 	 * @throws the poll's own error, without waiting out the timeout, when retrying cannot help:
 	 * the bundler rejected the request itself (JSON-RPC -32600 invalid request, -32601 method
 	 * not found, -32602 invalid params, e.g. a malformed hash).
@@ -75,7 +76,15 @@ export class SendUseroperationResponse {
 			}
 			await this.delay(Math.min(intervalInMilliseconds, remaining));
 			try {
-				const res = await this.bundler.getUserOperationReceipt(this.userOperationHash);
+				// Bound the request by the time left: a request that hangs
+				// would otherwise hold the caller past the deadline.
+				const res = await this.withinDeadline(
+					this.bundler.getUserOperationReceipt(this.userOperationHash),
+					deadline,
+				);
+				if (res === DEADLINE_PASSED) {
+					break;
+				}
 				if (res != null) {
 					return res;
 				}
@@ -98,7 +107,30 @@ export class SendUseroperationResponse {
 			cause: lastError,
 		});
 	}
+
+	/**
+	 * Settle with `request`, or with {@link DEADLINE_PASSED} if `deadline`
+	 * (a `Date.now()` timestamp) comes first. The request cannot be aborted,
+	 * so it keeps running; `Promise.race` still handles its outcome.
+	 */
+	private async withinDeadline<T>(
+		request: Promise<T>,
+		deadline: number,
+	): Promise<T | typeof DEADLINE_PASSED> {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const expired = new Promise<typeof DEADLINE_PASSED>((resolve) => {
+			timer = setTimeout(() => resolve(DEADLINE_PASSED), Math.max(deadline - Date.now(), 0));
+		});
+		try {
+			return await Promise.race([request, expired]);
+		} finally {
+			clearTimeout(timer);
+		}
+	}
 }
+
+/** Marks a receipt request still pending when the wait ran out. */
+const DEADLINE_PASSED: unique symbol = Symbol("deadline passed");
 
 /**
  * JSON-RPC codes for a request the server refuses as such: invalid request,
