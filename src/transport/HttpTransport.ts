@@ -54,10 +54,13 @@ export class HttpTransport extends BaseRpcTransport {
 	protected async send(envelope: JsonRpcEnvelope, options?: RequestOptions): Promise<unknown> {
 		// Content-Type is fixed by this class (body is always a JSON-RPC
 		// envelope), so it wins against any user-supplied header.
-		const headers: Record<string, string> = {
-			...(this.options.headers ?? {}),
-			"Content-Type": "application/json",
-		};
+		// Header names are case-insensitive: drop the caller's content type in
+		// any spelling, or both would be sent ("text/plain, application/json").
+		const headers: Record<string, string> = {};
+		for (const [name, value] of Object.entries(this.options.headers ?? {})) {
+			if (name.toLowerCase() !== "content-type") headers[name] = value;
+		}
+		headers["Content-Type"] = "application/json";
 		const body = HttpTransport.serializeEnvelope(envelope);
 		const fetchImpl = this.options.fetch ?? globalThis.fetch;
 		const response = await fetchImpl(this.url, {

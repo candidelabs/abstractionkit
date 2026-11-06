@@ -110,7 +110,8 @@ describe.each(CLASSES)('%s WebAuthn statics', (_name, Account, expected, other, 
             request: async ({ method, params }) => {
                 expect(method).toBe('eth_call');
                 captured = params;
-                return '0x' + '0'.repeat(63) + '1';
+                // isValidSignature answers with the ERC-1271 magic value, left-aligned
+                return '0x1626ba7e' + '0'.repeat(56);
             },
         };
         const ok = await Account.verifyWebAuthnSignatureForMessageHash(transport, PASSKEY, MESSAGE_HASH, '0x1234');
@@ -121,6 +122,20 @@ describe.each(CLASSES)('%s WebAuthn statics', (_name, Account, expected, other, 
         expect(override).toContain(hex(Account.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON));
         expect(override).toContain(
             (Account.DEFAULT_WEB_AUTHN_PRECOMPILE.slice(-4) + Account.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER.slice(2)).toLowerCase(),
+        );
+    });
+
+    // The signer proxy returns bytes4, never a bool. Decoding it as a bool read
+    // the last byte, which is zero for a valid signature too, so every
+    // signature was reported invalid.
+    test.each([
+        ['zero, what the proxy returns for a bad signature', '0x' + '0'.repeat(64)],
+        ['a bool-style true, which the proxy never returns', '0x' + '0'.repeat(63) + '1'],
+        ['another selector', '0xffffffff' + '0'.repeat(56)],
+    ])('verifyWebAuthnSignatureForMessageHash is false for %s', async (_name, result) => {
+        const transport = { request: async () => result };
+        expect(await Account.verifyWebAuthnSignatureForMessageHash(transport, PASSKEY, MESSAGE_HASH, '0x1234')).toBe(
+            false,
         );
     });
 

@@ -130,3 +130,61 @@ describe("signHash", () => {
 		expect(a.r === b.r && a.s === b.s).toBe(false);
 	});
 });
+
+// A malformed private key used to be echoed into the error message by every
+// helper that signs through signHash: 14 nibbles of an odd-length hex key, or
+// the whole of a short non-hex secret. privateKeyToAddress already redacted.
+describe("a malformed private key is not echoed into the error", () => {
+	const ak = require("../dist/index.cjs");
+	const HASH = "0x" + "ab".repeat(32);
+	const ADDRESS = "0x" + "11".repeat(20);
+	const ODD_LENGTH_KEY = "0x" + "123456789abcdef".repeat(4) + "654"; // 63 nibbles
+	const NOT_HEX = "my secret seed phrase words go here ok";
+	const OP = {
+		sender: ADDRESS,
+		nonce: 0n,
+		factory: null,
+		factoryData: null,
+		callData: "0x",
+		callGasLimit: 1n,
+		verificationGasLimit: 1n,
+		preVerificationGas: 1n,
+		maxFeePerGas: 1n,
+		maxPriorityFeePerGas: 1n,
+		paymaster: null,
+		paymasterVerificationGasLimit: null,
+		paymasterPostOpGasLimit: null,
+		paymasterData: null,
+		signature: "0x",
+		eip7702Auth: null,
+	};
+
+	const SIGNERS = [
+		["signHash", (key) => ak.signHash(HASH, key)],
+		["createAndSignEip7702DelegationAuthorization", (key) =>
+			ak.createAndSignEip7702DelegationAuthorization(1n, ADDRESS, 0n, key)],
+		["createAndSignLegacyRawTransaction", (key) =>
+			ak.createAndSignLegacyRawTransaction(1n, 0n, 1n, 21000n, ADDRESS, 0n, "0x", key)],
+		["createAndSignEip7702RawTransaction", (key) =>
+			ak.createAndSignEip7702RawTransaction(1n, 0n, 1n, 1n, 100000n, ADDRESS, 0n, "0x", [], [], key)],
+		["Simple7702Account.signUserOperation", (key) => new ak.Simple7702Account(ADDRESS).signUserOperation(OP, key, 1n)],
+		["Calibur7702Account.signUserOperation", (key) => new ak.Calibur7702Account(ADDRESS).signUserOperation(OP, key, 1n)],
+	];
+
+	test.each(SIGNERS)("%s", (_name, sign) => {
+		for (const key of [ODD_LENGTH_KEY, NOT_HEX]) {
+			let message;
+			try {
+				sign(key);
+			} catch (error) {
+				message = error.message;
+			}
+			expect(message).toBeDefined();
+			expect(message).toContain("[REDACTED]");
+			// neither the start nor the end of the secret, nor the phrase
+			expect(message).not.toContain(key.replace("0x", "").slice(0, 8));
+			expect(message).not.toContain(key.slice(-6));
+			expect(message).not.toContain("seed phrase");
+		}
+	});
+});

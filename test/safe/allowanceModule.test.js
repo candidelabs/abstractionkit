@@ -84,3 +84,54 @@ describe('AllowanceModule setAllowance encoding', () => {
         ).rejects.toThrow(RangeError);
     });
 });
+
+// executeAllowanceTransfer(safe, token, to, amount, paymentToken, payment, delegate, signature)
+describe('AllowanceModule transfer payment overrides', () => {
+    const module = new ak.AllowanceModule();
+    const SAFE = '0x' + '42'.repeat(20);
+    const ZERO = '0x' + '00'.repeat(20);
+
+    function decodeTransfer(overrides) {
+        const tx = module.createAllowanceTransferMetaTransaction(SAFE, TOKEN, DELEGATE, 50n, DELEGATE, overrides);
+        const [, , , amount, paymentToken, payment] = AbiCoder.defaultAbiCoder().decode(
+            ['address', 'address', 'address', 'uint96', 'address', 'uint96', 'address', 'bytes'],
+            '0x' + tx.data.slice(10),
+        );
+        return { amount, paymentToken, payment };
+    }
+
+    // The module pays in the native token when paymentToken is the zero
+    // address. A paymentAmount without a paymentToken used to be dropped.
+    test('paymentAmount on its own is a native-token payment', () => {
+        expect(decodeTransfer({ paymentAmount: 123n })).toEqual({ amount: 50n, paymentToken: ZERO, payment: 123n });
+    });
+
+    test('paymentToken with paymentAmount is encoded as given', () => {
+        expect(decodeTransfer({ paymentToken: TOKEN, paymentAmount: 7n })).toEqual({
+            amount: 50n,
+            paymentToken: TOKEN,
+            payment: 7n,
+        });
+    });
+
+    test('no payment overrides encode no payment', () => {
+        expect(decodeTransfer()).toEqual({ amount: 50n, paymentToken: ZERO, payment: 0n });
+    });
+
+    test('paymentToken without paymentAmount and a negative paymentAmount are rejected', () => {
+        expect(() => decodeTransfer({ paymentToken: TOKEN })).toThrow(/must specify paymentAmount/);
+        expect(() => decodeTransfer({ paymentAmount: -1n })).toThrow(RangeError);
+    });
+});
+
+describe('legacy AllowanceModule address', () => {
+    // The contract at this address reports VERSION() "0.1.1"; the old constant
+    // name said v0.1.0. The name is corrected, the value is not changed.
+    test('the correctly named constant and the deprecated alias are the same address', () => {
+        expect(ak.ALLOWANCE_MODULE_V0_1_1_ADDRESS).toBe('0xAA46724893dedD72658219405185Fb0Fc91e091C');
+        expect(ak.ALLOWANCE_MODULE_V0_1_0_ADDRESS).toBe(ak.ALLOWANCE_MODULE_V0_1_1_ADDRESS);
+        expect(new ak.AllowanceModule(ak.ALLOWANCE_MODULE_V0_1_1_ADDRESS).moduleAddress).toBe(
+            ak.ALLOWANCE_MODULE_V0_1_1_ADDRESS,
+        );
+    });
+});

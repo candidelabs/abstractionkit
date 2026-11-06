@@ -44,7 +44,13 @@ import {
 	type UserOperationV7,
 	type UserOperationV9,
 } from "../../types";
-import {createCallData, fetchAccountNonce, getFunctionSelector, handlefetchGasPrice,} from "../../utils";
+import {
+	createCallData,
+	fetchAccountNonce,
+	getFunctionSelector,
+	handlefetchGasPrice,
+	stripV9PaymasterSignature,
+} from "../../utils";
 import {
 	simulateSenderCallDataWithTenderly,
 	simulateSenderCallDataWithTenderlyAndCreateShareLink,
@@ -65,6 +71,7 @@ import {
 	type BaseInitOverrides,
 	type CreateBaseUserOperationOverrides,
 	type CreateUserOperationV6Overrides,
+	type CreateUserOperationV7Overrides,
 	EOADummySignerSignaturePair,
 	type SafeAccountSingleton,
 	SafeModuleExecutorFunctionSelector,
@@ -80,6 +87,11 @@ import {
 	type WebauthnSignatureData,
 	type WebAuthnSignatureOverrides,
 } from "./types";
+
+/** Whether a v0.7+ `factory` value names no factory at all. */
+function isEmptyFactory(factory: string | null | undefined): boolean {
+	return factory == null || factory === "" || factory === "0x";
+}
 
 /**
  * Base implementation shared by all Safe-account variants.
@@ -212,7 +224,7 @@ export class SafeAccount extends SmartAccount {
 	 * SafeAccountFactory.DEFAULT_FACTORY_ADDRESS
 	 * @param overrides.singletonInitHash - a hash that includes the singleton address and the proxy bytecode
 	 * keccak256(solidityPacked(["bytes", "bytes"], [proxyByteCode, abiCoder.encode(["uint256"], [singletonAddress])]))
-	 * defaults to SafeAccount.safeAccountSingleton.singletonInitHash
+	 * defaults to the init hash of the Safe L2 v1.4.1 singleton (`Safe_L2_V1_4_1.singletonInitHash`)
 	 * @returns proxy/account address
 	 */
 	public static createProxyAddress(
@@ -509,7 +521,23 @@ export class SafeAccount extends SmartAccount {
 			},
 		);
 
-		return executorFunctionCallData;
+		// Bytes after the ABI-encoded arguments are not part of the call, but
+		// they are part of the callData: `createUserOperation` appends the
+		// on-chain identifier there. Carry them over to the rewritten callData.
+		const canonicalCallData = SafeAccount.createAccountCallData(
+			metaTransaction.to,
+			metaTransaction.value,
+			metaTransaction.data,
+			metaTransaction.operation ?? Operation.Call,
+			{
+				safeModuleExecutorFunctionSelector,
+			},
+		);
+		const trailingBytes = callData.toLowerCase().startsWith(canonicalCallData.toLowerCase())
+			? callData.slice(canonicalCallData.length)
+			: "";
+
+		return executorFunctionCallData + trailingBytes;
 	}
 
 	/**
@@ -864,23 +892,11 @@ export class SafeAccount extends SmartAccount {
 				).slice(34);
 			}
 			if (useroperation.paymasterData != null) {
-				const PAYMASTER_SIG_MAGIC = "22e325a297439656";
-				if (
-					overrides.is_v9 &&
-					useroperation.paymasterData.toLowerCase().endsWith(PAYMASTER_SIG_MAGIC)
-				) {
-					const sigLenHex = useroperation.paymasterData.slice(
-						useroperation.paymasterData.length - 16 - 4,
-						useroperation.paymasterData.length - 16,
-					);
-					const sigLen = parseInt(sigLenHex, 16);
-					const prefixEnd = useroperation.paymasterData.length - 16 - 4 - sigLen * 2;
-					paymasterAndData +=
-						useroperation.paymasterData.slice(0, prefixEnd).replaceAll("0x", "") +
-						PAYMASTER_SIG_MAGIC;
-				} else {
-					paymasterAndData += useroperation.paymasterData.slice(2);
-				}
+				paymasterAndData += (
+					overrides.is_v9
+						? stripV9PaymasterSignature(useroperation.paymasterData)
+						: useroperation.paymasterData
+				).slice(2);
 			}
 		}
 		const messageValue: SafeUserOperationV7TypedMessageValue = {
@@ -1092,6 +1108,37 @@ export class SafeAccount extends SmartAccount {
 		);
 
 		return new SendUseroperationResponse(sendUserOperationRes, bundler, this.entrypointAddress);
+	}
+
+	/**
+	 * Fill the shared-signer Passkey module fields the caller left unset from
+	 * `cls`. The init helpers below are called on `SafeAccount` by name, so
+	 * they cannot see the class a public static was invoked on; the public
+	 * statics pass it here so a subclass that overrides a Passkey module
+	 * default is initialised with the same shared signer it later signs with.
+	 * @param cls - the class whose defaults apply
+	 * @param overrides - the caller's init overrides
+	 * @returns a copy of `overrides` with the three shared-signer fields set
+	 */
+	protected static withSharedSignerDefaults<T extends BaseInitOverrides>(
+		cls: Pick<
+			typeof SafeAccount,
+			| "DEFAULT_WEB_AUTHN_SHARED_SIGNER"
+			| "DEFAULT_WEB_AUTHN_PRECOMPILE"
+			| "DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER"
+		>,
+		overrides: T,
+	): T {
+		return {
+			...overrides,
+			webAuthnSharedSigner: overrides.webAuthnSharedSigner ?? cls.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+			eip7212WebAuthnPrecompileVerifierForSharedSigner:
+				overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner ??
+				cls.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			eip7212WebAuthnContractVerifierForSharedSigner:
+				overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
+				cls.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
+		};
 	}
 
 	/**
@@ -1534,8 +1581,68 @@ export class SafeAccount extends SmartAccount {
 		if (transactions.length < 1) {
 			throw new RangeError("There should be at least one transaction");
 		}
+		// Reject bad overrides before any RPC call starts: a request left
+		// running behind a synchronous throw rejects with nobody listening,
+		// and a request that has finished is wasted.
+		if (typeof overrides.maxFeePerGas === "bigint" && overrides.maxFeePerGas < 0n) {
+			throw new RangeError("maxFeePerGas overrid can't be negative");
+		}
+		if (typeof overrides.maxPriorityFeePerGas === "bigint" && overrides.maxPriorityFeePerGas < 0n) {
+			throw new RangeError("maxPriorityFeePerGas overrid can't be negative");
+		}
+		if (typeof overrides.preVerificationGas === "bigint" && overrides.preVerificationGas < 0n) {
+			throw new RangeError("preVerificationGas overrid can't be negative");
+		}
+		if (typeof overrides.verificationGasLimit === "bigint" && overrides.verificationGasLimit < 0n) {
+			throw new RangeError("verificationGasLimit overrid can't be negative");
+		}
+		if (typeof overrides.callGasLimit === "bigint" && overrides.callGasLimit < 0n) {
+			throw new RangeError("callGasLimit overrid can't be negative");
+		}
+		if (overrides.dummySignerSignaturePairs != null) {
+			if (overrides.expectedSigners != null) {
+				throw new RangeError(
+					"Can't use both dummySignerSignaturePairs and expectedSigners overrides.",
+				);
+			}
+			if (overrides.dummySignerSignaturePairs.length < 1) {
+				throw new RangeError("Number of dummySignerSignaturePairs can't be less than 1");
+			}
+		}
+		if (overrides.parallelPaymasterInitValues != null) {
+			// lowercase like the EIP-712 trimmer and the MultiChain
+			// subclass — uppercase hex is valid input
+			if (
+				!overrides.parallelPaymasterInitValues.paymasterData
+					.toLowerCase()
+					.endsWith("22e325a297439656")
+			) {
+				throw new RangeError(
+					"Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'.",
+				);
+			}
+			if (this.entrypointAddress.toLowerCase() !== ENTRYPOINT_V9.toLowerCase()) {
+				throw new RangeError("parallelPaymasterInitValues only works with ep v0.9");
+			}
+		}
+		const skipGasEstimation = overrides.skipGasEstimation ?? false;
+		const estimateGas =
+			!skipGasEstimation &&
+			(overrides.preVerificationGas == null ||
+				overrides.verificationGasLimit == null ||
+				overrides.callGasLimit == null);
+		if (estimateGas && bundlerRpc == null) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"bundlerRpc can't be null if preVerificationGas," +
+					"verificationGasLimit and callGasLimit are not overridden",
+			);
+		}
+		// Passkey module defaults come from the constructed class, so a
+		// subclass that overrides them deploys and signs with the same owner.
+		const accountClass = this.constructor as typeof SafeAccount;
 		const webAuthnSharedSigner =
-			overrides.webAuthnSharedSigner ?? SafeAccount.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
+			overrides.webAuthnSharedSigner ?? accountClass.DEFAULT_WEB_AUTHN_SHARED_SIGNER;
 		const safeModuleExecutorFunctionSelector =
 			overrides.safeModuleExecutorFunctionSelector ??
 			SafeAccount.DEFAULT_EXECUTOR_FUCNTION_SELECTOR;
@@ -1558,13 +1665,6 @@ export class SafeAccount extends SmartAccount {
 			nonce = overrides.nonce;
 		}
 
-		if (typeof overrides.maxFeePerGas === "bigint" && overrides.maxFeePerGas < 0n) {
-			throw new RangeError("maxFeePerGas overrid can't be negative");
-		}
-
-		if (typeof overrides.maxPriorityFeePerGas === "bigint" && overrides.maxPriorityFeePerGas < 0n) {
-			throw new RangeError("maxPriorityFeePerGas overrid can't be negative");
-		}
 		let maxFeePerGas = BaseUserOperationDummyValues.maxFeePerGas;
 		let maxPriorityFeePerGas = BaseUserOperationDummyValues.maxPriorityFeePerGas;
 
@@ -1598,16 +1698,16 @@ export class SafeAccount extends SmartAccount {
 				100n;
 
 		const eip7212WebAuthnPrecompileVerifier =
-			overrides.eip7212WebAuthnPrecompileVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_PRECOMPILE;
+			overrides.eip7212WebAuthnPrecompileVerifier ?? accountClass.DEFAULT_WEB_AUTHN_PRECOMPILE;
 		const eip7212WebAuthnContractVerifier =
-			overrides.eip7212WebAuthnContractVerifier ?? SafeAccount.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
+			overrides.eip7212WebAuthnContractVerifier ?? accountClass.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER;
 		const webAuthnSignerFactory =
-			overrides.webAuthnSignerFactory ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
+			overrides.webAuthnSignerFactory ?? accountClass.DEFAULT_WEB_AUTHN_SIGNER_FACTORY;
 		const webAuthnSignerSingleton =
-			overrides.webAuthnSignerSingleton ?? SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
+			overrides.webAuthnSignerSingleton ?? accountClass.DEFAULT_WEB_AUTHN_SIGNER_SINGLETON;
 		const webAuthnSignerProxyCreationCode =
 			overrides.webAuthnSignerProxyCreationCode ??
-			SafeAccount.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
+			accountClass.DEFAULT_WEB_AUTHN_SIGNER_PROXY_CREATION_CODE;
 
 		let factoryAddress: string | null = this.factoryAddress;
 		let factoryData: string | null = this.factoryData;
@@ -1616,11 +1716,62 @@ export class SafeAccount extends SmartAccount {
 			throw new RangeError("failed to determine nonce");
 		} else if (nonce < 0n) {
 			throw new RangeError("nonce can't be negative");
-		} else if (nonce > 0n) {
+		}
+		// The deployment fields a caller overrides decide whether this
+		// operation deploys the account: the v0.6 `initCode`, or the v0.7+
+		// `factory`. They have to be read before the callData is built, since
+		// a passkey account's first operation also carries the passkey setup
+		// calls, which revert on an account that is already deployed.
+		const v06InitCodeOverride = isV06
+			? ((overrides as CreateUserOperationV6Overrides).initCode ?? null)
+			: null;
+		const factoryOverrides: CreateUserOperationV7Overrides = isV06
+			? {}
+			: (overrides as CreateUserOperationV7Overrides);
+		let isFirstOperation: boolean;
+		if (v06InitCodeOverride != null) {
+			isFirstOperation = v06InitCodeOverride !== "0x";
+		} else if (factoryOverrides.factory !== undefined) {
+			isFirstOperation = !isEmptyFactory(factoryOverrides.factory);
+		} else {
+			// The nonce is `key << 64 | sequence`. A non-zero sequence proves
+			// the account has already run an operation. Sequence 0 under a
+			// non-zero key proves nothing about deployment, so ask the node
+			// when there is one; without a node a non-zero nonce still means
+			// "deployed".
+			isFirstOperation = nonce === 0n;
+			if (
+				nonce > 0n &&
+				(nonce & 0xffffffffffffffffn) === 0n &&
+				factoryAddress != null &&
+				providerRpc != null
+			) {
+				isFirstOperation = !(await SafeAccount.isDeployed(this.accountAddress, providerRpc));
+			}
+		}
+		if (!isFirstOperation) {
 			factoryAddress = null;
 			factoryData = null;
-		} else if (this.isInitWebAuthn) {
-			//nonce = 0
+		}
+		// EntryPoint v0.7+ callers can override the factory fields; they
+		// replace the derived ones in the returned op, the estimation op and
+		// the dummy signature.
+		if (factoryOverrides.factory !== undefined) {
+			factoryAddress = factoryOverrides.factory;
+		}
+		if (factoryOverrides.factoryData !== undefined) {
+			factoryData = factoryOverrides.factoryData;
+		}
+		// "0x" (or "") names no factory. Return it as null, the v0.7+ shape
+		// for "no deployment", and drop factoryData, which means nothing
+		// without a factory: the EntryPoint packs initCode as
+		// factory ‖ factoryData.
+		if (isEmptyFactory(factoryAddress)) {
+			factoryAddress = null;
+			factoryData = null;
+		}
+		if (isFirstOperation && this.isInitWebAuthn) {
+			//first operation of a passkey account
 			if (this.x == null || this.y == null) {
 				throw new RangeError(
 					"Invalid account initialization with Webauthn signer." +
@@ -1734,7 +1885,7 @@ export class SafeAccount extends SmartAccount {
 		// when a factory address is set.
 		let resolvedV06InitCode: string | null = null;
 		if (isV06) {
-			resolvedV06InitCode = (overrides as CreateUserOperationV6Overrides).initCode ?? null;
+			resolvedV06InitCode = v06InitCodeOverride;
 			if (resolvedV06InitCode == null) {
 				resolvedV06InitCode = "0x";
 				if (factoryAddress != null) {
@@ -1745,19 +1896,10 @@ export class SafeAccount extends SmartAccount {
 				}
 			}
 		}
-		const isInit = isV06
-			? resolvedV06InitCode !== "0x"
-			: factoryAddress != null && factoryAddress !== "0x";
+		const isInit = isV06 ? resolvedV06InitCode !== "0x" : factoryAddress != null;
 		let dummySignerSignaturePairs: SignerSignaturePair[];
 		if (overrides.dummySignerSignaturePairs != null) {
-			if (overrides.expectedSigners != null) {
-				throw new RangeError(
-					"Can't use both dummySignerSignaturePairs and expectedSigners overrides.",
-				);
-			}
-			if (overrides.dummySignerSignaturePairs.length < 1) {
-				throw new RangeError("Number of dummySignerSignaturePairs can't be less than 1");
-			}
+			// validated before the RPC calls
 			dummySignerSignaturePairs = overrides.dummySignerSignaturePairs;
 		} else {
 			if (overrides.expectedSigners == null) {
@@ -1797,30 +1939,11 @@ export class SafeAccount extends SmartAccount {
 			},
 		);
 
-		// Validate before the estimation branch so a bad config is rejected
-		// even when estimation is skipped or every gas limit is supplied.
+		// validated before the RPC calls
 		const parallelPaymasterInitValues = overrides.parallelPaymasterInitValues;
-		if (parallelPaymasterInitValues != null) {
-			// lowercase like the EIP-712 trimmer and the MultiChain
-			// subclass — uppercase hex is valid input
-			if (!parallelPaymasterInitValues.paymasterData.toLowerCase().endsWith("22e325a297439656")) {
-				throw new RangeError(
-					"Invalid paymasterData override, it must end with the PAYMASTER_SIG_MAGIC '22e325a297439656'.",
-				);
-			}
-			if (this.entrypointAddress.toLowerCase() !== ENTRYPOINT_V9.toLowerCase()) {
-				throw new RangeError("parallelPaymasterInitValues only works with ep v0.9");
-			}
-		}
 
-		const skipGasEstimation = overrides.skipGasEstimation ?? false;
-
-		if (
-			!skipGasEstimation &&
-			(overrides.preVerificationGas == null ||
-				overrides.verificationGasLimit == null ||
-				overrides.callGasLimit == null)
-		) {
+		if (estimateGas) {
+			// bundlerRpc was checked before the RPC calls
 			if (bundlerRpc != null) {
 				userOperation.callGasLimit = 0n;
 				userOperation.verificationGasLimit = 0n;
@@ -1884,18 +2007,6 @@ export class SafeAccount extends SmartAccount {
 				);
 			}
 		}
-		if (typeof overrides.preVerificationGas === "bigint" && overrides.preVerificationGas < 0n) {
-			throw new RangeError("preVerificationGas overrid can't be negative");
-		}
-
-		if (typeof overrides.verificationGasLimit === "bigint" && overrides.verificationGasLimit < 0n) {
-			throw new RangeError("verificationGasLimit overrid can't be negative");
-		}
-
-		if (typeof overrides.callGasLimit === "bigint" && overrides.callGasLimit < 0n) {
-			throw new RangeError("callGasLimit overrid can't be negative");
-		}
-
 		userOperation.preVerificationGas =
 			overrides.preVerificationGas ??
 			(preVerificationGas * BigInt((overrides.preVerificationGasPercentageMultiplier ?? 0) + 100)) /
@@ -2808,6 +2919,7 @@ export class SafeAccount extends SmartAccount {
 			data: callData,
 		};
 		const getOwnersResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
+		SafeAccount.ensureNonEmptyCallResult(getOwnersResult, "getOwners");
 
 		const decodedCalldata = decodeAbiParameters<[string[]]>(["address[]"], getOwnersResult);
 
@@ -2828,6 +2940,7 @@ export class SafeAccount extends SmartAccount {
 			data: callData,
 		};
 		const getThresholdResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
+		SafeAccount.ensureNonEmptyCallResult(getThresholdResult, "getThreshold");
 
 		const decodedCalldata = decodeAbiParameters<[bigint]>(["uint256"], getThresholdResult);
 
@@ -2910,6 +3023,7 @@ export class SafeAccount extends SmartAccount {
 			data: callData,
 		};
 		const isModuleEnabledResult = await JsonRpcNode.from(nodeRpcUrl).call(ethCallParams, "latest");
+		SafeAccount.ensureNonEmptyCallResult(isModuleEnabledResult, "isModuleEnabled");
 
 		const decodedCalldata = decodeAbiParameters<[boolean]>(["bool"], isModuleEnabledResult);
 
@@ -2932,7 +3046,22 @@ export class SafeAccount extends SmartAccount {
 			SAFE_FALLBACK_HANDLER_STORAGE_SLOT,
 			"latest",
 		);
-		return getAddress("0x" + word.slice(-40));
+		// a node may answer "0x" for an empty slot instead of a zero word
+		return getAddress("0x" + word.slice(2).padStart(64, "0").slice(-40));
+	}
+
+	/**
+	 * An `eth_call` to an address with no code returns "0x". Decoding that
+	 * fails with an opaque ABI error, so name the likely cause instead.
+	 */
+	private static ensureNonEmptyCallResult(result: string, method: string): void {
+		if (result === "0x") {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				`${method} returned an empty result, the target account is ` +
+					"probably not deployed yet.",
+			);
+		}
 	}
 
 	/**
@@ -2948,6 +3077,7 @@ export class SafeAccount extends SmartAccount {
 			{ to: this.accountAddress, data: callData },
 			"latest",
 		);
+		SafeAccount.ensureNonEmptyCallResult(result, "getSafeVersion");
 		const [version] = decodeAbiParameters<[string]>(["string"], result);
 		return version;
 	}
@@ -3089,9 +3219,10 @@ export class SafeAccount extends SmartAccount {
 			},
 		);
 
-		const decodedCalldata = decodeAbiParameters<[boolean]>(["bool"], isModuleEnabledResult);
-
-		return decodedCalldata[0];
+		// isValidSignature answers with the ERC-1271 magic value, a bytes4
+		// left-aligned in the word, and with zero for a bad signature. It is
+		// not a bool: the last byte is zero either way.
+		return isModuleEnabledResult.slice(0, 10).toLowerCase() === functionSelector;
 	}
 
 	private static createSafeWebAuthnSignerProxyDeployedByteCode(
@@ -3230,7 +3361,7 @@ export class SafeAccount extends SmartAccount {
 		accountAddress: string,
 	): MetaTransaction {
 		const callData = createCallData(
-			"0xe009cfde", //"disableModule(address)"
+			"0xe009cfde", //"disableModule(address,address)"
 			["address", "address"],
 			[prevModuleAddress, moduleAddress],
 		);
@@ -3546,7 +3677,7 @@ export class SafeAccount extends SmartAccount {
  * @param project - project name
  * @param platform - "Web", "Mobile", "Safe App", or "Widget"; defaults to "Web"
  * @param tool - tool name; defaults to "abstractionkit"
- * @param toolVersion - tool version; defaults to the current abstractionkit version
+ * @param toolVersion - tool version; defaults to "1.0.0"
  * @returns the on-chain identifier as a hex string (not 0x prefixed)
  */
 function generateOnChainIdentifier(

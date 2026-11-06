@@ -1,5 +1,5 @@
 import type { Bundler } from "src/Bundler";
-import { AbstractionKitError } from "src/errors";
+import { AbstractionKitError, ensureError } from "src/errors";
 import type { UserOperationReceiptResult } from "src/types";
 
 /**
@@ -40,13 +40,20 @@ export class SendUseroperationResponse {
 	 * @param requestIntervalInSeconds - Time between polling requests (default: 2s)
 	 * @returns The UserOperation receipt once included
 	 * @throws RangeError if timeout or interval are <= 0, or timeout < interval
-	 * @throws AbstractionKitError with code "TIMEOUT" if the operation is not found within the timeout
+	 * @throws AbstractionKitError with code "TIMEOUT" if the operation is not found within the
+	 * timeout (wall-clock), including when a receipt request is still pending at the deadline.
+	 * A failed poll does not end the wait; if the wait times out, the last poll failure is the
+	 * error's `cause`.
+	 * @throws the poll's own error, without waiting out the timeout, when retrying cannot help:
+	 * the bundler rejected the request itself (JSON-RPC -32600 invalid request, -32601 method
+	 * not found, -32602 invalid params, e.g. a malformed hash).
 	 */
 	async included(
 		timeoutInSeconds: number = 180,
 		requestIntervalInSeconds: number = 2,
 	): Promise<UserOperationReceiptResult> {
-		if (timeoutInSeconds <= 0 || requestIntervalInSeconds <= 0) {
+		// `!(x > 0)` also rejects NaN, which `x <= 0` lets through
+		if (!(timeoutInSeconds > 0) || !(requestIntervalInSeconds > 0)) {
 			throw new RangeError(
 				"timeoutInSeconds and requestIntervalInSeconds should be bigger than zero",
 			);
@@ -54,18 +61,90 @@ export class SendUseroperationResponse {
 		if (timeoutInSeconds < requestIntervalInSeconds) {
 			throw new RangeError("timeoutInSeconds can't be less than requestIntervalInSeconds");
 		}
-		let count = 0;
-		while (count <= timeoutInSeconds) {
-			await this.delay(requestIntervalInSeconds * 1000);
-			const res = await this.bundler.getUserOperationReceipt(this.userOperationHash);
-			if (res == null) {
-				count += requestIntervalInSeconds;
-			} else {
-				return res;
+		// The timeout is wall-clock time. Counting the sleeps alone ignored how
+		// long each request took, so a slow bundler stretched the wait to
+		// several times the timeout.
+		const intervalInMilliseconds = requestIntervalInSeconds * 1000;
+		const deadline = Date.now() + timeoutInSeconds * 1000;
+		let lastError: Error | undefined;
+		while (true) {
+			// The last sleep is cut short so the final poll lands on the
+			// deadline instead of up to one interval before it.
+			const remaining = deadline - Date.now();
+			if (remaining <= 0) {
+				break;
+			}
+			await this.delay(Math.min(intervalInMilliseconds, remaining));
+			try {
+				// Bound the request by the time left: a request that hangs
+				// would otherwise hold the caller past the deadline.
+				const res = await this.withinDeadline(
+					this.bundler.getUserOperationReceipt(this.userOperationHash),
+					deadline,
+				);
+				if (res === DEADLINE_PASSED) {
+					break;
+				}
+				if (res != null) {
+					return res;
+				}
+				lastError = undefined;
+			} catch (err) {
+				const error = ensureError(err);
+				// A request the bundler rejects as such fails the same way on
+				// every poll; report it now rather than after the timeout.
+				if (isPermanentPollError(error)) {
+					throw error;
+				}
+				// One failed poll (a 502, a dropped connection) says nothing
+				// about the operation. Keep polling and report the last
+				// failure if the wait times out.
+				lastError = error;
 			}
 		}
 		throw new AbstractionKitError("TIMEOUT", "can't find useroperation", {
 			context: this.userOperationHash,
+			cause: lastError,
 		});
 	}
+
+	/**
+	 * Settle with `request`, or with {@link DEADLINE_PASSED} if `deadline`
+	 * (a `Date.now()` timestamp) comes first. The request cannot be aborted,
+	 * so it keeps running; `Promise.race` still handles its outcome.
+	 */
+	private async withinDeadline<T>(
+		request: Promise<T>,
+		deadline: number,
+	): Promise<T | typeof DEADLINE_PASSED> {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const expired = new Promise<typeof DEADLINE_PASSED>((resolve) => {
+			timer = setTimeout(() => resolve(DEADLINE_PASSED), Math.max(deadline - Date.now(), 0));
+		});
+		try {
+			return await Promise.race([request, expired]);
+		} finally {
+			clearTimeout(timer);
+		}
+	}
+}
+
+/** Marks a receipt request still pending when the wait ran out. */
+const DEADLINE_PASSED: unique symbol = Symbol("deadline passed");
+
+/**
+ * JSON-RPC codes for a request the server refuses as such: invalid request,
+ * method not found, invalid params. Retrying the same request cannot succeed.
+ */
+const PERMANENT_JSON_RPC_CODES = new Set([-32600, -32601, -32602]);
+
+/**
+ * Whether a failed receipt poll will fail the same way on every retry.
+ * {@link Bundler} reports the JSON-RPC code as `errno`; a raw transport error
+ * carries it as `code`.
+ */
+function isPermanentPollError(error: Error): boolean {
+	const { errno, code } = error as Error & { errno?: unknown; code?: unknown };
+	const rpcCode = typeof errno === "number" ? errno : code;
+	return typeof rpcCode === "number" && PERMANENT_JSON_RPC_CODES.has(rpcCode);
 }

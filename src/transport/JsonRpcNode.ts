@@ -493,8 +493,12 @@ function translateNodeError(err: unknown, method: string): AbstractionKitError {
 		codeString in JsonRpcErrorDict ? JsonRpcErrorDict[codeString] : "UNKNOWN_ERROR";
 	const error = ensureError(err);
 	return new AbstractionKitError("NODE_ERROR", `node ${method} rpc call failed`, {
+		// The transport error stays reachable as `cause.cause`: it carries the
+		// JSON-RPC `data` (the revert bytes of a failed eth_call), the reason
+		// behind a failed fetch, and the AbortError name of a cancelled call.
 		cause: new AbstractionKitError(innerCode, error.message, {
 			errno: code,
+			cause: error,
 		}),
 		errno: code,
 	});

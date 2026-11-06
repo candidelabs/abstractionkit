@@ -97,8 +97,9 @@ export class Bundler implements Transport {
 	}
 
 	/**
-	 * Transport delegate. Forwards directly to the underlying
-	 * {@link Transport.request}. Lets a `Bundler` itself slot into any other
+	 * Transport delegate. Forwards to the underlying {@link Transport.request}
+	 * after converting bigint values in the params to 0x-hex, as every other
+	 * `Bundler` method does. Lets a `Bundler` itself slot into any other
 	 * transport position.
 	 */
 	request<T = unknown>(args: RequestArgs, options?: RequestOptions): Promise<T> {
@@ -334,7 +335,10 @@ function translateBundlerError(
 	// here so callers can branch on a stable code instead of matching the message.
 	const aaCode = parseAaCode(error.message);
 	return new AbstractionKitError("BUNDLER_ERROR", `bundler ${method} rpc call failed`, {
-		cause: new AbstractionKitError(innerCode, error.message, { errno: code, aaCode }),
+		// The transport error stays reachable as `cause.cause`: it carries the
+		// JSON-RPC `data` (revert bytes, paymaster or stake info), the reason
+		// behind a failed fetch, and the AbortError name of a cancelled call.
+		cause: new AbstractionKitError(innerCode, error.message, { errno: code, aaCode, cause: error }),
 		errno: code,
 		context,
 		aaCode,

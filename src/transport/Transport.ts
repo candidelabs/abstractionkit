@@ -10,8 +10,7 @@
  *
  * The SDK ships exactly one concrete transport ({@link HttpTransport}). All
  * other behaviors — fallback, retry, hedging, logging, circuit breakers — are
- * intentionally left to the user to compose. See `FEATURE_TRANSPORT.md` for
- * the design rationale.
+ * intentionally left to the user to compose.
  */
 
 /**

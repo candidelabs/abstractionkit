@@ -135,7 +135,40 @@ export class AbstractionKitError extends Error {
 	 * @returns JSON string of the error
 	 */
 	stringify(): string {
-		return JSON.stringify(this, ["name", "code", "message", "cause", "errno", "context", "aaCode"]);
+		// A key whitelist passed to JSON.stringify applies at every depth, so
+		// it would also strip the keys inside `context`. Pick the fields by
+		// hand and let `context` serialize in full.
+		const seen = new WeakSet<object>();
+		const pick = (value: unknown): unknown => {
+			if (!(value instanceof Error)) return value;
+			if (seen.has(value)) return "[Circular]";
+			seen.add(value);
+			const error = value as Error & {
+				code?: unknown;
+				errno?: unknown;
+				context?: unknown;
+				aaCode?: unknown;
+				data?: unknown;
+			};
+			return {
+				name: error.name,
+				code: error.code,
+				message: error.message,
+				cause: pick(error.cause),
+				errno: error.errno,
+				context: error.context,
+				data: error.data,
+				aaCode: error.aaCode,
+			};
+		};
+		const bigintAsString = (_key: string, value: unknown) =>
+			typeof value === "bigint" ? value.toString() : value;
+		try {
+			return JSON.stringify(pick(this), bigintAsString);
+		} catch {
+			// a context that cannot be serialized (e.g. circular) is left out
+			return JSON.stringify(this, ["name", "code", "message", "cause", "errno", "aaCode"]);
+		}
 	}
 }
 

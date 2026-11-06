@@ -28,7 +28,10 @@ export interface FromSafeWebauthnParams {
 	 * signer's address is the WebAuthn shared signer (because the per-owner
 	 * verifier proxy isn't deployed yet); when `false`, it's the
 	 * deterministic verifier proxy address derived from `publicKey`.
-	 * Typically computed by the caller as `userOperation.nonce === 0n`.
+	 * Compute it from the operation's factory: `userOperation.factory != null`
+	 * (EntryPoint v0.7+) or `userOperation.initCode !== "0x"` (v0.6). The nonce
+	 * is not a reliable signal: a deployed account that migrates to a new
+	 * EntryPoint starts again at nonce 0.
 	 */
 	isInit: boolean;
 	/** Async callback that runs the WebAuthn ceremony for the SafeOp digest. */
@@ -119,7 +122,7 @@ export interface FromSafeWebauthnParams {
  *
  * const signer = fromSafeWebauthn({
  *   publicKey: { x, y },
- *   isInit: userOperation.nonce === 0n,
+ *   isInit: userOperation.factory != null,
  *   accountClass: SafeAccountV0_3_0, // SafeMultiChainSigAccountV1 / V2 for multi-chain
  *   getAssertion: async (challenge) => {
  *     const assertion = await navigator.credentials.get({
@@ -226,6 +229,8 @@ function coerceBigint(v: bigint | string | number, field: string): bigint {
 		coerced = v;
 	} else if (typeof v === "string") {
 		try {
+			// BigInt("") and BigInt(" ") are 0n, not an error
+			if (v.trim() === "") throw new SyntaxError("empty string");
 			coerced = BigInt(v);
 		} catch {
 			throw new Error(
@@ -319,16 +324,19 @@ export function pubkeyCoordinatesFromJson(
  *
  * Each field is normalized individually:
  * - `authenticatorData`: `ArrayBuffer` (raw browser API), `Uint8Array`
- *   (most libraries), or `0x`-prefixed hex string (`ox`).
- * - `clientDataJSON`: UTF-8 string (`ox` returns it pre-decoded), or
- *   buffer (raw browser API).
- * - `signature`: pre-decoded `{ r, s }` bigints (`ox` returns this), or a
- *   DER-encoded buffer (raw browser API).
+ *   (most libraries), `0x`-prefixed hex string (`ox`), or base64url string
+ *   (`@simplewebauthn/browser`).
+ * - `clientDataJSON`: the JSON text itself (`ox` returns it pre-decoded), a
+ *   buffer (raw browser API), or a base64url string
+ *   (`@simplewebauthn/browser`).
+ * - `signature`: pre-decoded `{ r, s }` bigints (`ox` returns this), a
+ *   DER-encoded buffer (raw browser API), or the DER bytes as a `0x`-prefixed
+ *   hex or base64url string (`@simplewebauthn/browser`).
  */
 interface AuthenticatorAssertionLike {
 	authenticatorData: ArrayBuffer | Uint8Array | string;
 	clientDataJSON: ArrayBuffer | Uint8Array | string;
-	signature: ArrayBuffer | Uint8Array | { r: bigint; s: bigint };
+	signature: ArrayBuffer | Uint8Array | string | { r: bigint; s: bigint };
 }
 
 /**
@@ -382,19 +390,71 @@ function toArrayBuffer(input: ArrayBuffer | Uint8Array | string): ArrayBuffer {
 	// that one case manually. Same byte-for-byte output as the previous
 	// hand-rolled `hexToBytes` plus regex validation.
 	if (input instanceof ArrayBuffer) return input;
-	const bytes = getBytes(input);
+	const bytes = typeof input === "string" ? stringToBytes(input, "authenticatorData") : getBytes(input);
 	return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
 function toUtf8String(input: ArrayBuffer | Uint8Array | string): string {
-	if (typeof input === "string") return input;
+	if (typeof input === "string") {
+		// The JSON text itself, or its bytes as base64url. Anything that is
+		// neither is returned as is, for the JSON validation to report.
+		if (input.trimStart().startsWith("{") || !/^[A-Za-z0-9\-_+/]+=*$/.test(input)) return input;
+		try {
+			JSON.parse(input);
+			return input; // valid JSON that is not an object, e.g. `null` or `42`
+		} catch {
+			return fromUtf8Bytes(base64UrlToBytes(input, "clientDataJSON"));
+		}
+	}
 	const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
 	// Pure-JS decode so it works in React Native / Hermes too (no TextDecoder there).
 	return fromUtf8Bytes(bytes);
 }
 
+/** Bytes of a string field: `0x`-prefixed hex, otherwise base64url. */
+function stringToBytes(input: string, field: string): Uint8Array {
+	if (input.startsWith("0x") || input.startsWith("0X")) return getBytes(input);
+	// Bare hex is also made of base64 characters. Decoding it as base64 would
+	// silently give the wrong bytes, so ask for the prefix instead.
+	if (/^[0-9a-fA-F]+$/.test(input)) {
+		throw new Error(
+			`webauthnSignatureFromAssertion: ${field} looks like hex without a 0x prefix. ` +
+				"Pass 0x-prefixed hex or a base64url string.",
+		);
+	}
+	return base64UrlToBytes(input, field);
+}
+
+/**
+ * Decode base64url (or plain base64, with or without padding). Pure JS:
+ * `atob` and `Buffer` are not defined in React Native / Hermes.
+ */
+function base64UrlToBytes(input: string, field: string): Uint8Array {
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+	const text = input.replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+	if (text.length % 4 === 1 || /[^A-Za-z0-9\-_]/.test(text)) {
+		throw new Error(
+			`webauthnSignatureFromAssertion: ${field} is not a 0x-prefixed hex or base64url string`,
+		);
+	}
+	const bytes = new Uint8Array(Math.floor((text.length * 3) / 4));
+	let buffer = 0;
+	let bits = 0;
+	let index = 0;
+	for (const char of text) {
+		buffer = (buffer << 6) | alphabet.indexOf(char);
+		bits += 6;
+		if (bits >= 8) {
+			bits -= 8;
+			bytes[index++] = (buffer >> bits) & 0xff;
+			buffer &= (1 << bits) - 1;
+		}
+	}
+	return bytes;
+}
+
 function toRSPair(
-	input: ArrayBuffer | Uint8Array | { r: bigint; s: bigint },
+	input: ArrayBuffer | Uint8Array | string | { r: bigint; s: bigint },
 ): { r: bigint; s: bigint } {
 	if (
 		input !== null &&
@@ -406,19 +466,36 @@ function toRSPair(
 	) {
 		return { r: (input as { r: bigint }).r, s: (input as { s: bigint }).s };
 	}
+	if (typeof input === "string") {
+		return parseDerP256Signature(stringToBytes(input, "signature"));
+	}
 	const bytes = input instanceof Uint8Array ? input : new Uint8Array(input as ArrayBuffer);
 	return parseDerP256Signature(bytes);
 }
 
 /**
- * Re-serialize every clientDataJSON field except `type` and `challenge`.
- * Robust to authenticators adding or reordering keys (e.g. Safari's
- * `crossOrigin`, future WebAuthn L3 fields) — parses JSON instead of
- * using a regex, validates the shape is a plain object, and emits hex
+ * The clientDataJSON fields after `type` and `challenge`, as the signer
+ * contract needs them: it rebuilds the JSON as
+ * `{"type":"webauthn.get","challenge":"<challenge>",<fields>}` and checks the
+ * signature over those exact bytes.
+ *
+ * So for a JSON in that order the fields are sliced out of the signed text
+ * unchanged. Parsing and re-serializing them is not byte-preserving: an
+ * origin the authenticator wrote as `https:\/\/example.com` would come back
+ * as `https://example.com` and the signature would no longer verify.
+ *
+ * A JSON in any other order cannot be rebuilt by the contract in the first
+ * place; for it the fields are still re-serialized, as before. Hex is emitted
  * via the pure-JS `toUtf8Bytes` (works in browsers and React Native /
  * Hermes; neither `Buffer` nor `TextEncoder` is defined there by default).
  */
 function extractClientDataFieldsHex(clientDataJSON: string): string {
+	const signedFields = clientDataJSON.match(
+		/^\{"type":"webauthn\.get","challenge":"[A-Za-z0-9\-_]{43}",(.*)\}$/s,
+	);
+	if (signedFields != null) {
+		return hexlify(toUtf8Bytes(signedFields[1]));
+	}
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(clientDataJSON);
