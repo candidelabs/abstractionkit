@@ -3219,6 +3219,16 @@ export class SafeAccount extends SmartAccount {
 			},
 		);
 
+		// The signer proxy only exists through the state override. A node that
+		// ignores that parameter calls an address without code and answers
+		// "0x"; reporting that as "invalid signature" would be wrong.
+		if (isModuleEnabledResult.length < 10) {
+			throw new AbstractionKitError(
+				"BAD_DATA",
+				"verifyWebAuthnSignatureForMessageHash got an empty result from eth_call. " +
+					"The node may not support the state override parameter.",
+			);
+		}
 		// isValidSignature answers with the ERC-1271 magic value, a bytes4
 		// left-aligned in the word, and with zero for a bad signature. It is
 		// not a bool: the last byte is zero either way.

@@ -164,23 +164,22 @@ describe('webauthnSignatureFromAssertion: input shape normalization', () => {
     });
 
     test('malformed hex authenticatorData throws (no silent zero-coercion)', () => {
-        // ethers' getBytes rejects non-hex characters; a permissive parser
-        // would silently coerce `parseInt("zz", 16)` (NaN) into 0.
-        expect(() =>
-            ak.webauthnSignatureFromAssertion(
-                buildAssertion({ authenticatorData: '0xzz' + FIXTURE_AUTHENTICATOR_DATA_HEX.slice(2) }),
-            ),
-        ).toThrow(/invalid BytesLike value/);
+        // A permissive parser would coerce `parseInt("!!", 16)` (NaN) into 0.
+        // Characters outside both the hex and the base64url alphabet are
+        // rejected outright.
+        for (const bad of ['0x!!' + FIXTURE_AUTHENTICATOR_DATA_HEX.slice(2), '0x1%' + FIXTURE_AUTHENTICATOR_DATA_HEX.slice(2)]) {
+            expect(() => ak.webauthnSignatureFromAssertion(buildAssertion({ authenticatorData: bad }))).toThrow(
+                /not a 0x-prefixed hex or base64url string/,
+            );
+        }
     });
 
-    test('partial-hex pair throws (parseInt would silently truncate)', () => {
-        // `Number.parseInt("1g", 16)` returns 1 (parseInt stops at the first
-        // non-hex char). ethers' getBytes refuses the whole input instead.
-        expect(() =>
-            ak.webauthnSignatureFromAssertion(
-                buildAssertion({ authenticatorData: '0x1g' + FIXTURE_AUTHENTICATOR_DATA_HEX.slice(2) }),
-            ),
-        ).toThrow(/invalid BytesLike value/);
+    test('a 0x-prefixed string that is not hex is read as base64url, never as truncated hex', () => {
+        // `Number.parseInt("1g", 16)` returns 1; nothing here parses pairs.
+        // "0x1g…" is a valid base64url string, so it decodes as one.
+        const input = '0x1g' + FIXTURE_AUTHENTICATOR_DATA_HEX.slice(2);
+        const out = ak.webauthnSignatureFromAssertion(buildAssertion({ authenticatorData: input }));
+        expect(Buffer.from(out.authenticatorData).toString('hex')).toBe(Buffer.from(input, 'base64url').toString('hex'));
     });
 
     test('clientDataJSON: string and buffer both work', () => {
@@ -409,6 +408,16 @@ describe('webauthnSignatureFromAssertion: base64url string inputs', () => {
         });
         expect(hexOf(out.authenticatorData)).toBe(FIXTURE_AUTHENTICATOR_DATA_HEX);
         expect(out.rs).toEqual([1n, 2n]);
+    });
+
+    test('a base64url string that happens to start with 0x is still base64url', () => {
+        // authenticatorData starts with sha256(rpId); for 1 in 4096 RP IDs its
+        // base64url form starts with "0x". That is not hex.
+        const bytes = Buffer.from('d31b26a2c32bf907d9aa0fd681b3884e6145b1c84088eb2d45718883231d10d05000000001', 'hex');
+        const encoded = toBase64Url(bytes);
+        expect(encoded.startsWith('0x')).toBe(true);
+        const out = ak.webauthnSignatureFromAssertion({ authenticatorData: encoded, clientDataJSON, signature: DER });
+        expect(hexOf(out.authenticatorData)).toBe(bytes.toString('hex'));
     });
 
     test('bare hex is rejected instead of being decoded as base64', () => {
