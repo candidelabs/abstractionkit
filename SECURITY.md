@@ -6,7 +6,7 @@ Only the latest stable version published to npm is supported with security updat
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.0.0   | :white_check_mark: |
+| 2.0.0   | :white_check_mark: |
 
 ## Reporting a Vulnerability
 
