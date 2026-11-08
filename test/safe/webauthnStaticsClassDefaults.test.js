@@ -139,6 +139,18 @@ describe.each(CLASSES)('%s WebAuthn statics', (_name, Account, expected, other, 
         );
     });
 
+    test('verifyWebAuthnSignatureForMessageHash reports an empty eth_call result instead of "false"', async () => {
+        // a node that ignores the state override calls an address without code
+        const transport = { request: async () => '0x' };
+        const error = await Account.verifyWebAuthnSignatureForMessageHash(transport, PASSKEY, MESSAGE_HASH, '0x1234').then(
+            () => null,
+            (e) => e,
+        );
+        expect(error).toBeInstanceOf(ak.AbstractionKitError);
+        expect(error.code).toBe('BAD_DATA');
+        expect(error.message).toMatch(/state override/);
+    });
+
     test('a per-call override still wins over the class default', () => {
         const custom = Account.createWebAuthnSignerVerifierAddress(PASSKEY.x, PASSKEY.y, {
             webAuthnSignerFactory: CUSTOM_SIGNER_FACTORY,

@@ -63,6 +63,8 @@ These follow from the bug fixes below. Each one changes what working code gets b
 - **`fromViem` accepts viem's `LocalAccount`.** The parameter type required `sign`, which viem declares optional, so `toAccount(...)` custom accounts did not type-check. Raw-hash signing is now offered only when the account has `sign`.
 - **`HttpTransport` replaces a caller's `content-type` header in any letter case.** A lowercase header was sent next to the pinned one (`text/plain, application/json`).
 - **`webauthnSignatureFromAssertion` returns the client data fields as they were signed.** It parsed `clientDataJSON` and re-serialized the fields, which is not byte-preserving: an origin written as `https:\/\/example.com` came back as `https://example.com` and the on-chain check of the signature would fail. For a JSON in the canonical order the fields are now sliced out unchanged. It also accepts the base64url strings `@simplewebauthn/browser` returns, as its documentation said, and `pubkeyCoordinatesFromJson` rejects empty coordinate strings instead of reading them as `0`.
+- **`webauthnSignatureFromAssertion` reads a base64url `authenticatorData` that happens to start with `0x`.** `authenticatorData` begins with `sha256(rpId)`, and for 1 in 4096 RP IDs its base64url form starts with `0x`; it was handed to the hex parser and rejected. A string is hex only when it is hex all the way.
+- **`verifyWebAuthnSignatureForMessageHash` reports an empty `eth_call` result as `BAD_DATA`** instead of `false`. The signer proxy exists only through the state override, so a node that ignores that parameter answers `0x`, which is not a verdict on the signature.
 
 ## 1.0.0
 

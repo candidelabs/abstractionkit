@@ -413,7 +413,9 @@ function toUtf8String(input: ArrayBuffer | Uint8Array | string): string {
 
 /** Bytes of a string field: `0x`-prefixed hex, otherwise base64url. */
 function stringToBytes(input: string, field: string): Uint8Array {
-	if (input.startsWith("0x") || input.startsWith("0X")) return getBytes(input);
+	// Only a string that is hex all the way is hex: a base64url string can
+	// start with "0x" too (1 in 4096 authenticatorData values do).
+	if (/^0x[0-9a-fA-F]*$/i.test(input)) return getBytes(input);
 	// Bare hex is also made of base64 characters. Decoding it as base64 would
 	// silently give the wrong bytes, so ask for the prefix instead.
 	if (/^[0-9a-fA-F]+$/.test(input)) {
