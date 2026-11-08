@@ -3687,14 +3687,14 @@ export class SafeAccount extends SmartAccount {
  * @param project - project name
  * @param platform - "Web", "Mobile", "Safe App", or "Widget"; defaults to "Web"
  * @param tool - tool name; defaults to "abstractionkit"
- * @param toolVersion - tool version; defaults to "1.0.0"
+ * @param toolVersion - tool version; defaults to "2.0.0"
  * @returns the on-chain identifier as a hex string (not 0x prefixed)
  */
 function generateOnChainIdentifier(
 	project: string,
 	platform: "Web" | "Mobile" | "Safe App" | "Widget" = "Web",
 	tool: string = "abstractionkit",
-	toolVersion: string = "1.0.0",
+	toolVersion: string = "2.0.0",
 ): string {
 	const identifierPrefix = "5afe"; // Safe identifier prefix
 	const identifierVersion = "00"; // First version
