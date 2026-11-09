@@ -6,12 +6,21 @@ import {createCallData} from "../../../utils";
 import {SafeModule} from "./SafeModule";
 
 /**
- * Address of the legacy Allowance Module v0.1.0 contract.
- * Replaced by v1.0.0 due to a bug in the v0.1.0 contract.
+ * Address of the legacy Allowance Module the SDK used before v1.0.0. The
+ * contract reports `VERSION()` "0.1.1".
+ * Replaced by v1.0.0 due to a bug in the legacy contract.
  * Use this to interact with existing allowances set on the old module.
  * @deprecated Prefer `AllowanceModule.DEFAULT_ALLOWANCE_MODULE_ADDRESS` (v1.0.0) for new allowances.
  */
-export const ALLOWANCE_MODULE_V0_1_0_ADDRESS = "0xAA46724893dedD72658219405185Fb0Fc91e091C";
+export const ALLOWANCE_MODULE_V0_1_1_ADDRESS = "0xAA46724893dedD72658219405185Fb0Fc91e091C";
+
+/**
+ * Misnamed alias of {@link ALLOWANCE_MODULE_V0_1_1_ADDRESS}: the contract at
+ * this address is Allowance Module v0.1.1, not v0.1.0. The value is unchanged,
+ * so code using this name keeps reaching the same contract.
+ * @deprecated Use {@link ALLOWANCE_MODULE_V0_1_1_ADDRESS}.
+ */
+export const ALLOWANCE_MODULE_V0_1_0_ADDRESS = ALLOWANCE_MODULE_V0_1_1_ADDRESS;
 
 /**
  * Safe module for managing token spending allowances (v1.0.0). Enables Safe owners
@@ -24,9 +33,9 @@ export const ALLOWANCE_MODULE_V0_1_0_ADDRESS = "0xAA46724893dedD72658219405185Fb
  * Once exhausted, a new delegate must be used.
  *
  * **Breaking change (v1.0.0):** The default module address changed from
- * {@link ALLOWANCE_MODULE_V0_1_0_ADDRESS} (`0xAA46…091C`) due to a bug in the
- * v0.1.0 contract. If you have active allowances on the old module, use
- * `new AllowanceModule(ALLOWANCE_MODULE_V0_1_0_ADDRESS)` to interact with them.
+ * {@link ALLOWANCE_MODULE_V0_1_1_ADDRESS} (`0xAA46…091C`) due to a bug in the
+ * legacy contract. If you have active allowances on the old module, use
+ * `new AllowanceModule(ALLOWANCE_MODULE_V0_1_1_ADDRESS)` to interact with them.
  */
 export class AllowanceModule extends SafeModule {
 	static readonly DEFAULT_ALLOWANCE_MODULE_ADDRESS = "0x691f59471Bfd2B7d639DCF74671a2d648ED1E331";
@@ -78,6 +87,8 @@ export class AllowanceModule extends SafeModule {
 	 * Defaults to 0n, which starts the period accounting at the moment the Safe
 	 * executes the transaction for a new allowance; when updating an existing
 	 * allowance, 0n keeps its current accounting anchor unchanged.
+	 * Note that a validity period of 0 minutes does not recur: it creates a
+	 * one-time allowance, like {@link createOneTimeAllowanceMetaTransaction}.
 	 * @returns A MetaTransaction to be executed by the Safe.
 	 */
 	public createRecurringAllowanceMetaTransaction(
@@ -196,7 +207,15 @@ export class AllowanceModule extends SafeModule {
 	 *   sentinel value indicating the caller is the delegate themselves.
 	 * @param overrides.paymentToken - Optional token address used to pay for execution.
 	 * @param overrides.paymentAmount - Amount to pay for execution (required if paymentToken is set).
-	 * @returns A MetaTransaction to be executed by the Safe.
+	 *   Without a paymentToken it is paid in the native token.
+	 *
+	 *   **The payment goes to `tx.origin`.** The module transfers it from the
+	 *   allowance Safe to whoever signed the outer transaction, and counts it
+	 *   against the delegate's allowance for `paymentToken`. Sent in a
+	 *   UserOperation (ERC-4337), `tx.origin` is the bundler's EOA, so the
+	 *   bundler receives it on top of the gas fee the operation already pays.
+	 *   Leave it unset unless a relayer you run submits the transaction.
+	 * @returns A MetaTransaction to be executed by the delegate, or by anyone holding the delegate's signature. It is not sent by the Safe that granted the allowance.
 	 * @throws Will revert on-chain if the delegate's nonce has reached 65534 for this token.
 	 */
 	public createAllowanceTransferMetaTransaction(
@@ -211,14 +230,16 @@ export class AllowanceModule extends SafeModule {
 			paymentAmount?: bigint;
 		} = {},
 	): MetaTransaction {
-		let paymentToken = "0x0000000000000000000000000000000000000000";
-		let paymentAmount = 0n;
-		if (overrides.paymentToken != null) {
-			paymentToken = overrides.paymentToken;
-			if (overrides.paymentAmount == null) {
-				throw new RangeError("must specify paymentAmount if paymentToken is set");
-			}
-			paymentAmount = overrides.paymentAmount;
+		// The module pays the relayer in `paymentToken`, and in the native
+		// token when it is the zero address. So a paymentAmount on its own is
+		// a native-token payment, not something to drop.
+		const paymentToken = overrides.paymentToken ?? "0x0000000000000000000000000000000000000000";
+		if (overrides.paymentToken != null && overrides.paymentAmount == null) {
+			throw new RangeError("must specify paymentAmount if paymentToken is set");
+		}
+		const paymentAmount = overrides.paymentAmount ?? 0n;
+		if (paymentAmount < 0n) {
+			throw new RangeError("paymentAmount can't be negative");
 		}
 
 		const delegateSignature =
@@ -244,7 +265,9 @@ export class AllowanceModule extends SafeModule {
 	 * @param to - Address that should receive the tokens.
 	 * @param amount - Amount that should be transferred.
 	 * @param paymentToken - Token that should be used to pay for the execution of the transfer.
-	 * @param payment - Amount to should be paid for executing the transfer.
+	 * @param payment - Amount to should be paid for executing the transfer. The
+	 *   module sends it to `tx.origin`, which is the bundler's EOA when the call
+	 *   runs inside a UserOperation; pass 0 unless a relayer you run submits it.
 	 * @param delegate - Delegate whose allowance should be updated.
 	 * @param signature - Signature generated by the delegate to authorize the transfer.
 	 * @returns a MetaTransaction
@@ -391,7 +414,9 @@ export class AllowanceModule extends SafeModule {
 	 * all results unless `maxNumberOfResults` is specified.
 	 * @param nodeRpcUrl - JSON-RPC endpoint URL for the target chain.
 	 * @param safeAddress - The Safe account address to query delegates for.
-	 * @param overrides.start - Starting index for pagination (default 0).
+	 * @param overrides.start - Pagination cursor (default 0, the first page). It is
+	 *   not an ordinal: pass the `next` value of a previous page, which the module
+	 *   derives from a delegate address.
 	 * @param overrides.maxNumberOfResults - Maximum number of delegates to return.
 	 *   If omitted, all delegates are fetched via automatic pagination.
 	 * @returns Array of delegate addresses.
@@ -440,7 +465,7 @@ export class AllowanceModule extends SafeModule {
 	 * Fetch a single page of delegate addresses from the module (used internally by `getDelegates`).
 	 * @param nodeRpcUrl - The JSON-RPC API url for the target chain.
 	 * @param safeAddress - The target account.
-	 * @param start - Pagination start index
+	 * @param start - Pagination cursor: 0 for the first page, then the `next` value of the previous page (not an ordinal)
 	 * @param pageSize - Maximum number of delegates to return in this page
 	 * @returns promise of `{ results, next }` — `next` is 0 when there are no more pages
 	 */

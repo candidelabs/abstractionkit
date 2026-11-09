@@ -120,6 +120,25 @@ describe("HttpTransport", () => {
 		});
 	});
 
+	// Header names are case-insensitive. A caller's content type in another
+	// spelling used to be sent next to the pinned one, which arrives as
+	// "text/plain, application/json".
+	test.each(["content-type", "CONTENT-TYPE", "Content-type"])(
+		"a caller's %s header is replaced, not sent alongside",
+		async (name) => {
+			const fetch = makeMockFetch(() => jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x1" }));
+			const t = new ak.HttpTransport("https://example.test/rpc", {
+				fetch,
+				headers: { [name]: "text/plain", Authorization: "Bearer xyz" },
+			});
+			await t.request({ method: "eth_chainId", params: [] });
+			expect(fetch.calls[0].init.headers).toEqual({
+				Authorization: "Bearer xyz",
+				"Content-Type": "application/json",
+			});
+		},
+	);
+
 	test("merges user-supplied headers and pins Content-Type", async () => {
 		const fetch = makeMockFetch(() => jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x" }));
 		const t = new ak.HttpTransport("https://example.test/rpc", {

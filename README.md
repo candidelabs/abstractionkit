@@ -36,6 +36,21 @@ Requires Node.js 18 or later.
 npm install abstractionkit
 ```
 
+### Upgrading to v2.0.0
+
+v2.0.0 is a bug-fix release on top of v1.0.0. Every change is a correction, but several of them alter what working code gets back, so the version is a major one. The behaviours listed here are the ones v1.0.0 and the 0.x releases had, so the list applies whichever version you come from; if you upgrade from 0.4.x, also read the [1.0.0 section of CHANGELOG.md](./CHANGELOG.md#100) for the renames and removals of that release. The changes most likely to need a code change:
+
+- **Paymaster error codes name who failed.** `CandidePaymaster` and `Erc7677Paymaster` throw `PAYMASTER_ERROR` when the paymaster rejected the operation (`AA3x`, `AA50`) and `BUNDLER_ERROR` otherwise, with the original error as `cause`. Branch on `error.aaCode` rather than on the code alone.
+- **`decodeUserOperationRevertReason`** reports a paymaster `postOp` revert and a too-low prefund through the new `postOpReverted` and `prefundTooLow` fields instead of `outOfGas`.
+- **`SendUseroperationResponse.included()`** keeps polling through a transient bundler failure; if the wait runs out, that failure is the `cause` of the `TIMEOUT` error.
+- **Safe readers** (`getOwners`, `getThreshold`, `isModuleEnabled`, `getSafeVersion`) throw `BAD_DATA` on an undeployed account instead of an ABI decoding error.
+- **`factory` / `factoryData` overrides** of Safe `createUserOperation` are honoured on EntryPoint v0.7+, and `parallelPaymasterInitValues` is rejected by the classes that cannot carry it.
+- **`createUserOperationHash`** throws for `factory: "0x7702"` without `eip7702Auth.address`; operations built by the SDK are unaffected.
+- **An `ExternalSigner` returning `v` as `0` / `1`** now yields a `27` / `28` signature.
+- **`webauthnSignatureFromAssertion`** returns the client data fields exactly as signed, and `verifyWebAuthnSignatureForMessageHash` returns `true` for a valid passkey signature (it returned `false` for every signature before).
+
+See the [2.0.0 section of CHANGELOG.md](./CHANGELOG.md#200) for the complete list, including the on-chain identifier of token-paymaster operations, the EntryPoint v0.9 paymaster-signature hash and the Safe Passkey module defaults of subclasses.
+
 ### Upgrading to v0.3.0
 
 v0.3.0 is a major release. The following API changes are likely to break existing paymaster code:

@@ -38,7 +38,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 * For new (undeployed) accounts, use the static `initializeNewAccount` method instead.
 	 *
 	 * @param accountAddress - The on-chain address of the Safe account
-	 * @param overrides - Override default module and EntryPoint addresses
+	 * @param overrides - Override default module, EntryPoint, and singleton addresses
 	 */
 	constructor(
 		accountAddress: string,
@@ -47,6 +47,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			entrypointAddress?: string;
 			onChainIdentifierParams?: OnChainIdentifierParamsType;
 			onChainIdentifier?: string;
+			safeAccountSingleton?: SafeAccountSingleton;
 		} = {},
 	) {
 		const safe4337ModuleAddress =
@@ -57,6 +58,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		super(accountAddress, safe4337ModuleAddress, entrypointAddress, {
 			onChainIdentifierParams: overrides.onChainIdentifierParams,
 			onChainIdentifier: overrides.onChainIdentifier,
+			safeAccountSingleton: overrides.safeAccountSingleton,
 		});
 	}
 
@@ -83,9 +85,11 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			eip7212WebAuthnContractVerifierForSharedSigner?: string;
 		} = {},
 	): string {
+		// biome-ignore lint/complexity/noThisInStatic: a subclass's Passkey module defaults must win; detached calls fall back to this class
+		const cls: typeof SafeAccountV0_2_0 = this ?? SafeAccountV0_2_0;
 		const [accountAddress, ,] = SafeAccount.createAccountAddressAndFactoryAddressAndData(
 			owners,
-			overrides,
+			SafeAccount.withSharedSignerDefaults(cls, overrides),
 			overrides.safe4337ModuleAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 			overrides.safeModuleSetupAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 		);
@@ -105,10 +109,22 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 * @example
 	 * const smartAccount = SafeAccountV0_2_0.initializeNewAccount(["0xOwnerAddress"]);
 	 */
+	public static initializeNewAccount<T extends typeof SafeAccountV0_2_0>(
+		this: T,
+		owners: Signer[],
+		overrides?: InitCodeOverrides,
+	): InstanceType<T>;
+	/** Detached call (`const init = SafeAccountV0_2_0.initializeNewAccount; init(...)`). */
 	public static initializeNewAccount(
+		this: void,
+		owners: Signer[],
+		overrides?: InitCodeOverrides,
+	): SafeAccountV0_2_0;
+	public static initializeNewAccount<T extends typeof SafeAccountV0_2_0>(
+		this: T | undefined,
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
-	): SafeAccountV0_2_0 {
+	): InstanceType<T> {
 		let isInitWebAuthn = false;
 		let x = 0n;
 		let y = 0n;
@@ -126,19 +142,28 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 				y = owner.y;
 			}
 		}
+		// Plain-JS callers may invoke this factory detached
+		// (`const init = SafeAccountV0_2_0.initializeNewAccount; init(...)`),
+		// leaving strict-mode `this` undefined; fall back to this class so
+		// such calls keep working instead of throwing on `new this(...)`.
+		// biome-ignore lint/complexity/noThisInStatic: polymorphic factory; subclasses must get their own type back
+		const ctor = (this as T | undefined) ?? SafeAccountV0_2_0;
 		const [accountAddress, factoryAddress, factoryData] =
 			SafeAccountV0_2_0.createAccountAddressAndFactoryAddressAndData(
 				owners,
-				overrides,
+				// the shared signer configured at setup must be the one the
+				// constructed class signs with
+				SafeAccount.withSharedSignerDefaults(ctor, overrides),
 				overrides.safe4337ModuleAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 				overrides.safeModuleSetupAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
 
-		const safe = new SafeAccountV0_2_0(accountAddress, {
+		const safe: SafeAccountV0_2_0 = new ctor(accountAddress, {
 			safe4337ModuleAddress: overrides.safe4337ModuleAddress,
 			entrypointAddress: overrides.entrypointAddress,
 			onChainIdentifierParams: overrides.onChainIdentifierParams,
 			onChainIdentifier: overrides.onChainIdentifier,
+			safeAccountSingleton: overrides.safeAccountSingleton,
 		});
 		safe.factoryAddress = factoryAddress;
 		safe.factoryData = factoryData;
@@ -148,7 +173,7 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			safe.y = y;
 		}
 
-		return safe;
+		return safe as InstanceType<T>;
 	}
 
 	/**
@@ -233,10 +258,12 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		owners: Signer[],
 		overrides: InitCodeOverrides = {},
 	): [string, string] {
+		// biome-ignore lint/complexity/noThisInStatic: a subclass's Passkey module defaults must win; detached calls fall back to this class
+		const cls: typeof SafeAccountV0_2_0 = this ?? SafeAccountV0_2_0;
 		const [sender, safeAccountFactoryAddress, factoryData] =
 			SafeAccount.createAccountAddressAndFactoryAddressAndData(
 				owners,
-				overrides,
+				SafeAccount.withSharedSignerDefaults(cls, overrides),
 				overrides.safe4337ModuleAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 				overrides.safeModuleSetupAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 			);
@@ -266,6 +293,8 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			eip7212WebAuthnContractVerifierForSharedSigner?: string;
 		} = {},
 	): string {
+		// biome-ignore lint/complexity/noThisInStatic: a subclass's Passkey module defaults must win; detached calls fall back to this class
+		const cls: typeof SafeAccountV0_2_0 = this ?? SafeAccountV0_2_0;
 		const safe4337ModuleAddress =
 			overrides.safe4337ModuleAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS;
 		const safeModuleSetupAddress =
@@ -277,9 +306,11 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 			safe4337ModuleAddress,
 			safeModuleSetupAddress,
 			overrides.multisendContractAddress,
-			overrides.webAuthnSharedSigner,
-			overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner,
-			overrides.eip7212WebAuthnContractVerifierForSharedSigner,
+			overrides.webAuthnSharedSigner ?? cls.DEFAULT_WEB_AUTHN_SHARED_SIGNER,
+			overrides.eip7212WebAuthnPrecompileVerifierForSharedSigner ??
+				cls.DEFAULT_WEB_AUTHN_PRECOMPILE,
+			overrides.eip7212WebAuthnContractVerifierForSharedSigner ??
+				cls.DEFAULT_WEB_AUTHN_CONTRACT_VERIFIER,
 		);
 	}
 
@@ -291,9 +322,11 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 	 * @returns The initCode string (factory address + encoded calldata)
 	 */
 	public static createInitCode(owners: Signer[], overrides: InitCodeOverrides = {}): string {
+		// biome-ignore lint/complexity/noThisInStatic: a subclass's Passkey module defaults must win; detached calls fall back to this class
+		const cls: typeof SafeAccountV0_2_0 = this ?? SafeAccountV0_2_0;
 		const [safeAccountFactoryAddress, factoryData] = SafeAccount.createFactoryAddressAndData(
 			owners,
-			overrides,
+			SafeAccount.withSharedSignerDefaults(cls, overrides),
 			overrides.safe4337ModuleAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_4337_MODULE_ADDRESS,
 			overrides.safeModuleSetupAddress ?? SafeAccountV0_2_0.DEFAULT_SAFE_MODULE_SETUP_ADDRESS,
 		);
@@ -324,6 +357,15 @@ export class SafeAccountV0_2_0 extends SafeAccount {
 		bundlerRpc?: string | Transport | Bundler,
 		overrides: CreateUserOperationV6Overrides = {},
 	): Promise<UserOperationV6> {
+		// This class returns an operation without paymaster fields, so the
+		// values would be estimated with and then dropped. Reject them here
+		// even when the EntryPoint is overridden to v0.9.
+		if (overrides.parallelPaymasterInitValues != null) {
+			throw new RangeError(
+				"parallelPaymasterInitValues only works with ep v0.9 account classes " +
+					"(SafeMultiChainSigAccountV1, SafeMultiChainSigAccountV2)",
+			);
+		}
 		const [userOperation, factoryAddress, factoryData] =
 			await this.createBaseUserOperationAndFactoryAddressAndFactoryData(
 				transactions,

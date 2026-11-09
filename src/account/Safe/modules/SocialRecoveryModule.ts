@@ -150,7 +150,8 @@ export abstract class SocialRecoveryModuleBase extends SafeModule {
 	 * @param accountAddress - The target account.
 	 * @param guardianAddress - The guardian to revoke.
 	 * @param threshold - The new threshold that will be set after execution of revocation.
-	 * @param prevGuardian - (if not provided, will be detected using the nodeRpcUrl)
+	 * @param overrides.prevGuardianAddress - the guardian before this one in the
+	 * module's linked list (if not provided, it is looked up using the nodeRpcUrl)
 	 * The previous guardian linking to the guardian in the linked list.
 	 * @returns promise of a MetaTransaction
 	 */
@@ -166,7 +167,11 @@ export abstract class SocialRecoveryModuleBase extends SafeModule {
 		let prevGuardianAddressT = overrides.prevGuardianAddress;
 		if (prevGuardianAddressT == null) {
 			const guardians = await this.getGuardians(nodeRpcUrl, accountAddress);
-			const guardianToDeleteIndex = guardians.indexOf(guardianAddress);
+			// getGuardians returns checksummed addresses; the caller may not
+			const guardianLowerCase = guardianAddress.toLowerCase();
+			const guardianToDeleteIndex = guardians.findIndex(
+				(guardian) => guardian.toLowerCase() === guardianLowerCase,
+			);
 			if (guardianToDeleteIndex === -1) {
 				throw new RangeError(
 					`${guardianAddress} is not a current guardian for account : ${accountAddress}`,

@@ -16,6 +16,76 @@ function receiptWithRevert(revertReason, success = false) {
 const errorData = (msg) => "0x08c379a0" + coder.encode(["string"], [msg]).slice(2);
 const panicData = (code) => "0x4e487b71" + coder.encode(["uint256"], [code]).slice(2);
 
+const POST_OP_TOPIC = id("PostOpRevertReason(bytes32,address,uint256,bytes)");
+const PREFUND_TOPIC = id("UserOperationPrefundTooLow(bytes32,address,uint256)");
+// The EntryPoint wraps what the paymaster reverted with in its own error.
+const postOpReverted = (inner) => id("PostOpReverted(bytes)").slice(0, 10) + coder.encode(["bytes"], [inner]).slice(2);
+
+function failedReceipt(logs) {
+	return { success: false, userOpHash: "0xhash", logs, receipt: { logs: [], transactionHash: "0xtx" } };
+}
+const postOpLog = (revertReason, hash = "0xhash") => ({
+	topics: [POST_OP_TOPIC, hash, "0xsender"],
+	data: coder.encode(["uint256", "bytes"], [0n, revertReason]),
+});
+
+// A failed op whose only EntryPoint log is PostOpRevertReason or
+// UserOperationPrefundTooLow used to be reported as out-of-gas: the decoder
+// looked for UserOperationRevertReason only. The account call may well have
+// succeeded, so raising gas limits is the wrong reaction.
+describe("decodeUserOperationRevertReason for failures outside the account call", () => {
+	it("reports a paymaster postOp revert with its reason", () => {
+		const r = decodeUserOperationRevertReason(
+			failedReceipt([postOpLog(postOpReverted(errorData("paymaster postOp failed")))]),
+		);
+		expect(r).toMatchObject({
+			reverted: true,
+			outOfGas: false,
+			postOpReverted: true,
+			errorMessage: "paymaster postOp failed",
+		});
+		expect(r.revertData).toBe(errorData("paymaster postOp failed"));
+	});
+
+	it("decodes a postOp panic and keeps a custom error as raw data", () => {
+		const panic = decodeUserOperationRevertReason(failedReceipt([postOpLog(postOpReverted(panicData(0x11)))]));
+		expect(panic).toMatchObject({ postOpReverted: true, panicCode: 0x11, outOfGas: false });
+		const custom = decodeUserOperationRevertReason(failedReceipt([postOpLog(postOpReverted("0xdeadbeef"))]));
+		expect(custom).toMatchObject({ postOpReverted: true, outOfGas: false, revertData: "0xdeadbeef" });
+	});
+
+	it("still decodes postOp data that is not wrapped in PostOpReverted", () => {
+		const r = decodeUserOperationRevertReason(failedReceipt([postOpLog(errorData("bare"))]));
+		expect(r).toMatchObject({ postOpReverted: true, errorMessage: "bare" });
+	});
+
+	it("flags a postOp that left no revert data, without hiding that it was the postOp", () => {
+		const r = decodeUserOperationRevertReason(failedReceipt([postOpLog(postOpReverted("0x"))]));
+		expect(r).toMatchObject({ reverted: true, postOpReverted: true, outOfGas: true, revertData: "0x" });
+	});
+
+	it("reports a prefund that was too low", () => {
+		const r = decodeUserOperationRevertReason(
+			failedReceipt([{ topics: [PREFUND_TOPIC, "0xhash", "0xsender"], data: coder.encode(["uint256"], [0n]) }]),
+		);
+		expect(r).toEqual({ reverted: true, outOfGas: false, prefundTooLow: true, revertData: "0x" });
+	});
+
+	it("ignores another operation's postOp log in the same bundle", () => {
+		const r = decodeUserOperationRevertReason(
+			failedReceipt([postOpLog(postOpReverted(errorData("someone else")), "0xother")]),
+		);
+		expect(r).toEqual({ reverted: true, outOfGas: true, revertData: "0x" });
+	});
+
+	it("an account revert is not marked as a postOp revert", () => {
+		const r = decodeUserOperationRevertReason(receiptWithRevert(errorData("account")));
+		expect(r.errorMessage).toBe("account");
+		expect(r.postOpReverted).toBeUndefined();
+		expect(r.prefundTooLow).toBeUndefined();
+	});
+});
+
 describe("decodeUserOperationRevertReason", () => {
 	it("decodes a revert reason string", () => {
 		const r = decodeUserOperationRevertReason(receiptWithRevert(errorData("ERC20: transfer amount exceeds balance")));

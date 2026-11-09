@@ -16,7 +16,13 @@ import {
 	type DecodeTokenQuoteOverrides,
 	decodeTokenQuote as decodeTokenQuoteImpl,
 } from "./decodeTokenQuote";
-import {assertPaymasterMatchesApproveSpender, extractPaymasterAddress, Paymaster} from "./Paymaster";
+import {
+	assertPaymasterMatchesApproveSpender,
+	extractPaymasterAddress,
+	Paymaster,
+	paymasterRpcError,
+	toPaymasterError,
+} from "./Paymaster";
 import type {
 	AnyUserOperation,
 	Erc7677PaymasterConstructorOptions,
@@ -117,6 +123,26 @@ export interface Erc7677StubDataResult extends Erc7677PaymasterFields {
 }
 
 /**
+ * Raw shape of Candide's `pm_supportedERC20Tokens` response.
+ * `dummyPaymasterAndData` is a concatenated hex string for EntryPoint v0.6 and
+ * a structured object for v0.7+.
+ */
+interface CandideSupportedResponse {
+	tokens: Array<{ address: string; exchangeRate: string }>;
+	paymasterMetadata: {
+		address: string;
+		dummyPaymasterAndData:
+			| string
+			| {
+					paymaster: string;
+					paymasterVerificationGasLimit: string;
+					paymasterPostOpGasLimit: string;
+					paymasterData: string;
+			  };
+	};
+}
+
+/**
  * Generic ERC-7677 paymaster client.
  *
  * Speaks the [ERC-7677](https://eips.ethereum.org/EIPS/eip-7677) JSON-RPC
@@ -199,26 +225,6 @@ export interface Erc7677StubDataResult extends Erc7677PaymasterFields {
  * );
  * ```
  */
-/**
- * Raw shape of Candide's `pm_supportedERC20Tokens` response.
- * `dummyPaymasterAndData` is a concatenated hex string for EntryPoint v0.6 and
- * a structured object for v0.7+.
- */
-interface CandideSupportedResponse {
-	tokens: Array<{ address: string; exchangeRate: string }>;
-	paymasterMetadata: {
-		address: string;
-		dummyPaymasterAndData:
-			| string
-			| {
-					paymaster: string;
-					paymasterVerificationGasLimit: string;
-					paymasterPostOpGasLimit: string;
-					paymasterData: string;
-			  };
-	};
-}
-
 export class Erc7677Paymaster extends Paymaster implements Transport {
 	/**
 	 * The raw transport the user passed in (or {@link HttpTransport} when a URL
@@ -400,9 +406,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			});
 			return result as Erc7677StubDataResult;
 		} catch (err) {
-			throw new AbstractionKitError("PAYMASTER_ERROR", "pm_getPaymasterStubData failed", {
-				cause: ensureError(err),
-			});
+			throw paymasterRpcError("pm_getPaymasterStubData failed", err);
 		}
 	}
 
@@ -423,9 +427,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			});
 			return result as Erc7677PaymasterFields;
 		} catch (err) {
-			throw new AbstractionKitError("PAYMASTER_ERROR", "pm_getPaymasterData failed", {
-				cause: ensureError(err),
-			});
+			throw paymasterRpcError("pm_getPaymasterData failed", err);
 		}
 	}
 
@@ -441,9 +443,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 		try {
 			return await this.outbound.request<unknown>({ method, params });
 		} catch (err) {
-			throw new AbstractionKitError("PAYMASTER_ERROR", `sendRPCRequest(${method}) failed`, {
-				cause: ensureError(err),
-			});
+			throw paymasterRpcError(`sendRPCRequest(${method}) failed`, err);
 		}
 	}
 
@@ -461,6 +461,21 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 *
 	 * @returns An object `{ userOperation, tokenQuote? }`. `tokenQuote` is only
 	 *   populated when the token-payment flow is taken (`context.token` set).
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when the paymaster
+	 *   part fails: an RPC error (the `cause`, its JSON-RPC code in `errno`), a
+	 *   malformed response, or invalid paymaster context such as an
+	 *   unparseable `context.exchangeRate` or an account that cannot prepend
+	 *   the token approval.
+	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when gas estimation
+	 *   fails because the paymaster rejected the operation (an EntryPoint
+	 *   `AA3x` / `AA50` code, or bundler code -32501 / -32508). The bundler's
+	 *   error is the `cause`; `aaCode` and `errno` are copied to the top.
+	 * @throws AbstractionKitError with code "BUNDLER_ERROR" when gas estimation
+	 *   fails for any other reason (e.g. `AA23`, the account's own validation),
+	 *   as from an account's `createUserOperation`; `aaCode` names the
+	 *   EntryPoint error.
+	 * @throws RangeError for invalid UserOperation input, e.g. a negative gas
+	 *   override.
 	 */
 	async createPaymasterUserOperation<T extends AnyUserOperation>(
 		smartAccount: SmartAccountWithEntrypoint,
@@ -476,7 +491,8 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 
 			// Token paymaster flow: triggered when context.token is set
 			if (context.token != null && typeof context.token === "string") {
-				return this.tokenPaymasterFlow(
+				// `await` so a rejection is handled by the catch below
+				return await this.tokenPaymasterFlow(
 					smartAccount as unknown as PrependTokenPaymasterApproveAccount,
 					userOp,
 					context.token as string,
@@ -489,13 +505,19 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			}
 
 			// Delegate to the sponsored flow (stub → estimate → final).
-			return this.sponsoredFlow(userOp, bundlerRpc, entrypoint, chainIdHex, context, overrides);
+			return await this.sponsoredFlow(
+				userOp,
+				bundlerRpc,
+				entrypoint,
+				chainIdHex,
+				context,
+				overrides,
+			);
 		} catch (err) {
-			const error = ensureError(err);
-			if (error instanceof AbstractionKitError) throw error;
-			throw new AbstractionKitError("PAYMASTER_ERROR", "createPaymasterUserOperation failed", {
-				cause: error,
-			});
+			// Same contract as CandidePaymaster: SDK errors keep the code of
+			// the service that failed, a RangeError for bad input is thrown
+			// as is, and anything else from the paymaster is wrapped.
+			throw toPaymasterError("createPaymasterUserOperation failed", err);
 		}
 	}
 
@@ -650,7 +672,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 *   $3000/ETH this is `3000 * 10^6 = 3e9`. Used to compute the token
 	 *   approval amount via `(exchangeRate * gasCostWei) / 10^18`, floored to
 	 *   a minimum of 1 token smallest-unit (see
-	 *   {@link Erc7677Paymaster.tokenFlow}).
+	 *   {@link Erc7677Paymaster.tokenPaymasterFlow}).
 	 */
 	private async fetchPimlicoTokenQuote(
 		tokenAddress: string,
@@ -729,7 +751,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 *   $3000/ETH this is `3000 * 10^6 = 3e9`. Used to compute the token
 	 *   approval amount via `(exchangeRate * gasCostWei) / 10^18`, floored to
 	 *   a minimum of 1 token smallest-unit (see
-	 *   {@link Erc7677Paymaster.tokenFlow}).
+	 *   {@link Erc7677Paymaster.tokenPaymasterFlow}).
 	 */
 	private async fetchCandideTokenQuote(
 		tokenAddress: string,

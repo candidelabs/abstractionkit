@@ -66,3 +66,30 @@ describe("initializeNewAccount runtime type (#116)", () => {
 		expect(account.accountAddress).toBe(SubclassAccount.createAccountAddress([OWNER]));
 	});
 });
+
+// SafeAccountV0_2_0 hard-coded `new SafeAccountV0_2_0(...)` in its factory
+// long after V0_3_0 and the multi-chain classes became polymorphic.
+describe("SafeAccountV0_2_0.initializeNewAccount runtime type", () => {
+	class SubclassV0_2_0 extends ak.SafeAccountV0_2_0 {}
+
+	test("a subclass factory returns the subclass", () => {
+		const account = SubclassV0_2_0.initializeNewAccount([OWNER]);
+		expect(account).toBeInstanceOf(SubclassV0_2_0);
+		expect(account).toBeInstanceOf(ak.SafeAccountV0_2_0);
+		expect(account.accountAddress).toBe(ak.SafeAccountV0_2_0.createAccountAddress([OWNER]));
+		expect(account.factoryAddress).not.toBeNull();
+	});
+
+	test("the base factory still returns a plain SafeAccountV0_2_0", () => {
+		const account = ak.SafeAccountV0_2_0.initializeNewAccount([OWNER]);
+		expect(account).toBeInstanceOf(ak.SafeAccountV0_2_0);
+		expect(account).not.toBeInstanceOf(SubclassV0_2_0);
+	});
+
+	test("a detached factory call degrades to the base instead of throwing", () => {
+		const init = SubclassV0_2_0.initializeNewAccount;
+		const account = init([OWNER]);
+		expect(account).toBeInstanceOf(ak.SafeAccountV0_2_0);
+		expect(account.accountAddress).toBe(ak.SafeAccountV0_2_0.createAccountAddress([OWNER]));
+	});
+});

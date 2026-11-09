@@ -72,7 +72,11 @@ export interface CreateBaseUserOperationOverrides {
 		paymasterVerificationGasLimit: bigint;
 		/** set the paymaster post-operation gas limit */
 		paymasterPostOpGasLimit: bigint;
-		/** set the paymaster data, only valid value is 0x22e325a297439656 */
+		/**
+		 * set the paymaster data. It must end with the PAYMASTER_SIG_MAGIC
+		 * `22e325a297439656`: either the bare magic, or a placeholder paymaster
+		 * signature followed by its 2-byte length and the magic.
+		 */
 		paymasterData: string;
 	};
 }

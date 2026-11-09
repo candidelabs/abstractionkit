@@ -88,7 +88,9 @@ export interface CandidePaymasterContext {
 	/** Sponsorship policy identifier for the Candide paymaster. */
 	sponsorshipPolicyId?: string;
 	/**
-	 * Opt into the **parallel signing** two-phase flow (EntryPoint v0.9 only).
+	 * Opt into the **parallel signing** two-phase flow. It only works on
+	 * EntryPoint v0.9; the value is forwarded to the paymaster as is and the
+	 * SDK does not check the EntryPoint version for you.
 	 *
 	 * Decouples owner signing from the paymaster's final signature, so owners
 	 * can sign asynchronously on separate devices (multi-sig, hardware wallets,

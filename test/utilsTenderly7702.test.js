@@ -162,6 +162,31 @@ describe("Tenderly EIP-7702 simulation handling", () => {
 			expect(sims[0].state_objects).toBeUndefined();
 		});
 
+		// executeUserOp(packedUserOp, userOpHash): for the marker without an
+		// authorization the hash depends on the sender's on-chain delegate,
+		// which createUserOperationHash refuses to guess. The simulation
+		// still runs, with a zero hash in the argument.
+		test("an executeUserOp callData with the marker and no eip7702Auth still simulates", async () => {
+			const userOperation = makeV8UserOperation({ eip7702Auth: null, callData: "0x8dd7712f" + "ab".repeat(4) });
+			expect(() => ak.createUserOperationHash(userOperation, ENTRYPOINT_V8, 1n)).toThrow(
+				/eip7702Auth\.address is missing/,
+			);
+			const sims = await runCallDataSimulation(userOperation);
+			expect(sims).toHaveLength(1);
+			expect(sims[0].input.startsWith("0x8dd7712f")).toBe(true);
+			// head: offset of the packed op, then the hash word
+			expect(sims[0].input.slice(10 + 64, 10 + 128)).toBe("00".repeat(32));
+		});
+
+		test("an executeUserOp callData with an authorization passes the real hash", async () => {
+			const userOperation = makeV8UserOperation({ callData: "0x8dd7712f" + "ab".repeat(4) });
+			const sims = await runCallDataSimulation(userOperation);
+			const callDataSim = sims[sims.length - 1];
+			expect(callDataSim.input.slice(10 + 64, 10 + 128)).toBe(
+				ak.createUserOperationHash(userOperation, ENTRYPOINT_V8, 1n).slice(2),
+			);
+		});
+
 		test("merges the delegation override without mutating caller state overrides", async () => {
 			const callerOverrides = { [SENDER]: { balance: "0x1" } };
 			const sims = await runCallDataSimulation(makeV8UserOperation(), callerOverrides);

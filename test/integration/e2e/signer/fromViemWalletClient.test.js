@@ -13,11 +13,10 @@ jest.setTimeout(120000);
 const ONE_ETH = 10n ** 18n;
 const toHex = (n) => `0x${n.toString(16)}`;
 
-// Calibur only accepts `signHash`-capable signers (its userOp signature is a
-// raw ECDSA over the userOp hash, then wrapped). A viem WalletClient signer
-// only exposes `signTypedData`, so this adapter combination is unsupported by
-// design — `signUserOperationWithSigner` throws offline with an actionable
-// error. Filter Calibur out so the matrix only covers compatible pairings.
+// A viem WalletClient signer only exposes `signTypedData`. Calibur accepts
+// that too (its typed-data digest is the userOp hash; covered offline in
+// test/signer/signer.test.js), but it has not been added to this on-chain
+// matrix yet.
 const matrix = runnableMatrix().filter((entry) => entry.accountVersion !== 'Calibur');
 
 describe('signer: fromViemWalletClient', () => {

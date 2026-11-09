@@ -11,8 +11,10 @@ export { CaliburKeyType } from "./account/Calibur/types";
 export type { Allowance } from "./account/Safe/modules/AllowanceModule";
 export {
 	ALLOWANCE_MODULE_V0_1_0_ADDRESS,
+	ALLOWANCE_MODULE_V0_1_1_ADDRESS,
 	AllowanceModule,
 } from "./account/Safe/modules/AllowanceModule";
+export { SafeModule } from "./account/Safe/modules/SafeModule";
 export type {
 	RecoveryRequestTypedDataDomain,
 	RecoveryRequestV1,
@@ -52,9 +54,12 @@ export type {
 	CreateUserOperationV9Overrides,
 	ECDSAPublicAddress,
 	InitCodeOverrides,
+	SafeAccountSingleton,
+	SafeSignatureOptions,
 	SafeUserOperationTypedDataDomain,
 	Signer,
 	SignerSignaturePair,
+	WebAuthnSignatureOverrides,
 	WebauthnPublicKey,
 	WebauthnSignatureData,
 } from "./account/Safe/types";
@@ -87,6 +92,7 @@ export {
 	SAFE_FALLBACK_HANDLER_STORAGE_SLOT,
 	ZeroAddress,
 } from "./constants";
+export type { BasicErrorCode, BundlerErrorCode, JsonRpcErrorCode } from "./errors";
 export { AbstractionKitError, parseAaCode } from "./errors";
 export { SafeAccountFactory } from "./factory/SafeAccountFactory";
 export { SmartAccountFactory } from "./factory/SmartAccountFactory";
@@ -148,6 +154,9 @@ export type {
 } from "./signer/types";
 export type {
 	AbiInputValue,
+	AddressToState,
+	ERC20Token,
+	ERC20TokenWithExchangeRate,
 	GasEstimationResult,
 	JsonRpcError,
 	JsonRpcParam,
@@ -155,10 +164,16 @@ export type {
 	JsonRpcResult,
 	Log,
 	MetaTransaction,
+	OnChainIdentifierParamsType,
 	ParallelPaymasterInitValues,
+	PaymasterMetadata,
+	SingleTransactionTenderlySimulationResult,
 	SponsorInfo,
 	SponsorMetadata,
 	StateOverrideSet,
+	SupportedERC20TokensAndMetadata,
+	SupportedERC20TokensAndMetadataWithExchangeRate,
+	TenderlySimulationResult,
 	TokenQuote,
 	UserOperationByHashResult,
 	UserOperationReceipt,

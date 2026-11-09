@@ -467,8 +467,17 @@ export enum GasOption {
 /** Polygon network identifier used to select the correct Polygon Gas Station endpoint. */
 export enum PolygonChain {
 	Mainnet = "v2",
+	/**
+	 * @deprecated The Polygon Gas Station no longer serves a zkEVM endpoint
+	 * (it answers 404), so this value always fails. Leave `polygonGasStation`
+	 * unset on zkEVM and let the node provide gas prices.
+	 */
 	ZkMainnet = "zkevm",
 	Amoy = "amoy",
+	/**
+	 * @deprecated The Polygon Gas Station no longer serves a Cardona endpoint
+	 * (it answers 404), so this value always fails.
+	 */
 	Cardona = "cardona",
 }
 
@@ -498,7 +507,7 @@ export type OnChainIdentifierParamsType = {
 	platform?: "Web" | "Mobile" | "Safe App" | "Widget";
 	/** Tool name; defaults to "abstractionkit" */
 	tool?: string;
-	/** Tool version; defaults to the current abstractionkit version */
+	/** Tool version; defaults to "2.0.0" */
 	toolVersion?: string;
 };
 

@@ -5,13 +5,13 @@ AbstractionKit uses capability-oriented signers for account methods that accept 
 - `signHash(hash, context)` signs a raw 32-byte digest with no EIP-191 prefix.
 - `signTypedData(data, context)` signs an EIP-712 payload.
 
-Account implementations choose the best supported scheme for the operation. Safe accounts prefer typed data when available, while Simple7702, Calibur, and Safe multi-chain Merkle signing require raw hash signing.
+Account implementations choose the best supported scheme for the operation. Every account accepts both schemes and prefers typed data when the signer offers it, so a typed-data-only signer such as a browser wallet works with Safe, Simple7702, Calibur, and Safe multi-chain Merkle signing alike.
 
 ## Built-in adapters
 
 - `fromPrivateKey(privateKey)` exposes both hash and typed-data signing.
 - `fromEthersWallet(wallet)` exposes both hash and typed-data signing.
-- `fromViem(account)` exposes both hash and typed-data signing for viem local accounts.
+- `fromViem(account)` exposes typed-data signing for viem local accounts, and hash signing when the account has a `sign` method.
 - `fromViemWalletClient(client)` exposes typed-data signing only, which fits browser and JSON-RPC wallets.
 - `fromSafeWebauthn(params)` exposes hash signing only and marks the signer as a Safe contract signer.
 
