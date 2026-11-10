@@ -491,6 +491,28 @@ describe('token flows: overrides.approveAmount', () => {
     ],
   ];
 
+  test('CandidePaymaster finalize phase ignores the override, even an invalid one', async () => {
+    const server = await mockServer();
+    try {
+      const account = makeTokenAccount(ENTRYPOINT_V7);
+      const { userOperation: out, tokenQuote } = await new CandidePaymaster(
+        server.url,
+      ).createTokenPaymasterUserOperation(
+        account,
+        v7UserOp(),
+        TOKEN,
+        server.url,
+        { signingPhase: 'finalize' },
+        { approveAmount: -1n },
+      );
+      expect(tokenQuote).toBeUndefined();
+      expect(account.calls).toHaveLength(0);
+      expect(out.paymaster).toBe(PAYMASTER);
+    } finally {
+      await server.close();
+    }
+  });
+
   describe.each(flows)('%s', (_name, run) => {
     async function quotedTokenCost() {
       const server = await mockServer();

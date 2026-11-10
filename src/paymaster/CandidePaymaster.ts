@@ -724,7 +724,10 @@ export class CandidePaymaster extends Paymaster implements Transport {
 					{ context: { token: context.token } },
 				);
 			}
-			assertValidApproveAmountOverride(overrides?.approveAmount);
+			// The finalize phase builds no approval and ignores approveAmount.
+			if (context.signingPhase !== "finalize") {
+				assertValidApproveAmountOverride(overrides?.approveAmount);
+			}
 			const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
 			await this.ensureInitialized(entrypoint);
 			let tokenQuote: TokenQuote | undefined;
