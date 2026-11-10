@@ -30,8 +30,10 @@ import {
 } from "./decodeTokenQuote";
 import {
 	assertPaymasterMatchesApproveSpender,
+	assertValidApproveAmountOverride,
 	getUserOperationPaymaster,
 	Paymaster,
+	resolveTokenApproveAmount,
 	toPaymasterError,
 } from "./Paymaster";
 import type {
@@ -47,8 +49,6 @@ import type {
 const PAYMASTER_V06_VERIFICATION_OVERHEAD = 40000n;
 /** Max value for uint256 */
 const UINT256_MAX = 115792089237316195423570985008687907853269984665640564039457584007913129639935n;
-/** Multiplier for token approve amount to cover paymasterAndData cost variance */
-const TOKEN_APPROVE_AMOUNT_MULTIPLIER = 2n;
 
 /**
  * ERC-20 tokens that require resetting their allowance to 0 before setting a
@@ -679,14 +679,17 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 * @param tokenAddress - The ERC-20 token contract address to pay gas with
 	 * @param bundlerRpc - Bundler RPC URL for gas estimation
 	 * @param context - Optional additional context to pass to the paymaster RPC
-	 * @param overrides - Override gas limits and multipliers
+	 * @param overrides - Override gas limits and multipliers, and the approval
+	 *   (`resetApproval`, `approveAmount`). By default the prepended approval
+	 *   grants twice the quoted `tokenCost`; pass `approveAmount` to set it.
 	 * @returns An object `{ userOperation, tokenQuote? }`. `tokenQuote` is absent
 	 *   when called under the `finalize` signing phase (no cost recomputation).
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when the paymaster
 	 *   part fails: the token is not a valid address or is not supported
 	 *   (`context.supportedTokens` lists the ones that are), an RPC error such
-	 *   as an unsupported EntryPoint (the `cause`), or a paymaster that differs
-	 *   from the one the approval was built for.
+	 *   as an unsupported EntryPoint (the `cause`), a paymaster that differs
+	 *   from the one the approval was built for, or an `overrides.approveAmount`
+	 *   below the quoted token cost (`context.tokenCost`).
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when gas estimation
 	 *   fails because the paymaster rejected the operation (an EntryPoint
 	 *   `AA3x` / `AA50` code, or bundler code -32501 / -32508). The bundler's
@@ -721,6 +724,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 					{ context: { token: context.token } },
 				);
 			}
+			assertValidApproveAmountOverride(overrides?.approveAmount);
 			const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
 			await this.ensureInitialized(entrypoint);
 			let tokenQuote: TokenQuote | undefined;
@@ -753,7 +757,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 
 				const exchangeRate = await this.fetchTokenPaymasterExchangeRate(context.token, entrypoint);
 				const tokenCost = calculateUserOperationErc20TokenCost(userOp, exchangeRate);
-				const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
+				const approveAmount = resolveTokenApproveAmount(tokenCost, overrides?.approveAmount);
 				tokenQuote = {
 					token: context.token,
 					exchangeRate,

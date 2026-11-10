@@ -159,6 +159,24 @@ export interface BasePaymasterUserOperationOverrides {
 	entrypoint?: string;
 	/** When true, prepend an approve(0) call before the actual token approval. Required for tokens like USDT that don't allow changing a non-zero allowance directly. */
 	resetApproval?: boolean;
+	/**
+	 * Token paymaster flows only: the allowance the prepended
+	 * `approve(paymaster, amount)` grants, in the token's smallest unit. It
+	 * replaces the default of twice the quoted `tokenCost` and is reported
+	 * back as `tokenQuote.approveAmount`. Use it to cap what the signed
+	 * operation can approve, e.g. at a maximum fee the user agreed to.
+	 *
+	 * The flow throws `PAYMASTER_ERROR` when the amount is below the quoted
+	 * `tokenCost` (both values are in the error's `context`, as decimal
+	 * strings), since such an approval can never cover the fee. `tokenCost`
+	 * is quoted during the call, from the gas estimate and the provider's
+	 * current exchange rate, so it is not known beforehand.
+	 *
+	 * Ignored where no approval is built: sponsored operations, the
+	 * `finalize` signing phase, and `Erc7677Paymaster` without a provider or
+	 * `context.exchangeRate`.
+	 */
+	approveAmount?: bigint;
 }
 
 /**

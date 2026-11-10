@@ -18,9 +18,11 @@ import {
 } from "./decodeTokenQuote";
 import {
 	assertPaymasterMatchesApproveSpender,
+	assertValidApproveAmountOverride,
 	extractPaymasterAddress,
 	Paymaster,
 	paymasterRpcError,
+	resolveTokenApproveAmount,
 	toPaymasterError,
 } from "./Paymaster";
 import type {
@@ -35,8 +37,6 @@ import type {
 
 /** Max value for uint256 */
 const UINT256_MAX = 115792089237316195423570985008687907853269984665640564039457584007913129639935n;
-/** Multiplier for token approve amount to cover paymasterAndData cost variance */
-const TOKEN_APPROVE_AMOUNT_MULTIPLIER = 2n;
 /**
  * ERC-20 tokens that require resetting their allowance to 0 before setting a
  * new approval amount (e.g. USDT on mainnet).
@@ -877,6 +877,8 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			);
 		}
 
+		assertValidApproveAmountOverride(overrides.approveAmount);
+
 		// Step 1 — resolve exchange rate + paymaster address.
 		let exchangeRate: bigint;
 		let paymasterAddress: string | null = null;
@@ -982,7 +984,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 
 		// Step 5 — calculate real token cost.
 		const tokenCost = calculateUserOperationErc20TokenCost(userOp, exchangeRate);
-		const approveAmount = tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
+		const approveAmount = resolveTokenApproveAmount(tokenCost, overrides.approveAmount);
 		const tokenQuote: TokenQuote = {
 			token: tokenAddress,
 			exchangeRate,

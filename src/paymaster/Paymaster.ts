@@ -56,6 +56,52 @@ export function assertPaymasterMatchesApproveSpender(
 	}
 }
 
+/** Largest value an ERC-20 `approve` can carry. */
+const UINT256_MAX = 2n ** 256n - 1n;
+/** Default multiplier for the token approve amount, to cover paymasterAndData cost variance */
+const TOKEN_APPROVE_AMOUNT_MULTIPLIER = 2n;
+
+/**
+ * Reject an `overrides.approveAmount` that is not a uint256 bigint. Called
+ * before any RPC round-trip so a bad override fails fast. `undefined` (no
+ * override) passes.
+ *
+ * @internal
+ */
+export function assertValidApproveAmountOverride(approveAmount: unknown): void {
+	if (approveAmount === undefined) return;
+	if (typeof approveAmount !== "bigint" || approveAmount < 0n || approveAmount > UINT256_MAX) {
+		throw new AbstractionKitError(
+			"PAYMASTER_ERROR",
+			`overrides.approveAmount must be a bigint between 0 and 2^256 - 1, got ${String(approveAmount)}`,
+		);
+	}
+}
+
+/**
+ * Allowance the token paymaster flows grant in the prepended `approve`:
+ * the caller's `overrides.approveAmount` when set, otherwise `tokenCost`
+ * with the default safety multiplier. An override below `tokenCost` throws,
+ * since the approval replaces the allowance and could never cover the fee.
+ *
+ * @internal
+ */
+export function resolveTokenApproveAmount(tokenCost: bigint, approveAmount?: bigint): bigint {
+	if (approveAmount === undefined) {
+		return tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
+	}
+	assertValidApproveAmountOverride(approveAmount);
+	if (approveAmount < tokenCost) {
+		throw new AbstractionKitError(
+			"PAYMASTER_ERROR",
+			`overrides.approveAmount (${approveAmount}) is below the token cost of the ` +
+				`UserOperation (${tokenCost}). The approval would not cover the fee.`,
+			{ context: { approveAmount: approveAmount.toString(), tokenCost: tokenCost.toString() } },
+		);
+	}
+	return approveAmount;
+}
+
 /**
  * The error a paymaster client throws for a failure, shared by the clients
  * so they keep one contract. The code names who failed, not which method
