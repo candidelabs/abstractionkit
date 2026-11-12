@@ -60,12 +60,9 @@ jobs:
         if: steps.pat.outputs.configured == 'true' && steps.check.outputs.needed == 'true'
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
+          HEAD_BRANCH: ${{ steps.branch.outputs.name }}
         run: |
-          gh pr create \
-            --base dev \
-            --head "${{ steps.branch.outputs.name }}" \
-            --title "sync: main into dev" \
-            --body "$(cat <<'EOF'
+          BODY="$(cat <<'EOF'
           Auto-opened after push to \`main\` (typically a release merge).
 
           Brings \`main\`'s tip back into \`dev\` so the next release PR does not open with an "out-of-date with base" banner.
@@ -77,3 +74,20 @@ jobs:
           Why: the point of this PR is to make \`main\`'s release merge commits ancestors of \`dev\` by SHA. Squash flattens to a single new commit with a different SHA; rebase rewrites commits with different SHAs. Only "Create a merge commit" preserves the ancestry.
           EOF
           )"
+
+          # GitHub can fail a PR create right after the branch push with a
+          # transient GraphQL error (seen on run 42547151850). Retry, and stop
+          # if an earlier attempt opened the PR despite reporting a failure.
+          for attempt in 1 2 3 4 5; do
+            if gh pr create --base dev --head "$HEAD_BRANCH" --title "sync: main into dev" --body "$BODY"; then
+              exit 0
+            fi
+            if [ -n "$(gh pr list --base dev --head "$HEAD_BRANCH" --state open --json number --jq '.[0].number')" ]; then
+              echo "sync PR already open for $HEAD_BRANCH"
+              exit 0
+            fi
+            echo "::warning::gh pr create failed (attempt $attempt of 5); retrying"
+            sleep $((attempt * 10))
+          done
+          echo "::error::could not open the sync PR for $HEAD_BRANCH"
+          exit 1
