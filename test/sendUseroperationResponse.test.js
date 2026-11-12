@@ -69,9 +69,19 @@ describe('SendUseroperationResponse.included', () => {
     });
 
     test('a timeout equal to the interval still polls once', async () => {
-        const { response, polls } = responseWith([null]);
-        await caught(response.included(0.05, 0.05));
-        expect(polls()).toBe(1);
+        // Fake timers: a real setTimeout can fire about 1 ms early against
+        // Date.now(), which leaves a sliver of time and a second poll.
+        jest.useFakeTimers();
+        try {
+            const { response, polls } = responseWith([null]);
+            const result = caught(response.included(0.05, 0.05));
+            await jest.advanceTimersByTimeAsync(50);
+            const error = await result;
+            expect(error.code).toBe('TIMEOUT');
+            expect(polls()).toBe(1);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     test('a failed poll does not end the wait', async () => {
