@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.1.0
+
+### New Features
+
+- **Set the token paymaster approval amount.** `overrides.approveAmount` on `CandidePaymaster.createTokenPaymasterUserOperation` and `Erc7677Paymaster.createPaymasterUserOperation` replaces the default allowance of twice the quoted token cost, in both the prepended `approve(paymaster, amount)` and `tokenQuote.approveAmount`. It must be a uint256 `bigint` no lower than the quoted token cost, or the call throws `PAYMASTER_ERROR` (with `approveAmount` and `tokenCost` in the error's `context` when it is too low). The finalize signing phase builds no approval and ignores it. (#267, closes #266)
+
+### Internal
+
+- The sync workflow retries opening the `main` into `dev` PR on transient GitHub errors. (#270)
+- Made a timing-dependent `SendUseroperationResponse.included()` test deterministic. (#269)
+
 ## 2.0.0
 
 ### Breaking Changes

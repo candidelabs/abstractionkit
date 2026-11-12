@@ -508,7 +508,7 @@ export type OnChainIdentifierParamsType = {
 	platform?: "Web" | "Mobile" | "Safe App" | "Widget";
 	/** Tool name; defaults to "abstractionkit" */
 	tool?: string;
-	/** Tool version; defaults to "2.0.0" */
+	/** Tool version; defaults to "2.1.0" */
 	toolVersion?: string;
 };
 
