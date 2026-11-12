@@ -453,3 +453,161 @@ describe('CandidePaymaster token flow: approve spender must match the final paym
     }
   });
 });
+
+/**
+ * `overrides.approveAmount` replaces the default allowance (twice the token
+ * cost) in the prepended approve and in `tokenQuote.approveAmount`.
+ */
+describe('token flows: overrides.approveAmount', () => {
+  const CANDIDE_FINAL = {
+    paymaster: PAYMASTER,
+    paymasterData: '0xfinal',
+    paymasterVerificationGasLimit: '0x8000',
+    paymasterPostOpGasLimit: '0xa000',
+  };
+
+  function mockServer() {
+    return makeMockRpcServer({
+      pm_chainId: () => '0x1',
+      pm_supportedERC20Tokens: () => candideSupported(),
+      eth_estimateUserOperationGas: () => ESTIMATE,
+      pm_getPaymasterData: () => CANDIDE_FINAL,
+    });
+  }
+
+  /** Both clients behind one call shape: (server, account, overrides) => result. */
+  const flows = [
+    [
+      'Erc7677Paymaster',
+      (server, account, overrides) =>
+        new Erc7677Paymaster(server.url, { chainId: CHAIN_ID, provider: 'candide' })
+          .createPaymasterUserOperation(account, v7UserOp(), server.url, { token: TOKEN }, overrides),
+    ],
+    [
+      'CandidePaymaster',
+      (server, account, overrides) =>
+        new CandidePaymaster(server.url)
+          .createTokenPaymasterUserOperation(account, v7UserOp(), TOKEN, server.url, undefined, overrides),
+    ],
+  ];
+
+  test('CandidePaymaster finalize phase ignores the override, even an invalid one', async () => {
+    const server = await mockServer();
+    try {
+      const account = makeTokenAccount(ENTRYPOINT_V7);
+      const { userOperation: out, tokenQuote } = await new CandidePaymaster(
+        server.url,
+      ).createTokenPaymasterUserOperation(
+        account,
+        v7UserOp(),
+        TOKEN,
+        server.url,
+        { signingPhase: 'finalize' },
+        { approveAmount: -1n },
+      );
+      expect(tokenQuote).toBeUndefined();
+      expect(account.calls).toHaveLength(0);
+      expect(out.paymaster).toBe(PAYMASTER);
+    } finally {
+      await server.close();
+    }
+  });
+
+  describe.each(flows)('%s', (_name, run) => {
+    async function quotedTokenCost() {
+      const server = await mockServer();
+      try {
+        const { tokenQuote } = await run(server, makeTokenAccount(ENTRYPOINT_V7));
+        return tokenQuote.tokenCost;
+      } finally {
+        await server.close();
+      }
+    }
+
+    test('approves exactly the override and reports it in tokenQuote', async () => {
+      const tokenCost = await quotedTokenCost();
+      const approveAmount = tokenCost + 7n;
+      const server = await mockServer();
+      try {
+        const account = makeTokenAccount(ENTRYPOINT_V7);
+        const { userOperation: out, tokenQuote } = await run(server, account, { approveAmount });
+        expect(tokenQuote.tokenCost).toBe(tokenCost);
+        expect(tokenQuote.approveAmount).toBe(approveAmount);
+        const lastApprove = account.calls[account.calls.length - 1];
+        expect(lastApprove.approveAmount).toBe(approveAmount);
+        expect(out.callData).toBe(`approve(${PAYMASTER},${approveAmount.toString(16)})::0x`);
+      } finally {
+        await server.close();
+      }
+    });
+
+    test('an override equal to the token cost is accepted', async () => {
+      const tokenCost = await quotedTokenCost();
+      const server = await mockServer();
+      try {
+        const { tokenQuote } = await run(server, makeTokenAccount(ENTRYPOINT_V7), {
+          approveAmount: tokenCost,
+        });
+        expect(tokenQuote.approveAmount).toBe(tokenCost);
+      } finally {
+        await server.close();
+      }
+    });
+
+    test('keeps the approve(0) reset in front of the overridden approval', async () => {
+      const tokenCost = await quotedTokenCost();
+      const server = await mockServer();
+      try {
+        const account = makeTokenAccount(ENTRYPOINT_V7);
+        const { userOperation: out } = await run(server, account, {
+          approveAmount: tokenCost,
+          resetApproval: true,
+        });
+        expect(out.callData).toBe(
+          `approve(${PAYMASTER},0)::approve(${PAYMASTER},${tokenCost.toString(16)})::0x`,
+        );
+      } finally {
+        await server.close();
+      }
+    });
+
+    test('an override below the token cost throws with both amounts in context', async () => {
+      const tokenCost = await quotedTokenCost();
+      const server = await mockServer();
+      try {
+        let caught;
+        try {
+          await run(server, makeTokenAccount(ENTRYPOINT_V7), { approveAmount: tokenCost - 1n });
+        } catch (err) {
+          caught = err;
+        }
+        expect(caught).toBeDefined();
+        expect(caught.code).toBe('PAYMASTER_ERROR');
+        expect(caught.message).toContain('approveAmount');
+        expect(caught.context).toEqual({
+          approveAmount: (tokenCost - 1n).toString(),
+          tokenCost: tokenCost.toString(),
+        });
+        // Rejected before the final paymaster data is requested.
+        expect(server.calls.some((c) => c.method === 'pm_getPaymasterData')).toBe(false);
+      } finally {
+        await server.close();
+      }
+    });
+
+    test.each([[-1n], [2n ** 256n], [100], ['100'], [null]])(
+      'an invalid override (%p) throws before gas estimation',
+      async (approveAmount) => {
+        const server = await mockServer();
+        try {
+          const account = makeTokenAccount(ENTRYPOINT_V7);
+          await expectPaymasterError(run(server, account, { approveAmount }), 'approveAmount');
+          expect(account.calls).toHaveLength(0);
+          expect(server.calls.some((c) => c.method === 'eth_estimateUserOperationGas')).toBe(false);
+        } finally {
+          await server.close();
+        }
+      },
+    );
+  });
+});

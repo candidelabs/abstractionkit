@@ -272,7 +272,8 @@ export type TokenQuote = {
 	paymaster: string;
 	/**
 	 * Allowance granted to `paymaster` by the prepended `approve`, in the
-	 * token's smallest unit (`tokenCost` with a safety multiplier applied).
+	 * token's smallest unit: twice `tokenCost` by default, or the
+	 * `approveAmount` passed in the overrides.
 	 */
 	approveAmount: bigint;
 };
@@ -507,7 +508,7 @@ export type OnChainIdentifierParamsType = {
 	platform?: "Web" | "Mobile" | "Safe App" | "Widget";
 	/** Tool name; defaults to "abstractionkit" */
 	tool?: string;
-	/** Tool version; defaults to "2.0.0" */
+	/** Tool version; defaults to "2.1.0" */
 	toolVersion?: string;
 };
 
