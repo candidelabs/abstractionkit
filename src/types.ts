@@ -272,8 +272,8 @@ export type TokenQuote = {
 	paymaster: string;
 	/**
 	 * Allowance granted to `paymaster` by the prepended `approve`, in the
-	 * token's smallest unit: twice `tokenCost` by default, or the
-	 * `approveAmount` passed in the overrides.
+	 * token's smallest unit: twice `tokenCost` by default, or as set
+	 * by the `approveAmount` or `approveAmountPercentageMultiplier` override.
 	 */
 	approveAmount: bigint;
 };

@@ -609,5 +609,261 @@ describe('token flows: overrides.approveAmount', () => {
         }
       },
     );
+
+    describe('overrides.approveAmountPercentageMultiplier', () => {
+      // Percent added on top of the token cost, rounded down.
+      test.each([[0], [20], [33], [100], [250]])(
+        'approves the token cost plus %p percent and reports it in tokenQuote',
+        async (approveAmountPercentageMultiplier) => {
+          const tokenCost = await quotedTokenCost();
+          const expected = (tokenCost * BigInt(100 + approveAmountPercentageMultiplier)) / 100n;
+          const server = await mockServer();
+          try {
+            const account = makeTokenAccount(ENTRYPOINT_V7);
+            const { userOperation: out, tokenQuote } = await run(server, account, {
+              approveAmountPercentageMultiplier,
+            });
+            expect(tokenQuote.tokenCost).toBe(tokenCost);
+            expect(tokenQuote.approveAmount).toBe(expected);
+            expect(tokenQuote.approveAmount >= tokenCost).toBe(true);
+            expect(out.callData).toBe(`approve(${PAYMASTER},${expected.toString(16)})::0x`);
+          } finally {
+            await server.close();
+          }
+        },
+      );
+
+      // Two decimals are kept, like the gas multipliers; the rest is rounded.
+      test.each([[12.5, 1250n], [0.25, 25n], [33.333, 3333n], [0.004, 0n]])(
+        'a fractional value (%p) adds %p parts in 10000',
+        async (approveAmountPercentageMultiplier, parts) => {
+          const tokenCost = await quotedTokenCost();
+          const server = await mockServer();
+          try {
+            const { tokenQuote } = await run(server, makeTokenAccount(ENTRYPOINT_V7), {
+              approveAmountPercentageMultiplier,
+            });
+            expect(tokenQuote.approveAmount).toBe((tokenCost * (10000n + parts)) / 10000n);
+          } finally {
+            await server.close();
+          }
+        },
+      );
+
+      test('100 matches the default approval', async () => {
+        const server = await mockServer();
+        try {
+          const { tokenQuote } = await run(server, makeTokenAccount(ENTRYPOINT_V7), {
+            approveAmountPercentageMultiplier: 100,
+          });
+          expect(tokenQuote.approveAmount).toBe(tokenQuote.tokenCost * 2n);
+        } finally {
+          await server.close();
+        }
+      });
+
+      test('keeps the approve(0) reset in front of the approval', async () => {
+        const tokenCost = await quotedTokenCost();
+        const server = await mockServer();
+        try {
+          const { userOperation: out } = await run(server, makeTokenAccount(ENTRYPOINT_V7), {
+            approveAmountPercentageMultiplier: 0,
+            resetApproval: true,
+          });
+          expect(out.callData).toBe(
+            `approve(${PAYMASTER},0)::approve(${PAYMASTER},${tokenCost.toString(16)})::0x`,
+          );
+        } finally {
+          await server.close();
+        }
+      });
+
+      test.each([[-1], [-0.5], [NaN], [Infinity], [1e300], [20n], ['20'], [null]])(
+        'an invalid value (%p) throws before gas estimation',
+        async (approveAmountPercentageMultiplier) => {
+          const server = await mockServer();
+          try {
+            const account = makeTokenAccount(ENTRYPOINT_V7);
+            await expectPaymasterError(
+              run(server, account, { approveAmountPercentageMultiplier }),
+              'approveAmountPercentageMultiplier',
+            );
+            expect(account.calls).toHaveLength(0);
+            expect(server.calls.some((c) => c.method === 'eth_estimateUserOperationGas')).toBe(false);
+          } finally {
+            await server.close();
+          }
+        },
+      );
+
+      test('an invalid value next to a valid approveAmount is named, not reported as a conflict', async () => {
+        const server = await mockServer();
+        try {
+          let caught;
+          try {
+            await run(server, makeTokenAccount(ENTRYPOINT_V7), {
+              approveAmount: 10n ** 30n,
+              approveAmountPercentageMultiplier: null,
+            });
+          } catch (err) {
+            caught = err;
+          }
+          const text = [caught?.message, caught?.cause?.message].filter(Boolean).join(' ');
+          expect(text).toContain('must be a non-negative number');
+          expect(text).not.toContain('Pass only one');
+        } finally {
+          await server.close();
+        }
+      });
+
+      test('throws before gas estimation when approveAmount is also set', async () => {
+        const server = await mockServer();
+        try {
+          const account = makeTokenAccount(ENTRYPOINT_V7);
+          await expectPaymasterError(
+            run(server, account, { approveAmount: 10n ** 30n, approveAmountPercentageMultiplier: 20 }),
+            'approveAmount',
+            'approveAmountPercentageMultiplier',
+          );
+          expect(account.calls).toHaveLength(0);
+          expect(server.calls.some((c) => c.method === 'eth_estimateUserOperationGas')).toBe(false);
+        } finally {
+          await server.close();
+        }
+      });
+    });
+
+    /**
+     * The approval is sized before the paymaster's final response, which can
+     * still raise the paymaster gas limits. The finished operation must not
+     * approve less than its own token cost.
+     */
+    describe('final response raising the token cost', () => {
+      function raisingServer() {
+        return makeMockRpcServer({
+          pm_chainId: () => '0x1',
+          pm_supportedERC20Tokens: () => candideSupported(),
+          eth_estimateUserOperationGas: () => ESTIMATE,
+          // Stub limits are 0x8000 / 0xa000; the final post-op limit is doubled.
+          pm_getPaymasterData: () => ({ ...CANDIDE_FINAL, paymasterPostOpGasLimit: '0x14000' }),
+        });
+      }
+
+      test.each([
+        ['approveAmountPercentageMultiplier 0', () => ({ approveAmountPercentageMultiplier: 0 })],
+        ['approveAmount equal to the quoted cost', (tokenCost) => ({ approveAmount: tokenCost })],
+      ])('throws with %s', async (_label, makeOverrides) => {
+        const quoted = await quotedTokenCost();
+        const server = await raisingServer();
+        try {
+          let caught;
+          try {
+            await run(server, makeTokenAccount(ENTRYPOINT_V7), makeOverrides(quoted));
+          } catch (err) {
+            caught = err;
+          }
+          expect(caught).toBeDefined();
+          expect(caught.code).toBe('PAYMASTER_ERROR');
+          const context = caught.context ?? caught.cause?.context;
+          expect(context.approveAmount).toBe(quoted.toString());
+          expect(context.quotedTokenCost).toBe(quoted.toString());
+          expect(BigInt(context.tokenCost) > quoted).toBe(true);
+        } finally {
+          await server.close();
+        }
+      });
+
+      test('the default approval still covers it', async () => {
+        const quoted = await quotedTokenCost();
+        const server = await raisingServer();
+        try {
+          const { userOperation: out, tokenQuote } = await run(server, makeTokenAccount(ENTRYPOINT_V7));
+          expect(tokenQuote.approveAmount).toBe(quoted * 2n);
+          expect(out.paymasterPostOpGasLimit).toBe(0x14000n);
+        } finally {
+          await server.close();
+        }
+      });
+    });
+  });
+
+  test('CandidePaymaster finalize phase ignores the multiplier, invalid or combined', async () => {
+    const server = await mockServer();
+    try {
+      for (const overrides of [
+        { approveAmountPercentageMultiplier: -1 },
+        { approveAmount: 1n, approveAmountPercentageMultiplier: 20 },
+      ]) {
+        const account = makeTokenAccount(ENTRYPOINT_V7);
+        const { tokenQuote } = await new CandidePaymaster(server.url).createTokenPaymasterUserOperation(
+          account,
+          v7UserOp(),
+          TOKEN,
+          server.url,
+          { signingPhase: 'finalize' },
+          overrides,
+        );
+        expect(tokenQuote).toBeUndefined();
+        expect(account.calls).toHaveLength(0);
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  describe('Erc7677Paymaster without a provider', () => {
+    const STUB = {
+      paymaster: PAYMASTER,
+      paymasterData: '0xstub',
+      paymasterVerificationGasLimit: '0x8000',
+      paymasterPostOpGasLimit: '0xa000',
+    };
+    function plainServer() {
+      return makeMockRpcServer({
+        pm_getPaymasterStubData: () => STUB,
+        eth_estimateUserOperationGas: () => ESTIMATE,
+        pm_getPaymasterData: () => CANDIDE_FINAL,
+      });
+    }
+
+    test('with no exchange rate no approval is built and the multiplier is ignored, even an invalid one', async () => {
+      const server = await plainServer();
+      try {
+        const account = makeTokenAccount(ENTRYPOINT_V7);
+        const { tokenQuote } = await new Erc7677Paymaster(server.url, { chainId: CHAIN_ID })
+          .createPaymasterUserOperation(account, v7UserOp(), server.url, { token: TOKEN }, {
+            approveAmountPercentageMultiplier: -1,
+          });
+        expect(tokenQuote).toBeUndefined();
+        expect(account.calls).toHaveLength(0);
+      } finally {
+        await server.close();
+      }
+    });
+
+    test('an approval above uint256 throws, naming the cost rather than an unset override', async () => {
+      const server = await plainServer();
+      try {
+        let caught;
+        try {
+          await new Erc7677Paymaster(server.url, { chainId: CHAIN_ID }).createPaymasterUserOperation(
+            makeTokenAccount(ENTRYPOINT_V7),
+            v7UserOp(),
+            server.url,
+            { token: TOKEN, exchangeRate: 2n ** 270n },
+          );
+        } catch (err) {
+          caught = err;
+        }
+        expect(caught).toBeDefined();
+        expect(caught.code).toBe('PAYMASTER_ERROR');
+        expect(caught.message).toContain('2^256 - 1');
+        expect(caught.message).not.toContain('overrides.');
+        expect(caught.context.approveAmountPercentageMultiplier).toBe(100);
+        expect(server.calls.some((c) => c.method === 'pm_getPaymasterData')).toBe(false);
+      } finally {
+        await server.close();
+      }
+    });
   });
 });

@@ -30,7 +30,8 @@ import {
 } from "./decodeTokenQuote";
 import {
 	assertPaymasterMatchesApproveSpender,
-	assertValidApproveAmountOverride,
+	assertApproveCoversFinalTokenCost,
+	assertValidApproveOverrides,
 	getUserOperationPaymaster,
 	Paymaster,
 	resolveTokenApproveAmount,
@@ -680,16 +681,21 @@ export class CandidePaymaster extends Paymaster implements Transport {
 	 * @param bundlerRpc - Bundler RPC URL for gas estimation
 	 * @param context - Optional additional context to pass to the paymaster RPC
 	 * @param overrides - Override gas limits and multipliers, and the approval
-	 *   (`resetApproval`, `approveAmount`). By default the prepended approval
-	 *   grants twice the quoted `tokenCost`; pass `approveAmount` to set it.
+	 *   (`resetApproval`, `approveAmount`, `approveAmountPercentageMultiplier`).
+	 *   By default the prepended approval grants twice the quoted `tokenCost`;
+	 *   pass `approveAmount` to set a fixed amount, or
+	 *   `approveAmountPercentageMultiplier` to set it relative to `tokenCost`.
 	 * @returns An object `{ userOperation, tokenQuote? }`. `tokenQuote` is absent
 	 *   when called under the `finalize` signing phase (no cost recomputation).
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when the paymaster
 	 *   part fails: the token is not a valid address or is not supported
 	 *   (`context.supportedTokens` lists the ones that are), an RPC error such
 	 *   as an unsupported EntryPoint (the `cause`), a paymaster that differs
-	 *   from the one the approval was built for, or an `overrides.approveAmount`
-	 *   below the quoted token cost (`context.tokenCost`).
+	 *   from the one the approval was built for, an invalid
+	 *   `overrides.approveAmount` or `overrides.approveAmountPercentageMultiplier`,
+	 *   both of them set, or an approval below the token cost of the operation
+	 *   (`context.approveAmount` and `context.tokenCost`), whether quoted or
+	 *   raised by the paymaster's final response.
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when gas estimation
 	 *   fails because the paymaster rejected the operation (an EntryPoint
 	 *   `AA3x` / `AA50` code, or bundler code -32501 / -32508). The bundler's
@@ -724,9 +730,10 @@ export class CandidePaymaster extends Paymaster implements Transport {
 					{ context: { token: context.token } },
 				);
 			}
-			// The finalize phase builds no approval and ignores approveAmount.
+			// The finalize phase builds no approval and ignores both approval
+			// overrides (approveAmount, approveAmountPercentageMultiplier).
 			if (context.signingPhase !== "finalize") {
-				assertValidApproveAmountOverride(overrides?.approveAmount);
+				assertValidApproveOverrides(overrides ?? {});
 			}
 			const entrypoint = overrides?.entrypoint ?? this.resolveEntrypoint(smartAccount, userOp);
 			await this.ensureInitialized(entrypoint);
@@ -760,7 +767,7 @@ export class CandidePaymaster extends Paymaster implements Transport {
 
 				const exchangeRate = await this.fetchTokenPaymasterExchangeRate(context.token, entrypoint);
 				const tokenCost = calculateUserOperationErc20TokenCost(userOp, exchangeRate);
-				const approveAmount = resolveTokenApproveAmount(tokenCost, overrides?.approveAmount);
+				const approveAmount = resolveTokenApproveAmount(tokenCost, overrides ?? {});
 				tokenQuote = {
 					token: context.token,
 					exchangeRate,
@@ -800,6 +807,15 @@ export class CandidePaymaster extends Paymaster implements Transport {
 				getUserOperationPaymaster(resultUserOp),
 				epMetadata.paymasterMetadata.address,
 			);
+			// The final response may have raised the paymaster gas limits after
+			// the approval was sized. Local arithmetic, no extra RPC call.
+			if (tokenQuote !== undefined) {
+				assertApproveCoversFinalTokenCost(
+					tokenQuote.approveAmount,
+					calculateUserOperationErc20TokenCost(resultUserOp, tokenQuote.exchangeRate),
+					tokenQuote.tokenCost,
+				);
+			}
 			return { userOperation: resultUserOp, tokenQuote };
 		} catch (err) {
 			throw toPaymasterError("createTokenPaymasterUserOperation failed", err);

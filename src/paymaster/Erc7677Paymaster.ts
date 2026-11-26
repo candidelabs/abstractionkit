@@ -18,7 +18,8 @@ import {
 } from "./decodeTokenQuote";
 import {
 	assertPaymasterMatchesApproveSpender,
-	assertValidApproveAmountOverride,
+	assertApproveCoversFinalTokenCost,
+	assertValidApproveOverrides,
 	extractPaymasterAddress,
 	Paymaster,
 	paymasterRpcError,
@@ -465,7 +466,11 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 	 *   part fails: an RPC error (the `cause`, its JSON-RPC code in `errno`), a
 	 *   malformed response, or invalid paymaster context such as an
 	 *   unparseable `context.exchangeRate` or an account that cannot prepend
-	 *   the token approval.
+	 *   the token approval. In the token flow also: an invalid
+	 *   `overrides.approveAmount` or `overrides.approveAmountPercentageMultiplier`,
+	 *   both of them set, or an approval below the token cost of the operation
+	 *   (`context.approveAmount` and `context.tokenCost`), whether quoted or
+	 *   raised by the paymaster's final response.
 	 * @throws AbstractionKitError with code "PAYMASTER_ERROR" when gas estimation
 	 *   fails because the paymaster rejected the operation (an EntryPoint
 	 *   `AA3x` / `AA50` code, or bundler code -32501 / -32508). The bundler's
@@ -877,7 +882,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			);
 		}
 
-		assertValidApproveAmountOverride(overrides.approveAmount);
+		assertValidApproveOverrides(overrides);
 
 		// Step 1 — resolve exchange rate + paymaster address.
 		let exchangeRate: bigint;
@@ -984,7 +989,7 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 
 		// Step 5 — calculate real token cost.
 		const tokenCost = calculateUserOperationErc20TokenCost(userOp, exchangeRate);
-		const approveAmount = resolveTokenApproveAmount(tokenCost, overrides.approveAmount);
+		const approveAmount = resolveTokenApproveAmount(tokenCost, overrides);
 		const tokenQuote: TokenQuote = {
 			token: tokenAddress,
 			exchangeRate,
@@ -1025,6 +1030,14 @@ export class Erc7677Paymaster extends Paymaster implements Transport {
 			paymasterAddress,
 		);
 		this.applyPaymasterFields(userOp, final);
+
+		// Step 9 — the final response may have raised the paymaster gas limits
+		// after the approval was sized. Local arithmetic, no extra RPC call.
+		assertApproveCoversFinalTokenCost(
+			approveAmount,
+			calculateUserOperationErc20TokenCost(userOp, exchangeRate),
+			tokenCost,
+		);
 
 		return { userOperation: userOp as unknown as SameUserOp<T>, tokenQuote };
 	}
