@@ -177,6 +177,39 @@ export interface BasePaymasterUserOperationOverrides {
 	 * `context.exchangeRate`.
 	 */
 	approveAmount?: bigint;
+	/**
+	 * Token paymaster flows only: sets the prepended approval relative to the
+	 * quoted `tokenCost`, as a percent added on top of it, like the gas
+	 * `*PercentageMultiplier` overrides. `20` approves `tokenCost` x 1.2, `0`
+	 * approves exactly `tokenCost`, and leaving it unset keeps the default of
+	 * twice `tokenCost` (the same as `100`). Fractions keep two decimals
+	 * (`12.5`). The result is rounded down and reported back as
+	 * `tokenQuote.approveAmount`.
+	 *
+	 * Use it when the approval should follow the quoted cost, which is only
+	 * known during the call: one build then yields an operation whose
+	 * approval is a known multiple of the fee. Must be a non-negative number.
+	 * Throws `PAYMASTER_ERROR` when combined with `approveAmount`.
+	 *
+	 * Choosing a low value: `tokenCost` leaves out the paymaster contract's
+	 * post-operation overhead, a fixed amount of gas (35,000 on Candide's
+	 * paymasters, `postOpGas` from the quote on Pimlico's) charged at the
+	 * operation's gas price. The most the contract can charge is `tokenCost`
+	 * plus that term, so the gap is larger, in percent, the less gas the
+	 * operation uses: `Erc7677Paymaster.decodeTokenQuote` returns the exact
+	 * figure for a built operation as `maxTokenCost`. An approval below it
+	 * still succeeds as long as the actual charge stays under the approval,
+	 * and the charge is taken on the gas actually used, normally well below
+	 * `tokenCost`. The operation fails only if the charge ends up above the
+	 * approval.
+	 *
+	 * The flow also throws `PAYMASTER_ERROR` when the paymaster's final
+	 * response raises the gas limits enough to put the operation's token cost
+	 * above the approval (`context.tokenCost` and `context.quotedTokenCost`).
+	 *
+	 * Ignored in the same cases as `approveAmount`.
+	 */
+	approveAmountPercentageMultiplier?: number;
 }
 
 /**

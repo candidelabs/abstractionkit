@@ -58,48 +58,136 @@ export function assertPaymasterMatchesApproveSpender(
 
 /** Largest value an ERC-20 `approve` can carry. */
 const UINT256_MAX = 2n ** 256n - 1n;
-/** Default multiplier for the token approve amount, to cover paymasterAndData cost variance */
-const TOKEN_APPROVE_AMOUNT_MULTIPLIER = 2n;
+/**
+ * Default percent added on top of the token cost in the approve amount (100 =
+ * twice the cost), to cover paymasterAndData cost variance.
+ */
+const DEFAULT_TOKEN_APPROVE_AMOUNT_PERCENTAGE_MULTIPLIER = 100;
+
+/** The two overrides that set the token paymaster approval. */
+type TokenApproveOverrides = {
+	approveAmount?: unknown;
+	approveAmountPercentageMultiplier?: unknown;
+};
 
 /**
- * Reject an `overrides.approveAmount` that is not a uint256 bigint. Called
- * before any RPC round-trip so a bad override fails fast. `undefined` (no
- * override) passes.
+ * Reject invalid approval overrides: an `approveAmount` that is not a uint256
+ * bigint, an `approveAmountPercentageMultiplier` that is not a non-negative
+ * finite number, or both set at once. Called before any RPC round-trip so a
+ * bad override fails fast. Unset overrides pass.
  *
  * @internal
  */
-export function assertValidApproveAmountOverride(approveAmount: unknown): void {
-	if (approveAmount === undefined) return;
-	if (typeof approveAmount !== "bigint" || approveAmount < 0n || approveAmount > UINT256_MAX) {
+export function assertValidApproveOverrides(overrides: TokenApproveOverrides): void {
+	const { approveAmount, approveAmountPercentageMultiplier: multiplier } = overrides;
+	// Each value is checked on its own first, so an invalid one is named
+	// rather than reported as a conflict with the other.
+	if (
+		approveAmount !== undefined &&
+		(typeof approveAmount !== "bigint" || approveAmount < 0n || approveAmount > UINT256_MAX)
+	) {
 		throw new AbstractionKitError(
 			"PAYMASTER_ERROR",
 			`overrides.approveAmount must be a bigint between 0 and 2^256 - 1, got ${String(approveAmount)}`,
+		);
+	}
+	if (
+		multiplier !== undefined &&
+		(typeof multiplier !== "number" ||
+			multiplier < 0 ||
+			!Number.isSafeInteger(Math.round(multiplier * 100)))
+	) {
+		throw new AbstractionKitError(
+			"PAYMASTER_ERROR",
+			"overrides.approveAmountPercentageMultiplier must be a non-negative number " +
+				`(percent added on top of the token cost), got ${String(multiplier)}`,
+		);
+	}
+	if (approveAmount !== undefined && multiplier !== undefined) {
+		throw new AbstractionKitError(
+			"PAYMASTER_ERROR",
+			"overrides.approveAmount and overrides.approveAmountPercentageMultiplier " +
+				"both set the token paymaster approval. Pass only one.",
 		);
 	}
 }
 
 /**
  * Allowance the token paymaster flows grant in the prepended `approve`:
- * the caller's `overrides.approveAmount` when set, otherwise `tokenCost`
- * with the default safety multiplier. An override below `tokenCost` throws,
- * since the approval replaces the allowance and could never cover the fee.
+ * - `overrides.approveAmount` when set. Below `tokenCost` it throws, since
+ *   the approval replaces the allowance and could never cover the fee.
+ * - otherwise `tokenCost` plus `overrides.approveAmountPercentageMultiplier`
+ *   percent. The percent keeps two decimals, like the gas multipliers, and
+ *   the result is rounded down (never below `tokenCost`).
+ * - otherwise twice `tokenCost`.
  *
  * @internal
  */
-export function resolveTokenApproveAmount(tokenCost: bigint, approveAmount?: bigint): bigint {
-	if (approveAmount === undefined) {
-		return tokenCost * TOKEN_APPROVE_AMOUNT_MULTIPLIER;
+export function resolveTokenApproveAmount(
+	tokenCost: bigint,
+	overrides: { approveAmount?: bigint; approveAmountPercentageMultiplier?: number } = {},
+): bigint {
+	assertValidApproveOverrides(overrides);
+	const { approveAmount, approveAmountPercentageMultiplier } = overrides;
+	if (approveAmount !== undefined) {
+		if (approveAmount < tokenCost) {
+			throw new AbstractionKitError(
+				"PAYMASTER_ERROR",
+				`overrides.approveAmount (${approveAmount}) is below the token cost of the ` +
+					`UserOperation (${tokenCost}). The approval would not cover the fee.`,
+				{ context: { approveAmount: approveAmount.toString(), tokenCost: tokenCost.toString() } },
+			);
+		}
+		return approveAmount;
 	}
-	assertValidApproveAmountOverride(approveAmount);
-	if (approveAmount < tokenCost) {
+	const multiplier =
+		approveAmountPercentageMultiplier ?? DEFAULT_TOKEN_APPROVE_AMOUNT_PERCENTAGE_MULTIPLIER;
+	// Hundredths of a percent, so 12.5 becomes 1250 parts in 10000.
+	const amount = (tokenCost * (10000n + BigInt(Math.round(multiplier * 100)))) / 10000n;
+	if (amount > UINT256_MAX) {
 		throw new AbstractionKitError(
 			"PAYMASTER_ERROR",
-			`overrides.approveAmount (${approveAmount}) is below the token cost of the ` +
-				`UserOperation (${tokenCost}). The approval would not cover the fee.`,
-			{ context: { approveAmount: approveAmount.toString(), tokenCost: tokenCost.toString() } },
+			`the token paymaster approval (token cost ${tokenCost} plus ${multiplier}%) ` +
+				"is above 2^256 - 1, the largest amount an ERC-20 approve can carry.",
+			{ context: { tokenCost: tokenCost.toString(), approveAmountPercentageMultiplier: multiplier } },
 		);
 	}
-	return approveAmount;
+	return amount;
+}
+
+/**
+ * Guard for the token paymaster flows, run on the finished operation. The
+ * approval is sized from a token cost quoted before the paymaster's final
+ * response, and that response can still raise the paymaster gas limits and
+ * with them the cost. Throws when the approval no longer covers the cost of
+ * the operation being returned.
+ *
+ * @param approveAmount - Allowance the prepended `approve` grants.
+ * @param finalTokenCost - Token cost of the finished operation, at the same
+ *   exchange rate the quote used.
+ * @param quotedTokenCost - Token cost the approval was sized from.
+ * @internal
+ */
+export function assertApproveCoversFinalTokenCost(
+	approveAmount: bigint,
+	finalTokenCost: bigint,
+	quotedTokenCost: bigint,
+): void {
+	if (approveAmount >= finalTokenCost) return;
+	throw new AbstractionKitError(
+		"PAYMASTER_ERROR",
+		`the token paymaster approval (${approveAmount}) is below the token cost of the ` +
+			`finished UserOperation (${finalTokenCost}). The paymaster's final response raised ` +
+			`the cost above the quoted ${quotedTokenCost}. Build the operation again, or ` +
+			"approve a larger amount.",
+		{
+			context: {
+				approveAmount: approveAmount.toString(),
+				tokenCost: finalTokenCost.toString(),
+				quotedTokenCost: quotedTokenCost.toString(),
+			},
+		},
+	);
 }
 
 /**

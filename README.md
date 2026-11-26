@@ -195,14 +195,17 @@ const userOp = await smartAccount.createUserOperation(
 // approval was granted to (verified to match the returned op's paymaster), and
 // the allowance amount that approval sets (`approveAmount`). The allowance is
 // twice the token cost by default; pass { approveAmount } in the overrides to
-// set it yourself, e.g. to the maximum fee the user agreed to.
+// set it yourself, e.g. to the maximum fee the user agreed to, or
+// { approveAmountPercentageMultiplier } to set it relative to the token cost
+// (20 approves the cost plus 20%, 0 approves exactly the cost).
 const { userOperation: tokenOp, tokenQuote } = await paymaster.createTokenPaymasterUserOperation(
   smartAccount,
   userOp,
   gasTokenAddress,
   bundlerRpc,
   // context (optional)
-  // overrides (optional: gas limits, multipliers, resetApproval, approveAmount)
+  // overrides (optional: gas limits, multipliers, resetApproval, approveAmount,
+  // approveAmountPercentageMultiplier)
 );
 
 tokenOp.signature = smartAccount.signUserOperation(tokenOp, [ownerPrivateKey], chainId);
